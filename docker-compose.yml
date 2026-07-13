@@ -1,0 +1,53 @@
+services:
+  nexora:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VERSION: "1.0.0"
+    image: nexora:latest
+    container_name: nexora
+    restart: unless-stopped
+    # Load configuration from the .env file in this directory.
+    env_file:
+      - .env
+    environment:
+      NEXORA_DATA_DIR: /app/data
+      NEXORA_DATABASE_PATH: /app/data/nexora.db
+      NEXORA_THUMBNAIL_CACHE_DIR: /app/data/cache/thumbnails
+      NEXORA_WEB_ROOT: /app/web
+      NEXORA_LISTEN_ADDR: ":8080"
+    ports:
+      - "8080:8080"
+    volumes:
+      # Persistent application data (SQLite DB, config, cache).
+      - nexora-data:/app/data
+      # User-managed storage bind mounts. Adjust the left side to your host paths.
+      - ./data/files:/mnt/files
+      - ./data/media:/mnt/media:ro
+      - ./data/backups:/mnt/backups
+      - ./data/shared:/mnt/shared
+    # Read-only root filesystem with tmpfs for scratch space.
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:8080/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    # Optional resource limits for low-spec hosts (uncomment to enable):
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: "1.0"
+    #       memory: 512M
+
+volumes:
+  nexora-data:
+    driver: local
