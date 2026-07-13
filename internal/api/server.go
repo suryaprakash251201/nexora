@@ -10,8 +10,13 @@ import (
 	"github.com/nexora/nexora/internal/audit"
 	"github.com/nexora/nexora/internal/auth"
 	"github.com/nexora/nexora/internal/config"
+	"github.com/nexora/nexora/internal/jobs"
 	"github.com/nexora/nexora/internal/logger"
+	"github.com/nexora/nexora/internal/metrics"
 	"github.com/nexora/nexora/internal/middleware"
+	"github.com/nexora/nexora/internal/preview"
+	"github.com/nexora/nexora/internal/search"
+	"github.com/nexora/nexora/internal/sharing"
 	"github.com/nexora/nexora/internal/storage"
 )
 
@@ -26,6 +31,11 @@ type Server struct {
 	Guard        *auth.LoginGuard
 	Limiter      *middleware.RateLimiter
 	StorageRoots *storage.RootService
+	Search       *search.Service
+	Shares       *sharing.Store
+	Jobs         *jobs.Manager
+	Preview      *preview.Service
+	Metrics      *metrics.Registry
 	WebRoot      string
 }
 
@@ -57,6 +67,9 @@ func (s *Server) Routes() http.Handler {
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP(s.Cfg.TrustedProxies))
 	r.Use(middleware.Recoverer(s.Log))
+	if s.Metrics != nil {
+		r.Use(s.Metrics.HTTPMiddleware())
+	}
 	r.Use(middleware.SecurityHeaders(s.Cfg))
 	r.Use(middleware.CSRF(csrfExempt))
 	r.Use(auth.SessionAuth(s.Sessions, s.Users))
@@ -64,6 +77,9 @@ func (s *Server) Routes() http.Handler {
 	// Health endpoints (no auth).
 	r.Get("/healthz", s.handleHealthz)
 	r.Get("/readyz", s.handleReadyz)
+	if s.Cfg.EnablePrometheus && s.Metrics != nil {
+		r.Get("/metrics", s.Metrics.Handler())
+	}
 
 	// Optional CORS (disabled by default).
 	if len(s.Cfg.CORSOrigins) > 0 {
@@ -79,6 +95,14 @@ func (s *Server) Routes() http.Handler {
 	// Versioned API.
 	api := chi.NewRouter()
 	api.Get("/version", s.handleVersion)
+
+	// Public share endpoints (no auth; rate-limited).
+	shareRouter := chi.NewRouter()
+	shareRouter.With(s.Limiter.RateLimit(middleware.KeyByClientIP())).Get("/{token}", s.handleSharePublicInfo)
+	shareRouter.With(s.Limiter.RateLimit(middleware.KeyByClientIP())).Post("/{token}/verify", s.handleSharePublicVerify)
+	shareRouter.With(s.Limiter.RateLimit(middleware.KeyByClientIP())).Get("/{token}/download", s.handleSharePublicDownload)
+	shareRouter.With(s.Limiter.RateLimit(middleware.KeyByClientIP())).Get("/{token}/raw", s.handleSharePublicRaw)
+	api.Mount("/share", shareRouter)
 
 	// Auth routes live under a single mount to avoid prefix collisions.
 	authRouter := chi.NewRouter()
@@ -112,6 +136,35 @@ func (s *Server) Routes() http.Handler {
 	authed.Post("/trash/restore", s.handleRestoreTrash)
 	authed.Delete("/trash", s.handleDeleteTrash)
 
+	// Previews, metadata, editor.
+	authed.Get("/files/thumbnail", s.handleThumbnail)
+	authed.Get("/files/checksum", s.handleChecksum)
+	authed.Get("/files/metadata", s.handleMetadata)
+	authed.Get("/files/content", s.handleGetContent)
+	authed.Post("/files/save", s.handleSaveContent)
+
+	// Search.
+	authed.Get("/search", s.handleSearch)
+
+	// Archive / extract jobs.
+	authed.Post("/archive", s.handleCreateArchive)
+	authed.Post("/extract", s.handleExtract)
+	authed.Get("/jobs", s.handleListJobs)
+	authed.Get("/jobs/{id}", s.handleGetJob)
+	authed.Get("/jobs/{id}/events", s.handleJobEvents)
+	authed.Get("/jobs/{id}/download", s.handleDownloadArchive)
+
+	// Favorites & recents.
+	authed.Get("/favorites", s.handleListFavorites)
+	authed.Post("/favorites", s.handleAddFavorite)
+	authed.Delete("/favorites", s.handleRemoveFavorite)
+	authed.Get("/recents", s.handleListRecents)
+
+	// Share links (authenticated management).
+	authed.Get("/shares", s.handleListShares)
+	authed.Post("/shares", s.handleCreateShare)
+	authed.Delete("/shares/{id}", s.handleRevokeShare)
+
 	// Admin-only routes.
 	admin := chi.NewRouter()
 	admin.Use(auth.RequireRole(auth.RoleAdmin))
@@ -120,7 +173,14 @@ func (s *Server) Routes() http.Handler {
 	admin.Put("/roots/{id}", s.handleAdminUpdateRoot)
 	admin.Delete("/roots/{id}", s.handleAdminDeleteRoot)
 	admin.Get("/users", s.handleAdminListUsers)
+	admin.Post("/users", s.handleAdminCreateUser)
+	admin.Put("/users/{id}", s.handleAdminUpdateUser)
+	admin.Delete("/users/{id}", s.handleAdminDeleteUser)
+	admin.Get("/users/{id}/roots", s.handleAdminGetUserRoots)
+	admin.Post("/users/{id}/roots", s.handleAdminGrantRoot)
+	admin.Delete("/users/{id}/roots/{rootId}", s.handleAdminRevokeRoot)
 	admin.Get("/audit", s.handleAdminListAudit)
+	admin.Post("/search/reindex", s.handleAdminReindex)
 	api.Mount("/admin", admin)
 
 	api.Mount("/", authed)

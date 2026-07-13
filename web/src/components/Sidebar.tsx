@@ -1,24 +1,39 @@
-import { HardDrive, Trash2, Moon, Sun, Plus, Share2, Clock, Star } from "lucide-react";
+import { HardDrive, Trash2, Moon, Sun, Plus, Share2, Clock, Star, Search, Shield } from "lucide-react";
 import type { Root } from "../api/types";
 import { useUI } from "../store";
+
+export type SidebarView = "files" | "trash" | "favorites" | "recents" | "shares" | "search" | "admin";
 
 export default function Sidebar({
   roots,
   activeRoot,
   view,
+  isAdmin,
   onSelectRoot,
-  onSelectTrash,
+  onSelectView,
   onNewRoot,
 }: {
   roots: Root[];
   activeRoot: string | null;
-  view: "files" | "trash";
+  view: SidebarView;
+  isAdmin: boolean;
   onSelectRoot: (id: string) => void;
-  onSelectTrash: () => void;
+  onSelectView: (v: SidebarView) => void;
   onNewRoot: () => void;
 }) {
   const theme = useUI((s) => s.theme);
   const toggleTheme = useUI((s) => s.toggleTheme);
+
+  const navBtn = (v: SidebarView, icon: React.ReactNode, label: string) => (
+    <button
+      onClick={() => onSelectView(v)}
+      className={`w-full flex items-center gap-2 px-2 py-2 rounded-lg text-left text-sm ${
+        view === v ? "bg-accent/15 text-accent" : "hover:bg-surface-muted"
+      }`}
+    >
+      {icon} {label}
+    </button>
+  );
 
   return (
     <aside className="w-60 shrink-0 border-r bg-surface-muted/40 flex flex-col h-full">
@@ -28,7 +43,9 @@ export default function Sidebar({
       </div>
 
       <nav className="flex-1 overflow-y-auto p-2 space-y-1">
-        <p className="px-2 pt-2 pb-1 text-xs uppercase tracking-wide text-content-muted">Storage</p>
+        {navBtn("search", <Search className="h-4 w-4" />, "Search")}
+
+        <p className="px-2 pt-3 pb-1 text-xs uppercase tracking-wide text-content-muted">Storage</p>
         {roots.map((r) => (
           <button
             key={r.id}
@@ -42,31 +59,24 @@ export default function Sidebar({
             {r.read_only && <span className="text-[10px] uppercase text-content-muted">ro</span>}
           </button>
         ))}
-        <button
-          onClick={onNewRoot}
-          className="w-full flex items-center gap-2 px-2 py-2 rounded-lg text-left text-sm text-content-muted hover:bg-surface-muted"
-        >
-          <Plus className="h-4 w-4" /> New storage root
-        </button>
+        {isAdmin && (
+          <button onClick={onNewRoot} className="w-full flex items-center gap-2 px-2 py-2 rounded-lg text-left text-sm text-content-muted hover:bg-surface-muted">
+            <Plus className="h-4 w-4" /> New storage root
+          </button>
+        )}
 
         <p className="px-2 pt-4 pb-1 text-xs uppercase tracking-wide text-content-muted">Workspace</p>
-        <button
-          onClick={onSelectTrash}
-          className={`w-full flex items-center gap-2 px-2 py-2 rounded-lg text-left text-sm ${
-            view === "trash" ? "bg-accent/15 text-accent" : "hover:bg-surface-muted"
-          }`}
-        >
-          <Trash2 className="h-4 w-4" /> Trash
-        </button>
-        <button className="w-full flex items-center gap-2 px-2 py-2 rounded-lg text-left text-sm text-content-muted hover:bg-surface-muted" disabled>
-          <Star className="h-4 w-4" /> Favorites
-        </button>
-        <button className="w-full flex items-center gap-2 px-2 py-2 rounded-lg text-left text-sm text-content-muted hover:bg-surface-muted" disabled>
-          <Clock className="h-4 w-4" /> Recent
-        </button>
-        <button className="w-full flex items-center gap-2 px-2 py-2 rounded-lg text-left text-sm text-content-muted hover:bg-surface-muted" disabled>
-          <Share2 className="h-4 w-4" /> Shared
-        </button>
+        {navBtn("favorites", <Star className="h-4 w-4" />, "Favorites")}
+        {navBtn("recents", <Clock className="h-4 w-4" />, "Recent")}
+        {navBtn("shares", <Share2 className="h-4 w-4" />, "Shared")}
+        {navBtn("trash", <Trash2 className="h-4 w-4" />, "Trash")}
+
+        {isAdmin && (
+          <>
+            <p className="px-2 pt-4 pb-1 text-xs uppercase tracking-wide text-content-muted">Administration</p>
+            {navBtn("admin", <Shield className="h-4 w-4" />, "Admin")}
+          </>
+        )}
       </nav>
 
       <div className="p-2 border-t flex items-center justify-between">

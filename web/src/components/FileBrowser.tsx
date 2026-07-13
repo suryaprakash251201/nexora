@@ -1,6 +1,7 @@
 import { FileItem } from "../api/types";
 import { iconForFile } from "./FileIcon";
 import { formatBytes, formatDate } from "../lib/format";
+import { thumbUrl } from "../lib/preview";
 import { useUI } from "../store";
 
 export default function FileBrowser({
@@ -10,7 +11,7 @@ export default function FileBrowser({
   selection,
   canWrite,
   onOpen,
-  onToggleSelect,
+  onSelect,
   onContextMenu,
 }: {
   items: FileItem[];
@@ -19,9 +20,11 @@ export default function FileBrowser({
   selection: Set<string>;
   canWrite: boolean;
   onOpen: (item: FileItem) => void;
-  onToggleSelect: (item: FileItem, e: React.MouseEvent) => void;
+  onSelect: (item: FileItem, e: React.MouseEvent | React.ChangeEvent) => void;
   onContextMenu: (e: React.MouseEvent, item: FileItem) => void;
 }) {
+  const pushToast = useUI((s) => s.pushToast);
+
   if (loading) {
     return (
       <div className="p-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -43,25 +46,45 @@ export default function FileBrowser({
     );
   }
 
+  const thumb = (it: FileItem) => {
+    const url = thumbUrl(it);
+    if (url) return <img src={url} alt="" className="h-10 w-10 object-cover rounded" />;
+    const Icon = iconForFile(it);
+    return <Icon className={`h-10 w-10 ${it.is_dir ? "text-accent" : "text-content-muted"}`} />;
+  };
+
   if (viewMode === "grid") {
     return (
       <div className="p-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
         {items.map((it) => {
-          const Icon = iconForFile(it);
           const selected = selection.has(it.path);
           return (
             <button
               key={it.path}
-              onClick={(e) => onToggleSelect(it, e)}
+              onClick={(e) => {
+                if (e.metaKey || e.ctrlKey || e.shiftKey) onSelect(it, e);
+                else onOpen(it);
+              }}
               onDoubleClick={() => onOpen(it)}
               onContextMenu={(e) => onContextMenu(e, it)}
               className={`group relative flex flex-col items-center gap-2 p-4 rounded-xl border text-center hover:bg-surface-muted ${
                 selected ? "border-accent bg-accent/10" : ""
               }`}
             >
-              <Icon className={`h-10 w-10 ${it.is_dir ? "text-accent" : "text-content-muted"}`} />
+              {!it.is_dir && thumb(it)}
+              {it.is_dir && <div className="h-10 w-10 grid place-items-center"><span className="text-3xl">📁</span></div>}
               <span className="text-sm truncate w-full" title={it.name}>{it.name}</span>
               <span className="text-[11px] text-content-muted">{it.is_dir ? "" : formatBytes(it.size)}</span>
+              {!it.is_dir && canWrite && (
+                <input
+                  type="checkbox"
+                  className="absolute top-2 left-2 accent-accent"
+                  checked={selected}
+                  onChange={(e) => onSelect(it, e)}
+                  onClick={(e) => e.stopPropagation()}
+                  title="Select"
+                />
+              )}
             </button>
           );
         })}
@@ -77,12 +100,14 @@ export default function FileBrowser({
         <span className="w-40 text-right">Modified</span>
       </div>
       {items.map((it) => {
-        const Icon = iconForFile(it);
         const selected = selection.has(it.path);
         return (
           <div
             key={it.path}
-            onClick={(e) => onToggleSelect(it, e)}
+            onClick={(e) => {
+              if (e.metaKey || e.ctrlKey || e.shiftKey) onSelect(it, e);
+              else onOpen(it);
+            }}
             onDoubleClick={() => onOpen(it)}
             onContextMenu={(e) => onContextMenu(e, it)}
             className={`group grid grid-cols-[1fr_auto_auto] gap-2 px-3 py-2 rounded-lg items-center cursor-pointer ${
@@ -90,7 +115,16 @@ export default function FileBrowser({
             }`}
           >
             <span className="flex items-center gap-2 min-w-0">
-              <Icon className={`h-4 w-4 shrink-0 ${it.is_dir ? "text-accent" : "text-content-muted"}`} />
+              {!it.is_dir && canWrite && (
+                <input
+                  type="checkbox"
+                  className="accent-accent"
+                  checked={selected}
+                  onChange={(e) => onSelect(it, e)}
+                  onClick={(e) => e.stopPropagation()}
+                />
+              )}
+              {!it.is_dir ? thumb(it) : <span className="text-lg">📁</span>}
               <span className="truncate" title={it.name}>{it.name}</span>
             </span>
             <span className="w-28 text-right text-sm text-content-muted">{it.is_dir ? "—" : formatBytes(it.size)}</span>

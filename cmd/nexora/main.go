@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -16,8 +17,13 @@ import (
 	"github.com/nexora/nexora/internal/auth"
 	"github.com/nexora/nexora/internal/config"
 	"github.com/nexora/nexora/internal/database"
+	"github.com/nexora/nexora/internal/jobs"
 	"github.com/nexora/nexora/internal/logger"
+	"github.com/nexora/nexora/internal/metrics"
 	"github.com/nexora/nexora/internal/middleware"
+	"github.com/nexora/nexora/internal/preview"
+	"github.com/nexora/nexora/internal/search"
+	"github.com/nexora/nexora/internal/sharing"
 	"github.com/nexora/nexora/internal/storage"
 	"github.com/nexora/nexora/internal/util"
 )
@@ -53,12 +59,37 @@ func main() {
 	guard := auth.NewLoginGuard(cfg.LockoutAttempts, cfg.LockoutWindow)
 	limiter := middleware.NewRateLimiter(cfg.RateLimitPerMin, cfg.LockoutWindow)
 	roots := storage.NewRootService(db)
+	searchSvc := search.NewService(db, roots, log)
+	shareStore := sharing.NewStore(db)
+	previewSvc := preview.NewService(cfg.ThumbnailCacheDir, cfg.ThumbnailMaxSize, cfg.ThumbnailTTL)
+	jobMgr := jobs.NewManager(db, roots, log, filepath.Join(cfg.DataDir, "cache", "archives"), 2)
+	defer jobMgr.Stop()
+
+	var reg *metrics.Registry
+	if cfg.EnablePrometheus {
+		reg = metrics.New()
+		reg.SetGauge("nexora_active_jobs", func() float64 { return float64(jobMgr.ActiveCount()) })
+		reg.SetGauge("nexora_search_indexed", func() float64 {
+			_, _, n := searchSvc.Status()
+			return float64(n)
+		})
+	}
 
 	srv := api.NewServer(cfg, log, db, users, sessions, auditStore, guard, limiter, roots)
+	srv.Search = searchSvc
+	srv.Shares = shareStore
+	srv.Preview = previewSvc
+	srv.Jobs = jobMgr
+	srv.Metrics = reg
 	srv.WebRoot = webRoot()
 
-	// Periodic maintenance.
-	go runMaintenance(db, sessions, limiter, log)
+	// Background: initial low-priority index scan (never blocks startup) and
+	// periodic maintenance.
+	go func() {
+		time.Sleep(5 * time.Second)
+		searchSvc.ScanAll(context.Background())
+	}()
+	go runMaintenance(db, sessions, limiter, searchSvc, shareStore, previewSvc, jobMgr, log)
 
 	httpSrv := &http.Server{
 		Addr:              cfg.ListenAddr,
@@ -115,13 +146,25 @@ func webRoot() string {
 	return "web/dist"
 }
 
-func runMaintenance(db *sql.DB, sessions *auth.SessionStore, limiter *middleware.RateLimiter, log *logger.Logger) {
+func runMaintenance(db *sql.DB, sessions *auth.SessionStore, limiter *middleware.RateLimiter, searchSvc *search.Service, shares *sharing.Store, previewSvc *preview.Service, jobMgr *jobs.Manager, log *logger.Logger) {
 	ticker := time.NewTicker(15 * time.Minute)
 	defer ticker.Stop()
-	for range ticker.C {
-		if n, err := sessions.Cleanup(); err == nil && n > 0 {
-			log.Debug("cleaned expired sessions", "count", n)
+	scanTicker := time.NewTicker(6 * time.Hour)
+	defer scanTicker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			if n, err := sessions.Cleanup(); err == nil && n > 0 {
+				log.Debug("cleaned expired sessions", "count", n)
+			}
+			limiter.Sweep()
+			if n, err := shares.PurgeExpired(); err == nil && n > 0 {
+				log.Debug("purged expired shares", "count", n)
+			}
+			previewSvc.PurgeStale()
+			jobMgr.CleanupOldArchives(24 * time.Hour)
+		case <-scanTicker.C:
+			searchSvc.ScanAll(context.Background())
 		}
-		limiter.Sweep()
 	}
 }

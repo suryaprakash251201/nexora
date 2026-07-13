@@ -197,6 +197,7 @@ func (s *Server) handleCreateDir(w http.ResponseWriter, r *http.Request) {
 		s.writeProviderError(w, r, err)
 		return
 	}
+	s.indexUpsert(req.Root, acc.provider, rel)
 	s.audit(r, "create_directory", rel, "")
 	writeJSON(w, http.StatusCreated, map[string]any{"ok": true, "path": rel})
 }
@@ -243,6 +244,8 @@ func (s *Server) handleRename(w http.ResponseWriter, r *http.Request) {
 		s.writeProviderError(w, r, err)
 		return
 	}
+	s.indexRemove(req.Root, rel)
+	s.indexUpsert(req.Root, acc.provider, dest)
 	s.audit(r, "rename", rel+" -> "+dest, "")
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "path": dest})
 }
@@ -276,6 +279,8 @@ func (s *Server) handleMove(w http.ResponseWriter, r *http.Request) {
 		s.writeProviderError(w, r, err)
 		return
 	}
+	s.indexRemove(req.Root, src)
+	s.indexUpsert(req.Root, acc.provider, dst)
 	s.audit(r, "move", src+" -> "+dst, "")
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
@@ -309,6 +314,7 @@ func (s *Server) handleCopy(w http.ResponseWriter, r *http.Request) {
 		s.writeProviderError(w, r, err)
 		return
 	}
+	s.indexUpsert(req.Root, acc.provider, dst)
 	s.audit(r, "copy", src+" -> "+dst, "")
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
@@ -333,6 +339,7 @@ func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 			s.writeProviderError(w, r, err)
 			return
 		}
+		s.indexRemove(rootID, rel)
 		s.audit(r, "delete_permanent", rel, "")
 		writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 		return
@@ -361,6 +368,7 @@ func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.audit(r, "delete", rel, "moved to trash")
+	s.indexRemove(rootID, rel)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "trashed": true})
 }
 
@@ -426,6 +434,10 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 		}
 		src.Close()
 		uploaded = append(uploaded, dest)
+		s.indexUpsert(rootID, acc.provider, dest)
+		if s.Metrics != nil {
+			s.Metrics.AddUpload(fh.Size)
+		}
 		s.audit(r, "upload", dest, "")
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "uploaded": uploaded})
@@ -480,6 +492,7 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	_, _ = io.Copy(w, rc)
 	s.audit(r, "download", rel, "")
+	s.recordRecent(r, rootID, rel)
 }
 
 func (s *Server) handleRaw(w http.ResponseWriter, r *http.Request) {
@@ -502,6 +515,9 @@ func (s *Server) handleRaw(w http.ResponseWriter, r *http.Request) {
 	if info.IsDir {
 		writeError(w, http.StatusBadRequest, "is_directory", "cannot preview a directory", middleware.GetRequestID(r.Context()))
 		return
+	}
+	if r.Header.Get("Range") == "" {
+		s.recordRecent(r, rootID, rel)
 	}
 	total := info.Size
 	start, end := parseRange(r.Header.Get("Range"), total)
@@ -643,6 +659,7 @@ func (s *Server) handleCreateFile(w http.ResponseWriter, r *http.Request) {
 		s.writeProviderError(w, r, err)
 		return
 	}
+	s.indexUpsert(req.Root, acc.provider, rel)
 	s.audit(r, "create_file", rel, "")
 	writeJSON(w, http.StatusCreated, map[string]any{"ok": true, "path": rel})
 }
@@ -663,3 +680,21 @@ func boolToInt(b bool) int {
 var errUnauthorized = fmt.Errorf("unauthorized")
 
 func urlEncode(name string) string { return url.QueryEscape(name) }
+
+// indexUpsert refreshes the search index for a single path (best effort).
+func (s *Server) indexUpsert(rootID string, provider storage.StorageProvider, rel string) {
+	if s.Search == nil {
+		return
+	}
+	if info, err := provider.Stat(rel); err == nil {
+		s.Search.Upsert(rootID, info)
+	}
+}
+
+// indexRemove removes a path (and its subtree) from the search index.
+func (s *Server) indexRemove(rootID, rel string) {
+	if s.Search == nil {
+		return
+	}
+	s.Search.Remove(rootID, rel)
+}

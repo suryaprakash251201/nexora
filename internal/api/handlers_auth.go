@@ -127,6 +127,9 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if !ok || !auth.VerifyPassword(req.Password, user.PasswordHash) {
 		backoff := s.Guard.RecordFailure(loginKey(req.Login))
 		_ = s.Audit.Record("", "login_failed", req.Login, "invalid credentials", ip)
+		if s.Metrics != nil {
+			s.Metrics.IncLoginFailure()
+		}
 		if backoff > 0 {
 			writeError(w, http.StatusTooManyRequests, "account_locked", "too many failures, account locked briefly", middleware.GetRequestID(r.Context()))
 		} else {

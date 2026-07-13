@@ -1,0 +1,59 @@
+import type { FileItem } from "../api/types";
+
+export type PreviewKind = "image" | "video" | "audio" | "pdf" | "markdown" | "text" | "none";
+
+const TEXT_EXT = new Set([
+  "txt", "md", "markdown", "json", "yaml", "yml", "toml", "ini", "env", "conf",
+  "js", "jsx", "ts", "tsx", "html", "htm", "css", "scss", "py", "go", "sh",
+  "bash", "rs", "java", "c", "cpp", "h", "sql", "csv", "log", "xml",
+]);
+
+const EDITABLE_EXT = new Set([...TEXT_EXT]);
+const EDITABLE_NAMES = new Set(["dockerfile", "docker-compose.yml", "docker-compose.yaml", "makefile", ".gitignore", ".env"]);
+
+const IMAGE_EXT = new Set(["jpg", "jpeg", "png", "gif", "webp", "svg", "bmp", "avif"]);
+
+export function previewKind(item: { mime: string; extension: string; name?: string }): PreviewKind {
+  const ext = item.extension?.toLowerCase() || "";
+  if (item.mime.startsWith("image/") || IMAGE_EXT.has(ext)) return "image";
+  if (item.mime.startsWith("video/")) return "video";
+  if (item.mime.startsWith("audio/")) return "audio";
+  if (item.mime === "application/pdf" || ext === "pdf") return "pdf";
+  if (ext === "md" || ext === "markdown") return "markdown";
+  if (item.mime.startsWith("text/") || TEXT_EXT.has(ext)) return "text";
+  return "none";
+}
+
+export function isEditable(item: { extension: string; name: string }): boolean {
+  const lower = item.name.toLowerCase();
+  if (EDITABLE_NAMES.has(lower)) return true;
+  return EDITABLE_EXT.has((item.extension || "").toLowerCase());
+}
+
+export function isAudio(item: { mime: string }): boolean {
+  return item.mime.startsWith("audio/");
+}
+
+// codeLanguage returns a coarse language label for display purposes.
+export function codeLanguage(ext: string): string {
+  const map: Record<string, string> = {
+    js: "JavaScript", jsx: "JavaScript", ts: "TypeScript", tsx: "TypeScript",
+    py: "Python", go: "Go", rs: "Rust", java: "Java", c: "C", cpp: "C++",
+    h: "C header", sh: "Shell", bash: "Shell", html: "HTML", css: "CSS",
+    scss: "SCSS", json: "JSON", yaml: "YAML", yml: "YAML", toml: "TOML",
+    sql: "SQL", xml: "XML", md: "Markdown", ini: "INI", csv: "CSV",
+  };
+  return map[ext?.toLowerCase()] || (ext ? ext.toUpperCase() : "Text");
+}
+
+export function rawUrl(rootId: string, path: string, download = false): string {
+  return `/api/v1/files/raw?root=${encodeURIComponent(rootId)}&path=${encodeURIComponent(path)}${download ? "&download=1" : ""}`;
+}
+
+export function thumbUrl(item: FileItem, size = 256): string {
+  return `/api/v1/files/thumbnail?root=${encodeURIComponent(item.root_id)}&path=${encodeURIComponent(item.path)}&size=${size}`;
+}
+
+export function hasThumbnail(item: { extension: string }): boolean {
+  return ["jpg", "jpeg", "png", "gif"].includes((item.extension || "").toLowerCase());
+}

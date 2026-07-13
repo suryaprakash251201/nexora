@@ -144,6 +144,14 @@ func (s *RootService) invalidate(id string) {
 	s.mu.Unlock()
 }
 
+// SetProviderForTest overrides the cached provider for a root. It exists for
+// tests that need an in-memory or fake storage backend.
+func (s *RootService) SetProviderForTest(id string, p StorageProvider) {
+	s.mu.Lock()
+	s.cache[id] = p
+	s.mu.Unlock()
+}
+
 // EnsureDefaultRoots creates roots from configuration the first time the system
 // boots with no roots, and grants the admin full access. It is idempotent.
 func (s *RootService) EnsureDefaultRoots(roots []Root, adminID string) error {

@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { X, Download, Eye, Pencil, Trash2, Scissors, Copy, Info } from "lucide-react";
+import { X, Download, Eye, Pencil, Trash2, Scissors, Copy, Info, Star, Share2 } from "lucide-react";
 import { get } from "../api/client";
 import { formatBytes, formatDate } from "../lib/format";
 import { useUI } from "../store";
@@ -9,6 +9,7 @@ export default function DetailsDrawer({
   rootId,
   path,
   canWrite,
+  isFavorite,
   onClose,
   onDownload,
   onPreview,
@@ -16,11 +17,15 @@ export default function DetailsDrawer({
   onDelete,
   onMove,
   onCopy,
+  onShare,
+  onFavorite,
+  onEdit,
 }: {
   rootName: string;
   rootId: string;
   path: string;
   canWrite: boolean;
+  isFavorite: boolean;
   onClose: () => void;
   onDownload: () => void;
   onPreview: () => void;
@@ -28,6 +33,9 @@ export default function DetailsDrawer({
   onDelete: () => void;
   onMove: () => void;
   onCopy: () => void;
+  onShare: () => void;
+  onFavorite: () => void;
+  onEdit: () => void;
 }) {
   const pushToast = useUI((s) => s.pushToast);
   const { data, isLoading } = useQuery({
@@ -82,6 +90,17 @@ export default function DetailsDrawer({
             {!data.is_dir && (
               <button onClick={onPreview} className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-surface-muted text-sm">
                 <Eye className="h-4 w-4" /> Preview
+              </button>
+            )}
+            <button onClick={onShare} className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-surface-muted text-sm">
+              <Share2 className="h-4 w-4" /> Share
+            </button>
+            <button onClick={onFavorite} className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-surface-muted text-sm">
+              <Star className={`h-4 w-4 ${isFavorite ? "text-amber-400 fill-amber-400" : ""}`} /> {isFavorite ? "Remove favorite" : "Add to favorites"}
+            </button>
+            {!data.is_dir && canWrite && (
+              <button onClick={onEdit} className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-surface-muted text-sm">
+                <Pencil className="h-4 w-4" /> Edit
               </button>
             )}
             {canWrite && (

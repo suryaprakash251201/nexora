@@ -22,15 +22,22 @@ func CleanRelative(rel string) (string, error) {
 	if strings.ContainsRune(rel, '\\') {
 		return "", ErrInvalidPath
 	}
+	// Guard against traversal. path.Clean collapses a leading ".." at the root
+	// (e.g. "/../etc" -> "/etc"), so we cannot rely on the cleaned form alone.
+	// Instead: if the raw path has a ".." segment that survives cleaning as a
+	// leading escape, reject it. Intermediate ".." that cancel out (e.g.
+	// "a/b/../c") remain safe.
+	if strings.Contains(rel, "..") {
+		cleaned := path.Clean(rel)
+		if strings.HasPrefix(cleaned, "..") {
+			return "", ErrTraversal
+		}
+	}
 	cleaned := path.Clean("/" + rel)
 	if cleaned == "/" {
 		return "", nil
 	}
 	relOut := strings.TrimPrefix(cleaned, "/")
-	// Guard against traversal (path.Clean already collapses ".." to "/..").
-	if strings.HasPrefix(relOut, "..") || relOut == ".." {
-		return "", ErrTraversal
-	}
 	return relOut, nil
 }
 
