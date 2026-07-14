@@ -1,0 +1,2 @@
+{"caller":"main.go:43","level":"info","listen":":8080","msg":"starting nexora","service":"nexora","ts":"2026-07-13T23:57:46.6017114Z","version":"dev"}
+{"addr":":8080","caller":"main.go:104","level":"info","msg":"listening","service":"nexora","ts":"2026-07-13T23:57:46.6553949Z"}

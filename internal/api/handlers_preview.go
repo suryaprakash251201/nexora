@@ -25,6 +25,13 @@ func (s *Server) handleThumbnail(w http.ResponseWriter, r *http.Request) {
 	size, _ := strconv.Atoi(queryParam(r, "size", "256"))
 	data, err := s.Preview.Thumbnail(acc.provider, rootID, rel, size)
 	if err != nil {
+		// Fall back to embedded album art for audio files (MP3/FLAC).
+		if cover, cerr := s.Preview.Cover(acc.provider, rootID, rel, size); cerr == nil {
+			data = cover
+			err = nil
+		}
+	}
+	if err != nil {
 		if err == preview.ErrUnsupported {
 			writeError(w, http.StatusUnsupportedMediaType, "unsupported", "no thumbnail for this file", middleware.GetRequestID(r.Context()))
 			return

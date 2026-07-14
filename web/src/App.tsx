@@ -7,6 +7,16 @@ import type { User } from "./api/types";
 
 export default function App() {
   const qc = useQueryClient();
+  return (
+    <>
+      <div className="nexora-bg" aria-hidden="true" />
+      <AppInner />
+    </>
+  );
+}
+
+function AppInner() {
+  const qc = useQueryClient();
   const needsSetup = useQuery({ queryKey: ["needs-setup"], queryFn: () => get<{ configured: boolean }>("/auth/needs-setup") });
   const session = useQuery({ queryKey: ["session"], queryFn: () => get<{ user: User }>("/auth/session") });
 

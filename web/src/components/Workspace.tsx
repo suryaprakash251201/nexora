@@ -1,8 +1,10 @@
 import { useRef, useState, useCallback, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { get, post, del, put, upload as uploadFile } from "../api/client";
+import { get, post, del, put } from "../api/client";
 import type { FileItem, Root, TrashItem, User, FavoriteItem, RecentItem, SearchResult } from "../api/types";
 import { useUI } from "../store";
+import { usePlayer } from "../store/player";
+import { usePlaylists } from "../store/playlists";
 import Sidebar, { SidebarView } from "./Sidebar";
 import TopBar from "./TopBar";
 import FileBrowser from "./FileBrowser";
@@ -15,12 +17,15 @@ import SearchView from "./SearchView";
 import SharesPanel from "./SharesPanel";
 import AdminPanel from "./AdminPanel";
 import Toaster from "./Toaster";
+import PlayerBar from "./PlayerBar";
+import TransfersPanel from "./TransfersPanel";
 import { Modal } from "./Modal";
 import { formatDate } from "../lib/format";
 import { previewKind, isEditable } from "../lib/preview";
+import { startUpload, startDownload } from "../lib/transfer";
 import {
   Download, Trash2, Pencil, Scissors, Copy, Eye, FolderOpen, RotateCcw, LogOut,
-  HardDrive, Star, Share2, Archive, FolderInput, FileEdit,
+  HardDrive, Star, Share2, Archive, FolderInput, FileEdit, Play, ListMusic,
 } from "lucide-react";
 
 export default function Workspace({ user }: { user: User }) {
@@ -46,6 +51,8 @@ export default function Workspace({ user }: { user: User }) {
   const [ctx, setCtx] = useState<{ x: number; y: number; item: FileItem } | null>(null);
   const [menu, setMenu] = useState<{ kind: string; item?: FileItem } | null>(null);
   const [rootModal, setRootModal] = useState(false);
+  const [playlistModal, setPlaylistModal] = useState(false);
+  const [playlistName, setPlaylistName] = useState("");
   const fileInput = useRef<HTMLInputElement>(null);
 
   const roots = useQuery({ queryKey: ["roots"], queryFn: () => get<{ roots: Root[] }>("/roots") });
@@ -76,16 +83,8 @@ export default function Workspace({ user }: { user: User }) {
 
   const uploadFiles = useCallback(async (fileList: FileList | null) => {
     if (!fileList || !fileList.length || !rootId) return;
-    const form = new FormData();
-    for (const f of Array.from(fileList)) form.append("files", f);
-    try {
-      await uploadFile(`/files/upload?root=${encodeURIComponent(rootId)}&path=${encodeURIComponent(path)}`, form);
-      pushToast("success", `Uploaded ${fileList.length} file(s)`);
-      refresh();
-    } catch (e: any) {
-      pushToast("error", e.message || "Upload failed");
-    }
-  }, [rootId, path, refresh, pushToast]);
+    startUpload(rootId, path, fileList, () => refresh());
+  }, [rootId, path, refresh]);
 
   const openItem = (item: FileItem) => {
     if (item.is_dir) {
@@ -113,7 +112,22 @@ export default function Workspace({ user }: { user: User }) {
   };
 
   const downloadItem = (item: FileItem) => {
-    window.open(`/api/v1/files/download?root=${encodeURIComponent(rootId!)}&path=${encodeURIComponent(item.path)}`, "_blank");
+    if (!item.is_dir) startDownload(item.root_id, item.path, item.name);
+  };
+
+  // Play the selected audio files (or the whole folder's audio) as a queue.
+  const selectedItems = items.filter((i) => selection.has(i.path));
+  const playSelected = () => {
+    const audio = (selectedItems.length ? selectedItems : items).filter((i) => i.mime.startsWith("audio/"));
+    if (audio.length) usePlayer.getState().play(audio, 0);
+  };
+  const savePlaylist = () => {
+    const audio = (selectedItems.length ? selectedItems : items).filter((i) => i.mime.startsWith("audio/"));
+    if (!audio.length) { pushToast("error", "No audio files selected"); setPlaylistModal(false); return; }
+    usePlaylists.getState().create(playlistName.trim() || `Playlist ${usePlaylists.getState().playlists.length + 1}`, audio);
+    setPlaylistName("");
+    setPlaylistModal(false);
+    pushToast("success", "Playlist created");
   };
 
   // Archive selected items (or one) into a ZIP via a background job, then download.
@@ -187,7 +201,10 @@ export default function Workspace({ user }: { user: User }) {
     setCtx({ x: e.clientX, y: e.clientY, item });
   };
 
-  const logout = async () => { await post("/auth/logout"); qc.invalidateQueries(); };
+  const logout = async () => {
+    try { await post("/auth/logout"); } catch { /* ignore */ }
+    qc.removeQueries({ queryKey: ["session"] });
+  };
 
   // Navigate to a search/favorite/recent result.
   const navigateTo = (rid: string, p: string, isDir: boolean, name: string) => {
@@ -252,7 +269,7 @@ export default function Workspace({ user }: { user: User }) {
           />
         )}
         {view !== "files" && (
-          <div className="h-14 border-b flex items-center px-4 font-semibold capitalize">{view}</div>
+          <div className="h-14 glass-bar flex items-center px-4 font-semibold capitalize">{view}</div>
         )}
 
         <input ref={fileInput} type="file" multiple className="hidden" onChange={(e) => { uploadFiles(e.target.files); e.target.value = ""; }} />
@@ -303,19 +320,25 @@ export default function Workspace({ user }: { user: User }) {
         </div>
 
         {selection.size > 0 && view === "files" && (
-          <div className="border-t px-4 py-2 flex items-center gap-3 text-sm">
+          <div className="glass-bottom px-4 py-2 flex items-center gap-3 text-sm">
             <span className="text-content-muted">{selection.size} selected</span>
+            <button onClick={playSelected} className="flex items-center gap-1 hover:underline"><Play className="h-4 w-4" /> Play</button>
+            <button onClick={() => setPlaylistModal(true)} className="flex items-center gap-1 hover:underline"><ListMusic className="h-4 w-4" /> Save playlist</button>
             <button onClick={() => archivePaths(Array.from(selection), "selection")} className="flex items-center gap-1 hover:underline"><Archive className="h-4 w-4" /> Archive</button>
             {canWrite && <button onClick={bulkDelete} className="flex items-center gap-1 text-red-500 hover:underline"><Trash2 className="h-4 w-4" /> Delete</button>}
             <button onClick={clearSelection} className="text-content-muted hover:underline">Clear</button>
           </div>
         )}
 
-        <div className="border-t px-4 py-2 flex items-center justify-between text-sm text-content-muted">
+        <div className="glass-bottom px-4 py-2 flex items-center justify-between text-sm text-content-muted">
           <span>{view === "files" ? `${filtered.length} items` : ""}</span>
           <button onClick={logout} className="flex items-center gap-1 hover:text-content"><LogOut className="h-4 w-4" /> {user.username}</button>
         </div>
+
+        <PlayerBar />
       </div>
+
+      <TransfersPanel />
 
       {view === "files" && activeRoot && drawerPath && (
         <DetailsDrawer
@@ -353,6 +376,22 @@ export default function Workspace({ user }: { user: User }) {
       {shareItem && <ShareDialog item={shareItem} rootId={rootId!} onClose={() => setShareItem(null)} />}
       {menu && <ActionModals menu={menu} rootId={rootId!} path={path} onClose={() => setMenu(null)} onDone={() => { refresh(); setMenu(null); }} onArchiveExtract={(src, dest) => { extractZip(rootId!, src, dest, pushToast, refresh); setMenu(null); }} />}
       {rootModal && <RootModal onClose={() => setRootModal(false)} onDone={() => { refresh(); setRootModal(false); }} />}
+
+      {playlistModal && (
+        <Modal title="Save playlist" onClose={() => setPlaylistModal(false)} footer={<button onClick={savePlaylist} className="px-3 py-1.5 rounded-lg accent-glass text-sm font-medium">Create</button>}>
+          <label className="block text-sm mb-1 opacity-80">Playlist name</label>
+          <input
+            value={playlistName}
+            onChange={(e) => setPlaylistName(e.target.value)}
+            autoFocus
+            placeholder="My playlist"
+            className="w-full rounded-lg glass-input px-3 py-2 outline-none"
+          />
+          <p className="mt-2 text-xs opacity-60">
+            {(selectedItems.length ? selectedItems : items).filter((i) => i.mime.startsWith("audio/")).length} audio track(s) will be added.
+          </p>
+        </Modal>
+      )}
       <Toaster />
     </div>
   );
@@ -372,7 +411,7 @@ function SimpleList({ loading, empty, rows }: { loading: boolean; empty: string;
   return (
     <div className="p-2">
       {rows.map((r) => (
-        <button key={r.id} onClick={r.onClick} className="w-full grid grid-cols-[1fr_auto] gap-2 px-3 py-2 rounded-lg items-center hover:bg-surface-muted text-left">
+        <button key={r.id} onClick={r.onClick} className="w-full grid grid-cols-[1fr_auto] gap-2 px-3 py-2 rounded-lg items-center glass-hover text-left">
           <div className="min-w-0">
             <p className="truncate font-medium">{r.title}</p>
             <p className="text-xs text-content-muted truncate">{r.sub}</p>
@@ -392,12 +431,12 @@ function TrashView({ items, loading, onRestore, onDelete }: {
   return (
     <div className="p-2">
       {items.map((t) => (
-        <div key={t.id} className="grid grid-cols-[1fr_auto_auto] gap-2 px-3 py-2 rounded-lg items-center hover:bg-surface-muted">
-          <div className="min-w-0">
-            <p className="truncate font-medium">{t.name}</p>
-            <p className="text-xs text-content-muted truncate">{t.root_name} · {t.original_path}</p>
-          </div>
-          <button onClick={() => onRestore(t.id)} className="flex items-center gap-1 px-2 py-1 text-sm rounded-lg hover:bg-surface border"><RotateCcw className="h-4 w-4" /> Restore</button>
+           <div key={t.id} className="grid grid-cols-[1fr_auto_auto] gap-2 px-3 py-2 rounded-lg items-center glass-hover">
+           <div className="min-w-0">
+             <p className="truncate font-medium">{t.name}</p>
+             <p className="text-xs text-content-muted truncate">{t.root_name} · {t.original_path}</p>
+           </div>
+           <button onClick={() => onRestore(t.id)} className="flex items-center gap-1 px-2 py-1 text-sm rounded-lg glass-hover border"><RotateCcw className="h-4 w-4" /> Restore</button>
           <button onClick={() => onDelete(t.id)} className="flex items-center gap-1 px-2 py-1 text-sm rounded-lg text-red-500 hover:bg-red-500/10"><Trash2 className="h-4 w-4" /> Delete</button>
         </div>
       ))}
@@ -423,14 +462,14 @@ function ActionModals({ menu, rootId, path, onClose, onDone, onArchiveExtract }:
 
   if (menu.kind === "newFolder") {
     return (
-      <Modal title="New folder" onClose={onClose} footer={<button onClick={() => run(() => post("/files/directory", { root: rootId, path: base(value || "New Folder") }), "Folder created")} className="px-3 py-1.5 rounded-lg bg-accent text-accent-fg text-sm">Create</button>}>
+      <Modal title="New folder" onClose={onClose} footer={<button onClick={() => run(() => post("/files/directory", { root: rootId, path: base(value || "New Folder") }), "Folder created")} className="px-3 py-1.5 rounded-lg accent-glass text-sm">Create</button>}>
         <input autoFocus value={value} onChange={(e) => setValue(e.target.value)} placeholder="Folder name" className="w-full rounded-lg bg-surface border px-3 py-2 outline-none focus:ring-2 focus:ring-accent/40" />
       </Modal>
     );
   }
   if (menu.kind === "newFile") {
     return (
-      <Modal title="New text file" onClose={onClose} footer={<button onClick={() => run(() => post("/files/file", { root: rootId, path: base(value || "untitled.txt"), content }), "File created")} className="px-3 py-1.5 rounded-lg bg-accent text-accent-fg text-sm">Create</button>}>
+      <Modal title="New text file" onClose={onClose} footer={<button onClick={() => run(() => post("/files/file", { root: rootId, path: base(value || "untitled.txt"), content }), "File created")} className="px-3 py-1.5 rounded-lg accent-glass text-sm">Create</button>}>
         <input autoFocus value={value} onChange={(e) => setValue(e.target.value)} placeholder="name.txt" className="w-full mb-2 rounded-lg bg-surface border px-3 py-2 outline-none focus:ring-2 focus:ring-accent/40" />
         <textarea value={content} onChange={(e) => setContent(e.target.value)} rows={6} placeholder="Contents…" className="w-full rounded-lg bg-surface border px-3 py-2 outline-none focus:ring-2 focus:ring-accent/40 font-mono text-sm" />
       </Modal>
@@ -438,7 +477,7 @@ function ActionModals({ menu, rootId, path, onClose, onDone, onArchiveExtract }:
   }
   if (menu.kind === "rename" && menu.item) {
     return (
-      <Modal title="Rename" onClose={onClose} footer={<button onClick={() => run(() => post("/files/rename", { root: rootId, path: menu.item!.path, name: value }), "Renamed")} className="px-3 py-1.5 rounded-lg bg-accent text-accent-fg text-sm">Rename</button>}>
+      <Modal title="Rename" onClose={onClose} footer={<button onClick={() => run(() => post("/files/rename", { root: rootId, path: menu.item!.path, name: value }), "Renamed")} className="px-3 py-1.5 rounded-lg accent-glass text-sm">Rename</button>}>
         <input autoFocus defaultValue={menu.item.name} onChange={(e) => setValue(e.target.value)} className="w-full rounded-lg bg-surface border px-3 py-2 outline-none focus:ring-2 focus:ring-accent/40" />
       </Modal>
     );
@@ -446,7 +485,7 @@ function ActionModals({ menu, rootId, path, onClose, onDone, onArchiveExtract }:
   if ((menu.kind === "move" || menu.kind === "copy") && menu.item) {
     const isMove = menu.kind === "move";
     return (
-      <Modal title={isMove ? "Move to" : "Copy to"} onClose={onClose} footer={<button onClick={() => run(() => post(`/files/${isMove ? "move" : "copy"}`, { root: rootId, source: menu.item!.path, destination: (value ? value + "/" : "") + menu.item!.name }), isMove ? "Moved" : "Copied")} className="px-3 py-1.5 rounded-lg bg-accent text-accent-fg text-sm">{isMove ? "Move" : "Copy"}</button>}>
+      <Modal title={isMove ? "Move to" : "Copy to"} onClose={onClose} footer={<button onClick={() => run(() => post(`/files/${isMove ? "move" : "copy"}`, { root: rootId, source: menu.item!.path, destination: (value ? value + "/" : "") + menu.item!.name }), isMove ? "Moved" : "Copied")} className="px-3 py-1.5 rounded-lg accent-glass text-sm">{isMove ? "Move" : "Copy"}</button>}>
         <p className="text-sm text-content-muted mb-2">Destination folder (relative path, empty = root):</p>
         <input autoFocus value={value} onChange={(e) => setValue(e.target.value)} placeholder="e.g. docs" className="w-full rounded-lg bg-surface border px-3 py-2 outline-none focus:ring-2 focus:ring-accent/40" />
       </Modal>
@@ -455,7 +494,7 @@ function ActionModals({ menu, rootId, path, onClose, onDone, onArchiveExtract }:
   if (menu.kind === "extract" && menu.item) {
     const defaultDest = path;
     return (
-      <Modal title={`Extract "${menu.item.name}"`} onClose={onClose} footer={<button onClick={() => onArchiveExtract(menu.item!.path, value || defaultDest)} className="px-3 py-1.5 rounded-lg bg-accent text-accent-fg text-sm">Extract</button>}>
+      <Modal title={`Extract "${menu.item.name}"`} onClose={onClose} footer={<button onClick={() => onArchiveExtract(menu.item!.path, value || defaultDest)} className="px-3 py-1.5 rounded-lg accent-glass text-sm">Extract</button>}>
         <p className="text-sm text-content-muted mb-2">Destination folder (relative path, empty = current):</p>
         <input autoFocus value={value} onChange={(e) => setValue(e.target.value)} placeholder={defaultDest || "root"} className="w-full rounded-lg bg-surface border px-3 py-2 outline-none focus:ring-2 focus:ring-accent/40" />
         <p className="mt-2 text-xs text-content-muted">Archives are extracted safely with zip-slip protection.</p>
@@ -475,7 +514,7 @@ function RootModal({ onClose, onDone }: { onClose: () => void; onDone: () => voi
     catch (e: any) { pushToast("error", e.message); }
   };
   return (
-    <Modal title="New storage root" onClose={onClose} footer={<button onClick={run} className="px-3 py-1.5 rounded-lg bg-accent text-accent-fg text-sm">Create</button>}>
+    <Modal title="New storage root" onClose={onClose} footer={<button onClick={run} className="px-3 py-1.5 rounded-lg accent-glass text-sm">Create</button>}>
       <label className="block text-sm mb-1">Name</label>
       <input value={name} onChange={(e) => setName(e.target.value)} className="w-full mb-3 rounded-lg bg-surface border px-3 py-2 outline-none" placeholder="Backups" />
       <label className="block text-sm mb-1">Host path</label>

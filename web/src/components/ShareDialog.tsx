@@ -49,9 +49,9 @@ export default function ShareDialog({ item, rootId, onClose }: { item: FileItem;
       onClose={onClose}
       footer={
         result ? (
-          <button onClick={onClose} className="px-3 py-1.5 rounded-lg bg-accent text-accent-fg text-sm">Done</button>
+          <button onClick={onClose} className="px-3 py-1.5 rounded-lg accent-glass text-sm">Done</button>
         ) : (
-          <button onClick={create} disabled={creating} className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-accent text-accent-fg text-sm disabled:opacity-50">
+          <button onClick={create} disabled={creating} className="flex items-center gap-1 px-3 py-1.5 rounded-lg accent-glass text-sm disabled:opacity-50">
             {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />} Create link
           </button>
         )
@@ -61,7 +61,7 @@ export default function ShareDialog({ item, rootId, onClose }: { item: FileItem;
         <div className="space-y-3">
           <div className="flex items-center gap-2">
             <input readOnly value={result.url} className="flex-1 rounded-lg bg-surface border px-3 py-2 text-sm font-mono" />
-            <button onClick={copy} className="p-2 rounded-lg border hover:bg-surface-muted" title="Copy link">
+              <button onClick={copy} className="p-2 rounded-lg border glass-hover" title="Copy link">
               {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
             </button>
           </div>

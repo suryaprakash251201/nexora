@@ -46,18 +46,27 @@ func Recoverer(log *logger.Logger) func(http.Handler) http.Handler {
 }
 
 // SecurityHeaders applies secure defaults: CSP, HSTS-friendly headers,
-// X-Content-Type-Options, Referrer-Policy, and frame restrictions.
+// X-Content-Type-Options, Referrer-Policy, and frame restrictions. Inline
+// media previews (PDF/thumbnail) are framed by the same-origin SPA, so those
+// paths relax the frame policy to allow embedding.
 func SecurityHeaders(cfg *config.Config) func(http.Handler) http.Handler {
-	csp := buildCSP()
+	baseCSP := buildCSP()
+	frameCSP := strings.Replace(buildCSP(), "frame-ancestors 'none'", "frame-ancestors 'self'", 1)
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			h := w.Header()
-			h.Set("Content-Security-Policy", csp)
+			p := r.URL.Path
+			allowFrame := strings.HasPrefix(p, "/api/v1/files/raw") || strings.HasPrefix(p, "/api/v1/files/thumbnail")
+			if allowFrame {
+				h.Set("Content-Security-Policy", frameCSP)
+			} else {
+				h.Set("Content-Security-Policy", baseCSP)
+				h.Set("X-Frame-Options", "DENY")
+			}
 			h.Set("X-Content-Type-Options", "nosniff")
 			h.Set("Referrer-Policy", "same-origin")
-			h.Set("X-Frame-Options", "DENY")
 			h.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
-			if !strings.HasPrefix(r.URL.Path, "/api/") {
+			if !strings.HasPrefix(p, "/api/") {
 				h.Set("Cache-Control", "no-store")
 			}
 			next.ServeHTTP(w, r)

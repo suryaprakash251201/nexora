@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { X, Download, Pencil, Share2, Copy, Check, ZoomIn, ZoomOut, SkipBack, SkipForward } from "lucide-react";
+import { X, Download, Pencil, Share2, Copy, Check, ZoomIn, ZoomOut } from "lucide-react";
 import type { FileItem } from "../api/types";
 import { previewKind, isEditable, rawUrl, codeLanguage } from "../lib/preview";
 import { renderMarkdown } from "../lib/markdown";
+import { usePlayer } from "../store/player";
+import MediaPlayer from "./MediaPlayer";
 
 const MAX_TEXT = 400000;
 
@@ -67,6 +69,13 @@ export default function PreviewModal({
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
+  useEffect(() => {
+    if (kind === "audio" && audioQueue.length) {
+      usePlayer.getState().play(audioQueue, queueIndex);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [current.path]);
+
   const copyText = () => {
     if (text) {
       navigator.clipboard.writeText(text).then(() => {
@@ -80,29 +89,29 @@ export default function PreviewModal({
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center p-4 bg-black/70" onMouseDown={onClose}>
-      <div className="w-full max-w-5xl h-[88vh] flex flex-col bg-surface-elevated border rounded-xl overflow-hidden" onMouseDown={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-4 py-3 border-b gap-2">
+      <div className="w-full max-w-5xl h-[88vh] flex flex-col glass-strong rounded-xl overflow-hidden" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-4 py-3 border-b glass-divider gap-2">
           <span className="font-medium truncate">{current.name}</span>
           <div className="flex items-center gap-1">
             {kind === "image" && (
               <>
-                <button onClick={() => setZoom((z) => Math.max(0.25, z - 0.25))} className="p-2 rounded-lg hover:bg-surface-muted" title="Zoom out"><ZoomOut className="h-4 w-4" /></button>
-                <button onClick={() => setZoom((z) => Math.min(5, z + 0.25))} className="p-2 rounded-lg hover:bg-surface-muted" title="Zoom in"><ZoomIn className="h-4 w-4" /></button>
+                <button onClick={() => setZoom((z) => Math.max(0.25, z - 0.25))} className="p-2 rounded-lg glass-hover" title="Zoom out"><ZoomOut className="h-4 w-4" /></button>
+                <button onClick={() => setZoom((z) => Math.min(5, z + 0.25))} className="p-2 rounded-lg glass-hover" title="Zoom in"><ZoomIn className="h-4 w-4" /></button>
               </>
             )}
             {(kind === "text" || kind === "markdown") && (
-              <button onClick={copyText} className="p-2 rounded-lg hover:bg-surface-muted" title="Copy">
+              <button onClick={copyText} className="p-2 rounded-lg glass-hover" title="Copy">
                 {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
               </button>
             )}
             {onShare && (
-              <button onClick={() => onShare(current)} className="p-2 rounded-lg hover:bg-surface-muted" title="Share"><Share2 className="h-4 w-4" /></button>
+              <button onClick={() => onShare(current)} className="p-2 rounded-lg glass-hover" title="Share"><Share2 className="h-4 w-4" /></button>
             )}
             {canWrite && editable && onEdit && (
-              <button onClick={() => { onEdit(current); }} className="p-2 rounded-lg hover:bg-surface-muted" title="Edit"><Pencil className="h-4 w-4" /></button>
+              <button onClick={() => { onEdit(current); }} className="p-2 rounded-lg glass-hover" title="Edit"><Pencil className="h-4 w-4" /></button>
             )}
-            <a href={rawUrl(current.root_id || rootId, current.path, true)} className="p-2 rounded-lg hover:bg-surface-muted" title="Download"><Download className="h-4 w-4" /></a>
-            <button onClick={onClose} className="p-2 rounded-lg hover:bg-surface-muted"><X className="h-4 w-4" /></button>
+            <a href={rawUrl(current.root_id || rootId, current.path, true)} className="p-2 rounded-lg glass-hover" title="Download"><Download className="h-4 w-4" /></a>
+            <button onClick={onClose} className="p-2 rounded-lg glass-hover"><X className="h-4 w-4" /></button>
           </div>
         </div>
 
@@ -111,32 +120,16 @@ export default function PreviewModal({
             <img src={url} alt={current.name} className="max-h-full max-w-full object-contain transition-transform" style={{ transform: `scale(${zoom})` }} />
           )}
           {kind === "video" && (
-            <video src={url} controls autoPlay className="max-h-full max-w-full" controlsList="nodownload" />
+            <MediaPlayer kind="video" url={url} item={current} autoPlay />
           )}
           {kind === "audio" && (
-            <div className="w-full max-w-lg p-6">
-              <div className="mb-4 text-center">
-                <div className="h-40 w-40 mx-auto rounded-xl bg-accent/15 grid place-items-center text-accent text-5xl font-bold">♪</div>
-                <p className="mt-3 font-medium truncate">{current.name}</p>
-              </div>
-              <audio src={url} controls autoPlay className="w-full" onEnded={() => {
-                if (queueIndex >= 0 && queueIndex < audioQueue.length - 1) setCurrent(audioQueue[queueIndex + 1]);
-              }} />
-              {audioQueue.length > 1 && (
-                <div className="mt-4">
-                  <div className="flex items-center justify-center gap-2 mb-2">
-                    <button disabled={queueIndex <= 0} onClick={() => setCurrent(audioQueue[queueIndex - 1])} className="p-2 rounded-lg hover:bg-surface-muted disabled:opacity-40"><SkipBack className="h-4 w-4" /></button>
-                    <span className="text-xs text-content-muted">{queueIndex + 1} / {audioQueue.length}</span>
-                    <button disabled={queueIndex >= audioQueue.length - 1} onClick={() => setCurrent(audioQueue[queueIndex + 1])} className="p-2 rounded-lg hover:bg-surface-muted disabled:opacity-40"><SkipForward className="h-4 w-4" /></button>
-                  </div>
-                  <div className="max-h-40 overflow-auto border rounded-lg divide-y">
-                    {audioQueue.map((t, i) => (
-                      <button key={t.path} onClick={() => setCurrent(t)} className={`w-full text-left px-3 py-2 text-sm truncate ${i === queueIndex ? "bg-accent/15 text-accent" : "hover:bg-surface-muted"}`}>{t.name}</button>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
+            <MediaPlayer
+              kind="audio"
+              controlled
+              item={current}
+              playlist={audioQueue}
+              onSelect={(i) => { setCurrent(audioQueue[i]); usePlayer.getState().play(audioQueue, i); }}
+            />
           )}
           {kind === "pdf" && <iframe src={url} className="w-full h-full bg-white" title={current.name} />}
           {kind === "markdown" && (
@@ -171,7 +164,7 @@ function CodeView({ text, ext, truncated }: { text: string; ext: string; truncat
         <span>{lines.length} lines{truncated ? " (truncated)" : ""}</span>
       </div>
       <div className="flex font-mono text-sm">
-        <div className="select-none text-right py-3 px-2 text-content-muted bg-surface-muted/40 border-r" style={{ minWidth: "3.5rem" }}>
+        <div className="select-none text-right py-3 px-2 text-content-muted bg-surface-muted border-r" style={{ minWidth: "3.5rem" }}>
           {lines.map((_, i) => <div key={i} className="leading-6">{i + 1}</div>)}
         </div>
         <pre className="flex-1 py-3 px-3 leading-6 whitespace-pre overflow-x-auto"><code>{text}</code></pre>

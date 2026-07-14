@@ -18,12 +18,12 @@ export function Modal({ title, onClose, children, footer }: {
   return (
     <div className="fixed inset-0 z-50 grid place-items-center p-4 bg-black/50" onMouseDown={onClose}>
       <div
-        className="w-full max-w-md bg-surface-elevated border rounded-xl shadow-lg"
+        className="w-full max-w-md glass-strong rounded-xl"
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-4 py-3 border-b">
+        <div className="flex items-center justify-between px-4 py-3 border-b glass-divider">
           <h2 className="font-semibold">{title}</h2>
-          <button onClick={onClose} className="p-1 rounded hover:bg-surface-muted">
+          <button onClick={onClose} className="p-1 rounded glass-hover">
             <X className="h-4 w-4" />
           </button>
         </div>

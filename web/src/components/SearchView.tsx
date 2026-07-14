@@ -44,7 +44,7 @@ export default function SearchView({
 
   return (
     <div className="flex-1 overflow-auto">
-      <div className="p-4 border-b space-y-3 sticky top-0 bg-surface z-10">
+      <div className="p-4 glass-bar space-y-3 sticky top-0 z-10">
         <div className="relative">
           <SearchIcon className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-content-muted" />
           <input
@@ -92,7 +92,7 @@ export default function SearchView({
             <button
               key={r.root_id + r.path}
               onClick={() => onOpen(r)}
-              className="w-full grid grid-cols-[auto_1fr_auto] gap-3 items-center px-3 py-2 rounded-lg hover:bg-surface-muted text-left"
+              className="w-full grid grid-cols-[auto_1fr_auto] gap-3 items-center px-3 py-2 rounded-lg glass-hover text-left"
             >
               {r.is_dir ? <Folder className="h-4 w-4 text-accent" /> : <FileText className="h-4 w-4 text-content-muted" />}
               <div className="min-w-0">

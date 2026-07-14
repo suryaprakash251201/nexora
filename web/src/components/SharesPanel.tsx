@@ -30,19 +30,19 @@ export default function SharesPanel() {
       {!isLoading && items.length === 0 && <p className="text-content-muted p-6 text-center">You have no active share links.</p>}
       <div className="space-y-2">
         {items.map((s) => (
-          <div key={s.id} className="border rounded-lg p-3 flex items-center gap-3">
+          <div key={s.id} className="glass rounded-lg p-3 flex items-center gap-3">
             <div className="min-w-0 flex-1">
               <p className="font-medium truncate">{s.name}</p>
               <p className="text-xs text-content-muted truncate">{s.path}</p>
               <div className="flex flex-wrap gap-2 mt-1 text-[11px] text-content-muted">
-                <span className="px-1.5 py-0.5 rounded bg-surface-muted">{s.scope}</span>
-                {s.has_password && <span className="px-1.5 py-0.5 rounded bg-surface-muted">password</span>}
-                <span className="px-1.5 py-0.5 rounded bg-surface-muted">{s.expires_at ? `expires ${formatDate(s.expires_at)}` : "no expiry"}</span>
-                <span className="px-1.5 py-0.5 rounded bg-surface-muted">{s.download_count}{s.max_downloads ? `/${s.max_downloads}` : ""} downloads</span>
+                <span className="px-1.5 py-0.5 rounded glass-chip">{s.scope}</span>
+                {s.has_password && <span className="px-1.5 py-0.5 rounded glass-chip">password</span>}
+                <span className="px-1.5 py-0.5 rounded glass-chip">{s.expires_at ? `expires ${formatDate(s.expires_at)}` : "no expiry"}</span>
+                <span className="px-1.5 py-0.5 rounded glass-chip">{s.download_count}{s.max_downloads ? `/${s.max_downloads}` : ""} downloads</span>
               </div>
             </div>
-            <button onClick={() => { navigator.clipboard.writeText(s.url); pushToast("success", "Link copied"); }} className="p-2 rounded-lg hover:bg-surface-muted" title="Copy link"><Copy className="h-4 w-4" /></button>
-            <a href={s.url} target="_blank" rel="noreferrer" className="p-2 rounded-lg hover:bg-surface-muted" title="Open"><ExternalLink className="h-4 w-4" /></a>
+            <button onClick={() => { navigator.clipboard.writeText(s.url); pushToast("success", "Link copied"); }} className="p-2 rounded-lg glass-hover" title="Copy link"><Copy className="h-4 w-4" /></button>
+            <a href={s.url} target="_blank" rel="noreferrer" className="p-2 rounded-lg glass-hover" title="Open"><ExternalLink className="h-4 w-4" /></a>
             <button onClick={() => revoke(s.id)} className="p-2 rounded-lg hover:bg-red-500/10 text-red-500" title="Revoke"><Trash2 className="h-4 w-4" /></button>
           </div>
         ))}

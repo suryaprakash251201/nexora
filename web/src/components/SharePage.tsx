@@ -42,13 +42,14 @@ export default function SharePage({ token }: { token: string }) {
   const rawViewUrl = `/api/v1/share/${encodeURIComponent(token)}/raw${pq}`;
 
   return (
-    <div className="min-h-screen grid place-items-center p-4 bg-surface">
+    <div className="min-h-screen grid place-items-center p-4 bg-transparent">
+      <div className="nexora-bg" aria-hidden="true" />
       <div className="w-full max-w-md">
         <div className="flex items-center gap-2 justify-center mb-6">
           <div className="h-9 w-9 rounded-lg bg-accent grid place-items-center text-accent-fg font-bold">N</div>
           <span className="font-semibold text-xl">Nexora</span>
         </div>
-        <div className="bg-surface-elevated border rounded-xl p-6 shadow-sm">
+        <div className="glass-strong rounded-xl p-6">
           {error && !info ? (
             <div className="text-center text-content-muted">
               <FileWarning className="h-8 w-8 mx-auto mb-2 text-amber-500" />
@@ -80,7 +81,7 @@ export default function SharePage({ token }: { token: string }) {
                     className="w-full rounded-lg bg-surface border px-3 py-2 outline-none focus:ring-2 focus:ring-accent/40"
                   />
                   {error && <p className="text-sm text-red-500">{error}</p>}
-                  <button onClick={verify} disabled={verifying} className="w-full rounded-lg bg-accent text-accent-fg py-2 disabled:opacity-50">
+                  <button onClick={verify} disabled={verifying} className="w-full rounded-lg accent-glass py-2 disabled:opacity-50">
                     {verifying ? "Checking…" : "Unlock"}
                   </button>
                 </div>
@@ -89,11 +90,11 @@ export default function SharePage({ token }: { token: string }) {
                   {info.scope === "preview" && previewKind(info) === "image" && (
                     <img src={rawViewUrl} alt={info.name} className="max-h-64 mx-auto rounded-lg object-contain" />
                   )}
-                  <a href={downloadUrl} className="flex items-center justify-center gap-2 w-full rounded-lg bg-accent text-accent-fg py-2 font-medium">
+                  <a href={downloadUrl} className="flex items-center justify-center gap-2 w-full rounded-lg accent-glass py-2 font-medium">
                     <Download className="h-4 w-4" /> Download
                   </a>
                   {info.scope === "preview" && (
-                    <a href={rawViewUrl} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-2 w-full rounded-lg border py-2 hover:bg-surface-muted">
+                    <a href={rawViewUrl} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-2 w-full rounded-lg border py-2 glass-hover">
                       <Eye className="h-4 w-4" /> Open preview
                     </a>
                   )}

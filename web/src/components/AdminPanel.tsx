@@ -1,23 +1,24 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Users, ScrollText, RefreshCw, Plus, Shield } from "lucide-react";
+import { Users, ScrollText, RefreshCw, Plus, Shield, Settings, HardDrive, Sun, Moon, Monitor, LayoutGrid, List } from "lucide-react";
 import { get, post, put, del } from "../api/client";
 import { Modal } from "./Modal";
 import { useUI } from "../store";
 import { formatDate } from "../lib/format";
-import type { AuditItem, User } from "../api/types";
+import type { AuditItem, User, Root } from "../api/types";
 
-type Tab = "users" | "audit";
+type Tab = "users" | "audit" | "settings";
 
 export default function AdminPanel() {
   const [tab, setTab] = useState<Tab>("users");
   return (
     <div className="flex-1 overflow-hidden flex flex-col">
-      <div className="border-b flex items-center gap-1 px-4">
+      <div className="border-b flex items-center gap-1 px-4 glass-divider">
         <TabButton active={tab === "users"} onClick={() => setTab("users")} icon={<Users className="h-4 w-4" />}>Users</TabButton>
         <TabButton active={tab === "audit"} onClick={() => setTab("audit")} icon={<ScrollText className="h-4 w-4" />}>Audit log</TabButton>
+        <TabButton active={tab === "settings"} onClick={() => setTab("settings")} icon={<Settings className="h-4 w-4" />}>Settings</TabButton>
       </div>
-      {tab === "users" ? <UsersTab /> : <AuditTab />}
+      {tab === "users" ? <UsersTab /> : tab === "audit" ? <AuditTab /> : <SettingsTab />}
     </div>
   );
 }
@@ -59,11 +60,11 @@ function UsersTab() {
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-semibold">Users</h2>
         <div className="flex gap-2">
-          <button onClick={reindex} className="flex items-center gap-1 px-3 py-1.5 rounded-lg border text-sm hover:bg-surface-muted"><RefreshCw className="h-4 w-4" /> Reindex search</button>
-          <button onClick={() => setShowCreate(true)} className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-accent text-accent-fg text-sm"><Plus className="h-4 w-4" /> New user</button>
+          <button onClick={reindex} className="flex items-center gap-1 px-3 py-1.5 rounded-lg border text-sm glass-hover"><RefreshCw className="h-4 w-4" /> Reindex search</button>
+          <button onClick={() => setShowCreate(true)} className="flex items-center gap-1 px-3 py-1.5 rounded-lg accent-glass text-sm"><Plus className="h-4 w-4" /> New user</button>
         </div>
       </div>
-      <div className="border rounded-lg divide-y">
+      <div className="glass rounded-lg divide-y glass-divider">
         {users.map((u) => (
           <div key={u.id} className="grid grid-cols-[1fr_auto_auto_auto] gap-3 items-center px-3 py-2">
             <div className="min-w-0">
@@ -80,7 +81,7 @@ function UsersTab() {
               <option value="disabled">Disabled</option>
             </select>
             <div className="flex gap-1">
-              <button onClick={() => setPermUser(u)} className="p-2 rounded-lg hover:bg-surface-muted" title="Root access"><Shield className="h-4 w-4" /></button>
+              <button onClick={() => setPermUser(u)} className="p-2 rounded-lg glass-hover" title="Root access"><Shield className="h-4 w-4" /></button>
               <button onClick={() => removeUser(u)} className="px-2 py-1 rounded-lg text-red-500 hover:bg-red-500/10 text-sm">Delete</button>
             </div>
           </div>
@@ -101,7 +102,7 @@ function CreateUserModal({ onClose, onDone }: { onClose: () => void; onDone: () 
   };
   const upd = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
   return (
-    <Modal title="Create user" onClose={onClose} footer={<button onClick={submit} className="px-3 py-1.5 rounded-lg bg-accent text-accent-fg text-sm">Create</button>}>
+    <Modal title="Create user" onClose={onClose} footer={<button onClick={submit} className="px-3 py-1.5 rounded-lg accent-glass text-sm">Create</button>}>
       <div className="space-y-3">
         <input value={form.username} onChange={(e) => upd("username", e.target.value)} placeholder="Username" className="w-full rounded-lg bg-surface border px-3 py-2 outline-none" />
         <input value={form.email} onChange={(e) => upd("email", e.target.value)} placeholder="Email" className="w-full rounded-lg bg-surface border px-3 py-2 outline-none" />
@@ -156,10 +157,10 @@ function AuditTab() {
     <div className="flex-1 overflow-auto p-4">
       <h2 className="text-lg font-semibold mb-4">Audit log</h2>
       {isLoading && <p className="text-content-muted">Loading…</p>}
-      <div className="border rounded-lg divide-y text-sm">
+      <div className="glass rounded-lg divide-y glass-divider text-sm">
         {items.map((a) => (
           <div key={a.id} className="grid grid-cols-[auto_1fr_auto] gap-3 items-center px-3 py-2">
-            <span className="px-1.5 py-0.5 rounded bg-surface-muted text-xs font-mono">{a.action}</span>
+            <span className="px-1.5 py-0.5 rounded glass-chip text-xs font-mono">{a.action}</span>
             <div className="min-w-0">
               <p className="truncate">{a.target}{a.detail ? ` — ${a.detail}` : ""}</p>
               <p className="text-xs text-content-muted">{a.user_id || "anonymous"} · {a.ip}</p>
@@ -168,6 +169,87 @@ function AuditTab() {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+function SettingsTab() {
+  const theme = useUI((s) => s.theme);
+  const setTheme = useUI((s) => s.setTheme);
+  const viewMode = useUI((s) => s.viewMode);
+  const setViewMode = useUI((s) => s.setViewMode);
+  const { data: ver } = useQuery({ queryKey: ["version"], queryFn: () => get<{ version: string; go: string; product: string; tagline: string }>("/version") });
+  const { data: roots } = useQuery({ queryKey: ["roots-admin"], queryFn: () => get<{ roots: Root[] }>("/roots") });
+
+  const themeOpts = [
+    { key: "light" as const, label: "Light", icon: <Sun className="h-4 w-4" /> },
+    { key: "dark" as const, label: "Dark", icon: <Moon className="h-4 w-4" /> },
+    { key: "system" as const, label: "System", icon: <Monitor className="h-4 w-4" /> },
+  ];
+
+  return (
+    <div className="flex-1 overflow-auto p-4 space-y-4">
+      <section className="glass rounded-xl p-4">
+        <h3 className="font-semibold mb-3 flex items-center gap-2"><Sun className="h-4 w-4" /> Appearance</h3>
+        <div className="space-y-4">
+          <div>
+            <p className="text-sm text-content-muted mb-2">Theme</p>
+            <div className="inline-flex rounded-lg border overflow-hidden glass">
+              {themeOpts.map((o) => (
+                <button
+                  key={o.key}
+                  onClick={() => setTheme(o.key)}
+                  className={`flex items-center gap-1 px-3 py-1.5 text-sm ${theme === o.key ? "bg-accent/15 text-accent" : "glass-hover"}`}
+                >
+                  {o.icon} {o.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <p className="text-sm text-content-muted mb-2">Default file view</p>
+            <div className="inline-flex rounded-lg border overflow-hidden glass">
+              <button
+                onClick={() => setViewMode("list")}
+                className={`flex items-center gap-1 px-3 py-1.5 text-sm ${viewMode === "list" ? "bg-accent/15 text-accent" : "glass-hover"}`}
+              >
+                <List className="h-4 w-4" /> List
+              </button>
+              <button
+                onClick={() => setViewMode("grid")}
+                className={`flex items-center gap-1 px-3 py-1.5 text-sm ${viewMode === "grid" ? "bg-accent/15 text-accent" : "glass-hover"}`}
+              >
+                <LayoutGrid className="h-4 w-4" /> Grid
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="glass rounded-xl p-4">
+        <h3 className="font-semibold mb-3 flex items-center gap-2"><HardDrive className="h-4 w-4" /> Storage roots</h3>
+        <div className="space-y-2">
+          {(roots?.roots || []).map((r) => (
+            <div key={r.id} className="flex items-center justify-between gap-2 text-sm">
+              <span className="flex items-center gap-2 truncate"><HardDrive className="h-4 w-4 text-content-muted" /> {r.name}</span>
+              <span className="text-xs text-content-muted">{r.read_only ? "Read-only" : "Read & write"}</span>
+            </div>
+          ))}
+          {(!roots?.roots || roots.roots.length === 0) && <p className="text-sm text-content-muted">No storage roots configured.</p>}
+        </div>
+      </section>
+
+      <section className="glass rounded-xl p-4">
+        <h3 className="font-semibold mb-3">System</h3>
+        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
+          <dt className="text-content-muted">Product</dt>
+          <dd>{ver?.product || "Nexora"}</dd>
+          <dt className="text-content-muted">Version</dt>
+          <dd>{ver?.version || "dev"}</dd>
+          <dt className="text-content-muted">Runtime</dt>
+          <dd>{ver?.go || "—"}</dd>
+        </dl>
+      </section>
     </div>
   );
 }

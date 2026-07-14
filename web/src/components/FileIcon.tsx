@@ -1,6 +1,7 @@
 import {
-  File,
   FileText,
+  FileType,
+  FileSpreadsheet,
   Folder,
   Image,
   Film,
@@ -8,7 +9,6 @@ import {
   Archive,
   FileCode,
   FileJson,
-  Sheet,
   Presentation,
   File as FileIconBase,
 } from "lucide-react";
@@ -21,13 +21,16 @@ export function iconForFile(item: { is_dir: boolean; mime: string; extension: st
   if (m.startsWith("image/")) return Image;
   if (m.startsWith("video/")) return Film;
   if (m.startsWith("audio/")) return Music;
-  if (m === "application/pdf") return FileText;
+  if (m === "application/pdf" || ext === "pdf") return FileText;
   if (m.includes("zip") || m.includes("tar") || ["zip", "tar", "gz", "7z", "rar"].includes(ext)) return Archive;
-  if (["json", "yaml", "yml", "toml", "ini", "xml"].includes(ext)) return FileJson;
+  if (["json", "yaml", "yml", "toml", "ini", "xml", "webmanifest"].includes(ext)) return FileJson;
   if (["js", "ts", "jsx", "tsx", "go", "py", "sh", "bash", "rs", "java", "c", "cpp", "h", "css", "html", "rb", "php"].includes(ext))
     return FileCode;
-  if (["md", "markdown", "txt", "log"].includes(ext)) return FileText;
-  if (["csv", "xls", "xlsx"].includes(ext)) return Sheet;
-  if (["ppt", "pptx", "key", "odp"].includes(ext)) return Presentation;
+  if (["md", "markdown", "txt", "log", "rtf"].includes(ext)) return FileText;
+  // Office documents.
+  if (["doc", "docx", "odt", "pages"].includes(ext)) return FileType;
+  if (["csv", "xls", "xlsx", "ods", "numbers"].includes(ext)) return FileSpreadsheet;
+  if (["ppt", "pptx", "key", "odp", "pps", "ppsx"].includes(ext)) return Presentation;
   return FileIconBase;
 }
+

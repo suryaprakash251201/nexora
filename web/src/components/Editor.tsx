@@ -103,18 +103,18 @@ export default function Editor({ item, rootId, onClose }: { item: FileItem; root
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center p-4 bg-black/70" onMouseDown={tryClose}>
-      <div className="w-full max-w-5xl h-[88vh] flex flex-col bg-surface-elevated border rounded-xl overflow-hidden" onMouseDown={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-4 py-3 border-b">
+      <div className="w-full max-w-5xl h-[88vh] flex flex-col glass-strong rounded-xl overflow-hidden" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-4 py-3 border-b glass-divider">
           <div className="flex items-center gap-2 min-w-0">
             <span className="font-medium truncate">{item.name}</span>
-            <span className="text-xs text-content-muted px-1.5 py-0.5 rounded bg-surface-muted">{codeLanguage(item.extension)}</span>
+            <span className="text-xs text-content-muted px-1.5 py-0.5 rounded glass-chip">{codeLanguage(item.extension)}</span>
             {dirty && <span className="text-xs text-amber-500">● unsaved</span>}
           </div>
           <div className="flex items-center gap-1">
-            <button onClick={() => save()} disabled={saving || !dirty} className="flex items-center gap-1 rounded-lg bg-accent text-accent-fg px-3 py-1.5 text-sm disabled:opacity-50">
+            <button onClick={() => save()} disabled={saving || !dirty} className="flex items-center gap-1 rounded-lg accent-glass px-3 py-1.5 text-sm disabled:opacity-50">
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Save
             </button>
-            <button onClick={tryClose} className="p-2 rounded-lg hover:bg-surface-muted"><X className="h-4 w-4" /></button>
+            <button onClick={tryClose} className="p-2 rounded-lg glass-hover"><X className="h-4 w-4" /></button>
           </div>
         </div>
         {loading ? (
@@ -125,7 +125,7 @@ export default function Editor({ item, rootId, onClose }: { item: FileItem; root
           </div>
         ) : (
           <div className="flex-1 flex overflow-hidden font-mono text-sm">
-            <div ref={gutterRef} className="overflow-hidden select-none text-right py-3 px-2 text-content-muted bg-surface-muted/40 border-r" style={{ minWidth: "3.5rem" }}>
+            <div ref={gutterRef} className="overflow-hidden select-none text-right py-3 px-2 text-content-muted bg-surface-muted border-r" style={{ minWidth: "3.5rem" }}>
               {Array.from({ length: lineCount }, (_, i) => (
                 <div key={i} className="leading-6">{i + 1}</div>
               ))}

@@ -1,8 +1,47 @@
+import { useState } from "react";
+import { Folder } from "lucide-react";
 import { FileItem } from "../api/types";
 import { iconForFile } from "./FileIcon";
 import { formatBytes, formatDate } from "../lib/format";
 import { thumbUrl } from "../lib/preview";
 import { useUI } from "../store";
+
+const IMAGE_EXT = ["jpg", "jpeg", "png", "gif", "webp", "bmp", "avif"];
+
+function FolderTile({ large }: { large?: boolean }) {
+  return (
+    <div className={`grid place-items-center rounded-xl bg-gradient-to-br from-accent/30 to-accent/10 text-accent ${large ? "h-16 w-16" : "h-9 w-9"}`}>
+      <Folder className={large ? "h-8 w-8" : "h-5 w-5"} />
+    </div>
+  );
+}
+
+// FileThumb renders an embedded cover (audio) or image thumbnail, falling back
+// to a type icon when no preview is available.
+function FileThumb({ it, large }: { it: FileItem; large?: boolean }) {
+  const [failed, setFailed] = useState(false);
+  const ext = it.extension.toLowerCase();
+  const isImage = it.mime.startsWith("image/") || IMAGE_EXT.includes(ext);
+  const isAudioCover = it.mime.startsWith("audio/") || ext === "mp3" || ext === "flac";
+  const dim = large ? "h-16 w-16" : "h-9 w-9";
+  if ((!isImage && !isAudioCover) || failed) {
+    const Icon = iconForFile(it);
+    return (
+      <div className={`grid place-items-center rounded-xl bg-white/5 ${dim}`}>
+        <Icon className={`${large ? "h-8 w-8" : "h-5 w-5"} text-content-muted`} />
+      </div>
+    );
+  }
+  return (
+    <img
+      src={thumbUrl(it)}
+      alt=""
+      className={`${dim} object-cover rounded-xl ring-1 ring-white/10`}
+      loading="lazy"
+      onError={() => setFailed(true)}
+    />
+  );
+}
 
 export default function FileBrowser({
   items,
@@ -46,13 +85,6 @@ export default function FileBrowser({
     );
   }
 
-  const thumb = (it: FileItem) => {
-    const url = thumbUrl(it);
-    if (url) return <img src={url} alt="" className="h-10 w-10 object-cover rounded" />;
-    const Icon = iconForFile(it);
-    return <Icon className={`h-10 w-10 ${it.is_dir ? "text-accent" : "text-content-muted"}`} />;
-  };
-
   if (viewMode === "grid") {
     return (
       <div className="p-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
@@ -67,12 +99,11 @@ export default function FileBrowser({
               }}
               onDoubleClick={() => onOpen(it)}
               onContextMenu={(e) => onContextMenu(e, it)}
-              className={`group relative flex flex-col items-center gap-2 p-4 rounded-xl border text-center hover:bg-surface-muted ${
-                selected ? "border-accent bg-accent/10" : ""
+              className={`group relative flex flex-col items-center gap-2 p-4 rounded-2xl border text-center transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg glass-hover ${
+                selected ? "border-accent bg-accent/10" : "border-transparent"
               }`}
             >
-              {!it.is_dir && thumb(it)}
-              {it.is_dir && <div className="h-10 w-10 grid place-items-center"><span className="text-3xl">📁</span></div>}
+              {it.is_dir ? <FolderTile large /> : <FileThumb it={it} large />}
               <span className="text-sm truncate w-full" title={it.name}>{it.name}</span>
               <span className="text-[11px] text-content-muted">{it.is_dir ? "" : formatBytes(it.size)}</span>
               {!it.is_dir && canWrite && (
@@ -94,7 +125,7 @@ export default function FileBrowser({
 
   return (
     <div className="p-2">
-      <div className="grid grid-cols-[1fr_auto_auto] gap-2 px-3 py-2 text-xs uppercase tracking-wide text-content-muted border-b">
+      <div className="grid grid-cols-[1fr_auto_auto] gap-2 px-3 py-2 text-xs uppercase tracking-wide text-content-muted border-b glass-divider">
         <span>Name</span>
         <span className="w-28 text-right">Size</span>
         <span className="w-40 text-right">Modified</span>
@@ -111,7 +142,7 @@ export default function FileBrowser({
             onDoubleClick={() => onOpen(it)}
             onContextMenu={(e) => onContextMenu(e, it)}
             className={`group grid grid-cols-[1fr_auto_auto] gap-2 px-3 py-2 rounded-lg items-center cursor-pointer ${
-              selected ? "bg-accent/10" : "hover:bg-surface-muted"
+              selected ? "bg-accent/10" : "glass-hover"
             }`}
           >
             <span className="flex items-center gap-2 min-w-0">
@@ -124,7 +155,7 @@ export default function FileBrowser({
                   onClick={(e) => e.stopPropagation()}
                 />
               )}
-              {!it.is_dir ? thumb(it) : <span className="text-lg">📁</span>}
+              {!it.is_dir ? <FileThumb it={it} /> : <FolderTile />}
               <span className="truncate" title={it.name}>{it.name}</span>
             </span>
             <span className="w-28 text-right text-sm text-content-muted">{it.is_dir ? "—" : formatBytes(it.size)}</span>

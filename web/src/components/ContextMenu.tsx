@@ -36,7 +36,7 @@ export default function ContextMenu({
     <>
       <div className="fixed inset-0 z-40" onClick={onClose} onContextMenu={(e) => { e.preventDefault(); onClose(); }} />
       <div
-        className="fixed z-50 min-w-[200px] bg-surface-elevated border rounded-lg shadow-lg py-1 text-sm"
+        className="fixed z-50 min-w-[200px] glass-strong rounded-lg py-1 text-sm"
         style={{ left: pos.x, top: pos.y }}
       >
         {items.map((it, i) => (
@@ -45,7 +45,7 @@ export default function ContextMenu({
             disabled={it.disabled}
             onClick={() => { it.onClick(); onClose(); }}
             className={`w-full flex items-center gap-2 px-3 py-2 text-left disabled:opacity-40 ${
-              it.danger ? "text-red-500 hover:bg-red-500/10" : "hover:bg-surface-muted"
+              it.danger ? "text-red-500 hover:bg-red-500/10" : "glass-hover"
             }`}
           >
             {it.icon}

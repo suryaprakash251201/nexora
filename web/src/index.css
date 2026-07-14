@@ -12,6 +12,21 @@
   --accent: 79 130 247;
   --accent-fg: 255 255 255;
   color-scheme: light;
+
+  /* Glassmorphism tokens (light) */
+  --glass-bg: rgba(255, 255, 255, 0.45);
+  --glass-bg-strong: rgba(255, 255, 255, 0.66);
+  --glass-bg-subtle: rgba(255, 255, 255, 0.30);
+  --glass-border: rgba(255, 255, 255, 0.70);
+  --glass-border-soft: rgba(255, 255, 255, 0.45);
+  --glass-highlight: rgba(255, 255, 255, 0.55);
+  --glass-shadow: 0 8px 32px rgba(31, 38, 135, 0.12);
+  --glass-shadow-strong: 0 24px 70px rgba(31, 38, 135, 0.22);
+  --glass-blur: 16px;
+  --bg-base: linear-gradient(135deg, #eef2ff 0%, #faf5ff 48%, #ecfeff 100%);
+  --blob-1: rgba(99, 102, 241, 0.32);
+  --blob-2: rgba(236, 72, 153, 0.22);
+  --blob-3: rgba(34, 211, 238, 0.22);
 }
 
 .dark {
@@ -24,6 +39,21 @@
   --accent: 96 165 250;
   --accent-fg: 8 11 16;
   color-scheme: dark;
+
+  /* Glassmorphism tokens (dark) */
+  --glass-bg: rgba(17, 24, 39, 0.50);
+  --glass-bg-strong: rgba(20, 27, 45, 0.72);
+  --glass-bg-subtle: rgba(17, 24, 39, 0.34);
+  --glass-border: rgba(255, 255, 255, 0.14);
+  --glass-border-soft: rgba(255, 255, 255, 0.08);
+  --glass-highlight: rgba(255, 255, 255, 0.10);
+  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+  --glass-shadow-strong: 0 24px 70px rgba(0, 0, 0, 0.55);
+  --glass-blur: 16px;
+  --bg-base: linear-gradient(135deg, #0b1020 0%, #0f172a 50%, #07101a 100%);
+  --blob-1: rgba(99, 102, 241, 0.40);
+  --blob-2: rgba(217, 70, 239, 0.22);
+  --blob-3: rgba(34, 211, 238, 0.18);
 }
 
 html,
@@ -34,14 +64,195 @@ body,
 
 body {
   margin: 0;
-  background: rgb(var(--surface));
+  background: transparent;
   color: rgb(var(--content));
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
+/* Decorative gradient backdrop with soft floating blobs (sits behind glass). */
+.nexora-bg {
+  position: fixed;
+  inset: -25%;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 20% 30%, var(--blob-1), transparent 45%),
+    radial-gradient(circle at 80% 20%, var(--blob-2), transparent 45%),
+    radial-gradient(circle at 55% 85%, var(--blob-3), transparent 50%),
+    var(--bg-base);
+  background-size: 130% 130%, 130% 130%, 130% 130%, 100% 100%;
+  animation: nexora-bg-float 22s ease-in-out infinite alternate;
+  filter: saturate(1.15);
+}
+
+/* Subtle grain overlay for realistic frosted glass. */
+.nexora-bg::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.4'/%3E%3C/svg%3E");
+  opacity: 0.035;
+  mix-blend-mode: overlay;
+}
+
+@keyframes nexora-bg-float {
+  from { background-position: 0% 0%, 100% 0%, 50% 100%, 0 0; }
+  to   { background-position: 15% 20%, 85% 25%, 45% 80%, 0 0; }
+}
+
 * {
   border-color: rgb(var(--border));
+}
+
+/* ============================================================
+   Glassmorphism surface system
+   Semantic utility classes (bg-surface / bg-surface-elevated /
+   bg-surface-muted) are fully overridden with frosted glass.
+   ============================================================ */
+
+.bg-surface,
+.bg-surface-elevated,
+.bg-surface-muted,
+.glass {
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+  border: 1px solid var(--glass-border);
+  box-shadow:
+    var(--glass-shadow),
+    inset 0 1px 1px var(--glass-highlight),
+    inset 0 0 0 1px rgb(255 255 255 / 0.03);
+}
+
+.bg-surface-elevated,
+.glass-strong {
+  background: var(--glass-bg-strong);
+  box-shadow:
+    var(--glass-shadow-strong),
+    inset 0 1px 1px var(--glass-highlight),
+    inset 0 0 0 1px rgb(255 255 255 / 0.04);
+}
+
+.bg-surface-muted,
+.glass-subtle {
+  background: var(--glass-bg-subtle);
+  -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 0.55)) saturate(150%);
+  backdrop-filter: blur(calc(var(--glass-blur) * 0.55)) saturate(150%);
+  border-color: var(--glass-border-soft);
+  box-shadow: inset 0 1px 1px var(--glass-highlight);
+}
+
+/* Frosted top bars (topbar, section headers) with a bottom hairline. */
+.glass-bar {
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+  border-bottom: 1px solid var(--glass-border);
+  box-shadow:
+    var(--glass-shadow),
+    inset 0 1px 1px var(--glass-highlight);
+}
+
+/* Frosted bottom bars (status bars, toolbars) with a top hairline. */
+.glass-bottom {
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+  border-top: 1px solid var(--glass-border);
+  box-shadow:
+    var(--glass-shadow),
+    inset 0 1px 1px var(--glass-highlight);
+}
+
+/* Horizontal hairline separators that read as glass edges. */
+.glass-divider {
+  border-color: var(--glass-border-soft);
+}
+
+/* Hover lift for glass buttons/rows/cards. */
+.glass-hover {
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+.glass-hover:hover {
+  background: var(--glass-bg-strong);
+  border-color: var(--glass-border);
+  box-shadow: var(--glass-shadow);
+}
+
+/* Glass chips / badges. */
+.glass-chip {
+  background: var(--glass-bg-subtle);
+  border: 1px solid var(--glass-border-soft);
+  -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 0.5)) saturate(150%);
+  backdrop-filter: blur(calc(var(--glass-blur) * 0.5)) saturate(150%);
+}
+
+/* Glass text inputs/selects/textarea. */
+input.glass-input,
+textarea.glass-input,
+select.glass-input,
+.glass-input {
+  background: var(--glass-bg-subtle) !important;
+  -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 0.7)) saturate(150%);
+  backdrop-filter: blur(calc(var(--glass-blur) * 0.7)) saturate(150%);
+  border-color: var(--glass-border-soft) !important;
+  box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.30);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.glass-input:focus {
+  border-color: rgb(var(--accent) / 0.7) !important;
+  box-shadow:
+    inset 0 1px 2px rgb(0 0 0 / 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.30),
+    0 0 0 3px rgb(var(--accent) / 0.25);
+  outline: none;
+}
+
+/* Inputs that inherit bg-surface already get frosted treatment. */
+input.bg-surface,
+textarea.bg-surface,
+select.bg-surface {
+  background: var(--glass-bg-subtle) !important;
+  -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 0.7)) saturate(150%);
+  backdrop-filter: blur(calc(var(--glass-blur) * 0.7)) saturate(150%);
+  border-color: var(--glass-border-soft) !important;
+  box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.30);
+}
+input.bg-surface:focus,
+textarea.bg-surface:focus,
+select.bg-surface:focus {
+  border-color: rgb(var(--accent) / 0.7) !important;
+  box-shadow:
+    inset 0 1px 2px rgb(0 0 0 / 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.30),
+    0 0 0 3px rgb(var(--accent) / 0.25);
+  outline: none;
+}
+
+/* Accent (primary) buttons get a translucent, frosted treatment. */
+.accent-glass {
+  background: rgb(var(--accent) / 0.82) !important;
+  color: rgb(var(--accent-fg));
+  -webkit-backdrop-filter: blur(10px) saturate(160%);
+  backdrop-filter: blur(10px) saturate(160%);
+  border: 1px solid rgb(var(--accent) / 0.6);
+  box-shadow: 0 6px 20px rgb(var(--accent) / 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.30);
+  transition: background 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+.accent-glass:hover {
+  background: rgb(var(--accent) / 0.92) !important;
+  box-shadow: 0 8px 26px rgb(var(--accent) / 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.30);
+}
+.accent-glass:active { transform: translateY(1px); }
+.accent-glass:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* Gradient text for logos / headings. */
+.text-gradient {
+  background: linear-gradient(120deg, rgb(var(--accent)), #a855f7 60%, #22d3ee);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 
 /* Thin, unobtrusive scrollbars */
@@ -50,8 +261,14 @@ body {
   height: 10px;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgb(var(--border));
+  background: rgb(var(--border) / 0.9);
   border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgb(var(--content-muted) / 0.7);
+  background-clip: padding-box;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
@@ -76,8 +293,8 @@ body {
   line-height: 1.25;
   margin: 1.4em 0 0.6em;
 }
-.markdown-body h1 { font-size: 1.7em; border-bottom: 1px solid rgb(var(--border)); padding-bottom: 0.3em; }
-.markdown-body h2 { font-size: 1.4em; border-bottom: 1px solid rgb(var(--border)); padding-bottom: 0.3em; }
+.markdown-body h1 { font-size: 1.7em; border-bottom: 1px solid var(--glass-border-soft); padding-bottom: 0.3em; }
+.markdown-body h2 { font-size: 1.4em; border-bottom: 1px solid var(--glass-border-soft); padding-bottom: 0.3em; }
 .markdown-body h3 { font-size: 1.2em; }
 .markdown-body p, .markdown-body ul, .markdown-body ol, .markdown-body blockquote { margin: 0.7em 0; }
 .markdown-body ul, .markdown-body ol { padding-left: 1.6em; }
@@ -88,12 +305,12 @@ body {
 .markdown-body code {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.875em;
-  background: rgb(var(--surface-muted));
+  background: var(--glass-bg-subtle);
   padding: 0.15em 0.4em;
   border-radius: 4px;
 }
 .markdown-body pre {
-  background: rgb(var(--surface-muted));
+  background: var(--glass-bg-subtle);
   padding: 1em;
   border-radius: 8px;
   overflow-x: auto;
@@ -105,6 +322,11 @@ body {
   color: rgb(var(--content-muted));
 }
 .markdown-body table { border-collapse: collapse; margin: 1em 0; display: block; overflow-x: auto; }
-.markdown-body th, .markdown-body td { border: 1px solid rgb(var(--border)); padding: 0.5em 0.8em; }
+.markdown-body th, .markdown-body td { border: 1px solid var(--glass-border-soft); padding: 0.5em 0.8em; }
 .markdown-body img { max-width: 100%; border-radius: 6px; }
-.markdown-body hr { border: none; border-top: 1px solid rgb(var(--border)); margin: 1.5em 0; }
+.markdown-body hr { border: none; border-top: 1px solid var(--glass-border-soft); margin: 1.5em 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
+  .nexora-bg { animation: none !important; background-position: 0% 0%, 100% 0%, 50% 100%, 0 0; }
+}

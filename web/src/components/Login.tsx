@@ -27,7 +27,7 @@ export default function Login({ onSuccess }: { onSuccess: () => void }) {
 
   return (
     <div className="min-h-screen grid place-items-center p-4">
-      <form onSubmit={submit} className="w-full max-w-sm bg-surface-elevated border rounded-xl p-6 shadow-sm">
+      <form onSubmit={submit} className="w-full max-w-sm glass-strong rounded-xl p-6">
         <div className="mb-6 text-center">
           <div className="mx-auto h-10 w-10 rounded-lg bg-accent grid place-items-center text-accent-fg font-bold text-lg">N</div>
           <h1 className="mt-3 text-lg font-semibold">Sign in to Nexora</h1>
@@ -52,7 +52,7 @@ export default function Login({ onSuccess }: { onSuccess: () => void }) {
         {error && <p className="text-sm text-red-500 mb-3">{error}</p>}
         <button
           disabled={busy}
-          className="w-full flex items-center justify-center gap-2 rounded-lg bg-accent text-accent-fg py-2 font-medium disabled:opacity-60"
+          className="w-full flex items-center justify-center gap-2 rounded-lg accent-glass py-2 font-medium disabled:opacity-60"
         >
           {busy ? <Loader2 className="animate-spin h-4 w-4" /> : <LogIn className="h-4 w-4" />}
           Sign in
