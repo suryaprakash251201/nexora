@@ -14,6 +14,7 @@ interface PlayerState {
   duration: number;
   volume: number;
   muted: boolean;
+  primaryOpen: boolean;
   play: (queue: FileItem[], index?: number) => void;
   toggle: () => void;
   next: (auto?: boolean) => void;
@@ -22,6 +23,7 @@ interface PlayerState {
   seek: (t: number) => void;
   setVolume: (v: number) => void;
   toggleMute: () => void;
+  setPrimaryOpen: (b: boolean) => void;
   setShuffle: (s: boolean) => void;
   cycleRepeat: () => void;
   current: () => FileItem | null;
@@ -84,6 +86,7 @@ export const usePlayer = create<PlayerState>((set, get) => ({
   duration: 0,
   volume: persisted.volume,
   muted: false,
+  primaryOpen: false,
 
   current: () => {
     const { queue, index } = get();
@@ -139,6 +142,8 @@ export const usePlayer = create<PlayerState>((set, get) => ({
     engine.setMuted(m);
     set({ muted: m });
   },
+
+  setPrimaryOpen: (b) => set({ primaryOpen: b }),
 
   setShuffle: (s) => { set({ shuffle: s }); persist(); },
 

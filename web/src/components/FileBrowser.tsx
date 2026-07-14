@@ -48,6 +48,7 @@ export default function FileBrowser({
   loading,
   viewMode,
   selection,
+  selectMode,
   canWrite,
   onOpen,
   onSelect,
@@ -57,6 +58,7 @@ export default function FileBrowser({
   loading: boolean;
   viewMode: "list" | "grid";
   selection: Set<string>;
+  selectMode: boolean;
   canWrite: boolean;
   onOpen: (item: FileItem) => void;
   onSelect: (item: FileItem, e: React.MouseEvent | React.ChangeEvent) => void;
@@ -94,7 +96,8 @@ export default function FileBrowser({
             <button
               key={it.path}
               onClick={(e) => {
-                if (e.metaKey || e.ctrlKey || e.shiftKey) onSelect(it, e);
+                if (selectMode) onSelect(it, e);
+                else if (e.metaKey || e.ctrlKey || e.shiftKey) onSelect(it, e);
                 else onOpen(it);
               }}
               onDoubleClick={() => onOpen(it)}
@@ -106,7 +109,7 @@ export default function FileBrowser({
               {it.is_dir ? <FolderTile large /> : <FileThumb it={it} large />}
               <span className="text-sm truncate w-full" title={it.name}>{it.name}</span>
               <span className="text-[11px] text-content-muted">{it.is_dir ? "" : formatBytes(it.size)}</span>
-              {!it.is_dir && canWrite && (
+              {selectMode && (
                 <input
                   type="checkbox"
                   className="absolute top-2 left-2 accent-accent"
@@ -136,7 +139,8 @@ export default function FileBrowser({
           <div
             key={it.path}
             onClick={(e) => {
-              if (e.metaKey || e.ctrlKey || e.shiftKey) onSelect(it, e);
+              if (selectMode) onSelect(it, e);
+              else if (e.metaKey || e.ctrlKey || e.shiftKey) onSelect(it, e);
               else onOpen(it);
             }}
             onDoubleClick={() => onOpen(it)}
@@ -146,10 +150,10 @@ export default function FileBrowser({
             }`}
           >
             <span className="flex items-center gap-2 min-w-0">
-              {!it.is_dir && canWrite && (
+              {selectMode && (
                 <input
                   type="checkbox"
-                  className="accent-accent"
+                  className="accent-accent shrink-0"
                   checked={selected}
                   onChange={(e) => onSelect(it, e)}
                   onClick={(e) => e.stopPropagation()}

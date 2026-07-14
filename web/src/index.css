@@ -31,31 +31,31 @@
 }
 
 .dark {
-  --surface: 15 17 21;
-  --surface-muted: 22 25 31;
-  --surface-elevated: 28 32 39;
-  --border: 40 45 54;
-  --content: 230 232 236;
-  --content-muted: 150 160 175;
-  --accent: 96 165 250;
-  --accent-fg: 8 11 16;
+  --surface: 18 18 20;
+  --surface-muted: 24 26 30;
+  --surface-elevated: 30 33 38;
+  --border: 48 52 60;
+  --content: 245 245 247;
+  --content-muted: 136 136 136;
+  --accent: 103 232 249;
+  --accent-fg: 13 17 23;
   color-scheme: dark;
 
-  /* Glassmorphism tokens (dark) */
-  --glass-bg: rgba(17, 24, 39, 0.48);
-  --glass-bg-strong: rgba(20, 27, 45, 0.70);
-  --glass-bg-subtle: rgba(17, 24, 39, 0.32);
-  --glass-border: rgba(255, 255, 255, 0.16);
-  --glass-border-soft: rgba(255, 255, 255, 0.09);
-  --glass-highlight: rgba(255, 255, 255, 0.12);
-  --glass-grad: linear-gradient(135deg, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0.02) 42%, rgba(255, 255, 255, 0.12) 100%);
-  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.50);
-  --glass-shadow-strong: 0 24px 70px rgba(0, 0, 0, 0.60);
-  --glass-blur: 20px;
-  --bg-base: linear-gradient(135deg, #0b1020 0%, #0f172a 50%, #07101a 100%);
-  --blob-1: rgba(99, 102, 241, 0.40);
-  --blob-2: rgba(217, 70, 239, 0.22);
-  --blob-3: rgba(34, 211, 238, 0.18);
+  /* Glassmorphism tokens (dark) — frosted white over charcoal */
+  --glass-bg: rgba(255, 255, 255, 0.05);
+  --glass-bg-strong: rgba(255, 255, 255, 0.10);
+  --glass-bg-subtle: rgba(255, 255, 255, 0.04);
+  --glass-border: rgba(255, 255, 255, 0.10);
+  --glass-border-soft: rgba(255, 255, 255, 0.07);
+  --glass-highlight: rgba(255, 255, 255, 0.10);
+  --glass-grad: linear-gradient(135deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0.02) 42%, rgba(255, 255, 255, 0.10) 100%);
+  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.55);
+  --glass-shadow-strong: 0 24px 70px rgba(0, 0, 0, 0.65);
+  --glass-blur: 16px;
+  --bg-base: linear-gradient(135deg, #0d0d0d 0%, #111827 50%, #0d0f14 100%);
+  --blob-1: rgba(103, 232, 249, 0.18);
+  --blob-2: rgba(167, 139, 250, 0.16);
+  --blob-3: rgba(244, 114, 182, 0.10);
 }
 
 html,
@@ -269,6 +269,24 @@ select.bg-surface:focus {
   background-clip: text;
   color: transparent;
 }
+
+/* Animated equalizer bars for the audio player */
+@keyframes eq-bar {
+  0%, 100% { transform: scaleY(0.25); }
+  50% { transform: scaleY(1); }
+}
+.eq-bar {
+  height: 100%;
+  transform-origin: bottom;
+  animation: eq-bar 0.85s ease-in-out infinite;
+}
+
+/* Gentle entrance for the audio player card */
+@keyframes n-player-in {
+  from { transform: translateY(10px) scale(0.985); opacity: 0; }
+  to { transform: translateY(0) scale(1); opacity: 1; }
+}
+.audio-card { animation: n-player-in 0.28s ease-out; }
 
 /* Thin, unobtrusive scrollbars */
 ::-webkit-scrollbar {

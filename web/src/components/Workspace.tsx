@@ -15,23 +15,26 @@ import Editor from "./Editor";
 import ShareDialog from "./ShareDialog";
 import SearchView from "./SearchView";
 import SharesPanel from "./SharesPanel";
+import PlaylistsPanel from "./PlaylistsPanel";
 import AdminPanel from "./AdminPanel";
 import Toaster from "./Toaster";
 import PlayerBar from "./PlayerBar";
 import TransfersPanel from "./TransfersPanel";
 import { Modal } from "./Modal";
+import RootModal from "./RootModal";
 import { formatDate } from "../lib/format";
 import { previewKind, isEditable } from "../lib/preview";
 import { startUpload, startDownload } from "../lib/transfer";
 import {
   Download, Trash2, Pencil, Scissors, Copy, Eye, FolderOpen, RotateCcw, LogOut,
-  HardDrive, Star, Share2, Archive, FolderInput, FileEdit, Play, ListMusic,
+  Star, Share2, Archive, FolderInput, FileEdit, Play, ListMusic,
 } from "lucide-react";
 
 export default function Workspace({ user }: { user: User }) {
   const qc = useQueryClient();
   const selection = useUI((s) => s.selection);
   const toggleSelect = useUI((s) => s.toggleSelect);
+  const selectMode = useUI((s) => s.selectMode);
   const clearSelection = useUI((s) => s.clearSelection);
   const openDrawer = useUI((s) => s.openDrawer);
   const drawerPath = useUI((s) => s.drawerPath);
@@ -53,6 +56,17 @@ export default function Workspace({ user }: { user: User }) {
   const [rootModal, setRootModal] = useState(false);
   const [playlistModal, setPlaylistModal] = useState(false);
   const [playlistName, setPlaylistName] = useState("");
+  const [playlistMenu, setPlaylistMenu] = useState(false);
+  const playlistMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!playlistMenu) return;
+    const onDown = (e: MouseEvent) => {
+      if (playlistMenuRef.current && !playlistMenuRef.current.contains(e.target as Node)) setPlaylistMenu(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [playlistMenu]);
   const fileInput = useRef<HTMLInputElement>(null);
 
   const roots = useQuery({ queryKey: ["roots"], queryFn: () => get<{ roots: Root[] }>("/roots") });
@@ -117,6 +131,7 @@ export default function Workspace({ user }: { user: User }) {
 
   // Play the selected audio files (or the whole folder's audio) as a queue.
   const selectedItems = items.filter((i) => selection.has(i.path));
+  const playlists = usePlaylists((s) => s.playlists);
   const playSelected = () => {
     const audio = (selectedItems.length ? selectedItems : items).filter((i) => i.mime.startsWith("audio/"));
     if (audio.length) usePlayer.getState().play(audio, 0);
@@ -128,6 +143,20 @@ export default function Workspace({ user }: { user: User }) {
     setPlaylistName("");
     setPlaylistModal(false);
     pushToast("success", "Playlist created");
+  };
+
+  // Add selected audio files to an existing playlist (id) or start a new one.
+  const addToPlaylist = (id?: string) => {
+    const audio = (selectedItems.length ? selectedItems : items).filter((i) => i.mime.startsWith("audio/"));
+    if (!audio.length) { pushToast("error", "No audio files selected"); setPlaylistMenu(false); return; }
+    if (id) {
+      const pl = playlists.find((p) => p.id === id);
+      usePlaylists.getState().addItems(id, audio);
+      pushToast("success", `Added ${audio.length} to "${pl?.name ?? "playlist"}"`);
+    } else {
+      setPlaylistModal(true);
+    }
+    setPlaylistMenu(false);
   };
 
   // Archive selected items (or one) into a ZIP via a background job, then download.
@@ -203,6 +232,7 @@ export default function Workspace({ user }: { user: User }) {
 
   const logout = async () => {
     try { await post("/auth/logout"); } catch { /* ignore */ }
+    qc.setQueryData(["session"], { user: null });
     qc.removeQueries({ queryKey: ["session"] });
   };
 
@@ -286,6 +316,7 @@ export default function Workspace({ user }: { user: User }) {
               loading={files.isLoading}
               viewMode={viewMode}
               selection={selection}
+              selectMode={selectMode}
               canWrite={canWrite}
               onOpen={openItem}
               onSelect={(it) => { toggleSelect(it.path); openDrawer(it.path); }}
@@ -310,6 +341,7 @@ export default function Workspace({ user }: { user: User }) {
             />
           )}
           {view === "shares" && <SharesPanel />}
+          {view === "playlists" && <PlaylistsPanel />}
           {view === "admin" && isAdmin && <AdminPanel />}
           {view === "search" && (
             <SearchView
@@ -324,17 +356,44 @@ export default function Workspace({ user }: { user: User }) {
           <div className="glass-bottom px-4 py-2 flex items-center gap-3 text-sm">
             <span className="text-content-muted">{selection.size} selected</span>
             <button onClick={playSelected} className="flex items-center gap-1 hover:underline"><Play className="h-4 w-4" /> Play</button>
-            <button onClick={() => setPlaylistModal(true)} className="flex items-center gap-1 hover:underline"><ListMusic className="h-4 w-4" /> Save playlist</button>
+            <div className="relative" ref={playlistMenuRef}>
+              <button
+                onClick={() => setPlaylistMenu((v) => !v)}
+                className={`flex items-center gap-1 hover:underline ${playlistMenu ? "text-accent" : ""}`}
+                title="Add to playlist"
+              >
+                <ListMusic className="h-4 w-4" /> Add to playlist
+              </button>
+              {playlistMenu && (
+                <div className="absolute bottom-full left-0 mb-2 w-56 glass-strong rounded-xl py-1 z-[60] ring-1 ring-white/10 max-h-72 overflow-auto">
+                  {playlists.length === 0 && (
+                    <p className="px-3 py-2 text-xs text-content-muted">No playlists yet</p>
+                  )}
+                  {playlists.map((pl) => (
+                    <button
+                      key={pl.id}
+                      onClick={() => addToPlaylist(pl.id)}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm rounded-lg glass-hover"
+                    >
+                      <ListMusic className="h-4 w-4 text-accent shrink-0" />
+                      <span className="flex-1 truncate">{pl.name}</span>
+                      <span className="text-[11px] text-content-muted">{pl.items.length}</span>
+                    </button>
+                  ))}
+                  <button
+                    onClick={() => addToPlaylist(undefined)}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm rounded-lg glass-hover text-accent"
+                  >
+                    <ListMusic className="h-4 w-4 shrink-0" /> New playlist…
+                  </button>
+                </div>
+              )}
+            </div>
             <button onClick={() => archivePaths(Array.from(selection), "selection")} className="flex items-center gap-1 hover:underline"><Archive className="h-4 w-4" /> Archive</button>
             {canWrite && <button onClick={bulkDelete} className="flex items-center gap-1 text-red-500 hover:underline"><Trash2 className="h-4 w-4" /> Delete</button>}
             <button onClick={clearSelection} className="text-content-muted hover:underline">Clear</button>
           </div>
         )}
-
-        <div className="glass-bottom px-4 py-2 flex items-center justify-between text-sm text-content-muted">
-          <span>{view === "files" ? `${filtered.length} items` : ""}</span>
-          <button onClick={logout} className="flex items-center gap-1 hover:text-content"><LogOut className="h-4 w-4" /> {user.username}</button>
-        </div>
 
         <PlayerBar />
       </div>
@@ -505,23 +564,6 @@ function ActionModals({ menu, rootId, path, onClose, onDone, onArchiveExtract }:
   return null;
 }
 
-function RootModal({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
-  const [name, setName] = useState("");
-  const [p, setP] = useState("");
-  const [readOnly, setReadOnly] = useState(false);
-  const pushToast = useUI((s) => s.pushToast);
-  const run = async () => {
-    try { await post("/admin/roots", { name, path: p, read_only: readOnly, indexed: true }); pushToast("success", "Storage root created"); onDone(); }
-    catch (e: any) { pushToast("error", e.message); }
-  };
-  return (
-    <Modal title="New storage root" onClose={onClose} footer={<button onClick={run} className="px-3 py-1.5 rounded-lg accent-glass text-sm">Create</button>}>
-      <label className="block text-sm mb-1">Name</label>
-      <input value={name} onChange={(e) => setName(e.target.value)} className="w-full mb-3 rounded-lg bg-surface border px-3 py-2 outline-none" placeholder="Backups" />
-      <label className="block text-sm mb-1">Host path</label>
-      <input value={p} onChange={(e) => setP(e.target.value)} className="w-full mb-3 rounded-lg bg-surface border px-3 py-2 outline-none font-mono" placeholder="/mnt/backups" />
-      <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={readOnly} onChange={(e) => setReadOnly(e.target.checked)} /> Read-only</label>
-      <p className="mt-2 text-xs text-content-muted flex items-center gap-1"><HardDrive className="h-3 w-3" /> The directory must exist on the host / mounted volume.</p>
-    </Modal>
-  );
-}
+
+
+

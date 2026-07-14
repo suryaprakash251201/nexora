@@ -30,6 +30,7 @@ interface PlaylistsState {
   addItems: (id: string, items: FileItem[]) => void;
   removeItem: (id: string, path: string) => void;
   play: (id: string) => void;
+  playFrom: (id: string, index: number) => void;
 }
 
 function uid() {
@@ -75,5 +76,9 @@ export const usePlaylists = create<PlaylistsState>((set, get) => ({
   play: (id) => {
     const pl = get().playlists.find((p) => p.id === id);
     if (pl && pl.items.length) usePlayer.getState().play(pl.items, 0);
+  },
+  playFrom: (id, index) => {
+    const pl = get().playlists.find((p) => p.id === id);
+    if (pl && pl.items.length) usePlayer.getState().play(pl.items, Math.max(0, Math.min(index, pl.items.length - 1)));
   },
 }));

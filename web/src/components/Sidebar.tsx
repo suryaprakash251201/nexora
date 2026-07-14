@@ -1,9 +1,10 @@
-import { HardDrive, Trash2, Moon, Sun, Plus, Share2, Clock, Star, Search, Shield, ListMusic, LogOut } from "lucide-react";
+import { Trash2, Moon, Sun, Plus, Share2, Clock, Star, Search, Shield, ListMusic, LogOut } from "lucide-react";
 import type { Root } from "../api/types";
 import { useUI } from "../store";
 import { usePlaylists } from "../store/playlists";
+import { rootIcon } from "../lib/rootIcons";
 
-export type SidebarView = "files" | "trash" | "favorites" | "recents" | "shares" | "search" | "admin";
+export type SidebarView = "files" | "trash" | "favorites" | "recents" | "shares" | "playlists" | "search" | "admin";
 
 export default function Sidebar({
   roots,
@@ -50,19 +51,22 @@ export default function Sidebar({
         {navBtn("search", <Search className="h-4 w-4" />, "Search")}
 
         <p className="px-2 pt-3 pb-1 text-xs uppercase tracking-wide text-content-muted">Storage</p>
-        {roots.map((r) => (
-          <button
-            key={r.id}
-            onClick={() => onSelectRoot(r.id)}
-            className={`w-full flex items-center gap-2 px-2 py-2 rounded-lg text-left text-sm glass-hover ${
-              view === "files" && activeRoot === r.id ? "bg-accent/15 text-accent" : ""
-            }`}
-          >
-            <HardDrive className="h-4 w-4 shrink-0" />
-            <span className="flex-1 truncate">{r.name}</span>
-            {r.read_only && <span className="text-[10px] uppercase text-content-muted">ro</span>}
-          </button>
-        ))}
+        {roots.map((r) => {
+          const Icon = rootIcon(r.icon);
+          return (
+            <button
+              key={r.id}
+              onClick={() => onSelectRoot(r.id)}
+              className={`w-full flex items-center gap-2 px-2 py-2 rounded-lg text-left text-sm glass-hover ${
+                view === "files" && activeRoot === r.id ? "bg-accent/15 text-accent" : ""
+              }`}
+            >
+              <Icon className="h-4 w-4 shrink-0" />
+              <span className="flex-1 truncate">{r.name}</span>
+              {r.read_only && <span className="text-[10px] uppercase text-content-muted">ro</span>}
+            </button>
+          );
+        })}
         {isAdmin && (
           <button onClick={onNewRoot} className="w-full flex items-center gap-2 px-2 py-2 rounded-lg text-left text-sm text-content-muted glass-hover">
             <Plus className="h-4 w-4" /> New storage root
@@ -73,9 +77,22 @@ export default function Sidebar({
         {navBtn("favorites", <Star className="h-4 w-4" />, "Favorites")}
         {navBtn("recents", <Clock className="h-4 w-4" />, "Recent")}
         {navBtn("shares", <Share2 className="h-4 w-4" />, "Shared")}
+        {navBtn("playlists", <ListMusic className="h-4 w-4" />, "Playlists")}
         {navBtn("trash", <Trash2 className="h-4 w-4" />, "Trash")}
 
-        <p className="px-2 pt-4 pb-1 text-xs uppercase tracking-wide text-content-muted">Playlists</p>
+        <div className="flex items-center justify-between px-2 pt-4 pb-1">
+          <p className="text-xs uppercase tracking-wide text-content-muted">Playlists</p>
+          <button
+            onClick={() => {
+              const name = window.prompt("Playlist name", `Playlist ${playlists.length + 1}`);
+              if (name !== null) usePlaylists.getState().create(name.trim() || `Playlist ${playlists.length + 1}`, []);
+            }}
+            className="text-content-muted hover:text-accent glass-hover rounded p-0.5"
+            title="New playlist"
+          >
+            <Plus className="h-3.5 w-3.5" />
+          </button>
+        </div>
         {playlists.length === 0 ? (
           <p className="px-2 text-xs text-content-muted">No playlists yet</p>
         ) : (

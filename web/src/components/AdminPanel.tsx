@@ -1,10 +1,12 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Users, ScrollText, RefreshCw, Plus, Shield, Settings, HardDrive, Sun, Moon, Monitor, LayoutGrid, List } from "lucide-react";
+import { Users, ScrollText, RefreshCw, Plus, Shield, Settings, HardDrive, Sun, Moon, Monitor, LayoutGrid, List, Pencil, Trash2 } from "lucide-react";
 import { get, post, put, del } from "../api/client";
 import { Modal } from "./Modal";
+import RootModal from "./RootModal";
 import { useUI } from "../store";
 import { formatDate } from "../lib/format";
+import { rootIcon } from "../lib/rootIcons";
 import type { AuditItem, User, Root } from "../api/types";
 
 type Tab = "users" | "audit" | "settings";
@@ -178,8 +180,18 @@ function SettingsTab() {
   const setTheme = useUI((s) => s.setTheme);
   const viewMode = useUI((s) => s.viewMode);
   const setViewMode = useUI((s) => s.setViewMode);
+  const pushToast = useUI((s) => s.pushToast);
+  const qc = useQueryClient();
   const { data: ver } = useQuery({ queryKey: ["version"], queryFn: () => get<{ version: string; go: string; product: string; tagline: string }>("/version") });
   const { data: roots } = useQuery({ queryKey: ["roots-admin"], queryFn: () => get<{ roots: Root[] }>("/roots") });
+  const [editRoot, setEditRoot] = useState<Root | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
+
+  const removeRoot = async (r: Root) => {
+    if (!confirm(`Delete storage root "${r.name}"? This cannot be undone.`)) return;
+    try { await del(`/admin/roots/${r.id}`); pushToast("success", "Storage root deleted"); qc.invalidateQueries({ queryKey: ["roots-admin"] }); qc.invalidateQueries({ queryKey: ["roots"] }); }
+    catch (e: any) { pushToast("error", e.message); }
+  };
 
   const themeOpts = [
     { key: "light" as const, label: "Light", icon: <Sun className="h-4 w-4" /> },
@@ -227,14 +239,30 @@ function SettingsTab() {
       </section>
 
       <section className="glass rounded-xl p-4">
-        <h3 className="font-semibold mb-3 flex items-center gap-2"><HardDrive className="h-4 w-4" /> Storage roots</h3>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-semibold flex items-center gap-2"><HardDrive className="h-4 w-4" /> Storage roots</h3>
+          <button onClick={() => setShowCreate(true)} className="flex items-center gap-1 px-2.5 py-1 rounded-lg accent-glass text-sm"><Plus className="h-4 w-4" /> New</button>
+        </div>
         <div className="space-y-2">
-          {(roots?.roots || []).map((r) => (
-            <div key={r.id} className="flex items-center justify-between gap-2 text-sm">
-              <span className="flex items-center gap-2 truncate"><HardDrive className="h-4 w-4 text-content-muted" /> {r.name}</span>
-              <span className="text-xs text-content-muted">{r.read_only ? "Read-only" : "Read & write"}</span>
-            </div>
-          ))}
+          {(roots?.roots || []).map((r) => {
+            const Icon = rootIcon(r.icon);
+            return (
+              <div key={r.id} className="flex items-center justify-between gap-2 text-sm glass rounded-lg px-3 py-2">
+                <span className="flex items-center gap-2 truncate min-w-0">
+                  <Icon className="h-4 w-4 shrink-0 text-content-muted" />
+                  <span className="truncate">{r.name}</span>
+                  <span className="text-[11px] text-content-muted truncate">{r.path}</span>
+                </span>
+                <span className="flex items-center gap-2 shrink-0">
+                  <span className={`text-[11px] ${r.enabled === false ? "text-content-muted" : r.read_only ? "text-amber-500" : "text-emerald-500"}`}>
+                    {r.enabled === false ? "Disabled" : r.read_only ? "Read-only" : "Read & write"}
+                  </span>
+                  <button onClick={() => setEditRoot(r)} className="p-1.5 rounded-lg glass-hover" title="Edit"><Pencil className="h-4 w-4" /></button>
+                  <button onClick={() => removeRoot(r)} className="p-1.5 rounded-lg glass-hover text-red-500 hover:bg-red-500/10" title="Delete"><Trash2 className="h-4 w-4" /></button>
+                </span>
+              </div>
+            );
+          })}
           {(!roots?.roots || roots.roots.length === 0) && <p className="text-sm text-content-muted">No storage roots configured.</p>}
         </div>
       </section>
@@ -250,6 +278,9 @@ function SettingsTab() {
           <dd>{ver?.go || "—"}</dd>
         </dl>
       </section>
+
+      {showCreate && <RootModal onClose={() => setShowCreate(false)} onDone={() => { setShowCreate(false); qc.invalidateQueries({ queryKey: ["roots-admin"] }); qc.invalidateQueries({ queryKey: ["roots"] }); }} />}
+      {editRoot && <RootModal root={editRoot} onClose={() => setEditRoot(null)} onDone={() => { setEditRoot(null); qc.invalidateQueries({ queryKey: ["roots-admin"] }); qc.invalidateQueries({ queryKey: ["roots"] }); }} />}
     </div>
   );
 }

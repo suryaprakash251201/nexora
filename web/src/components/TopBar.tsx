@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Search, LayoutGrid, List, FolderPlus, FilePlus, Upload, ChevronDown, RefreshCw } from "lucide-react";
+import { Search, LayoutGrid, List, FolderPlus, FilePlus, Upload, ChevronDown, RefreshCw, CheckSquare } from "lucide-react";
 import Breadcrumbs from "./Breadcrumbs";
 import { useUI } from "../store";
 
@@ -37,6 +37,8 @@ export default function TopBar({
 }) {
   const viewMode = useUI((s) => s.viewMode);
   const setViewMode = useUI((s) => s.setViewMode);
+  const selectMode = useUI((s) => s.selectMode);
+  const toggleSelectMode = useUI((s) => s.toggleSelectMode);
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPos, setMenuPos] = useState<{ top: number; right: number }>({ top: 0, right: 0 });
   const newBtnRef = useRef<HTMLButtonElement>(null);
@@ -106,6 +108,14 @@ export default function TopBar({
 
       <button onClick={onRefresh} className="p-2 rounded-lg glass-hover" title="Refresh">
         <RefreshCw className="h-4 w-4" />
+      </button>
+
+      <button
+        onClick={toggleSelectMode}
+        className={`p-2 rounded-lg glass-hover ${selectMode ? "bg-accent/15 text-accent" : ""}`}
+        title={selectMode ? "Exit selection" : "Select items"}
+      >
+        <CheckSquare className="h-4 w-4" />
       </button>
 
       <div className="flex rounded-lg overflow-hidden border">

@@ -20,6 +20,7 @@ type Root struct {
 	ID        string
 	Name      string
 	Path      string
+	Icon      string
 	ReadOnly  bool
 	Enabled   bool
 	Indexed   bool
@@ -41,7 +42,7 @@ func NewRootService(db *sql.DB) *RootService {
 
 // List returns all roots ordered by name.
 func (s *RootService) List() ([]Root, error) {
-	rows, err := s.db.Query(`SELECT id,name,path,read_only,enabled,indexed,created_at,updated_at FROM storage_roots ORDER BY name ASC`)
+	rows, err := s.db.Query(`SELECT id,name,path,icon,read_only,enabled,indexed,created_at,updated_at FROM storage_roots ORDER BY name ASC`)
 	if err != nil {
 		return nil, err
 	}
@@ -50,7 +51,7 @@ func (s *RootService) List() ([]Root, error) {
 	for rows.Next() {
 		var r Root
 		var ro, en, idx int
-		if err := rows.Scan(&r.ID, &r.Name, &r.Path, &ro, &en, &idx, &r.CreatedAt, &r.UpdatedAt); err != nil {
+		if err := rows.Scan(&r.ID, &r.Name, &r.Path, &r.Icon, &ro, &en, &idx, &r.CreatedAt, &r.UpdatedAt); err != nil {
 			return nil, err
 		}
 		r.ReadOnly, r.Enabled, r.Indexed = ro == 1, en == 1, idx == 1
@@ -63,8 +64,8 @@ func (s *RootService) List() ([]Root, error) {
 func (s *RootService) Get(id string) (Root, bool, error) {
 	var r Root
 	var ro, en, idx int
-	err := s.db.QueryRow(`SELECT id,name,path,read_only,enabled,indexed,created_at,updated_at FROM storage_roots WHERE id=?`, id).
-		Scan(&r.ID, &r.Name, &r.Path, &ro, &en, &idx, &r.CreatedAt, &r.UpdatedAt)
+	err := s.db.QueryRow(`SELECT id,name,path,icon,read_only,enabled,indexed,created_at,updated_at FROM storage_roots WHERE id=?`, id).
+		Scan(&r.ID, &r.Name, &r.Path, &r.Icon, &ro, &en, &idx, &r.CreatedAt, &r.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return Root{}, false, nil
 	}
@@ -83,18 +84,18 @@ func (s *RootService) Create(r Root) (Root, error) {
 	now := util.NowUTC()
 	r.CreatedAt, r.UpdatedAt = now, now
 	_, err := s.db.Exec(
-		`INSERT INTO storage_roots(id,name,path,read_only,enabled,indexed,created_at,updated_at)
-		 VALUES(?,?,?,?,?,?,?,?)`,
-		r.ID, r.Name, r.Path, boolToInt(r.ReadOnly), boolToInt(r.Enabled), boolToInt(r.Indexed), now, now)
+		`INSERT INTO storage_roots(id,name,path,icon,read_only,enabled,indexed,created_at,updated_at)
+		 VALUES(?,?,?,?,?,?,?,?,?)`,
+		r.ID, r.Name, r.Path, r.Icon, boolToInt(r.ReadOnly), boolToInt(r.Enabled), boolToInt(r.Indexed), now, now)
 	s.invalidate(r.ID)
 	return r, err
 }
 
 // Update modifies an existing root's mutable fields.
-func (s *RootService) Update(id string, name, path string, readOnly, enabled, indexed bool) error {
+func (s *RootService) Update(id string, name, path, icon string, readOnly, enabled, indexed bool) error {
 	_, err := s.db.Exec(
-		`UPDATE storage_roots SET name=?, path=?, read_only=?, enabled=?, indexed=?, updated_at=? WHERE id=?`,
-		name, path, boolToInt(readOnly), boolToInt(enabled), boolToInt(indexed), util.NowUTC(), id)
+		`UPDATE storage_roots SET name=?, path=?, icon=?, read_only=?, enabled=?, indexed=?, updated_at=? WHERE id=?`,
+		name, path, icon, boolToInt(readOnly), boolToInt(enabled), boolToInt(indexed), util.NowUTC(), id)
 	s.invalidate(id)
 	return err
 }

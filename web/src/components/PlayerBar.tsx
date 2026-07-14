@@ -8,6 +8,7 @@ import {
   Repeat,
   Repeat1,
   Volume2,
+  Volume1,
   VolumeX,
   X,
   ChevronUp,
@@ -35,7 +36,23 @@ export default function PlayerBar() {
   const bound = useRef(false);
   const current = usePlayer((s) => s.current());
   const isPlaying = usePlayer((s) => s.isPlaying);
+  const volume = usePlayer((s) => s.volume);
+  const muted = usePlayer((s) => s.muted);
+  const primaryOpen = usePlayer((s) => s.primaryOpen);
   const [expanded, setExpanded] = useState(false);
+  const [showVolume, setShowVolume] = useState(false);
+  const volWrap = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showVolume) return;
+    const onDown = (e: MouseEvent) => {
+      if (volWrap.current && !volWrap.current.contains(e.target as Node)) setShowVolume(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [showVolume]);
+
+  const VolIcon = muted || volume === 0 ? VolumeX : volume < 0.5 ? Volume1 : Volume2;
 
   useEffect(() => {
     if (audioRef.current && !bound.current) {
@@ -61,6 +78,10 @@ export default function PlayerBar() {
   }, [isPlaying]);
 
   if (!current) return <audio ref={audioRef} preload="none" />;
+
+  // While the primary (popup) player is open, hide the mini bar but keep the
+  // audio element mounted so playback continues uninterrupted.
+  if (primaryOpen) return <audio ref={audioRef} preload="none" />;
 
   const stop = () => {
     engine.pause();
@@ -123,9 +144,45 @@ export default function PlayerBar() {
           >
             {usePlayer.getState().repeat === "one" ? <Repeat1 className="h-4 w-4" /> : <Repeat className="h-4 w-4" />}
           </button>
-          <button onClick={() => usePlayer.getState().toggleMute()} className="p-1.5 rounded-full glass-hover" title="Mute">
-            {usePlayer.getState().muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
-          </button>
+          <div className="relative" ref={volWrap}>
+            <button
+              onClick={() => setShowVolume((v) => !v)}
+              className={`p-1.5 rounded-full glass-hover ${showVolume ? "text-accent" : ""}`}
+              title="Volume"
+            >
+              <VolIcon className="h-4 w-4" />
+            </button>
+            {showVolume && (
+              <div
+                className="absolute bottom-full right-0 mb-2 p-3 glass-strong rounded-xl flex items-center gap-2 ring-1 ring-white/10 w-44"
+                onMouseDown={(e) => e.stopPropagation()}
+              >
+                <button
+                  onClick={() => usePlayer.getState().toggleMute()}
+                  className="p-1 rounded-full glass-hover"
+                  title={muted ? "Unmute" : "Mute"}
+                >
+                  <VolIcon className="h-4 w-4" />
+                </button>
+                <div className="relative h-1.5 flex-1 rounded-full bg-white/20 overflow-hidden">
+                  <div className="absolute inset-y-0 left-0 bg-accent" style={{ width: `${(muted ? 0 : volume) * 100}%` }} />
+                  <input
+                    type="range"
+                    min={0}
+                    max={1}
+                    step={0.01}
+                    value={muted ? 0 : volume}
+                    onChange={(e) => usePlayer.getState().setVolume(Number(e.target.value))}
+                    className="absolute inset-0 w-full opacity-0 cursor-pointer"
+                    aria-label="Volume"
+                  />
+                </div>
+                <span className="text-xs text-content-muted tabular-nums w-8 text-right">
+                  {Math.round((muted ? 0 : volume) * 100)}
+                </span>
+              </div>
+            )}
+          </div>
           <button onClick={() => setExpanded(true)} className="p-1.5 rounded-full glass-hover" title="Expand">
             <ChevronUp className="h-4 w-4" />
           </button>

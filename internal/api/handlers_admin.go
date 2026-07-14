@@ -31,6 +31,7 @@ func (s *Server) handleAdminListRoots(w http.ResponseWriter, r *http.Request) {
 			"id":         root.ID,
 			"name":       root.Name,
 			"path":       root.Path,
+			"icon":       root.Icon,
 			"read_only":  root.ReadOnly,
 			"enabled":    root.Enabled,
 			"indexed":    root.Indexed,
@@ -44,6 +45,7 @@ func (s *Server) handleAdminCreateRoot(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Name     string `json:"name"`
 		Path     string `json:"path"`
+		Icon     string `json:"icon"`
 		ReadOnly bool   `json:"read_only"`
 		Indexed  bool   `json:"indexed"`
 	}
@@ -58,6 +60,7 @@ func (s *Server) handleAdminCreateRoot(w http.ResponseWriter, r *http.Request) {
 	root, err := s.StorageRoots.Create(storage.Root{
 		Name:      req.Name,
 		Path:      req.Path,
+		Icon:      req.Icon,
 		ReadOnly:  req.ReadOnly,
 		Enabled:   true,
 		Indexed:   req.Indexed,
@@ -78,6 +81,7 @@ func (s *Server) handleAdminUpdateRoot(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Name     string `json:"name"`
 		Path     string `json:"path"`
+		Icon     string `json:"icon"`
 		ReadOnly bool   `json:"read_only"`
 		Enabled  bool   `json:"enabled"`
 		Indexed  bool   `json:"indexed"`
@@ -86,7 +90,7 @@ func (s *Server) handleAdminUpdateRoot(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_body", err.Error(), middleware.GetRequestID(r.Context()))
 		return
 	}
-	if err := s.StorageRoots.Update(id, req.Name, req.Path, req.ReadOnly, req.Enabled, req.Indexed); err != nil {
+	if err := s.StorageRoots.Update(id, req.Name, req.Path, req.Icon, req.ReadOnly, req.Enabled, req.Indexed); err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error", "could not update root", middleware.GetRequestID(r.Context()))
 		return
 	}

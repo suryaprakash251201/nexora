@@ -169,7 +169,11 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleSession(w http.ResponseWriter, r *http.Request) {
-	user, _ := auth.UserFromContext(r.Context())
+	user, ok := auth.UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusOK, map[string]any{"user": nil})
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"user": toUserDTO(user)})
 }
 

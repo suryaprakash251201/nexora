@@ -77,6 +77,20 @@ function CoverArt({ item }: { item: FileItem }) {
   );
 }
 
+function Equalizer({ playing }: { playing: boolean }) {
+  return (
+    <div className={`flex items-end gap-1 h-5 ${playing ? "" : "opacity-30"}`} aria-hidden="true">
+      {[0, 1, 2, 3, 4].map((i) => (
+        <span
+          key={i}
+          className="eq-bar w-1 rounded-full bg-accent"
+          style={{ animationDelay: `${i * 0.13}s`, animationPlayState: playing ? "running" : "paused" }}
+        />
+      ))}
+    </div>
+  );
+}
+
 function AudioPlayer({
   url,
   item,
@@ -177,12 +191,15 @@ function AudioPlayer({
 
   return (
     <div className="w-full max-w-lg mx-auto p-2">
-      <div className="relative aspect-square w-full max-w-xs mx-auto rounded-2xl overflow-hidden shadow-2xl ring-1 ring-white/10">
+      <div className="audio-card relative aspect-square w-full max-w-xs mx-auto rounded-2xl overflow-hidden shadow-2xl ring-1 ring-white/10">
         {cur && <CoverArt item={cur} />}
         <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-        <div className="absolute bottom-0 left-0 right-0 p-4 text-white">
-          <p className="font-semibold truncate drop-shadow">{cur?.name}</p>
-          <p className="text-xs text-white/70 truncate">{multi ? `Track ${qIndex + 1} of ${queue.length}` : "Audio"}</p>
+        <div className="absolute bottom-0 left-0 right-0 p-4 text-white flex items-end justify-between gap-3">
+          <div className="min-w-0">
+            <p className="font-semibold truncate drop-shadow">{cur?.name}</p>
+            <p className="text-xs text-white/70 truncate">{multi ? `Track ${qIndex + 1} of ${queue.length}` : "Audio"}</p>
+          </div>
+          <Equalizer playing={playing} />
         </div>
       </div>
 

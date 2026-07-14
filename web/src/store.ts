@@ -13,6 +13,7 @@ interface UIState {
   theme: Theme;
   viewMode: ViewMode;
   selection: Set<string>;
+  selectMode: boolean;
   drawerPath: string | null; // relative path currently shown in details drawer
   mobileNavOpen: boolean;
   toasts: Toast[];
@@ -22,6 +23,8 @@ interface UIState {
   toggleSelect: (path: string) => void;
   clearSelection: () => void;
   setSelection: (paths: string[]) => void;
+  setSelectMode: (b: boolean) => void;
+  toggleSelectMode: () => void;
   openDrawer: (path: string | null) => void;
   setMobileNav: (open: boolean) => void;
   pushToast: (kind: Toast["kind"], message: string) => void;
@@ -45,6 +48,7 @@ export const useUI = create<UIState>((set, get) => ({
   theme: loadTheme(),
   viewMode: (localStorage.getItem("nexora.view") as ViewMode) || "list",
   selection: new Set<string>(),
+  selectMode: false,
   drawerPath: null,
   mobileNavOpen: false,
   toasts: [],
@@ -70,6 +74,11 @@ export const useUI = create<UIState>((set, get) => ({
   },
   clearSelection: () => set({ selection: new Set<string>() }),
   setSelection: (paths) => set({ selection: new Set(paths) }),
+  setSelectMode: (b) => set({ selectMode: b, ...(b ? {} : { selection: new Set<string>() }) }),
+  toggleSelectMode: () => {
+    const b = !get().selectMode;
+    set({ selectMode: b, ...(b ? {} : { selection: new Set<string>() }) });
+  },
   openDrawer: (path) => set({ drawerPath: path }),
   setMobileNav: (open) => set({ mobileNavOpen: open }),
   pushToast: (kind, message) => {

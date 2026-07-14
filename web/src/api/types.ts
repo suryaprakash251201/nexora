@@ -13,6 +13,8 @@ export interface User {
 export interface Root {
   id: string;
   name: string;
+  icon?: string;
+  path?: string;
   read_only: boolean;
   enabled: boolean;
   permission: "read" | "write";

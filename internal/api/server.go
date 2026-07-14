@@ -109,9 +109,9 @@ func (s *Server) Routes() http.Handler {
 	authRouter.Post("/setup", s.handleSetup)
 	authRouter.With(s.Limiter.RateLimit(middleware.KeyByClientIP())).Post("/login", s.handleLogin)
 	authRouter.Get("/needs-setup", s.handleNeedsSetup)
+	authRouter.Get("/session", s.handleSession)
 	authRouter.Group(func(protected chi.Router) {
 		protected.Use(auth.RequireAuth)
-		protected.Get("/session", s.handleSession)
 		protected.Post("/logout", s.handleLogout)
 		protected.Post("/password", s.handleChangePassword)
 	})

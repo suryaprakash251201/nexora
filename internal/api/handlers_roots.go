@@ -24,6 +24,8 @@ func (s *Server) handleListRoots(w http.ResponseWriter, r *http.Request) {
 		out = append(out, map[string]any{
 			"id":         r.ID,
 			"name":       r.Name,
+			"icon":       r.Icon,
+			"path":       r.Path,
 			"read_only":  r.ReadOnly,
 			"enabled":    r.Enabled,
 			"permission": string(perm),

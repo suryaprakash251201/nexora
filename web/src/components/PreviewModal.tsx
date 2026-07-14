@@ -76,6 +76,13 @@ export default function PreviewModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current.path]);
 
+  useEffect(() => {
+    if (kind === "audio") {
+      usePlayer.getState().setPrimaryOpen(true);
+      return () => usePlayer.getState().setPrimaryOpen(false);
+    }
+  }, [kind]);
+
   const copyText = () => {
     if (text) {
       navigator.clipboard.writeText(text).then(() => {
