@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Search, LayoutGrid, List, FolderPlus, FilePlus, Upload, ChevronDown, RefreshCw } from "lucide-react";
 import Breadcrumbs from "./Breadcrumbs";
 import { useUI } from "../store";
@@ -37,6 +38,36 @@ export default function TopBar({
   const viewMode = useUI((s) => s.viewMode);
   const setViewMode = useUI((s) => s.setViewMode);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [menuPos, setMenuPos] = useState<{ top: number; right: number }>({ top: 0, right: 0 });
+  const newBtnRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  const toggleMenu = () => {
+    const r = newBtnRef.current?.getBoundingClientRect();
+    if (r) setMenuPos({ top: r.bottom + 6, right: window.innerWidth - r.right });
+    setMenuOpen((o) => !o);
+  };
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (menuRef.current?.contains(t) || newBtnRef.current?.contains(t)) return;
+      setMenuOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenuOpen(false);
+    };
+    const onScroll = () => setMenuOpen(false);
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    window.addEventListener("scroll", onScroll, true);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+      window.removeEventListener("scroll", onScroll, true);
+    };
+  }, [menuOpen]);
 
   return (
     <div className="h-14 glass-bar flex items-center gap-3 px-4">
@@ -95,30 +126,34 @@ export default function TopBar({
       </div>
 
       {canWrite && (
-        <div className="relative">
+        <>
           <button
-            onClick={() => setMenuOpen((o) => !o)}
+            ref={newBtnRef}
+            onClick={toggleMenu}
             className="flex items-center gap-1 rounded-lg accent-glass px-3 py-1.5 text-sm font-medium"
           >
             New <ChevronDown className="h-4 w-4" />
           </button>
-          {menuOpen && (
-            <>
-              <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-              <div className="absolute right-0 mt-1 z-20 w-44 glass-strong rounded-lg py-1">
-                <button onClick={() => { setMenuOpen(false); onNewFolder(); }} className="w-full flex items-center gap-2 px-3 py-2 text-sm glass-hover">
+          {menuOpen &&
+            createPortal(
+              <div
+                ref={menuRef}
+                style={{ top: menuPos.top, right: menuPos.right }}
+                className="fixed z-50 w-44 glass-strong rounded-xl py-1"
+              >
+                <button onClick={() => { setMenuOpen(false); onNewFolder(); }} className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg glass-hover">
                   <FolderPlus className="h-4 w-4" /> New folder
                 </button>
-                <button onClick={() => { setMenuOpen(false); onNewFile(); }} className="w-full flex items-center gap-2 px-3 py-2 text-sm glass-hover">
+                <button onClick={() => { setMenuOpen(false); onNewFile(); }} className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg glass-hover">
                   <FilePlus className="h-4 w-4" /> New text file
                 </button>
-                <button onClick={() => { setMenuOpen(false); onUpload(); }} className="w-full flex items-center gap-2 px-3 py-2 text-sm glass-hover">
+                <button onClick={() => { setMenuOpen(false); onUpload(); }} className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg glass-hover">
                   <Upload className="h-4 w-4" /> Upload files
                 </button>
-              </div>
-            </>
-          )}
-        </div>
+              </div>,
+              document.body,
+            )}
+        </>
       )}
       <input id="file-upload-input" type="file" multiple className="hidden" />
     </div>
