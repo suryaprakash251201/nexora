@@ -247,6 +247,7 @@ export default function Workspace({ user }: { user: User }) {
         onSelectRoot={(id) => { setRootId(id); setPath(""); setView("files"); clearSelection(); }}
         onSelectView={(v) => { setView(v); clearSelection(); }}
         onNewRoot={() => isAdmin && setRootModal(true)}
+        onLogout={logout}
       />
 
       <div className="flex-1 flex flex-col min-w-0">

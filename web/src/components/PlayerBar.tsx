@@ -71,8 +71,8 @@ export default function PlayerBar() {
     <>
       <audio ref={audioRef} preload="none" />
 
-      <div className="glass-strong rounded-xl mx-3 mb-2 px-3 py-2 flex items-center gap-3">
-        <div className="h-12 w-12 rounded-lg overflow-hidden shrink-0 ring-1 ring-white/10">
+      <div className="glass-strong rounded-2xl mx-3 mb-2 px-3 py-2.5 flex items-center gap-3 ring-1 ring-white/10">
+        <div className="h-12 w-12 rounded-xl overflow-hidden shrink-0 ring-1 ring-white/10 shadow-md">
           <Cover item={current} />
         </div>
         <div className="min-w-0 w-40 hidden sm:block">

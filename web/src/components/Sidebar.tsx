@@ -1,4 +1,4 @@
-import { HardDrive, Trash2, Moon, Sun, Plus, Share2, Clock, Star, Search, Shield, ListMusic } from "lucide-react";
+import { HardDrive, Trash2, Moon, Sun, Plus, Share2, Clock, Star, Search, Shield, ListMusic, LogOut } from "lucide-react";
 import type { Root } from "../api/types";
 import { useUI } from "../store";
 import { usePlaylists } from "../store/playlists";
@@ -13,6 +13,7 @@ export default function Sidebar({
   onSelectRoot,
   onSelectView,
   onNewRoot,
+  onLogout,
 }: {
   roots: Root[];
   activeRoot: string | null;
@@ -21,6 +22,7 @@ export default function Sidebar({
   onSelectRoot: (id: string) => void;
   onSelectView: (v: SidebarView) => void;
   onNewRoot: () => void;
+  onLogout: () => void;
 }) {
   const theme = useUI((s) => s.theme);
   const toggleTheme = useUI((s) => s.toggleTheme);
@@ -98,15 +100,24 @@ export default function Sidebar({
         )}
       </nav>
 
-      <div className="p-2 border-t flex items-center justify-between">
-        <span className="text-xs text-content-muted">v1.0</span>
+      <div className="p-2 border-t flex flex-col gap-2">
+        <div className="flex items-center justify-between px-1">
+          <span className="text-xs text-content-muted">v1.3</span>
+          <button
+            onClick={toggleTheme}
+            className="p-2 rounded-lg glass-hover"
+            title="Toggle theme"
+            aria-label="Toggle theme"
+          >
+            {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+          </button>
+        </div>
         <button
-          onClick={toggleTheme}
-          className="p-2 rounded-lg glass-hover"
-          title="Toggle theme"
-          aria-label="Toggle theme"
+          onClick={onLogout}
+          className="w-full flex items-center justify-center gap-2 px-2 py-2 rounded-lg text-sm text-content-muted glass-hover hover:text-red-500 hover:border-red-500/40"
+          title="Log out"
         >
-          {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+          <LogOut className="h-4 w-4" /> Log out
         </button>
       </div>
     </aside>
