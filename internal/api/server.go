@@ -159,6 +159,7 @@ func (s *Server) Routes() http.Handler {
 	authed.Post("/favorites", s.handleAddFavorite)
 	authed.Delete("/favorites", s.handleRemoveFavorite)
 	authed.Get("/recents", s.handleListRecents)
+	authed.Get("/home", s.handleHome)
 
 	// Share links (authenticated management).
 	authed.Get("/shares", s.handleListShares)

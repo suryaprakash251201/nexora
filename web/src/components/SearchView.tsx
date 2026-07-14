@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Search as SearchIcon, FileText, Folder } from "lucide-react";
+import { Search as SearchIcon } from "lucide-react";
 import { get } from "../api/client";
 import { formatBytes, formatDate } from "../lib/format";
-import type { Root, SearchResult } from "../api/types";
+import type { Root, SearchResult, FileItem } from "../api/types";
+import { FileThumb, FolderTile } from "./FileThumb";
 
 export default function SearchView({
   initialQuery,
@@ -94,7 +95,7 @@ export default function SearchView({
               onClick={() => onOpen(r)}
               className="w-full grid grid-cols-[auto_1fr_auto] gap-3 items-center px-3 py-2 rounded-lg glass-hover text-left"
             >
-              {r.is_dir ? <Folder className="h-4 w-4 text-accent" /> : <FileText className="h-4 w-4 text-content-muted" />}
+              {r.is_dir ? <FolderTile /> : <FileThumb it={r as FileItem} />}
               <div className="min-w-0">
                 <p className="truncate font-medium">{r.name}</p>
                 <p className="text-xs text-content-muted truncate">{rootName} / {r.path}</p>

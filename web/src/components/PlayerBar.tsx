@@ -92,6 +92,7 @@ export default function PlayerBar() {
     <>
       <audio ref={audioRef} preload="none" />
 
+      {!expanded && (
       <div className="glass-strong rounded-2xl mx-3 mb-2 px-3 py-2.5 flex items-center gap-3 ring-1 ring-white/10">
         <div className="h-12 w-12 rounded-xl overflow-hidden shrink-0 ring-1 ring-white/10 shadow-md">
           <Cover item={current} />
@@ -191,6 +192,7 @@ export default function PlayerBar() {
           </button>
         </div>
       </div>
+      )}
 
       {expanded && (
         <div className="fixed inset-0 z-[70] grid place-items-center p-4 bg-black/70" onMouseDown={() => setExpanded(false)}>

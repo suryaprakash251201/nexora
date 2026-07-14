@@ -129,19 +129,64 @@ func (s *Server) handleListRecents(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"items": out})
 }
 
-// recordRecent upserts a recent-access entry for the current user (best effort).
-func (s *Server) recordRecent(r *http.Request, rootID, path string) {
+// recordRecent upserts a recent entry for the current user (best effort).
+// kind is "access" for views/downloads/plays or "add" for uploads/creates.
+func (s *Server) recordRecent(r *http.Request, rootID, path, kind string) {
 	user, ok := auth.UserFromContext(r.Context())
 	if !ok || path == "" {
 		return
 	}
+	if kind == "" {
+		kind = "access"
+	}
 	_, _ = s.DB.Exec(
-		`INSERT INTO recents(user_id, root_id, path, accessed_at) VALUES(?,?,?,?)
-		 ON CONFLICT(user_id, root_id, path) DO UPDATE SET accessed_at=excluded.accessed_at`,
-		user.ID, rootID, path, util.NowUTC())
+		`INSERT INTO recents(user_id, root_id, path, accessed_at, kind) VALUES(?,?,?,?,?)
+		 ON CONFLICT(user_id, root_id, path) DO UPDATE SET accessed_at=excluded.accessed_at, kind=excluded.kind`,
+		user.ID, rootID, path, util.NowUTC(), kind)
 	// Trim to the most recent 100 entries per user.
 	_, _ = s.DB.Exec(
 		`DELETE FROM recents WHERE user_id=? AND path NOT IN (
 			SELECT path FROM recents WHERE user_id=? ORDER BY accessed_at DESC LIMIT 100
 		)`, user.ID, user.ID)
+}
+
+// recentItems returns the user's most recent recents of a given kind.
+func (s *Server) recentItems(userID, kind string, limit int) []map[string]any {
+	rows, err := s.DB.Query(
+		`SELECT rc.root_id, rc.path, rc.accessed_at, r.name
+		 FROM recents rc LEFT JOIN storage_roots r ON r.id=rc.root_id
+		 WHERE rc.user_id=? AND rc.kind=? ORDER BY rc.accessed_at DESC LIMIT ?`,
+		userID, kind, limit)
+	if err != nil {
+		return []map[string]any{}
+	}
+	defer rows.Close()
+	out := make([]map[string]any, 0)
+	for rows.Next() {
+		var rootID, path, accessedAt, rootName string
+		if err := rows.Scan(&rootID, &path, &accessedAt, &rootName); err != nil {
+			continue
+		}
+		out = append(out, map[string]any{
+			"root_id":     rootID,
+			"root_name":   rootName,
+			"path":        path,
+			"name":        storage.NameFromPath(path),
+			"accessed_at": accessedAt,
+		})
+	}
+	return out
+}
+
+// handleHome returns dashboard data for the post-login Home view.
+func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
+	user, ok := auth.UserFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthenticated", "Authentication required", middleware.GetRequestID(r.Context()))
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"recent": s.recentItems(user.ID, "access", 12),
+		"added":  s.recentItems(user.ID, "add", 12),
+	})
 }

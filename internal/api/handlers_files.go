@@ -199,6 +199,7 @@ func (s *Server) handleCreateDir(w http.ResponseWriter, r *http.Request) {
 	}
 	s.indexUpsert(req.Root, acc.provider, rel)
 	s.audit(r, "create_directory", rel, "")
+	s.recordRecent(r, req.Root, rel, "add")
 	writeJSON(w, http.StatusCreated, map[string]any{"ok": true, "path": rel})
 }
 
@@ -439,6 +440,7 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 			s.Metrics.AddUpload(fh.Size)
 		}
 		s.audit(r, "upload", dest, "")
+		s.recordRecent(r, rootID, dest, "add")
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "uploaded": uploaded})
 }
@@ -492,7 +494,7 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	_, _ = io.Copy(w, rc)
 	s.audit(r, "download", rel, "")
-	s.recordRecent(r, rootID, rel)
+	s.recordRecent(r, rootID, rel, "access")
 }
 
 func (s *Server) handleRaw(w http.ResponseWriter, r *http.Request) {
@@ -517,7 +519,7 @@ func (s *Server) handleRaw(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.Header.Get("Range") == "" {
-		s.recordRecent(r, rootID, rel)
+		s.recordRecent(r, rootID, rel, "access")
 	}
 	total := info.Size
 	start, end := parseRange(r.Header.Get("Range"), total)
@@ -661,6 +663,7 @@ func (s *Server) handleCreateFile(w http.ResponseWriter, r *http.Request) {
 	}
 	s.indexUpsert(req.Root, acc.provider, rel)
 	s.audit(r, "create_file", rel, "")
+	s.recordRecent(r, req.Root, rel, "add")
 	writeJSON(w, http.StatusCreated, map[string]any{"ok": true, "path": rel})
 }
 

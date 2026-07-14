@@ -11,6 +11,7 @@ import FileBrowser from "./FileBrowser";
 import DetailsDrawer from "./DetailsDrawer";
 import ContextMenu, { MenuItem } from "./ContextMenu";
 import PreviewModal from "./PreviewModal";
+import HomePanel from "./HomePanel";
 import Editor from "./Editor";
 import ShareDialog from "./ShareDialog";
 import SearchView from "./SearchView";
@@ -42,7 +43,7 @@ export default function Workspace({ user }: { user: User }) {
   const viewMode = useUI((s) => s.viewMode);
 
   const isAdmin = user.role === "admin";
-  const [view, setView] = useState<SidebarView>("files");
+  const [view, setView] = useState<SidebarView>("home");
   const [rootId, setRootId] = useState<string | null>(null);
   const [path, setPath] = useState("");
   const [search, setSearch] = useState("");
@@ -81,6 +82,11 @@ export default function Workspace({ user }: { user: User }) {
   const trash = useQuery({ queryKey: ["trash"], queryFn: () => get<{ items: TrashItem[] }>("/trash"), enabled: view === "trash" });
   const favorites = useQuery({ queryKey: ["favorites"], queryFn: () => get<{ items: FavoriteItem[] }>("/favorites"), enabled: view === "favorites" });
   const recents = useQuery({ queryKey: ["recents"], queryFn: () => get<{ items: RecentItem[] }>("/recents"), enabled: view === "recents" });
+  const home = useQuery({
+    queryKey: ["home"],
+    queryFn: () => get<{ recent: RecentItem[]; added: RecentItem[] }>("/home"),
+    enabled: view === "home",
+  });
   const favSet = useQuery({ queryKey: ["fav-set"], queryFn: () => get<{ items: FavoriteItem[] }>("/favorites") });
 
   const items = files.data?.items || [];
@@ -106,6 +112,11 @@ export default function Workspace({ user }: { user: User }) {
       clearSelection();
     } else if (item.extension === "zip" && canWrite) {
       setMenu({ kind: "extract", item });
+    } else if (item.mime.startsWith("audio/")) {
+      // Play audio directly in the mini player, queuing the folder's audio tracks.
+      const audio = items.filter((i) => i.mime.startsWith("audio/"));
+      const idx = audio.findIndex((i) => i.path === item.path);
+      usePlayer.getState().play(audio, idx >= 0 ? idx : 0);
     } else {
       setPreview(item);
     }
@@ -237,15 +248,22 @@ export default function Workspace({ user }: { user: User }) {
   };
 
   // Navigate to a search/favorite/recent result.
-  const navigateTo = (rid: string, p: string, isDir: boolean, name: string) => {
+  const navigateTo = async (rid: string, p: string, isDir: boolean, name: string) => {
     setRootId(rid);
     const parent = p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "";
     setPath(isDir ? p : parent);
     setView("files");
     clearSelection();
     if (!isDir) {
-      const ext = name.includes(".") ? name.slice(name.lastIndexOf(".") + 1).toLowerCase() : "";
-      setTimeout(() => setPreview({ name, path: p, size: 0, is_dir: false, modified: "", mime: "", root_id: rid, extension: ext } as FileItem), 50);
+      // Fetch real metadata so the preview can classify the file correctly
+      // (mime/type), instead of a blank pseudo-item that always shows "no preview".
+      try {
+        const info = await get<FileItem>("/files/stat", { root: rid, path: p });
+        setTimeout(() => setPreview(info), 50);
+      } catch {
+        const ext = name.includes(".") ? name.slice(name.lastIndexOf(".") + 1).toLowerCase() : "";
+        setTimeout(() => setPreview({ name, path: p, size: 0, is_dir: false, modified: "", mime: "", root_id: rid, extension: ext } as FileItem), 50);
+      }
     }
   };
 
@@ -299,7 +317,7 @@ export default function Workspace({ user }: { user: User }) {
             onRefresh={refresh}
           />
         )}
-        {view !== "files" && (
+        {view !== "files" && view !== "home" && (
           <div className="h-14 glass-bar flex items-center px-4 font-semibold capitalize">{view}</div>
         )}
 
@@ -338,6 +356,15 @@ export default function Workspace({ user }: { user: User }) {
               loading={recents.isLoading}
               empty="No recent files yet."
               rows={(recents.data?.items || []).map((f) => ({ id: f.root_id + f.path, title: f.name, sub: `${f.root_name} / ${f.path}`, meta: formatDate(f.accessed_at), onClick: () => navigateTo(f.root_id, f.path, false, f.name) }))}
+            />
+          )}
+          {view === "home" && (
+            <HomePanel
+              recent={home.data?.recent}
+              added={home.data?.added}
+              isLoading={home.isLoading}
+              onSearch={(q) => { setSearch(q); setView("search"); }}
+              onOpen={(item) => navigateTo(item.root_id, item.path, false, item.name)}
             />
           )}
           {view === "shares" && <SharesPanel />}

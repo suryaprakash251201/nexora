@@ -14,7 +14,7 @@ RUN npm run build
 ############################
 # 2. Build the Go binary
 ############################
-FROM golang:1.23-alpine AS gobuild
+FROM golang:1.26-alpine AS gobuild
 RUN apk add --no-cache git
 WORKDIR /src
 COPY go.mod go.sum ./

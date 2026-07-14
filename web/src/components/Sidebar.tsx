@@ -1,10 +1,10 @@
-import { Trash2, Moon, Sun, Plus, Share2, Clock, Star, Search, Shield, ListMusic, LogOut } from "lucide-react";
+import { Trash2, Moon, Sun, Plus, Share2, Clock, Star, Search, Shield, ListMusic, LogOut, Home } from "lucide-react";
 import type { Root } from "../api/types";
 import { useUI } from "../store";
 import { usePlaylists } from "../store/playlists";
 import { rootIcon } from "../lib/rootIcons";
 
-export type SidebarView = "files" | "trash" | "favorites" | "recents" | "shares" | "playlists" | "search" | "admin";
+export type SidebarView = "home" | "files" | "trash" | "favorites" | "recents" | "shares" | "playlists" | "search" | "admin";
 
 export default function Sidebar({
   roots,
@@ -48,6 +48,7 @@ export default function Sidebar({
       </div>
 
       <nav className="flex-1 overflow-y-auto p-2 space-y-1">
+        {navBtn("home", <Home className="h-4 w-4" />, "Home")}
         {navBtn("search", <Search className="h-4 w-4" />, "Search")}
 
         <p className="px-2 pt-3 pb-1 text-xs uppercase tracking-wide text-content-muted">Storage</p>
