@@ -13,10 +13,12 @@ import {
   X,
   ChevronUp,
   Music,
+  Plus,
 } from "lucide-react";
 import type { FileItem } from "../api/types";
 import { usePlayer, engine } from "../store/player";
 import { thumbUrl, rawUrl } from "../lib/preview";
+import { AddToPlaylistMenu } from "./PlaylistAdder";
 import MediaPlayer from "./MediaPlayer";
 
 function Cover({ item }: { item: FileItem | null }) {
@@ -38,6 +40,8 @@ export default function PlayerBar() {
   const isPlaying = usePlayer((s) => s.isPlaying);
   const volume = usePlayer((s) => s.volume);
   const muted = usePlayer((s) => s.muted);
+  const currentTime = usePlayer((s) => s.currentTime);
+  const duration = usePlayer((s) => s.duration);
   const primaryOpen = usePlayer((s) => s.primaryOpen);
   const [expanded, setExpanded] = useState(false);
   const [showVolume, setShowVolume] = useState(false);
@@ -120,13 +124,13 @@ export default function PlayerBar() {
           </div>
 
           <div className="flex-1 flex items-center gap-2 min-w-0">
-            <span className="text-xs text-content-muted tabular-nums w-10 text-right hidden md:block">
-              {fmtTime(usePlayer.getState().currentTime)}
-            </span>
-            <ProgressBar />
-            <span className="text-xs text-content-muted tabular-nums w-10 hidden md:block">
-              {fmtTime(usePlayer.getState().duration)}
-            </span>
+             <span className="text-xs text-content-muted tabular-nums w-10 text-right hidden md:block">
+               {fmtTime(currentTime)}
+             </span>
+             <ProgressBar />
+             <span className="text-xs text-content-muted tabular-nums w-10 hidden md:block">
+               {fmtTime(duration)}
+             </span>
           </div>
         </div>
 
@@ -197,10 +201,18 @@ export default function PlayerBar() {
       {expanded && (
         <div className="fixed inset-0 z-[70] grid place-items-center p-4 bg-black/70" onMouseDown={() => setExpanded(false)}>
           <div className="w-full max-w-lg glass-strong rounded-2xl overflow-hidden" onMouseDown={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-4 py-2 border-b glass-divider">
-              <span className="text-sm font-medium">Now playing</span>
-              <button onClick={() => setExpanded(false)} className="p-1.5 rounded-full glass-hover"><X className="h-4 w-4" /></button>
-            </div>
+             <div className="flex items-center justify-between px-4 py-2 border-b glass-divider">
+               <span className="text-sm font-medium">Now playing</span>
+               <div className="flex items-center gap-1">
+                 <AddToPlaylistMenu
+                   items={current ? [current] : []}
+                   className="flex items-center gap-1 px-2 py-1.5 rounded-full glass-hover text-sm"
+                 >
+                   <Plus className="h-4 w-4" /> Add to playlist
+                 </AddToPlaylistMenu>
+                 <button onClick={() => setExpanded(false)} className="p-1.5 rounded-full glass-hover"><X className="h-4 w-4" /></button>
+               </div>
+             </div>
             <MediaPlayer kind="audio" controlled autoPlay />
           </div>
         </div>

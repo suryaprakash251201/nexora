@@ -27,10 +27,21 @@ func (s *Server) handleReadyz(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleVersion(w http.ResponseWriter, r *http.Request) {
+	if _, err := detectFfmpeg(); err == nil {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"version":   Version,
+			"go":        runtime.Version(),
+			"product":   "Nexora",
+			"tagline":   "Your private file workspace",
+			"transcode": true,
+		})
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"version": Version,
-		"go":      runtime.Version(),
-		"product": "Nexora",
-		"tagline": "Your private file workspace",
+		"version":   Version,
+		"go":        runtime.Version(),
+		"product":   "Nexora",
+		"tagline":   "Your private file workspace",
+		"transcode": false,
 	})
 }

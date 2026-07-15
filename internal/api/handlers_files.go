@@ -606,6 +606,8 @@ func (s *Server) writeProviderError(w http.ResponseWriter, r *http.Request, err 
 		writeError(w, http.StatusForbidden, "forbidden", "Operation not permitted (read-only or no access)", rid)
 	case storage.ErrInvalidPath, storage.ErrTraversal:
 		writeError(w, http.StatusBadRequest, "invalid_path", "Invalid path", rid)
+	case os.ErrPermission:
+		writeError(w, http.StatusForbidden, "permission_denied", "Filesystem permission denied (check storage directory ownership)", rid)
 	case storage.ErrExists:
 		writeError(w, http.StatusConflict, "exists", "Target already exists", rid)
 	default:

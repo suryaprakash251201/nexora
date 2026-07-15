@@ -29,8 +29,9 @@ RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w -X github.com/ne
 FROM alpine:3.20 AS runtime
 
 # Runtime essentials: CA certs for outbound TLS (e.g. SMTP, OIDC later) and
-# timezone data for correct log timestamps.
-RUN apk add --no-cache ca-certificates tzdata wget && \
+# timezone data for correct log timestamps. ffmpeg powers on-the-fly video
+# transcoding (e.g. Matroska/.mkv -> streamable MP4) for in-browser playback.
+RUN apk add --no-cache ca-certificates tzdata wget ffmpeg && \
     addgroup -S nexora && adduser -S nexora -G nexora && \
     mkdir -p /app/data/cache/thumbnails /app/web && \
     chown -R nexora:nexora /app

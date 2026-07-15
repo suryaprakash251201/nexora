@@ -98,15 +98,30 @@ export default function Sidebar({
           <p className="px-2 text-xs text-content-muted">No playlists yet</p>
         ) : (
           playlists.map((pl) => (
-            <button
+            <div
               key={pl.id}
-              onClick={() => usePlaylists.getState().play(pl.id)}
-              className="w-full flex items-center gap-2 px-2 py-2 rounded-lg text-left text-sm glass-hover"
+              className="group flex items-center gap-1 px-2 py-2 rounded-lg text-sm glass-hover"
             >
-              <ListMusic className="h-4 w-4 shrink-0 text-accent" />
-              <span className="flex-1 truncate">{pl.name}</span>
-              <span className="text-[10px] text-content-muted">{pl.items.length}</span>
-            </button>
+              <button
+                onClick={() => usePlaylists.getState().play(pl.id)}
+                className="flex items-center gap-2 flex-1 min-w-0 text-left"
+                title={`Play "${pl.name}"`}
+              >
+                <ListMusic className="h-4 w-4 shrink-0 text-accent" />
+                <span className="flex-1 truncate">{pl.name}</span>
+                <span className="text-[10px] text-content-muted">{pl.items.length}</span>
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (confirm(`Delete playlist "${pl.name}"?`)) usePlaylists.getState().remove(pl.id);
+                }}
+                className="opacity-0 group-hover:opacity-100 p-1 rounded glass-hover text-content-muted hover:text-red-500 shrink-0"
+                title="Delete playlist"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
           ))
         )}
 

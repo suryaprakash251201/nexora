@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { ListMusic, Play, Pencil, Trash2, Plus, X, Music } from "lucide-react";
 import { usePlaylists } from "../store/playlists";
+import { usePlayer } from "../store/player";
 import { useUI } from "../store";
 
 export default function PlaylistsPanel() {
@@ -8,11 +9,23 @@ export default function PlaylistsPanel() {
   const remove = usePlaylists((s) => s.remove);
   const rename = usePlaylists((s) => s.rename);
   const removeItem = usePlaylists((s) => s.removeItem);
+  const addItems = usePlaylists((s) => s.addItems);
   const play = usePlaylists((s) => s.play);
   const playFrom = usePlaylists((s) => s.playFrom);
   const create = usePlaylists((s) => s.create);
+  const current = usePlayer((s) => s.current());
   const pushToast = useUI((s) => s.pushToast);
   const [expanded, setExpanded] = useState<string | null>(playlists[0]?.id ?? null);
+
+  const addCurrent = (id: string) => {
+    if (!current) {
+      pushToast("info", "Nothing is playing right now");
+      return;
+    }
+    addItems(id, [current]);
+    const pl = playlists.find((p) => p.id === id);
+    pushToast("success", `Added "${current.name}" to "${pl?.name ?? "playlist"}"`);
+  };
 
   const newPlaylist = () => {
     const name = window.prompt("Playlist name", `Playlist ${playlists.length + 1}`);
@@ -60,6 +73,14 @@ export default function PlaylistsPanel() {
                   <p className="font-medium truncate">{pl.name}</p>
                   <p className="text-xs text-content-muted">{pl.items.length} track{pl.items.length === 1 ? "" : "s"}</p>
                 </div>
+                <button
+                  onClick={() => addCurrent(pl.id)}
+                  disabled={!current}
+                  className="p-2 rounded-full glass-hover disabled:opacity-40"
+                  title="Add currently playing track"
+                >
+                  <Plus className="h-4 w-4" />
+                </button>
                 <button
                   onClick={() => play(pl.id)}
                   disabled={!pl.items.length}

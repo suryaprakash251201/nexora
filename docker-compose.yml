@@ -1,4 +1,18 @@
 services:
+  # One-shot init container: bind mounts are owned by the host user/root, but the
+  # nexora process runs as the unprivileged uid 100/gid 101. Chown the writable
+  # mounts to that uid/gid so folder creation and uploads succeed. Runs as root,
+  # exits immediately, and the nexora service waits for it.
+  nexora-init:
+    image: alpine:3.20
+    container_name: nexora-init
+    restart: "no"
+    command: ["sh", "-c", "chown -R 100:101 /mnt/files /mnt/backups /mnt/shared && chmod -R 775 /mnt/files /mnt/backups /mnt/shared && echo initialized"]
+    volumes:
+      - ./data/files:/mnt/files
+      - ./data/backups:/mnt/backups
+      - ./data/shared:/mnt/shared
+
   nexora:
     build:
       context: .
@@ -8,6 +22,9 @@ services:
     image: nexora:latest
     container_name: nexora
     restart: unless-stopped
+    depends_on:
+      nexora-init:
+        condition: service_completed_successfully
     # Load configuration from the .env file in this directory.
     env_file:
       - .env
@@ -27,6 +44,7 @@ services:
       - ./data/media:/mnt/media:ro
       - ./data/backups:/mnt/backups
       - ./data/shared:/mnt/shared
+      - /data:/mnt/data:ro
     # Read-only root filesystem with tmpfs for scratch space.
     read_only: true
     tmpfs:

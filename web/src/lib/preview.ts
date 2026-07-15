@@ -1,4 +1,5 @@
 import type { FileItem } from "../api/types";
+import { get } from "../api/client";
 
 export type PreviewKind = "image" | "video" | "audio" | "pdf" | "markdown" | "text" | "none";
 
@@ -56,4 +57,35 @@ export function thumbUrl(item: FileItem, size = 256): string {
 
 export function hasThumbnail(item: { extension: string }): boolean {
   return ["jpg", "jpeg", "png", "gif"].includes((item.extension || "").toLowerCase());
+}
+
+// TRANSCODE_EXT lists video containers that browsers cannot play natively and
+// therefore need server-side transcoding to a streamable MP4.
+const TRANSCODE_EXT = new Set([
+  "mkv", "avi", "wmv", "flv", "asf", "3gp", "vob", "mts", "m2ts", "ts", "rm", "divx",
+]);
+
+export function needsTranscode(item: { extension: string }): boolean {
+  return TRANSCODE_EXT.has((item.extension || "").toLowerCase());
+}
+
+export function transcodeUrl(rootId: string, path: string): string {
+  return `/api/v1/files/transcode?root=${encodeURIComponent(rootId)}&path=${encodeURIComponent(path)}`;
+}
+
+let transcodeSupported: boolean | null = null;
+
+// serverSupportsTranscode reports whether the backend has ffmpeg available for
+// on-the-fly transcoding. The result is cached for the session.
+export function serverSupportsTranscode(): Promise<boolean> {
+  if (transcodeSupported !== null) return Promise.resolve(transcodeSupported);
+  return get<{ transcode?: boolean }>("/version")
+    .then((d) => {
+      transcodeSupported = !!d.transcode;
+      return transcodeSupported;
+    })
+    .catch(() => {
+      transcodeSupported = false;
+      return false;
+    });
 }

@@ -20,6 +20,7 @@ import PlaylistsPanel from "./PlaylistsPanel";
 import AdminPanel from "./AdminPanel";
 import Toaster from "./Toaster";
 import PlayerBar from "./PlayerBar";
+import { AddToPlaylistMenu, PlaylistPickerPopover } from "./PlaylistAdder";
 import TransfersPanel from "./TransfersPanel";
 import { Modal } from "./Modal";
 import RootModal from "./RootModal";
@@ -53,21 +54,11 @@ export default function Workspace({ user }: { user: User }) {
   const [editItem, setEditItem] = useState<FileItem | null>(null);
   const [shareItem, setShareItem] = useState<FileItem | null>(null);
   const [ctx, setCtx] = useState<{ x: number; y: number; item: FileItem } | null>(null);
+  const [ctxPlaylist, setCtxPlaylist] = useState<{ x: number; y: number; items: FileItem[] } | null>(null);
   const [menu, setMenu] = useState<{ kind: string; item?: FileItem } | null>(null);
   const [rootModal, setRootModal] = useState(false);
   const [playlistModal, setPlaylistModal] = useState(false);
   const [playlistName, setPlaylistName] = useState("");
-  const [playlistMenu, setPlaylistMenu] = useState(false);
-  const playlistMenuRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!playlistMenu) return;
-    const onDown = (e: MouseEvent) => {
-      if (playlistMenuRef.current && !playlistMenuRef.current.contains(e.target as Node)) setPlaylistMenu(false);
-    };
-    document.addEventListener("mousedown", onDown);
-    return () => document.removeEventListener("mousedown", onDown);
-  }, [playlistMenu]);
   const fileInput = useRef<HTMLInputElement>(null);
 
   const roots = useQuery({ queryKey: ["roots"], queryFn: () => get<{ roots: Root[] }>("/roots") });
@@ -142,7 +133,6 @@ export default function Workspace({ user }: { user: User }) {
 
   // Play the selected audio files (or the whole folder's audio) as a queue.
   const selectedItems = items.filter((i) => selection.has(i.path));
-  const playlists = usePlaylists((s) => s.playlists);
   const playSelected = () => {
     const audio = (selectedItems.length ? selectedItems : items).filter((i) => i.mime.startsWith("audio/"));
     if (audio.length) usePlayer.getState().play(audio, 0);
@@ -154,20 +144,6 @@ export default function Workspace({ user }: { user: User }) {
     setPlaylistName("");
     setPlaylistModal(false);
     pushToast("success", "Playlist created");
-  };
-
-  // Add selected audio files to an existing playlist (id) or start a new one.
-  const addToPlaylist = (id?: string) => {
-    const audio = (selectedItems.length ? selectedItems : items).filter((i) => i.mime.startsWith("audio/"));
-    if (!audio.length) { pushToast("error", "No audio files selected"); setPlaylistMenu(false); return; }
-    if (id) {
-      const pl = playlists.find((p) => p.id === id);
-      usePlaylists.getState().addItems(id, audio);
-      pushToast("success", `Added ${audio.length} to "${pl?.name ?? "playlist"}"`);
-    } else {
-      setPlaylistModal(true);
-    }
-    setPlaylistMenu(false);
   };
 
   // Archive selected items (or one) into a ZIP via a background job, then download.
@@ -207,13 +183,22 @@ export default function Workspace({ user }: { user: User }) {
     } catch (e: any) { pushToast("error", e.message); }
   };
 
-  const buildMenu = (item: FileItem): MenuItem[] => {
+  const buildMenu = (item: FileItem, x: number, y: number): MenuItem[] => {
     const menuItems: MenuItem[] = [
       { label: item.is_dir ? "Open" : "Preview", icon: item.is_dir ? <FolderOpen className="h-4 w-4" /> : <Eye className="h-4 w-4" />, onClick: () => openItem(item) },
       { label: "Download", icon: <Download className="h-4 w-4" />, onClick: () => downloadItem(item) },
       { label: "Share", icon: <Share2 className="h-4 w-4" />, onClick: () => setShareItem(item) },
-      { label: "Add to favorites", icon: <Star className="h-4 w-4" />, onClick: () => toggleFavorite(item) },
+       { label: "Add to favorites", icon: <Star className="h-4 w-4" />, onClick: () => toggleFavorite(item) },
     ];
+    if (!item.is_dir && item.mime.startsWith("audio/")) {
+      // When a multi-selection exists, add the whole selection; otherwise just this file.
+      const targets = selectedItems.length ? selectedItems : [item];
+      menuItems.push({
+        label: selectedItems.length ? `Add ${selectedItems.length} to playlist` : "Add to playlist",
+        icon: <ListMusic className="h-4 w-4" />,
+        onClick: () => setCtxPlaylist({ x, y, items: targets }),
+      });
+    }
     if (!item.is_dir) {
       menuItems.push({ label: "Archive (ZIP)", icon: <Archive className="h-4 w-4" />, onClick: () => archivePaths([item.path], item.name) });
     } else {
@@ -383,39 +368,12 @@ export default function Workspace({ user }: { user: User }) {
           <div className="glass-bottom px-4 py-2 flex items-center gap-3 text-sm">
             <span className="text-content-muted">{selection.size} selected</span>
             <button onClick={playSelected} className="flex items-center gap-1 hover:underline"><Play className="h-4 w-4" /> Play</button>
-            <div className="relative" ref={playlistMenuRef}>
-              <button
-                onClick={() => setPlaylistMenu((v) => !v)}
-                className={`flex items-center gap-1 hover:underline ${playlistMenu ? "text-accent" : ""}`}
-                title="Add to playlist"
-              >
-                <ListMusic className="h-4 w-4" /> Add to playlist
-              </button>
-              {playlistMenu && (
-                <div className="absolute bottom-full left-0 mb-2 w-56 glass-strong rounded-xl py-1 z-[60] ring-1 ring-white/10 max-h-72 overflow-auto">
-                  {playlists.length === 0 && (
-                    <p className="px-3 py-2 text-xs text-content-muted">No playlists yet</p>
-                  )}
-                  {playlists.map((pl) => (
-                    <button
-                      key={pl.id}
-                      onClick={() => addToPlaylist(pl.id)}
-                      className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm rounded-lg glass-hover"
-                    >
-                      <ListMusic className="h-4 w-4 text-accent shrink-0" />
-                      <span className="flex-1 truncate">{pl.name}</span>
-                      <span className="text-[11px] text-content-muted">{pl.items.length}</span>
-                    </button>
-                  ))}
-                  <button
-                    onClick={() => addToPlaylist(undefined)}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm rounded-lg glass-hover text-accent"
-                  >
-                    <ListMusic className="h-4 w-4 shrink-0" /> New playlist…
-                  </button>
-                </div>
-              )}
-            </div>
+            <AddToPlaylistMenu
+              items={selectedItems.length ? selectedItems : items}
+              className="flex items-center gap-1 hover:underline"
+            >
+              <ListMusic className="h-4 w-4" /> Add to playlist
+            </AddToPlaylistMenu>
             <button onClick={() => archivePaths(Array.from(selection), "selection")} className="flex items-center gap-1 hover:underline"><Archive className="h-4 w-4" /> Archive</button>
             {canWrite && <button onClick={bulkDelete} className="flex items-center gap-1 text-red-500 hover:underline"><Trash2 className="h-4 w-4" /> Delete</button>}
             <button onClick={clearSelection} className="text-content-muted hover:underline">Clear</button>
@@ -447,7 +405,10 @@ export default function Workspace({ user }: { user: User }) {
         />
       )}
 
-      {ctx && <ContextMenu x={ctx.x} y={ctx.y} items={buildMenu(ctx.item)} onClose={() => setCtx(null)} />}
+      {ctx && <ContextMenu x={ctx.x} y={ctx.y} items={buildMenu(ctx.item, ctx.x, ctx.y)} onClose={() => setCtx(null)} />}
+      {ctxPlaylist && (
+        <PlaylistPickerPopover x={ctxPlaylist.x} y={ctxPlaylist.y} items={ctxPlaylist.items} onClose={() => setCtxPlaylist(null)} />
+      )}
       {preview && (
         <PreviewModal
           item={preview}

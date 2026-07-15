@@ -132,6 +132,7 @@ func (s *Server) Routes() http.Handler {
 	authed.Post("/files/upload", s.handleUpload)
 	authed.Get("/files/download", s.handleDownload)
 	authed.Get("/files/raw", s.handleRaw)
+	authed.Get("/files/transcode", s.handleTranscode)
 	authed.Get("/trash", s.handleListTrash)
 	authed.Post("/trash/restore", s.handleRestoreTrash)
 	authed.Delete("/trash", s.handleDeleteTrash)

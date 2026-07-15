@@ -288,6 +288,41 @@ select.bg-surface:focus {
 }
 .audio-card { animation: n-player-in 0.28s ease-out; }
 
+/* Apple Music style spinning disc, paused when not playing */
+@keyframes n-disc-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.audio-disc {
+  animation: n-disc-spin 16s linear infinite;
+  animation-play-state: running;
+}
+.audio-disc.paused { animation-play-state: paused; }
+
+/* Full-screen audio overlay entrance */
+@keyframes n-audio-fs-in {
+  from { transform: scale(1.04); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+.audio-fs { animation: n-audio-fs-in 0.25s ease-out; }
+
+/* Full-screen video container fills the viewport */
+.video-fullscreen { width: 100vw; height: 100dvh; background: #000; }
+.video-fullscreen video { width: 100%; height: 100%; }
+
+/* Indeterminate progress bar for live / transcoded (non-seekable) streams */
+@keyframes n-progress-ind {
+  0% { left: -35%; width: 35%; }
+  50% { left: 30%; width: 45%; }
+  100% { left: 100%; width: 35%; }
+}
+.n-progress-indeterminate {
+  position: absolute;
+  inset-block: 0;
+  border-radius: 9999px;
+  animation: n-progress-ind 1.4s ease-in-out infinite;
+}
+
 /* Thin, unobtrusive scrollbars */
 ::-webkit-scrollbar {
   width: 10px;
