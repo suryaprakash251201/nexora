@@ -175,30 +175,7 @@ export default function PlayerBar() {
       )}
 
       {expanded && (
-        <div className="fixed inset-0 z-[70] grid place-items-center p-4 scrim pointer-events-auto" onMouseDown={() => setExpanded(false)}>
-          <div className="w-full max-w-2xl glass-strong rounded-3xl overflow-hidden shadow-2xl border border-white/10 animate-scale-in" onMouseDown={(e) => e.stopPropagation()}>
-             <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-surface/50 backdrop-blur-md">
-               <div className="flex flex-col">
-                 <span className="text-sm font-bold tracking-wider uppercase text-content-muted">Now Playing</span>
-                 <span className="text-lg font-bold text-content">{current.name}</span>
-               </div>
-               <div className="flex items-center gap-2">
-                 <AddToPlaylistMenu
-                   items={current ? [current] : []}
-                   className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-surface hover:bg-surface-muted transition-colors text-sm font-medium border border-border/50"
-                 >
-                   <Plus className="h-4 w-4" /> Add to Playlist
-                 </AddToPlaylistMenu>
-                 <button onClick={() => setExpanded(false)} className="p-2 rounded-xl bg-surface hover:bg-surface-muted transition-colors border border-border/50">
-                   <ChevronUp className="h-5 w-5 rotate-180" />
-                 </button>
-               </div>
-             </div>
-            <div className="p-6">
-              <MediaPlayer kind="audio" controlled autoPlay />
-            </div>
-          </div>
-        </div>
+        <MediaPlayer kind="audio" controlled autoPlay startFullscreen onClose={() => setExpanded(false)} />
       )}
     </div>,
     document.body

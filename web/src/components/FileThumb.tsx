@@ -6,12 +6,13 @@ import { thumbUrl } from "../lib/preview";
 export const IMAGE_EXT = ["jpg", "jpeg", "png", "gif", "webp", "bmp", "avif"];
 
 export function FolderTile({ large }: { large?: boolean }) {
-  const { icon: Icon, color } = iconForFile({ is_dir: true, mime: "", extension: "" });
-  const colorClass = colorClasses[color];
+  const { icon: Icon } = iconForFile({ is_dir: true, mime: "", extension: "" });
 
   return (
-    <div className={`grid place-items-center rounded-xl transition-transform duration-300 group-hover:scale-105 shadow-sm ${colorClass} ${large ? "h-16 w-16" : "h-9 w-9"}`}>
-      <Icon className={large ? "h-8 w-8" : "h-5 w-5"} />
+    <div className={`relative grid place-items-center rounded-xl transition-transform duration-300 group-hover:scale-105 shadow-sm overflow-hidden ${large ? "h-16 w-16" : "h-9 w-9"}`}>
+      <div className="absolute inset-0 bg-gradient-to-br from-blue-400/20 to-indigo-500/30 backdrop-blur-sm border border-blue-400/20 rounded-xl"></div>
+      <div className="absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/20 to-transparent"></div>
+      <Icon className={`relative z-10 text-indigo-400 drop-shadow-md ${large ? "h-8 w-8" : "h-5 w-5"}`} />
     </div>
   );
 }

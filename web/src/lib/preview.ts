@@ -13,11 +13,12 @@ const EDITABLE_EXT = new Set([...TEXT_EXT]);
 const EDITABLE_NAMES = new Set(["dockerfile", "docker-compose.yml", "docker-compose.yaml", "makefile", ".gitignore", ".env"]);
 
 const IMAGE_EXT = new Set(["jpg", "jpeg", "png", "gif", "webp", "svg", "bmp", "avif"]);
+const VIDEO_EXT = new Set(["mp4", "webm", "mkv", "mov", "avi", "m4v"]);
 
 export function previewKind(item: { mime: string; extension: string; name?: string }): PreviewKind {
   const ext = item.extension?.toLowerCase() || "";
   if (item.mime.startsWith("image/") || IMAGE_EXT.has(ext)) return "image";
-  if (item.mime.startsWith("video/")) return "video";
+  if (item.mime.startsWith("video/") || VIDEO_EXT.has(ext)) return "video";
   if (item.mime.startsWith("audio/")) return "audio";
   if (item.mime === "application/pdf" || ext === "pdf") return "pdf";
   if (ext === "md" || ext === "markdown") return "markdown";
@@ -62,7 +63,7 @@ export function hasThumbnail(item: { extension: string }): boolean {
 // TRANSCODE_EXT lists video containers that browsers cannot play natively and
 // therefore need server-side transcoding to a streamable MP4.
 const TRANSCODE_EXT = new Set([
-  "mkv", "avi", "wmv", "flv", "asf", "3gp", "vob", "mts", "m2ts", "ts", "rm", "divx",
+  "avi", "wmv", "flv", "asf", "3gp", "vob", "mts", "m2ts", "ts", "rm", "divx",
 ]);
 
 export function needsTranscode(item: { extension: string }): boolean {

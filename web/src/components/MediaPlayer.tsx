@@ -60,11 +60,13 @@ interface MediaPlayerProps {
   onSelect?: (i: number) => void;
   autoPlay?: boolean;
   controlled?: boolean;
+  startFullscreen?: boolean;
+  onClose?: () => void;
 }
 
-export default function MediaPlayer({ kind, url, item, playlist, index = 0, onSelect, autoPlay, controlled }: MediaPlayerProps) {
+export default function MediaPlayer({ kind, url, item, playlist, index = 0, onSelect, autoPlay, controlled, startFullscreen, onClose }: MediaPlayerProps) {
   if (kind === "audio") {
-    return <AudioPlayer url={url} item={item} playlist={playlist} index={index} onSelect={onSelect} autoPlay={autoPlay} controlled={controlled} />;
+    return <AudioPlayer url={url} item={item} playlist={playlist} index={index} onSelect={onSelect} autoPlay={autoPlay} controlled={controlled} startFullscreen={startFullscreen} onClose={onClose} />;
   }
   return <VideoPlayer url={url} item={item} autoPlay={autoPlay} />;
 }
@@ -96,6 +98,8 @@ function AudioPlayer({
   onSelect,
   autoPlay,
   controlled,
+  startFullscreen,
+  onClose,
 }: {
   url?: string;
   item?: FileItem;
@@ -104,6 +108,8 @@ function AudioPlayer({
   onSelect?: (i: number) => void;
   autoPlay?: boolean;
   controlled?: boolean;
+  startFullscreen?: boolean;
+  onClose?: () => void;
 }) {
   const player = usePlayer();
   const cur = controlled ? (player.current() ?? item) : item;
@@ -125,7 +131,7 @@ function AudioPlayer({
   const [lMuted, setLMuted] = useState(false);
   const [lRate, setLRate] = useState(1);
 
-  const [fs, setFs] = useState(false);
+  const [fs, setFs] = useState(startFullscreen || false);
   const [bgFailed, setBgFailed] = useState(false);
   const [showRates, setShowRates] = useState(false);
 
@@ -206,7 +212,7 @@ function AudioPlayer({
       {/* Top Nav */}
       <div className="absolute top-0 inset-x-0 z-20 flex items-center justify-between p-6">
         <button
-          onClick={() => setFs(false)}
+          onClick={() => { setFs(false); onClose?.(); }}
           className="p-3 rounded-full glass-hover text-white transition-transform hover:scale-110"
           title="Back"
         >
