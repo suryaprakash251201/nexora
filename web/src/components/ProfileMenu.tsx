@@ -34,6 +34,7 @@ export default function ProfileMenu({
   const [open, setOpen] = useState(false);
   const btnRef = useRef<HTMLButtonElement>(null);
   const ref = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ top: number; right: number }>({ top: 0, right: 0 });
 
   useEffect(() => {
@@ -55,7 +56,8 @@ export default function ProfileMenu({
     const onDown = (e: MouseEvent) => {
       if (
         ref.current && !ref.current.contains(e.target as Node) &&
-        btnRef.current && !btnRef.current.contains(e.target as Node)
+        btnRef.current && !btnRef.current.contains(e.target as Node) &&
+        menuRef.current && !menuRef.current.contains(e.target as Node)
       ) setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
@@ -91,9 +93,10 @@ export default function ProfileMenu({
           <>
             <div className="fixed inset-0 z-[80]" onClick={() => setOpen(false)} />
             <div
+              ref={menuRef}
               role="menu"
               style={{ top: pos.top, right: pos.right }}
-              className="fixed z-[81] w-64 glass-strong rounded-xl p-2"
+              className="fixed z-[81] w-64 menu-surface rounded-xl p-2"
             >
               <div className="flex items-center gap-3 px-2 py-2">
                 <span className="h-11 w-11 rounded-full bg-accent grid place-items-center text-accent-fg text-base font-semibold shrink-0">

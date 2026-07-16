@@ -293,6 +293,24 @@ select.bg-surface:focus {
   backdrop-filter: blur(2px);
 }
 
+/* Dropdown / popup surface: a more solid frosted panel with reduced blur
+   so text and accent colors stay crisp (esp. in dark mode). */
+.menu-surface {
+  --menu-bg: rgba(255, 255, 255, 0.82);
+  --menu-grad: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0.2) 45%, rgba(255, 255, 255, 0.35) 100%);
+  background:
+    linear-gradient(var(--menu-bg), var(--menu-bg)) padding-box,
+    var(--menu-grad) border-box;
+  border: 1px solid var(--glass-border-soft);
+  -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 0.45)) saturate(150%);
+  backdrop-filter: blur(calc(var(--glass-blur) * 0.45)) saturate(150%);
+  box-shadow: var(--glass-shadow-strong);
+}
+.dark .menu-surface {
+  --menu-bg: rgba(18, 20, 24, 0.92);
+  --menu-grad: linear-gradient(135deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0.03) 45%, rgba(255, 255, 255, 0.1) 100%);
+}
+
 /* Accent (primary) buttons get a translucent, frosted treatment. */
 .accent-glass {
   background: rgb(var(--accent) / 0.82) !important;
