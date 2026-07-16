@@ -25,7 +25,7 @@ export function FileThumb({ it, large, fill }: { it: FileItem; large?: boolean; 
   if ((!isImage && !isAudioCover) || failed) {
     const Icon = iconForFile(it);
     return (
-      <div className={`grid place-items-center rounded-xl bg-white/5 ${dim}`}>
+      <div className={`grid place-items-center rounded-xl bg-surface-muted ${dim}`}>
         <Icon className={`${fill ? "h-10 w-10" : large ? "h-8 w-8" : "h-5 w-5"} text-content-muted`} />
       </div>
     );
@@ -34,7 +34,7 @@ export function FileThumb({ it, large, fill }: { it: FileItem; large?: boolean; 
     <img
       src={thumbUrl(it)}
       alt=""
-      className={`${dim} object-cover rounded-xl ring-1 ring-white/10`}
+      className={`${dim} object-cover rounded-xl ring-1 ring-border`}
       loading="lazy"
       onError={() => setFailed(true)}
     />

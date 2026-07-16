@@ -13,6 +13,14 @@
   --accent-fg: 255 255 255;
   color-scheme: light;
 
+  /* Solid surface + overlay tokens (used where glass would be unreadable,
+     e.g. media player controls, modal backdrops). */
+  --solid-surface: 255 255 255;
+  --solid-surface-strong: 255 255 255;
+  --overlay-bg: rgba(17, 24, 39, 0.78);
+  --overlay-fg: 255 255 255;
+  --overlay-muted: rgba(255, 255, 255, 0.7);
+
   /* Glassmorphism tokens (light) */
   --glass-bg: rgba(255, 255, 255, 0.42);
   --glass-bg-strong: rgba(255, 255, 255, 0.64);
@@ -40,6 +48,12 @@
   --accent: 103 232 249;
   --accent-fg: 13 17 23;
   color-scheme: dark;
+
+  --solid-surface: 18 18 20;
+  --solid-surface-strong: 24 26 30;
+  --overlay-bg: rgba(17, 24, 39, 0.78);
+  --overlay-fg: 255 255 255;
+  --overlay-muted: rgba(255, 255, 255, 0.7);
 
   /* Glassmorphism tokens (dark) — frosted white over charcoal */
   --glass-bg: rgba(255, 255, 255, 0.05);
@@ -243,6 +257,29 @@ select.bg-surface:focus {
     inset 0 1px 0 rgba(255, 255, 255, 0.30),
     0 0 0 3px rgb(var(--accent) / 0.25);
   outline: none;
+}
+
+/* Solid overlay surfaces for media players / scrims where frosted glass
+   over arbitrary media would be unreadable. These stay readable in both
+   themes via --overlay-fg / --overlay-muted. */
+.overlay-surface {
+  background: var(--overlay-bg);
+  color: var(--overlay-fg);
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
+  backdrop-filter: blur(14px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+.overlay-surface .text-content-muted,
+.overlay-surface [data-overlay-muted] {
+  color: var(--overlay-muted);
+}
+
+/* Solid (non-glass) surface for chips/tiles/badges that must read clearly
+   against the gradient backdrop in either theme. */
+.solid-surface {
+  background: rgb(var(--solid-surface));
+  color: rgb(var(--content));
+  border: 1px solid rgb(var(--border));
 }
 
 /* Accent (primary) buttons get a translucent, frosted treatment. */

@@ -35,6 +35,8 @@ function applyTheme(theme: Theme) {
   const root = document.documentElement;
   const dark = theme === "dark" || (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
   root.classList.toggle("dark", dark);
+  root.style.colorScheme = dark ? "dark" : "light";
+  try { localStorage.setItem("nexora.theme", theme); } catch {}
 }
 
 function loadTheme(): Theme {

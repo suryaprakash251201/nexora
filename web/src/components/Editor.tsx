@@ -64,18 +64,25 @@ export default function Editor({ item, rootId, onClose }: { item: FileItem; root
     }
   };
 
-  // Save shortcut + close.
+  // Save shortcut + close. Refs keep the latest handlers without rebinding on
+  // every render (which would also swallow in-flight key events).
+  const saveRef = useRef(save);
+  const tryCloseRef = useRef(() => {});
+  useEffect(() => {
+    saveRef.current = save;
+    tryCloseRef.current = tryClose;
+  });
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
         e.preventDefault();
-        save();
+        saveRef.current();
       }
-      if (e.key === "Escape") tryClose();
+      if (e.key === "Escape") tryCloseRef.current();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  });
+  }, []);
 
   // Warn before unloading with unsaved changes.
   useEffect(() => {

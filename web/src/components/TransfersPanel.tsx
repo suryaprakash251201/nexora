@@ -20,7 +20,7 @@ function Row({ t }: { t: Transfer }) {
         {t.status === "error" && <AlertCircle className="h-4 w-4 text-red-500" />}
         <button onClick={() => remove(t.id)} className="p-1 rounded glass-hover" title="Dismiss"><X className="h-3.5 w-3.5" /></button>
       </div>
-      <div className="mt-1 relative h-1.5 rounded-full bg-white/15 overflow-hidden">
+      <div className="mt-1 relative h-1.5 rounded-full bg-content/10 overflow-hidden">
         <div
           className={`absolute inset-y-0 left-0 ${t.status === "error" ? "bg-red-500" : "bg-accent"}`}
           style={{ width: `${pct(t)}%` }}

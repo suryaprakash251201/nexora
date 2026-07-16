@@ -3,6 +3,7 @@ import type { Root } from "../api/types";
 import { useUI } from "../store";
 import { usePlaylists } from "../store/playlists";
 import { rootIcon } from "../lib/rootIcons";
+import { useEffect, useState } from "react";
 
 export type SidebarView = "home" | "files" | "trash" | "favorites" | "recents" | "shares" | "playlists" | "search" | "admin";
 
@@ -28,6 +29,18 @@ export default function Sidebar({
   const theme = useUI((s) => s.theme);
   const toggleTheme = useUI((s) => s.toggleTheme);
   const playlists = usePlaylists((s) => s.playlists);
+
+  // Reflect the *applied* theme (dark class) so "system" shows the right icon.
+  const [isDark, setIsDark] = useState(() =>
+    typeof document !== "undefined" && document.documentElement.classList.contains("dark"),
+  );
+  useEffect(() => {
+    const sync = () => setIsDark(document.documentElement.classList.contains("dark"));
+    sync();
+    const obs = new MutationObserver(sync);
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+    return () => obs.disconnect();
+  }, []);
 
   const navBtn = (v: SidebarView, icon: React.ReactNode, label: string) => (
     <button
@@ -142,7 +155,7 @@ export default function Sidebar({
             title="Toggle theme"
             aria-label="Toggle theme"
           >
-            {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           </button>
         </div>
         <button
