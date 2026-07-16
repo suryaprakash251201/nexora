@@ -20,17 +20,18 @@ import { usePlayer, engine } from "../store/player";
 import { thumbUrl, rawUrl } from "../lib/preview";
 import { AddToPlaylistMenu } from "./PlaylistAdder";
 import MediaPlayer from "./MediaPlayer";
+import { createPortal } from "react-dom";
 
 function Cover({ item }: { item: FileItem | null }) {
   const [failed, setFailed] = useState(false);
   if (failed || !item) {
     return (
-      <div className="h-full w-full grid place-items-center bg-gradient-to-br from-accent/40 to-fuchsia-500/30">
-        <Music className="h-5 w-5 text-white" />
+      <div className="h-full w-full grid place-items-center bg-gradient-to-br from-accent/60 to-purple-600/60 backdrop-blur-md">
+        <Music className="h-5 w-5 text-white/90" />
       </div>
     );
   }
-  return <img src={thumbUrl(item)} alt="" className="h-full w-full object-cover" onError={() => setFailed(true)} />;
+  return <img src={thumbUrl(item)} alt="" className="h-full w-full object-cover transition-transform duration-500 hover:scale-110" onError={() => setFailed(true)} />;
 }
 
 export default function PlayerBar() {
@@ -44,18 +45,7 @@ export default function PlayerBar() {
   const duration = usePlayer((s) => s.duration);
   const primaryOpen = usePlayer((s) => s.primaryOpen);
   const [expanded, setExpanded] = useState(false);
-  const [showVolume, setShowVolume] = useState(false);
-  const volWrap = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!showVolume) return;
-    const onDown = (e: MouseEvent) => {
-      if (volWrap.current && !volWrap.current.contains(e.target as Node)) setShowVolume(false);
-    };
-    document.addEventListener("mousedown", onDown);
-    return () => document.removeEventListener("mousedown", onDown);
-  }, [showVolume]);
-
+  
   const VolIcon = muted || volume === 0 ? VolumeX : volume < 0.5 ? Volume1 : Volume2;
 
   useEffect(() => {
@@ -92,85 +82,73 @@ export default function PlayerBar() {
     usePlayer.setState({ queue: [], index: -1, isPlaying: false, currentTime: 0, duration: 0 });
   };
 
-  return (
-    <>
+  return createPortal(
+    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] w-[95%] max-w-[800px] pointer-events-none flex justify-center">
       <audio ref={audioRef} preload="none" />
 
       {!expanded && (
-      <div className="glass-strong rounded-2xl mx-3 mb-2 px-3 py-2.5 flex items-center gap-3 ring-1 ring-white/10">
-        <div className="h-12 w-12 rounded-xl overflow-hidden shrink-0 ring-1 ring-white/10 shadow-md">
-          <Cover item={current} />
-        </div>
-        <div className="min-w-0 w-40 hidden sm:block">
-          <p className="truncate text-sm font-medium">{current.name}</p>
-          <p className="truncate text-xs text-content-muted">Now playing</p>
-        </div>
+        <div className={`pointer-events-auto transition-all duration-500 ease-out flex items-center p-2 rounded-[2rem] border border-white/20 shadow-2xl backdrop-blur-2xl
+          ${isPlaying ? 'bg-surface-strong/80 shadow-accent/20 ring-1 ring-accent/30 scale-100' : 'bg-surface-strong/60 shadow-black/10 scale-[0.98]'}`}>
+          
+          <div className="flex items-center gap-4 px-2">
+            <div className={`relative h-12 w-12 rounded-full overflow-hidden shrink-0 shadow-md transition-all duration-500 group ${isPlaying ? 'animate-[spin_8s_linear_infinite]' : ''}`}>
+              <Cover item={current} />
+              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer" onClick={() => setExpanded(true)}>
+                <ChevronUp className="h-5 w-5 text-white" />
+              </div>
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-3 bg-black/80 rounded-full border border-white/20 shadow-inner" />
+            </div>
 
-        <div className="flex-1 flex items-center gap-2">
-          <div className="flex items-center gap-1">
-            <button onClick={() => usePlayer.getState().prev()} className="p-1.5 rounded-full glass-hover" title="Previous">
-              <SkipBack className="h-4 w-4" />
+            <div className="min-w-0 w-32 sm:w-48 flex flex-col justify-center cursor-pointer" onClick={() => setExpanded(true)}>
+              <p className="truncate text-sm font-bold text-content leading-tight hover:text-accent transition-colors">{current.name}</p>
+              <p className="truncate text-[11px] font-medium text-content-muted mt-0.5">{isPlaying ? 'Now Playing' : 'Paused'}</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 sm:gap-6 px-4 py-1 border-x border-white/10 mx-2">
+            <button onClick={() => usePlayer.getState().prev()} className="p-1.5 rounded-full text-content-muted hover:text-content hover:bg-white/10 transition-colors" title="Previous">
+              <SkipBack className="h-5 w-5" />
             </button>
             <button
               onClick={() => usePlayer.getState().toggle()}
-              className="h-9 w-9 rounded-full accent-glass grid place-items-center"
+              className={`h-12 w-12 rounded-full grid place-items-center text-white shadow-lg transition-all duration-300 hover:scale-105 active:scale-95
+                ${isPlaying ? 'bg-gradient-to-br from-accent to-purple-500 shadow-accent/40' : 'bg-surface-muted border border-white/20 text-content'}`}
               title={isPlaying ? "Pause" : "Play"}
             >
-              {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4 translate-x-0.5" />}
+              {isPlaying ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5 translate-x-0.5" />}
             </button>
-            <button onClick={() => usePlayer.getState().next(false)} className="p-1.5 rounded-full glass-hover" title="Next">
-              <SkipForward className="h-4 w-4" />
+            <button onClick={() => usePlayer.getState().next(false)} className="p-1.5 rounded-full text-content-muted hover:text-content hover:bg-white/10 transition-colors" title="Next">
+              <SkipForward className="h-5 w-5" />
             </button>
           </div>
 
-          <div className="flex-1 flex items-center gap-2 min-w-0">
-             <span className="text-xs text-content-muted tabular-nums w-10 text-right hidden md:block">
-               {fmtTime(currentTime)}
-             </span>
-             <ProgressBar />
-             <span className="text-xs text-content-muted tabular-nums w-10 hidden md:block">
-               {fmtTime(duration)}
-             </span>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-1">
-          <button
-            onClick={() => usePlayer.getState().setShuffle(!usePlayer.getState().shuffle)}
-            className={`p-1.5 rounded-full glass-hover ${usePlayer.getState().shuffle ? "text-accent" : ""}`}
-            title="Shuffle"
-          >
-            <Shuffle className="h-4 w-4" />
-          </button>
-          <button
-            onClick={() => usePlayer.getState().cycleRepeat()}
-            className={`p-1.5 rounded-full glass-hover ${usePlayer.getState().repeat !== "off" ? "text-accent" : ""}`}
-            title={`Repeat: ${usePlayer.getState().repeat}`}
-          >
-            {usePlayer.getState().repeat === "one" ? <Repeat1 className="h-4 w-4" /> : <Repeat className="h-4 w-4" />}
-          </button>
-          <div className="relative" ref={volWrap}>
+          <div className="flex items-center gap-1.5 px-2 pr-4 shrink-0">
             <button
-              onClick={() => setShowVolume((v) => !v)}
-              className={`p-1.5 rounded-full glass-hover ${showVolume ? "text-accent" : ""}`}
-              title="Volume"
+              onClick={() => usePlayer.getState().setShuffle(!usePlayer.getState().shuffle)}
+              className={`p-2 rounded-full transition-colors hidden sm:block ${usePlayer.getState().shuffle ? "text-accent bg-accent/10" : "text-content-muted hover:text-content hover:bg-white/10"}`}
+              title="Shuffle"
             >
-              <VolIcon className="h-4 w-4" />
+              <Shuffle className="h-4 w-4" />
             </button>
-            {showVolume && (
-              <div
-                className="absolute bottom-full right-0 mb-2 p-3 glass-strong rounded-xl flex items-center gap-2 ring-1 ring-white/10 w-44"
-                onMouseDown={(e) => e.stopPropagation()}
+            <button
+              onClick={() => usePlayer.getState().cycleRepeat()}
+              className={`p-2 rounded-full transition-colors hidden sm:block ${usePlayer.getState().repeat !== "off" ? "text-accent bg-accent/10" : "text-content-muted hover:text-content hover:bg-white/10"}`}
+              title={`Repeat: ${usePlayer.getState().repeat}`}
+            >
+              {usePlayer.getState().repeat === "one" ? <Repeat1 className="h-4 w-4" /> : <Repeat className="h-4 w-4" />}
+            </button>
+            
+            <div className="group relative hidden md:flex items-center gap-2 pl-2 border-l border-white/10">
+              <button
+                onClick={() => usePlayer.getState().toggleMute()}
+                className={`p-2 rounded-full transition-colors ${muted ? "text-danger bg-danger/10" : "text-content-muted hover:text-content hover:bg-white/10"}`}
+                title={muted ? "Unmute" : "Mute"}
               >
-                <button
-                  onClick={() => usePlayer.getState().toggleMute()}
-                  className="p-1 rounded-full glass-hover"
-                  title={muted ? "Unmute" : "Mute"}
-                >
-                  <VolIcon className="h-4 w-4" />
-                </button>
-                <div className="relative h-1.5 flex-1 rounded-full bg-white/20 overflow-hidden">
-                  <div className="absolute inset-y-0 left-0 bg-accent" style={{ width: `${(muted ? 0 : volume) * 100}%` }} />
+                <VolIcon className="h-4 w-4" />
+              </button>
+              <div className="w-0 group-hover:w-20 overflow-hidden transition-all duration-300 ease-out opacity-0 group-hover:opacity-100 flex items-center">
+                <div className="relative h-1.5 w-full rounded-full bg-white/20">
+                  <div className="absolute inset-y-0 left-0 bg-accent rounded-full" style={{ width: `${(muted ? 0 : volume) * 100}%` }} />
                   <input
                     type="range"
                     min={0}
@@ -182,75 +160,48 @@ export default function PlayerBar() {
                     aria-label="Volume"
                   />
                 </div>
-                <span className="text-xs text-content-muted tabular-nums w-8 text-right">
-                  {Math.round((muted ? 0 : volume) * 100)}
-                </span>
               </div>
-            )}
+            </div>
+
+            <button onClick={stop} className="p-2 ml-1 rounded-full text-content-muted hover:text-danger hover:bg-danger/10 transition-colors" title="Close Player">
+              <X className="h-5 w-5" />
+            </button>
           </div>
-          <button onClick={() => setExpanded(true)} className="p-1.5 rounded-full glass-hover" title="Expand">
-            <ChevronUp className="h-4 w-4" />
-          </button>
-          <button onClick={stop} className="p-1.5 rounded-full glass-hover hover:text-red-500" title="Stop">
-            <X className="h-4 w-4" />
-          </button>
+          
+          <div className="absolute bottom-0 left-6 right-6 h-0.5 rounded-full bg-white/10 overflow-hidden hidden sm:block">
+             <div className="h-full bg-gradient-to-r from-accent to-purple-500 transition-all duration-300 ease-out" style={{ width: `${duration > 0 ? (currentTime / duration) * 100 : 0}%` }} />
+          </div>
         </div>
-      </div>
       )}
 
       {expanded && (
-        <div className="fixed inset-0 z-[70] grid place-items-center p-4 scrim" onMouseDown={() => setExpanded(false)}>
-          <div className="w-full max-w-lg glass-strong rounded-2xl overflow-hidden" onMouseDown={(e) => e.stopPropagation()}>
-             <div className="flex items-center justify-between px-4 py-2 border-b glass-divider">
-               <span className="text-sm font-medium">Now playing</span>
-               <div className="flex items-center gap-1">
+        <div className="fixed inset-0 z-[70] grid place-items-center p-4 scrim pointer-events-auto" onMouseDown={() => setExpanded(false)}>
+          <div className="w-full max-w-2xl glass-strong rounded-3xl overflow-hidden shadow-2xl border border-white/10 animate-scale-in" onMouseDown={(e) => e.stopPropagation()}>
+             <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-surface/50 backdrop-blur-md">
+               <div className="flex flex-col">
+                 <span className="text-sm font-bold tracking-wider uppercase text-content-muted">Now Playing</span>
+                 <span className="text-lg font-bold text-content">{current.name}</span>
+               </div>
+               <div className="flex items-center gap-2">
                  <AddToPlaylistMenu
                    items={current ? [current] : []}
-                   className="flex items-center gap-1 px-2 py-1.5 rounded-full glass-hover text-sm"
+                   className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-surface hover:bg-surface-muted transition-colors text-sm font-medium border border-border/50"
                  >
-                   <Plus className="h-4 w-4" /> Add to playlist
+                   <Plus className="h-4 w-4" /> Add to Playlist
                  </AddToPlaylistMenu>
-                 <button onClick={() => setExpanded(false)} className="p-1.5 rounded-full glass-hover"><X className="h-4 w-4" /></button>
+                 <button onClick={() => setExpanded(false)} className="p-2 rounded-xl bg-surface hover:bg-surface-muted transition-colors border border-border/50">
+                   <ChevronUp className="h-5 w-5 rotate-180" />
+                 </button>
                </div>
              </div>
-            <MediaPlayer kind="audio" controlled autoPlay />
+            <div className="p-6">
+              <MediaPlayer kind="audio" controlled autoPlay />
+            </div>
           </div>
         </div>
       )}
-    </>
-  );
-}
-
-function ProgressBar() {
-  const ref = useRef<HTMLInputElement>(null);
-  const [val, setVal] = useState(0);
-  useEffect(() => {
-    const unsub = usePlayer.subscribe((s) => {
-      const d = s.duration || 0;
-      setVal(d > 0 ? (s.currentTime / d) * 100 : 0);
-    });
-    return unsub;
-  }, []);
-  const seek = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const pct = Number(e.target.value);
-    const d = usePlayer.getState().duration;
-    if (d > 0) usePlayer.getState().seek((pct / 100) * d);
-  };
-  return (
-    <div className="relative h-1.5 flex-1 rounded-full bg-white/20 overflow-hidden">
-      <div className="absolute inset-y-0 left-0 bg-accent" style={{ width: `${val}%` }} />
-      <input
-        ref={ref}
-        type="range"
-        min={0}
-        max={100}
-        step={0.1}
-        value={val}
-        onChange={seek}
-        className="absolute inset-0 w-full opacity-0 cursor-pointer"
-        aria-label="Seek"
-      />
-    </div>
+    </div>,
+    document.body
   );
 }
 
