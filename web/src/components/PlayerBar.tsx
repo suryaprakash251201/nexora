@@ -48,6 +48,11 @@ export default function PlayerBar() {
   
   const VolIcon = muted || volume === 0 ? VolumeX : volume < 0.5 ? Volume1 : Volume2;
 
+  const openExpanded = () => {
+    setExpanded(true);
+    usePlayer.getState().setPrimaryOpen(true);
+  };
+
   useEffect(() => {
     if (audioRef.current && !bound.current) {
       engine.bind(audioRef.current);
@@ -73,33 +78,33 @@ export default function PlayerBar() {
 
   if (!current) return <audio ref={audioRef} preload="none" />;
 
-  // While the primary (popup) player is open, hide the mini bar but keep the
-  // audio element mounted so playback continues uninterrupted.
-  if (primaryOpen) return <audio ref={audioRef} preload="none" />;
-
   const stop = () => {
     engine.pause();
     usePlayer.setState({ queue: [], index: -1, isPlaying: false, currentTime: 0, duration: 0 });
   };
 
+  // When the primary (full-screen) player is open but not expanded-visible yet,
+  // keep the audio element mounted (so playback continues) but hide the mini bar.
+  const showMini = !primaryOpen || expanded;
+
   return createPortal(
     <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] w-[95%] max-w-[800px] pointer-events-none flex justify-center">
       <audio ref={audioRef} preload="none" />
 
-      {!expanded && (
+      {showMini && !expanded && (
         <div className={`pointer-events-auto transition-all duration-500 ease-out flex items-center p-2 rounded-[2rem] border border-white/20 shadow-2xl backdrop-blur-2xl
           ${isPlaying ? 'bg-surface-strong/80 shadow-accent/20 ring-1 ring-accent/30 scale-100' : 'bg-surface-strong/60 shadow-black/10 scale-[0.98]'}`}>
           
           <div className="flex items-center gap-4 px-2">
             <div className={`relative h-12 w-12 rounded-full overflow-hidden shrink-0 shadow-md transition-all duration-500 group ${isPlaying ? 'animate-[spin_8s_linear_infinite]' : ''}`}>
               <Cover item={current} />
-              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer" onClick={() => setExpanded(true)}>
+              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer" onClick={openExpanded}>
                 <ChevronUp className="h-5 w-5 text-white" />
               </div>
               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-3 bg-black/80 rounded-full border border-white/20 shadow-inner" />
             </div>
 
-            <div className="min-w-0 w-32 sm:w-48 flex flex-col justify-center cursor-pointer" onClick={() => setExpanded(true)}>
+            <div className="min-w-0 w-32 sm:w-48 flex flex-col justify-center cursor-pointer" onClick={openExpanded}>
               <p className="truncate text-sm font-bold text-content leading-tight hover:text-accent transition-colors">{current.name}</p>
               <p className="truncate text-[11px] font-medium text-content-muted mt-0.5">{isPlaying ? 'Now Playing' : 'Paused'}</p>
             </div>
@@ -175,7 +180,16 @@ export default function PlayerBar() {
       )}
 
       {expanded && (
-        <MediaPlayer kind="audio" controlled autoPlay startFullscreen onClose={() => setExpanded(false)} />
+        <MediaPlayer
+          kind="audio"
+          controlled
+          autoPlay
+          startFullscreen
+          onClose={() => {
+            setExpanded(false);
+            usePlayer.getState().setPrimaryOpen(false);
+          }}
+        />
       )}
     </div>,
     document.body

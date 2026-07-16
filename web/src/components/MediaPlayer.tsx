@@ -164,6 +164,12 @@ function AudioPlayer({
     if (autoPlay) a.play().catch(() => {});
   }, [url, controlled]);
 
+  // Reset the blurred-background error flag whenever the track changes so a
+  // failed cover on one track doesn't permanently disable the backdrop.
+  useEffect(() => {
+    setBgFailed(false);
+  }, [cur?.path]);
+
   const toggle = () => {
     if (controlled) { player.toggle(); return; }
     const a = ref.current;
@@ -187,6 +193,7 @@ function AudioPlayer({
     if (ref.current) ref.current.playbackRate = r;
     setShowRates(false);
   };
+
   const step = (dir: number) => {
     if (controlled) { dir > 0 ? player.next(false) : player.prev(); return; }
     if (!playlist || playlist.length === 0 || !onSelect) return;
@@ -202,56 +209,112 @@ function AudioPlayer({
   const rate = controlled ? rateV : lRate;
   const pct = duration > 0 ? (curTime / duration) * 100 : 0;
 
+  const closeFs = () => {
+    setFs(false);
+    onClose?.();
+  };
+
+  useEffect(() => {
+    if (!fs) return;
+    const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA") return;
+      switch (e.key) {
+        case "Escape":
+          e.preventDefault();
+          closeFs();
+          break;
+        case " ":
+          e.preventDefault();
+          toggle();
+          break;
+        case "ArrowLeft":
+          e.preventDefault();
+          seek(Math.max(0, curTime - 5));
+          break;
+        case "ArrowRight":
+          e.preventDefault();
+          seek(Math.min(duration || 0, curTime + 5));
+          break;
+        case "ArrowUp":
+          e.preventDefault();
+          changeVol(Math.min(1, (muted ? 0 : volume) + 0.05));
+          break;
+        case "ArrowDown":
+          e.preventDefault();
+          changeVol(Math.max(0, (muted ? 0 : volume) - 0.05));
+          break;
+        case "m":
+        case "M":
+          e.preventDefault();
+          if (controlled) player.toggleMute();
+          else setLMuted(!muted);
+          break;
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [fs, curTime, duration, volume, muted, controlled, toggle, seek, changeVol, closeFs]);
+
   const fullscreen = (
-    <div className="fixed inset-0 z-[100] flex flex-col animate-fade-in bg-black">
+    <div className="fixed inset-0 z-[100] flex flex-col animate-fade-in bg-black/95 select-none">
+      {/* Blurred cover-art backdrop (Apple-style) */}
       {cur && !bgFailed && (
-        <img src={thumbUrl(cur)} alt="" className="absolute inset-0 h-full w-full object-cover blur-3xl scale-125 opacity-40 mix-blend-screen" onError={() => setBgFailed(true)} />
+        <img
+          src={thumbUrl(cur)}
+          alt=""
+          key={cur.path}
+          className="absolute inset-0 h-full w-full object-cover blur-3xl scale-125 opacity-40"
+          onError={() => setBgFailed(true)}
+        />
       )}
-      <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-black/60 to-black/90 backdrop-blur-[100px]" />
-      
-      {/* Top Nav */}
-      <div className="absolute top-0 inset-x-0 z-20 flex items-center justify-between p-6">
+      <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-black/70 to-black/95 backdrop-blur-[100px]" />
+
+      {/* Top bar */}
+      <div className="absolute top-0 inset-x-0 z-30 flex items-center justify-between p-5 sm:p-7">
         <button
-          onClick={() => { setFs(false); onClose?.(); }}
+          onClick={closeFs}
           className="p-3 rounded-full glass-hover text-white transition-transform hover:scale-110"
-          title="Back"
+          title="Close (Esc)"
         >
           <X className="h-6 w-6" />
         </button>
+        <span className="text-white/55 text-sm font-medium tracking-wide uppercase">
+          {multi ? `Track ${qIndex + 1} of ${queue.length}` : "Now Playing"}
+        </span>
+        <div className="w-[44px]" />
       </div>
 
-      <div className="relative z-10 flex-1 flex flex-col items-center justify-center gap-10 w-full max-w-xl mx-auto px-6 h-full pb-10">
-        
-        {/* Album Art */}
-        <div className={`audio-disc ${playing ? "" : "paused"} relative w-full aspect-square max-w-[320px] sm:max-w-[400px] rounded-3xl overflow-hidden shadow-2xl shadow-accent/20 ring-1 ring-white/10 mx-auto transition-transform duration-500 ${playing ? 'scale-100' : 'scale-95'}`}>
-          {cur ? <CoverArt item={cur} /> : (
-            <div className="h-full w-full grid place-items-center bg-gradient-to-br from-accent/30 to-purple-500/20">
-              <Music className="h-24 w-24 text-white/80" />
-            </div>
-          )}
+      <div className="relative z-10 flex-1 flex flex-col items-center justify-center w-full max-w-2xl mx-auto px-6 h-full pb-8">
+        {/* Album Art — spinning vinyl when playing */}
+        <div className="relative mb-10">
+          <div
+            className={`audio-disc ${playing ? "" : "paused"} relative w-[58vw] max-w-[300px] sm:w-[340px] sm:max-w-[340px] aspect-square rounded-full overflow-hidden shadow-2xl shadow-black/60 ring-1 ring-white/10 transition-transform duration-500 ${playing ? "scale-100" : "scale-95"}`}
+          >
+            {cur ? (
+              <CoverArt item={cur} className="rounded-full" />
+            ) : (
+              <div className="h-full w-full grid place-items-center bg-gradient-to-br from-accent/30 to-purple-500/20">
+                <Music className="h-24 w-24 text-white/80" />
+              </div>
+            )}
+            {/* Center hole like a record */}
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/80 ring-1 ring-white/15" />
+          </div>
         </div>
 
         {/* Track Info */}
-        <div className="w-full flex justify-between items-end mt-4">
-          <div className="min-w-0 pr-4">
-            <h2 className="text-white font-bold text-3xl sm:text-4xl truncate drop-shadow-md mb-2">{cur?.name}</h2>
-            <p className="text-white/60 text-lg truncate font-medium">
-              {multi ? `Track ${qIndex + 1} of ${queue.length}` : "Now Playing"}
-            </p>
-          </div>
-          <div className="shrink-0 flex items-center">
-            {cur && (
-              <AddToPlaylistMenu items={[cur]} className="p-3 rounded-full glass-hover text-white transition-transform hover:scale-110">
-                <Plus className="h-6 w-6" />
-              </AddToPlaylistMenu>
-            )}
-          </div>
+        <div className="w-full text-center mb-7">
+          <h2 className="text-white font-bold text-2xl sm:text-3xl truncate drop-shadow-md">{cur?.name}</h2>
+          <p className="text-white/55 text-base truncate font-medium mt-1">
+            {cur ? (cur.extension ? cur.extension.replace(/^\./, "").toUpperCase() + " Audio" : "Audio") : ""}
+          </p>
         </div>
 
         {/* Progress Bar */}
-        <div className="w-full space-y-2 mt-2">
-          <div className="relative h-2 rounded-full bg-white/20 overflow-hidden cursor-pointer group">
-            <div className="absolute inset-y-0 left-0 bg-accent transition-all duration-100" style={{ width: `${pct}%` }} />
+        <div className="w-full space-y-2">
+          <div className="relative h-1.5 rounded-full bg-white/20 overflow-hidden cursor-pointer group">
+            <div className="absolute inset-y-0 left-0 bg-white transition-all duration-100" style={{ width: `${pct}%` }} />
             <input
               type="range"
               min={0}
@@ -263,54 +326,110 @@ function AudioPlayer({
               aria-label="Seek"
             />
           </div>
-          <div className="flex justify-between text-sm font-medium text-white/70 font-mono">
+          <div className="flex justify-between text-xs font-medium text-white/55 font-mono tabular-nums">
             <span>{fmt(curTime)}</span>
             <span>{fmt(duration)}</span>
           </div>
         </div>
 
         {/* Primary Controls */}
-        <div className="flex items-center justify-center gap-6 sm:gap-8 w-full mt-2">
+        <div className="flex items-center justify-center gap-5 sm:gap-7 w-full mt-9">
           {controlled && (
             <button
               onClick={() => player.setShuffle(!player.shuffle)}
-              className={`p-3 rounded-full transition-colors ${player.shuffle ? "text-accent bg-accent/10" : "text-white/70 hover:text-white glass-hover"}`}
+              className={`p-3 rounded-full transition-colors ${player.shuffle ? "text-accent bg-accent/15" : "text-white/70 hover:text-white glass-hover"}`}
               title="Shuffle"
             >
               <Shuffle className="h-6 w-6" />
             </button>
           )}
-          
-          <div className="flex items-center gap-4">
+
+          <div className="flex items-center gap-5">
             {multi && (
               <button onClick={() => step(-1)} className="p-3 rounded-full glass-hover text-white transition-transform hover:scale-110" title="Previous">
-                <SkipBack className="h-8 w-8" />
+                <SkipBack className="h-7 w-7" />
               </button>
             )}
-            
+
             <button
               onClick={toggle}
-              className="h-20 w-20 rounded-full bg-white text-black grid place-items-center transition-transform hover:scale-105 shadow-xl shadow-white/10"
-              title={playing ? "Pause" : "Play"}
+              className="h-20 w-20 rounded-full bg-white text-black grid place-items-center transition-transform hover:scale-105 shadow-xl shadow-white/10 active:scale-95"
+              title={playing ? "Pause (Space)" : "Play (Space)"}
             >
-              {playing ? <Pause className="h-10 w-10 fill-current" /> : <Play className="h-10 w-10 translate-x-1 fill-current" />}
+              {playing ? <Pause className="h-9 w-9 fill-current" /> : <Play className="h-9 w-9 translate-x-1 fill-current" />}
             </button>
-            
+
             {multi && (
               <button onClick={() => step(1)} className="p-3 rounded-full glass-hover text-white transition-transform hover:scale-110" title="Next">
-                <SkipForward className="h-8 w-8" />
+                <SkipForward className="h-7 w-7" />
               </button>
             )}
           </div>
-          
+
           {controlled && (
             <button
               onClick={() => player.cycleRepeat()}
-              className={`p-3 rounded-full transition-colors ${player.repeat !== "off" ? "text-accent bg-accent/10" : "text-white/70 hover:text-white glass-hover"}`}
+              className={`p-3 rounded-full transition-colors ${player.repeat !== "off" ? "text-accent bg-accent/15" : "text-white/70 hover:text-white glass-hover"}`}
               title={`Repeat: ${player.repeat}`}
             >
               {player.repeat === "one" ? <Repeat1 className="h-6 w-6" /> : <Repeat className="h-6 w-6" />}
             </button>
+          )}
+        </div>
+
+        {/* Secondary row: rate + volume + add to playlist */}
+        <div className="flex items-center justify-center gap-5 sm:gap-6 mt-8 text-white/70">
+          <div className="relative">
+            <button
+              onClick={() => setShowRates(!showRates)}
+              className="text-xs font-mono px-3 py-1.5 rounded-full glass-hover text-white/80 hover:text-white transition-colors"
+              title="Playback speed"
+            >
+              {rate}x
+            </button>
+            {showRates && (
+              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 glass-strong rounded-xl p-1 z-40 flex flex-col animate-scale-in min-w-[64px]">
+                {RATES.map((r) => (
+                  <button
+                    key={r}
+                    onClick={() => changeRate(r)}
+                    className={`px-4 py-1.5 text-xs font-mono rounded-lg hover:bg-accent/15 ${r === rate ? "text-accent bg-accent/10" : "text-white/80"}`}
+                  >
+                    {r}x
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Volume */}
+          <div className="flex items-center gap-2 group">
+            <button
+              onClick={() => (controlled ? player.toggleMute() : setLMuted(!muted))}
+              className="p-2 rounded-full glass-hover transition-transform hover:scale-110"
+              title="Mute (M)"
+            >
+              {muted || volume === 0 ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
+            </button>
+            <div className="relative w-24 h-1.5 rounded-full bg-white/20 overflow-hidden cursor-pointer group-hover:w-28 transition-all duration-300">
+              <div className="absolute inset-y-0 left-0 bg-white" style={{ width: `${(muted ? 0 : volume) * 100}%` }} />
+              <input
+                type="range"
+                min={0}
+                max={1}
+                step={0.01}
+                value={muted ? 0 : volume}
+                onChange={(e) => changeVol(Number(e.target.value))}
+                className="absolute inset-0 w-full opacity-0 cursor-pointer"
+                aria-label="Volume"
+              />
+            </div>
+          </div>
+
+          {cur && (
+            <AddToPlaylistMenu items={[cur]} className="p-2.5 rounded-full glass-hover text-white/80 hover:text-white transition-transform hover:scale-110">
+              <Plus className="h-5 w-5" />
+            </AddToPlaylistMenu>
           )}
         </div>
       </div>
