@@ -109,7 +109,7 @@ export default function Editor({ item, rootId, onClose }: { item: FileItem; root
   };
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center p-4 bg-black/70" onMouseDown={tryClose}>
+    <div className="fixed inset-0 z-50 grid place-items-center p-4 scrim" onMouseDown={tryClose}>
       <div className="w-full max-w-5xl h-[88vh] flex flex-col glass-strong rounded-xl overflow-hidden" onMouseDown={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between px-4 py-3 border-b glass-divider">
           <div className="flex items-center gap-2 min-w-0">

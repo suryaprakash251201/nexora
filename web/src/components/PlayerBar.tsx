@@ -199,7 +199,7 @@ export default function PlayerBar() {
       )}
 
       {expanded && (
-        <div className="fixed inset-0 z-[70] grid place-items-center p-4 bg-black/70" onMouseDown={() => setExpanded(false)}>
+        <div className="fixed inset-0 z-[70] grid place-items-center p-4 scrim" onMouseDown={() => setExpanded(false)}>
           <div className="w-full max-w-lg glass-strong rounded-2xl overflow-hidden" onMouseDown={(e) => e.stopPropagation()}>
              <div className="flex items-center justify-between px-4 py-2 border-b glass-divider">
                <span className="text-sm font-medium">Now playing</span>

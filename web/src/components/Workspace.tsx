@@ -24,6 +24,7 @@ import { AddToPlaylistMenu, PlaylistPickerPopover } from "./PlaylistAdder";
 import TransfersPanel from "./TransfersPanel";
 import { Modal } from "./Modal";
 import RootModal from "./RootModal";
+import FolderPickerModal from "./FolderPickerModal";
 import { formatDate } from "../lib/format";
 import { previewKind, isEditable } from "../lib/preview";
 import { startUpload, startDownload } from "../lib/transfer";
@@ -38,6 +39,8 @@ export default function Workspace({ user }: { user: User }) {
   const toggleSelect = useUI((s) => s.toggleSelect);
   const selectMode = useUI((s) => s.selectMode);
   const clearSelection = useUI((s) => s.clearSelection);
+  const setSelection = useUI((s) => s.setSelection);
+  const setSelectMode = useUI((s) => s.setSelectMode);
   const openDrawer = useUI((s) => s.openDrawer);
   const drawerPath = useUI((s) => s.drawerPath);
   const pushToast = useUI((s) => s.pushToast);
@@ -56,6 +59,7 @@ export default function Workspace({ user }: { user: User }) {
   const [ctx, setCtx] = useState<{ x: number; y: number; item: FileItem } | null>(null);
   const [ctxPlaylist, setCtxPlaylist] = useState<{ x: number; y: number; items: FileItem[] } | null>(null);
   const [menu, setMenu] = useState<{ kind: string; item?: FileItem } | null>(null);
+  const [folderPicker, setFolderPicker] = useState<{ mode: "move" | "copy"; paths: string[] } | null>(null);
   const [rootModal, setRootModal] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const dragDepth = useRef(0);
@@ -165,6 +169,44 @@ export default function Workspace({ user }: { user: User }) {
     if (!item.is_dir) startDownload(item.root_id, item.path, item.name);
   };
 
+  // Move the current selection into a target folder (triggered by dragging
+  // the selection onto a folder tile in the file browser).
+  const moveSelectionTo = (_folder: FileItem) => {
+    if (!rootId || !canWrite) return;
+    const srcPaths = Array.from(selection);
+    if (srcPaths.length === 0) return;
+    setFolderPicker({ mode: "move", paths: srcPaths });
+  };
+
+  const openMovePicker = () => {
+    const paths = Array.from(selection);
+    if (!paths.length) return;
+    setFolderPicker({ mode: "move", paths });
+  };
+  const openCopyPicker = () => {
+    const paths = Array.from(selection);
+    if (!paths.length) return;
+    setFolderPicker({ mode: "copy", paths });
+  };
+
+  const applyFolderPicker = async (destPath: string) => {
+    const fp = folderPicker;
+    setFolderPicker(null);
+    if (!fp || !rootId) return;
+    const verb = fp.mode === "move" ? "Moving" : "Copying";
+    try {
+      for (const p of fp.paths) {
+        if (p === destPath || destPath.startsWith(p + "/")) continue; // skip self/descendant
+        await post(`/files/${fp.mode}`, { root: rootId, source: p, destination: (destPath ? destPath + "/" : "") + p.split("/").pop() });
+      }
+      pushToast("success", fp.mode === "move" ? "Moved" : "Copied");
+      clearSelection();
+      refresh();
+    } catch (e: any) {
+      pushToast("error", e.message || `${verb} failed`);
+    }
+  };
+
   // Play the selected audio files (or the whole folder's audio) as a queue.
   const selectedItems = items.filter((i) => selection.has(i.path));
   const playSelected = () => {
@@ -192,7 +234,10 @@ export default function Workspace({ user }: { user: User }) {
 
   const pollArchive = (jobId: string) => {
     const es = new EventSource(`/api/v1/jobs/${jobId}/events`);
+    let settled = false;
     const finish = (ok: boolean, msg?: string) => {
+      if (settled) return;
+      settled = true;
       es.close();
       if (ok) { pushToast("success", "Archive ready"); window.open(`/api/v1/jobs/${jobId}/download`, "_blank"); }
       else pushToast("error", msg || "Archive failed");
@@ -204,7 +249,7 @@ export default function Workspace({ user }: { user: User }) {
         else if (job.status === "failed") finish(false, job.error);
       } catch { /* ignore */ }
     });
-    es.onerror = () => { es.close(); };
+    es.onerror = () => { es.close(); finish(false, "Archive stream interrupted"); };
   };
 
   const toggleFavorite = async (item: FileItem) => {
@@ -296,7 +341,12 @@ export default function Workspace({ user }: { user: User }) {
       if (e.key === "/") { e.preventDefault(); setView("search"); }
       else if (e.key.toLowerCase() === "n" && canWrite && view === "files") { e.preventDefault(); setMenu({ kind: "newFolder" }); }
       else if (e.key.toLowerCase() === "u" && canWrite && view === "files") { e.preventDefault(); fileInput.current?.click(); }
-      else if (e.key === "Delete" && selection.size > 0 && canWrite) { e.preventDefault(); bulkDelete(); }
+      else       if (e.key === "Delete" && selection.size > 0 && canWrite) { e.preventDefault(); bulkDelete(); }
+      else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "a" && view === "files" && items.length) {
+        e.preventDefault();
+        if (selectMode) setSelection(items.map((i) => i.path));
+        else setSelectMode(true), setSelection(items.map((i) => i.path));
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -362,6 +412,7 @@ export default function Workspace({ user }: { user: User }) {
               onOpen={openItem}
               onSelect={(it) => { toggleSelect(it.path); openDrawer(it.path); }}
               onContextMenu={onContextMenu}
+              onDropItem={(folder) => moveSelectionTo(folder)}
             />
           )}
           {view === "trash" && (
@@ -407,7 +458,7 @@ export default function Workspace({ user }: { user: User }) {
         </div>
 
         {selection.size > 0 && view === "files" && (
-          <div className="glass-bottom px-4 py-2 flex items-center gap-3 text-sm">
+          <div className="glass-bottom px-4 py-2 flex items-center gap-3 text-sm flex-wrap">
             <span className="text-content-muted">{selection.size} selected</span>
             <button onClick={playSelected} className="flex items-center gap-1 hover:underline"><Play className="h-4 w-4" /> Play</button>
             <AddToPlaylistMenu
@@ -416,8 +467,14 @@ export default function Workspace({ user }: { user: User }) {
             >
               <ListMusic className="h-4 w-4" /> Add to playlist
             </AddToPlaylistMenu>
-            <button onClick={() => archivePaths(Array.from(selection), "selection")} className="flex items-center gap-1 hover:underline"><Archive className="h-4 w-4" /> Archive</button>
-            {canWrite && <button onClick={bulkDelete} className="flex items-center gap-1 text-red-500 hover:underline"><Trash2 className="h-4 w-4" /> Delete</button>}
+            {canWrite && (
+              <>
+                <button onClick={openMovePicker} className="flex items-center gap-1 hover:underline"><FolderInput className="h-4 w-4" /> Move</button>
+                <button onClick={openCopyPicker} className="flex items-center gap-1 hover:underline"><Copy className="h-4 w-4" /> Copy</button>
+                <button onClick={() => archivePaths(Array.from(selection), "selection")} className="flex items-center gap-1 hover:underline"><Archive className="h-4 w-4" /> Archive</button>
+                <button onClick={bulkDelete} className="flex items-center gap-1 text-red-500 hover:underline"><Trash2 className="h-4 w-4" /> Delete</button>
+              </>
+            )}
             <button onClick={clearSelection} className="text-content-muted hover:underline">Clear</button>
           </div>
         )}
@@ -467,6 +524,16 @@ export default function Workspace({ user }: { user: User }) {
       {menu && <ActionModals menu={menu} rootId={rootId!} path={path} onClose={() => setMenu(null)} onDone={() => { refresh(); setMenu(null); }} onArchiveExtract={(src, dest) => { extractZip(rootId!, src, dest, pushToast, refresh); setMenu(null); }} />}
       {rootModal && <RootModal onClose={() => setRootModal(false)} onDone={() => { refresh(); setRootModal(false); }} />}
 
+      {folderPicker && rootId && (
+        <FolderPickerModal
+          rootId={rootId}
+          currentPath={path}
+          mode={folderPicker.mode}
+          onClose={() => setFolderPicker(null)}
+          onConfirm={applyFolderPicker}
+        />
+      )}
+
       {dropPicker && (
         <DropRootPicker
           roots={roots.data?.roots || []}
@@ -482,7 +549,7 @@ export default function Workspace({ user }: { user: User }) {
       )}
 
       {dragActive && (
-        <div className="fixed inset-0 z-[70] grid place-items-center bg-black/40 backdrop-blur-sm pointer-events-none">
+        <div className="fixed inset-0 z-[70] grid place-items-center scrim backdrop-blur-sm pointer-events-none">
           <div className="glass-strong rounded-2xl px-8 py-10 text-center">
             <Upload className="h-12 w-12 mx-auto mb-3 text-accent" />
             <p className="text-lg font-semibold">Drop to upload</p>

@@ -95,7 +95,7 @@ export default function PreviewModal({
   const editable = !current.is_dir && isEditable(current);
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center p-4 bg-black/70" onMouseDown={onClose}>
+    <div className="fixed inset-0 z-50 grid place-items-center p-4 scrim" onMouseDown={onClose}>
       <div className="w-full max-w-5xl h-[88vh] flex flex-col glass-strong rounded-xl overflow-hidden" onMouseDown={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between px-4 py-3 border-b glass-divider gap-2">
           <span className="font-medium truncate">{current.name}</span>

@@ -20,6 +20,8 @@
   --overlay-bg: rgba(17, 24, 39, 0.78);
   --overlay-fg: 255 255 255;
   --overlay-muted: rgba(255, 255, 255, 0.7);
+  /* Modal/backdrop scrim — readable in both themes. */
+  --scrim: rgba(15, 23, 42, 0.55);
 
   /* Glassmorphism tokens (light) */
   --glass-bg: rgba(255, 255, 255, 0.42);
@@ -54,6 +56,7 @@
   --overlay-bg: rgba(17, 24, 39, 0.78);
   --overlay-fg: 255 255 255;
   --overlay-muted: rgba(255, 255, 255, 0.7);
+  --scrim: rgba(2, 6, 23, 0.6);
 
   /* Glassmorphism tokens (dark) — frosted white over charcoal */
   --glass-bg: rgba(255, 255, 255, 0.05);
@@ -280,6 +283,14 @@ select.bg-surface:focus {
   background: rgb(var(--solid-surface));
   color: rgb(var(--content));
   border: 1px solid rgb(var(--border));
+}
+
+/* Dimming backdrop for modals/dialogs (theme-aware replacement for
+   hardcoded bg-black/50 etc). */
+.scrim {
+  background: var(--scrim);
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
 }
 
 /* Accent (primary) buttons get a translucent, frosted treatment. */

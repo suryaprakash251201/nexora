@@ -3,7 +3,9 @@ import type { Root } from "../api/types";
 import { useUI } from "../store";
 import { usePlaylists } from "../store/playlists";
 import { rootIcon } from "../lib/rootIcons";
+import { get } from "../api/client";
 import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 
 export type SidebarView = "home" | "files" | "trash" | "favorites" | "recents" | "shares" | "playlists" | "search" | "admin";
 
@@ -41,6 +43,11 @@ export default function Sidebar({
     obs.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
     return () => obs.disconnect();
   }, []);
+
+  const version = useQuery({
+    queryKey: ["version"],
+    queryFn: () => get<{ version: string }>("/version"),
+  });
 
   const navBtn = (v: SidebarView, icon: React.ReactNode, label: string) => (
     <button
@@ -148,7 +155,7 @@ export default function Sidebar({
 
       <div className="p-2 border-t flex flex-col gap-2">
         <div className="flex items-center justify-between px-1">
-          <span className="text-xs text-content-muted">v1.3</span>
+          <span className="text-xs text-content-muted">{version.data?.version ? `v${version.data.version}` : ""}</span>
           <button
             onClick={toggleTheme}
             className="p-2 rounded-lg glass-hover"

@@ -36,7 +36,7 @@ function TabButton({ active, onClick, icon, children }: { active: boolean; onCli
 function UsersTab() {
   const qc = useQueryClient();
   const pushToast = useUI((s) => s.pushToast);
-  const { data } = useQuery({ queryKey: ["admin-users"], queryFn: () => get<{ users: User[] }>("/admin/users") });
+  const { data, isLoading } = useQuery({ queryKey: ["admin-users"], queryFn: () => get<{ users: User[] }>("/admin/users") });
   const [showCreate, setShowCreate] = useState(false);
   const [permUser, setPermUser] = useState<User | null>(null);
 
@@ -67,6 +67,8 @@ function UsersTab() {
         </div>
       </div>
       <div className="glass rounded-lg divide-y glass-divider">
+        {isLoading && <p className="px-3 py-6 text-sm text-content-muted">Loading users…</p>}
+        {!isLoading && users.length === 0 && <p className="px-3 py-6 text-sm text-content-muted">No users yet.</p>}
         {users.map((u) => (
           <div key={u.id} className="grid grid-cols-[1fr_auto_auto_auto] gap-3 items-center px-3 py-2">
             <div className="min-w-0">
@@ -160,6 +162,7 @@ function AuditTab() {
       <h2 className="text-lg font-semibold mb-4">Audit log</h2>
       {isLoading && <p className="text-content-muted">Loading…</p>}
       <div className="glass rounded-lg divide-y glass-divider text-sm">
+        {!isLoading && items.length === 0 && <p className="px-3 py-6 text-content-muted">No audit entries yet.</p>}
         {items.map((a) => (
           <div key={a.id} className="grid grid-cols-[auto_1fr_auto] gap-3 items-center px-3 py-2">
             <span className="px-1.5 py-0.5 rounded glass-chip text-xs font-mono">{a.action}</span>

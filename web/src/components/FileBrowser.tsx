@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { FileItem } from "../api/types";
 import { formatBytes, formatDate } from "../lib/format";
 import { useUI } from "../store";
@@ -13,6 +14,7 @@ export default function FileBrowser({
   onOpen,
   onSelect,
   onContextMenu,
+  onDropItem,
 }: {
   items: FileItem[];
   loading: boolean;
@@ -23,8 +25,12 @@ export default function FileBrowser({
   onOpen: (item: FileItem) => void;
   onSelect: (item: FileItem, e: React.MouseEvent | React.ChangeEvent) => void;
   onContextMenu: (e: React.MouseEvent, item: FileItem) => void;
+  onDropItem?: (targetFolder: FileItem) => void;
 }) {
   const pushToast = useUI((s) => s.pushToast);
+  const [dropTarget, setDropTarget] = useState<string | null>(null);
+
+  const canDrop = canWrite && selectMode && onDropItem;
 
   if (loading) {
     return (
@@ -62,9 +68,18 @@ export default function FileBrowser({
               }}
               onDoubleClick={() => onOpen(it)}
               onContextMenu={(e) => onContextMenu(e, it)}
+              onDragOver={(e) => { if (canDrop && it.is_dir) { e.preventDefault(); setDropTarget(it.path); } }}
+              onDragLeave={() => { if (dropTarget === it.path) setDropTarget(null); }}
+              onDrop={(e) => {
+                if (canDrop && it.is_dir) {
+                  e.preventDefault();
+                  setDropTarget(null);
+                  onDropItem?.(it);
+                }
+              }}
               className={`group relative flex flex-col items-center gap-2 p-4 rounded-2xl border text-center transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg glass-hover ${
                 selected ? "border-accent bg-accent/10" : "border-transparent"
-              }`}
+              } ${dropTarget === it.path ? "ring-2 ring-accent bg-accent/10" : ""} ${it.is_dir ? "cursor-pointer" : ""}`}
             >
               {it.is_dir ? <FolderTile large /> : <FileThumb it={it} large />}
               <span className="text-sm truncate w-full" title={it.name}>{it.name}</span>
@@ -105,9 +120,18 @@ export default function FileBrowser({
             }}
             onDoubleClick={() => onOpen(it)}
             onContextMenu={(e) => onContextMenu(e, it)}
+            onDragOver={(e) => { if (canDrop && it.is_dir) { e.preventDefault(); setDropTarget(it.path); } }}
+            onDragLeave={() => { if (dropTarget === it.path) setDropTarget(null); }}
+            onDrop={(e) => {
+              if (canDrop && it.is_dir) {
+                e.preventDefault();
+                setDropTarget(null);
+                onDropItem?.(it);
+              }
+            }}
             className={`group grid grid-cols-[1fr_auto_auto] gap-2 px-3 py-2 rounded-lg items-center cursor-pointer ${
               selected ? "bg-accent/10" : "glass-hover"
-            }`}
+            } ${dropTarget === it.path ? "ring-2 ring-accent bg-accent/10" : ""}`}
           >
             <span className="flex items-center gap-2 min-w-0">
               {selectMode && (
