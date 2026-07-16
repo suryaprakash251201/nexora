@@ -27,10 +27,10 @@ export default function PlaylistsPanel() {
     pushToast("success", `Added "${current.name}" to "${pl?.name ?? "playlist"}"`);
   };
 
-  const newPlaylist = () => {
+  const newPlaylist = async () => {
     const name = window.prompt("Playlist name", `Playlist ${playlists.length + 1}`);
     if (name !== null) {
-      const pl = create(name.trim() || `Playlist ${playlists.length + 1}`, []);
+      const pl = await create(name.trim() || `Playlist ${playlists.length + 1}`, []);
       setExpanded(pl.id);
     }
   };

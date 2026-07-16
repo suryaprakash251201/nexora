@@ -18,6 +18,7 @@ import (
 	"github.com/nexora/nexora/internal/search"
 	"github.com/nexora/nexora/internal/sharing"
 	"github.com/nexora/nexora/internal/storage"
+	"github.com/nexora/nexora/internal/playlists"
 )
 
 // Server bundles dependencies for the HTTP API and static file server.
@@ -33,6 +34,7 @@ type Server struct {
 	StorageRoots *storage.RootService
 	Search       *search.Service
 	Shares       *sharing.Store
+	Playlists    *playlists.Store
 	Jobs         *jobs.Manager
 	Preview      *preview.Service
 	Metrics      *metrics.Registry
@@ -40,7 +42,7 @@ type Server struct {
 }
 
 // NewServer constructs the API server with its dependencies.
-func NewServer(cfg *config.Config, log *logger.Logger, db *sql.DB, users *auth.UserStore, sessions *auth.SessionStore, audit *audit.Store, guard *auth.LoginGuard, limiter *middleware.RateLimiter, roots *storage.RootService) *Server {
+func NewServer(cfg *config.Config, log *logger.Logger, db *sql.DB, users *auth.UserStore, sessions *auth.SessionStore, audit *audit.Store, guard *auth.LoginGuard, limiter *middleware.RateLimiter, roots *storage.RootService, plStore *playlists.Store) *Server {
 	return &Server{
 		Cfg:          cfg,
 		Log:          log,
@@ -51,6 +53,7 @@ func NewServer(cfg *config.Config, log *logger.Logger, db *sql.DB, users *auth.U
 		Guard:        guard,
 		Limiter:      limiter,
 		StorageRoots: roots,
+		Playlists:    plStore,
 	}
 }
 
@@ -146,6 +149,14 @@ func (s *Server) Routes() http.Handler {
 
 	// Search.
 	authed.Get("/search", s.handleSearch)
+
+	// Playlists.
+	authed.Get("/playlists", s.handleListPlaylists)
+	authed.Post("/playlists", s.handleCreatePlaylist)
+	authed.Delete("/playlists/{id}", s.handleDeletePlaylist)
+	authed.Put("/playlists/{id}", s.handleRenamePlaylist)
+	authed.Post("/playlists/{id}/items", s.handleAddPlaylistItems)
+	authed.Delete("/playlists/{id}/items", s.handleRemovePlaylistItem)
 
 	// Archive / extract jobs.
 	authed.Post("/archive", s.handleCreateArchive)

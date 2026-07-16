@@ -143,3 +143,22 @@ export interface HomeData {
   music: RecentItem[];
   video: RecentItem[];
 }
+
+export interface PlaylistItem {
+  id: string;
+  playlist_id: string;
+  root_id: string;
+  path: string;
+  created_at: string;
+  name: string;
+  extension: string;
+  mime: string;
+}
+
+export interface Playlist {
+  id: string;
+  name: string;
+  created_at: string;
+  updated_at: string;
+  items: PlaylistItem[];
+}

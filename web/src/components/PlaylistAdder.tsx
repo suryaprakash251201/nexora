@@ -18,7 +18,7 @@ export function PlaylistPickerList({ items, onClose }: { items: FileItem[]; onCl
   const pushToast = useUI((s) => s.pushToast);
   const audio = audioOnly(items);
 
-  const add = (id?: string) => {
+  const add = async (id?: string) => {
     if (!audio.length) {
       pushToast("error", "No audio files selected");
       onClose();
@@ -31,7 +31,7 @@ export function PlaylistPickerList({ items, onClose }: { items: FileItem[]; onCl
     } else {
       const name = window.prompt("New playlist name", `Playlist ${playlists.length + 1}`);
       if (name !== null) {
-        const pl = create(name.trim() || `Playlist ${playlists.length + 1}`, audio);
+        const pl = await create(name.trim() || `Playlist ${playlists.length + 1}`, audio);
         pushToast("success", `Created "${pl.name}" with ${audio.length} track${audio.length === 1 ? "" : "s"}`);
       }
     }

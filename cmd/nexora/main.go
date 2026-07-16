@@ -22,6 +22,7 @@ import (
 	"github.com/nexora/nexora/internal/metrics"
 	"github.com/nexora/nexora/internal/middleware"
 	"github.com/nexora/nexora/internal/preview"
+	"github.com/nexora/nexora/internal/playlists"
 	"github.com/nexora/nexora/internal/search"
 	"github.com/nexora/nexora/internal/sharing"
 	"github.com/nexora/nexora/internal/storage"
@@ -61,6 +62,7 @@ func main() {
 	roots := storage.NewRootService(db)
 	searchSvc := search.NewService(db, roots, log)
 	shareStore := sharing.NewStore(db)
+	plStore := playlists.NewStore(db)
 	previewSvc := preview.NewService(cfg.ThumbnailCacheDir, cfg.ThumbnailMaxSize, cfg.ThumbnailTTL)
 	jobMgr := jobs.NewManager(db, roots, log, filepath.Join(cfg.DataDir, "cache", "archives"), 2)
 	defer jobMgr.Stop()
@@ -75,7 +77,7 @@ func main() {
 		})
 	}
 
-	srv := api.NewServer(cfg, log, db, users, sessions, auditStore, guard, limiter, roots)
+	srv := api.NewServer(cfg, log, db, users, sessions, auditStore, guard, limiter, roots, plStore)
 	srv.Search = searchSvc
 	srv.Shares = shareStore
 	srv.Preview = previewSvc
