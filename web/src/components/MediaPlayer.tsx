@@ -135,6 +135,9 @@ function AudioPlayer({
   const [bgFailed, setBgFailed] = useState(false);
   const [showRates, setShowRates] = useState(false);
 
+  const [showControls, setShowControls] = useState(true);
+  const controlsTimeout = useRef<number>();
+
   useEffect(() => {
     if (controlled) return;
     const a = ref.current;
@@ -256,8 +259,32 @@ function AudioPlayer({
     return () => window.removeEventListener("keydown", onKey);
   }, [fs, curTime, duration, volume, muted, controlled, toggle, seek, changeVol, closeFs]);
 
+  const handleMouseMove = () => {
+    if (!fs) return;
+    setShowControls(true);
+    window.clearTimeout(controlsTimeout.current);
+    if (playing) {
+      controlsTimeout.current = window.setTimeout(() => setShowControls(false), 2500);
+    }
+  };
+
+  useEffect(() => {
+    if (!fs) return;
+    if (!playing) {
+      setShowControls(true);
+      window.clearTimeout(controlsTimeout.current);
+    } else {
+      controlsTimeout.current = window.setTimeout(() => setShowControls(false), 2500);
+    }
+    return () => window.clearTimeout(controlsTimeout.current);
+  }, [playing, fs]);
+
   const fullscreen = (
-    <div className="fixed inset-0 z-[100] flex flex-col animate-fade-in bg-black/95 select-none">
+    <div 
+      className={`fixed inset-0 z-[100] flex flex-col animate-fade-in bg-black/95 select-none ${showControls ? "" : "cursor-none"}`}
+      onMouseMove={handleMouseMove}
+      onClick={handleMouseMove}
+    >
       {/* Blurred cover-art backdrop (Apple-style) */}
       {cur && !bgFailed && (
         <img
@@ -271,7 +298,7 @@ function AudioPlayer({
       <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-black/70 to-black/95 backdrop-blur-[100px]" />
 
       {/* Top bar */}
-      <div className="absolute top-0 inset-x-0 z-30 flex items-center justify-between p-5 sm:p-7">
+      <div className={`absolute top-0 inset-x-0 z-30 flex items-center justify-between p-5 sm:p-7 transition-opacity duration-500 ${showControls ? "opacity-100" : "opacity-0 pointer-events-none"}`}>
         <button
           onClick={closeFs}
           className="p-3 rounded-full glass-hover text-white transition-transform hover:scale-110"
@@ -326,14 +353,14 @@ function AudioPlayer({
               aria-label="Seek"
             />
           </div>
-          <div className="flex justify-between text-xs font-medium text-white/55 font-mono tabular-nums">
+          <div className={`flex justify-between text-xs font-medium text-white/55 font-mono tabular-nums transition-opacity duration-500 ${showControls ? "opacity-100" : "opacity-0"}`}>
             <span>{fmt(curTime)}</span>
             <span>{fmt(duration)}</span>
           </div>
         </div>
 
         {/* Primary Controls */}
-        <div className="flex items-center justify-center gap-5 sm:gap-7 w-full mt-9">
+        <div className={`flex items-center justify-center gap-5 sm:gap-7 w-full mt-9 transition-opacity duration-500 ${showControls ? "opacity-100" : "opacity-0 pointer-events-none"}`}>
           {controlled && (
             <button
               onClick={() => player.setShuffle(!player.shuffle)}
@@ -378,7 +405,7 @@ function AudioPlayer({
         </div>
 
         {/* Secondary row: rate + volume + add to playlist */}
-        <div className="flex items-center justify-center gap-5 sm:gap-6 mt-8 text-white/70">
+        <div className={`flex items-center justify-center gap-5 sm:gap-6 mt-8 text-white/70 transition-opacity duration-500 ${showControls ? "opacity-100" : "opacity-0 pointer-events-none"}`}>
           <div className="relative">
             <button
               onClick={() => setShowRates(!showRates)}

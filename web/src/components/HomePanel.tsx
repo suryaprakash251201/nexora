@@ -36,26 +36,31 @@ function HomeCard({ item, onOpen }: { item: RecentItem; onOpen: () => void }) {
   return (
     <button 
       onClick={onOpen} 
-      className="group w-36 sm:w-44 shrink-0 text-left outline-none"
+      className="group w-full text-left outline-none flex items-center gap-4 p-3 rounded-2xl glass-strong border border-border/50 hover:border-accent/40 focus-visible:ring-2 focus-visible:ring-accent hover:shadow-lg hover:bg-surface/50 transition-all duration-300"
     >
-      <div className="relative aspect-square rounded-2xl glass-strong border border-border/50 group-hover:border-accent/40 group-focus-visible:ring-2 group-focus-visible:ring-accent group-hover:shadow-lg group-hover:-translate-y-1 transition-all duration-300 mb-3 overflow-hidden">
+      <div className="relative h-16 w-16 shrink-0 rounded-xl overflow-hidden shadow-sm">
         <FileThumb it={fi} fill />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+        <div className="absolute inset-0 bg-black/10 group-hover:bg-black/20 transition-colors duration-300" />
         
         {kind === "music" && (
-          <span className="absolute bottom-2 right-2 grid place-items-center h-8 w-8 rounded-full bg-surface/80 backdrop-blur-md shadow-sm border border-border/50 text-content group-hover:text-accent transition-colors">
-            <Music className="h-4 w-4" />
+          <span className="absolute bottom-1 right-1 grid place-items-center h-6 w-6 rounded-full bg-surface/90 backdrop-blur-md shadow-sm border border-border/50 text-content group-hover:text-accent transition-colors">
+            <Music className="h-3 w-3" />
           </span>
         )}
         {kind === "video" && (
-          <span className="absolute bottom-2 right-2 grid place-items-center h-8 w-8 rounded-full bg-surface/80 backdrop-blur-md shadow-sm border border-border/50 text-content group-hover:text-accent transition-colors">
-            <Film className="h-4 w-4" />
+          <span className="absolute bottom-1 right-1 grid place-items-center h-6 w-6 rounded-full bg-surface/90 backdrop-blur-md shadow-sm border border-border/50 text-content group-hover:text-accent transition-colors">
+            <Film className="h-3 w-3" />
           </span>
         )}
       </div>
-      <p className="truncate text-sm font-semibold text-content group-hover:text-accent transition-colors">{item.name}</p>
-      <p className="truncate text-xs font-medium text-content-muted mt-0.5">{item.root_name}</p>
-      <p className="truncate text-[10px] font-medium text-content-muted/70 mt-1 uppercase tracking-wider">{formatRelative(item.accessed_at)}</p>
+      <div className="flex-1 min-w-0">
+        <p className="truncate text-[15px] font-semibold text-content group-hover:text-accent transition-colors">{item.name}</p>
+        <div className="flex items-center gap-2 mt-1">
+          <p className="truncate text-xs font-medium text-content-muted">{item.root_name}</p>
+          <span className="h-1 w-1 rounded-full bg-border/80" />
+          <p className="truncate text-xs font-medium text-content-muted/70 uppercase tracking-wider">{formatRelative(item.accessed_at)}</p>
+        </div>
+      </div>
     </button>
   );
 }
@@ -84,11 +89,9 @@ function Section({
         <span className="px-2 py-0.5 rounded-full bg-surface-muted text-xs font-bold text-content-muted">{items.length}</span>
         {action && <span className="ml-auto">{action}</span>}
       </div>
-      <div className="flex gap-4 sm:gap-6 overflow-x-auto pb-4 custom-scrollbar -mx-2 px-2 snap-x snap-mandatory">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-2">
         {items.map((it) => (
-          <div key={it.root_id + it.path} className="snap-start">
-            <HomeCard item={it} onOpen={() => onOpen(it)} />
-          </div>
+          <HomeCard key={it.root_id + it.path} item={it} onOpen={() => onOpen(it)} />
         ))}
       </div>
     </section>
@@ -97,14 +100,14 @@ function Section({
 
 function AddTile({ icon, label, onClick }: { icon: React.ReactNode; label: string; onClick: () => void }) {
   return (
-    <button onClick={onClick} className="group w-36 sm:w-44 shrink-0 text-left outline-none snap-start">
-      <div className="aspect-square rounded-2xl glass-strong border border-border/50 group-hover:border-accent/40 group-focus-visible:ring-2 group-focus-visible:ring-accent group-hover:shadow-lg group-hover:-translate-y-1 transition-all duration-300 grid place-items-center text-content-muted group-hover:text-accent bg-surface-muted/30 relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-accent/0 to-accent/5 group-hover:opacity-100 opacity-0 transition-opacity" />
-        <div className="relative z-10 transition-transform duration-300 group-hover:scale-110">
+    <button onClick={onClick} className="group w-full text-left outline-none">
+      <div className="flex items-center gap-4 p-4 rounded-2xl glass-strong border border-border/50 hover:border-accent/40 focus-visible:ring-2 focus-visible:ring-accent hover:shadow-lg transition-all duration-300 group-hover:bg-surface-muted/30 relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-r from-accent/0 to-accent/5 group-hover:opacity-100 opacity-0 transition-opacity" />
+        <div className="relative z-10 grid place-items-center h-12 w-12 rounded-xl bg-accent/10 text-accent transition-transform duration-300 group-hover:scale-110">
           {icon}
         </div>
+        <p className="relative z-10 text-[15px] font-semibold text-content group-hover:text-accent transition-colors">{label}</p>
       </div>
-      <p className="mt-3 text-sm font-semibold text-center text-content group-hover:text-accent transition-colors">{label}</p>
     </button>
   );
 }
@@ -211,18 +214,18 @@ export default function HomePanel({
         {!isLoading && hasContent && (
           <div className="stagger-children space-y-12">
             <section className="animate-slide-up">
-              <div className="flex items-center gap-3 mb-4 px-1">
+              <div className="flex items-center gap-3 mb-6 px-1">
                 <div className="p-1.5 rounded-lg bg-accent/10 text-accent">
                   <Plus className="h-5 w-5" />
                 </div>
                 <h2 className="font-bold text-lg">Quick Actions</h2>
               </div>
-              <div className="flex gap-4 sm:gap-6 overflow-x-auto pb-4 custom-scrollbar -mx-2 px-2 snap-x snap-mandatory">
-                <AddTile icon={<Upload className="h-8 w-8" />} label="Upload Files" onClick={onUpload} />
-                <AddTile icon={<FolderPlus className="h-8 w-8" />} label="New Folder" onClick={onNewFolder} />
-                <AddTile icon={<FilePlus className="h-8 w-8" />} label="New Text File" onClick={onNewFile} />
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <AddTile icon={<Upload className="h-6 w-6" />} label="Upload Files" onClick={onUpload} />
+                <AddTile icon={<FolderPlus className="h-6 w-6" />} label="New Folder" onClick={onNewFolder} />
+                <AddTile icon={<FilePlus className="h-6 w-6" />} label="New Text File" onClick={onNewFile} />
                 {isAdmin && (
-                  <AddTile icon={<HardDrive className="h-8 w-8" />} label="New Storage Root" onClick={onNewRoot} />
+                  <AddTile icon={<HardDrive className="h-6 w-6" />} label="New Storage Root" onClick={onNewRoot} />
                 )}
               </div>
             </section>
