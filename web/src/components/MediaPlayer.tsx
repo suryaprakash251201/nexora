@@ -18,11 +18,15 @@ import {
   Rewind,
   FastForward,
   Plus,
+  MonitorPlay,
+  Settings2,
+  Download,
 } from "lucide-react";
 import type { FileItem } from "../api/types";
 import { thumbUrl, needsTranscode, transcodeUrl, serverSupportsTranscode } from "../lib/preview";
 import { usePlayer } from "../store/player";
 import { AddToPlaylistMenu } from "./PlaylistAdder";
+import { Button } from "./ui/Button";
 
 function fmt(t: number): string {
   if (!isFinite(t) || t < 0) t = 0;
@@ -44,6 +48,8 @@ function srtToVtt(srt: string): string {
   }
   return out;
 }
+
+const RATES = [0.5, 0.75, 1, 1.25, 1.5, 2];
 
 interface MediaPlayerProps {
   kind: "audio" | "video";
@@ -67,8 +73,8 @@ function CoverArt({ item, className }: { item: FileItem; className?: string }) {
   const [failed, setFailed] = useState(false);
   if (failed) {
     return (
-      <div className={`h-full w-full grid place-items-center bg-gradient-to-br from-accent/30 to-fuchsia-500/20 ${className || ""}`}>
-        <Music className="h-20 w-20 text-white/80" />
+      <div className={`h-full w-full grid place-items-center bg-gradient-to-br from-accent/30 to-purple-500/20 ${className || ""}`}>
+        <Music className="h-1/3 w-1/3 text-white/80 drop-shadow-md" />
       </div>
     );
   }
@@ -76,23 +82,9 @@ function CoverArt({ item, className }: { item: FileItem; className?: string }) {
     <img
       src={thumbUrl(item)}
       alt=""
-      className={`h-full w-full object-cover ${className || ""}`}
+      className={`h-full w-full object-cover transition-transform duration-700 hover:scale-105 ${className || ""}`}
       onError={() => setFailed(true)}
     />
-  );
-}
-
-function Equalizer({ playing }: { playing: boolean }) {
-  return (
-    <div className={`flex items-end gap-1 h-5 ${playing ? "" : "opacity-30"}`} aria-hidden="true">
-      {[0, 1, 2, 3, 4].map((i) => (
-        <span
-          key={i}
-          className="eq-bar w-1 rounded-full bg-accent"
-          style={{ animationDelay: `${i * 0.13}s`, animationPlayState: playing ? "running" : "paused" }}
-        />
-      ))}
-    </div>
   );
 }
 
@@ -120,20 +112,22 @@ function AudioPlayer({
   const durT = controlled ? player.duration : 0;
   const volV = controlled ? player.volume : 1;
   const mutedV = controlled ? player.muted : false;
+  const rateV = controlled ? player.playbackRate : 1;
   const queue = controlled ? player.queue : playlist || [];
   const qIndex = controlled ? player.index : index || 0;
   const multi = queue.length > 1;
 
-  // Non-controlled local playback (standalone use).
   const ref = useRef<HTMLAudioElement>(null);
   const [lPlaying, setLPlaying] = useState(false);
   const [lCur, setLCur] = useState(0);
   const [lDur, setLDur] = useState(0);
   const [lVol, setLVol] = useState(1);
   const [lMuted, setLMuted] = useState(false);
+  const [lRate, setLRate] = useState(1);
 
   const [fs, setFs] = useState(false);
   const [bgFailed, setBgFailed] = useState(false);
+  const [showRates, setShowRates] = useState(false);
 
   useEffect(() => {
     if (controlled) return;
@@ -153,7 +147,6 @@ function AudioPlayer({
       a.removeEventListener("pause", () => setLPlaying(false));
       a.removeEventListener("ended", () => step(1));
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [url, controlled]);
 
   useEffect(() => {
@@ -163,7 +156,6 @@ function AudioPlayer({
     a.load();
     setLCur(0);
     if (autoPlay) a.play().catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [url, controlled]);
 
   const toggle = () => {
@@ -183,6 +175,12 @@ function AudioPlayer({
     setLVol(v); setLMuted(v === 0);
     if (ref.current) ref.current.volume = v;
   };
+  const changeRate = (r: number) => {
+    if (controlled) { player.setPlaybackRate(r); return; }
+    setLRate(r);
+    if (ref.current) ref.current.playbackRate = r;
+    setShowRates(false);
+  };
   const step = (dir: number) => {
     if (controlled) { dir > 0 ? player.next(false) : player.prev(); return; }
     if (!playlist || playlist.length === 0 || !onSelect) return;
@@ -195,48 +193,59 @@ function AudioPlayer({
   const duration = controlled ? durT : lDur;
   const volume = controlled ? volV : lVol;
   const muted = controlled ? mutedV : lMuted;
+  const rate = controlled ? rateV : lRate;
   const pct = duration > 0 ? (curTime / duration) * 100 : 0;
 
   const fullscreen = (
-    <div className="fixed inset-0 z-[60] flex flex-col audio-fs">
+    <div className="fixed inset-0 z-[100] flex flex-col animate-fade-in bg-black">
       {cur && !bgFailed && (
-        <img src={thumbUrl(cur)} alt="" className="absolute inset-0 h-full w-full object-cover blur-3xl scale-125 opacity-50" onError={() => setBgFailed(true)} />
+        <img src={thumbUrl(cur)} alt="" className="absolute inset-0 h-full w-full object-cover blur-3xl scale-125 opacity-40 mix-blend-screen" onError={() => setBgFailed(true)} />
       )}
-      <div className="absolute inset-0 bg-black/45 backdrop-blur-2xl" />
-      <button
-        onClick={() => setFs(false)}
-        className="absolute top-4 right-4 z-20 p-2.5 rounded-full glass-hover text-white"
-        title="Exit full screen"
-      >
-        <Minimize2 className="h-5 w-5" />
-      </button>
-      <button
-        onClick={() => setFs(false)}
-        className="absolute top-4 left-4 z-20 flex items-center gap-2 px-3 py-2 rounded-full glass-hover text-white text-sm"
-        title="Back"
-      >
-        <ArrowLeft className="h-5 w-5" /> Back
-      </button>
+      <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-black/60 to-black/90 backdrop-blur-[100px]" />
+      
+      {/* Top Nav */}
+      <div className="absolute top-0 inset-x-0 z-20 flex items-center justify-between p-6">
+        <button
+          onClick={() => setFs(false)}
+          className="p-3 rounded-full glass-hover text-white transition-transform hover:scale-110"
+          title="Back"
+        >
+          <X className="h-6 w-6" />
+        </button>
+      </div>
 
-      <div className="relative z-10 flex-1 flex flex-col items-center justify-center gap-8 w-full max-w-md mx-auto px-6">
-        <div className={`audio-disc ${playing ? "" : "paused"} relative aspect-square w-64 sm:w-80 rounded-full overflow-hidden shadow-2xl ring-1 ring-white/15`}>
+      <div className="relative z-10 flex-1 flex flex-col items-center justify-center gap-10 w-full max-w-xl mx-auto px-6 h-full pb-10">
+        
+        {/* Album Art */}
+        <div className={`audio-disc ${playing ? "" : "paused"} relative w-full aspect-square max-w-[320px] sm:max-w-[400px] rounded-3xl overflow-hidden shadow-2xl shadow-accent/20 ring-1 ring-white/10 mx-auto transition-transform duration-500 ${playing ? 'scale-100' : 'scale-95'}`}>
           {cur ? <CoverArt item={cur} /> : (
-            <div className="h-full w-full grid place-items-center bg-gradient-to-br from-accent/30 to-fuchsia-500/20">
-              <Music className="h-20 w-20 text-white/80" />
+            <div className="h-full w-full grid place-items-center bg-gradient-to-br from-accent/30 to-purple-500/20">
+              <Music className="h-24 w-24 text-white/80" />
             </div>
           )}
         </div>
 
-        <div className="w-full text-center">
-          <p className="text-white font-semibold text-lg truncate drop-shadow">{cur?.name}</p>
-          <p className="text-white/60 text-sm truncate">
-            {multi ? `Track ${qIndex + 1} of ${queue.length}` : "Now Playing"}
-          </p>
+        {/* Track Info */}
+        <div className="w-full flex justify-between items-end mt-4">
+          <div className="min-w-0 pr-4">
+            <h2 className="text-white font-bold text-3xl sm:text-4xl truncate drop-shadow-md mb-2">{cur?.name}</h2>
+            <p className="text-white/60 text-lg truncate font-medium">
+              {multi ? `Track ${qIndex + 1} of ${queue.length}` : "Now Playing"}
+            </p>
+          </div>
+          <div className="shrink-0 flex items-center">
+            {cur && (
+              <AddToPlaylistMenu items={[cur]} className="p-3 rounded-full glass-hover text-white transition-transform hover:scale-110">
+                <Plus className="h-6 w-6" />
+              </AddToPlaylistMenu>
+            )}
+          </div>
         </div>
 
-        <div className="w-full">
-          <div className="relative h-1.5 rounded-full bg-white/25 overflow-hidden">
-            <div className="absolute inset-y-0 left-0 bg-accent" style={{ width: `${pct}%` }} />
+        {/* Progress Bar */}
+        <div className="w-full space-y-2 mt-2">
+          <div className="relative h-2 rounded-full bg-white/20 overflow-hidden cursor-pointer group">
+            <div className="absolute inset-y-0 left-0 bg-accent transition-all duration-100" style={{ width: `${pct}%` }} />
             <input
               type="range"
               min={0}
@@ -248,188 +257,157 @@ function AudioPlayer({
               aria-label="Seek"
             />
           </div>
-          <div className="flex justify-between text-xs text-white/70 mt-1.5">
+          <div className="flex justify-between text-sm font-medium text-white/70 font-mono">
             <span>{fmt(curTime)}</span>
             <span>{fmt(duration)}</span>
           </div>
         </div>
 
-        <div className="flex items-center justify-center gap-6">
-          {multi && (
-            <button onClick={() => step(-1)} className="p-2 rounded-full glass-hover text-white" title="Previous">
-              <SkipBack className="h-6 w-6" />
-            </button>
-          )}
-          <button
-            onClick={toggle}
-            className="h-16 w-16 rounded-full accent-glass grid place-items-center"
-            title={playing ? "Pause" : "Play"}
-          >
-            {playing ? <Pause className="h-7 w-7" /> : <Play className="h-7 w-7 translate-x-0.5" />}
-          </button>
-          {multi && (
-            <button onClick={() => step(1)} className="p-2 rounded-full glass-hover text-white" title="Next">
-              <SkipForward className="h-6 w-6" />
-            </button>
-          )}
-        </div>
-
-        <div className="flex items-center gap-4 w-full">
-          {cur && (
-            <AddToPlaylistMenu
-              items={[cur]}
-              className="flex items-center gap-1 px-2 py-1.5 rounded-full glass-hover text-white text-sm"
-            >
-              <Plus className="h-4 w-4" /> Add to playlist
-            </AddToPlaylistMenu>
-          )}
+        {/* Primary Controls */}
+        <div className="flex items-center justify-center gap-6 sm:gap-8 w-full mt-2">
           {controlled && (
             <button
               onClick={() => player.setShuffle(!player.shuffle)}
-              className={`p-2 rounded-full glass-hover text-white ${player.shuffle ? "text-accent" : ""}`}
+              className={`p-3 rounded-full transition-colors ${player.shuffle ? "text-accent bg-accent/10" : "text-white/70 hover:text-white glass-hover"}`}
               title="Shuffle"
             >
-              <Shuffle className="h-5 w-5" />
+              <Shuffle className="h-6 w-6" />
             </button>
           )}
+          
+          <div className="flex items-center gap-4">
+            {multi && (
+              <button onClick={() => step(-1)} className="p-3 rounded-full glass-hover text-white transition-transform hover:scale-110" title="Previous">
+                <SkipBack className="h-8 w-8" />
+              </button>
+            )}
+            
+            <button
+              onClick={toggle}
+              className="h-20 w-20 rounded-full bg-white text-black grid place-items-center transition-transform hover:scale-105 shadow-xl shadow-white/10"
+              title={playing ? "Pause" : "Play"}
+            >
+              {playing ? <Pause className="h-10 w-10 fill-current" /> : <Play className="h-10 w-10 translate-x-1 fill-current" />}
+            </button>
+            
+            {multi && (
+              <button onClick={() => step(1)} className="p-3 rounded-full glass-hover text-white transition-transform hover:scale-110" title="Next">
+                <SkipForward className="h-8 w-8" />
+              </button>
+            )}
+          </div>
+          
           {controlled && (
             <button
               onClick={() => player.cycleRepeat()}
-              className={`p-2 rounded-full glass-hover text-white ${player.repeat !== "off" ? "text-accent" : ""}`}
+              className={`p-3 rounded-full transition-colors ${player.repeat !== "off" ? "text-accent bg-accent/10" : "text-white/70 hover:text-white glass-hover"}`}
               title={`Repeat: ${player.repeat}`}
             >
-              {player.repeat === "one" ? <Repeat1 className="h-5 w-5" /> : <Repeat className="h-5 w-5" />}
+              {player.repeat === "one" ? <Repeat1 className="h-6 w-6" /> : <Repeat className="h-6 w-6" />}
             </button>
           )}
-          <button onClick={() => { const m = !muted; if (controlled) player.toggleMute(); else setLMuted(m); }} className="p-2 rounded-full glass-hover text-white" title="Mute">
-            {muted || volume === 0 ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
-          </button>
-          <div className="relative h-1.5 flex-1 rounded-full bg-white/25 overflow-hidden">
-            <div className="absolute inset-y-0 left-0 bg-accent" style={{ width: `${(muted ? 0 : volume) * 100}%` }} />
-            <input
-              type="range"
-              min={0}
-              max={1}
-              step={0.01}
-              value={muted ? 0 : volume}
-              onChange={(e) => changeVol(Number(e.target.value))}
-              className="absolute inset-0 w-full opacity-0 cursor-pointer"
-              aria-label="Volume"
-            />
-          </div>
         </div>
       </div>
     </div>
   );
 
   return (
-    <div className="w-full max-w-lg mx-auto p-2">
-      <div className="audio-card relative aspect-square w-full max-w-xs mx-auto rounded-2xl overflow-hidden shadow-2xl ring-1 ring-white/10">
+    <div className="w-full max-w-lg mx-auto p-4 flex flex-col items-center">
+      <div className="relative aspect-square w-full max-w-[280px] sm:max-w-[320px] rounded-3xl overflow-hidden shadow-2xl ring-1 ring-border/50 group cursor-pointer" onClick={() => setFs(true)}>
         {cur && <CoverArt item={cur} />}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-        <button
-          onClick={() => setFs(true)}
-          className="absolute top-3 right-3 z-10 p-2 rounded-full glass-hover text-white"
-          title="Full screen"
-        >
-          <Maximize2 className="h-4 w-4" />
-        </button>
-        <div className="absolute bottom-0 left-0 right-0 p-4 text-white flex items-end justify-between gap-3">
-          <div className="min-w-0">
-            <p className="font-semibold truncate drop-shadow">{cur?.name}</p>
-            <p className="text-xs text-white/70 truncate">{multi ? `Track ${qIndex + 1} of ${queue.length}` : "Audio"}</p>
-          </div>
-          <Equalizer playing={playing} />
+        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors duration-300 grid place-items-center">
+          <Maximize2 className="h-10 w-10 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-300 drop-shadow-lg" />
         </div>
       </div>
 
-      <div className="mt-4 px-2">
-        <div className="relative h-1.5 rounded-full bg-white/20 overflow-hidden">
-          <div className="absolute inset-y-0 left-0 bg-accent" style={{ width: `${pct}%` }} />
-          <input
-            type="range"
-            min={0}
-            max={duration || 0}
-            step={0.1}
-            value={curTime}
-            onChange={(e) => seek(Number(e.target.value))}
-            className="absolute inset-0 w-full opacity-0 cursor-pointer"
-            aria-label="Seek"
-          />
+      <div className="w-full mt-8 space-y-6 px-2">
+        <div className="text-center">
+          <h3 className="font-bold text-xl truncate">{cur?.name}</h3>
+          <p className="text-content-muted text-sm mt-1">{multi ? `Track ${qIndex + 1} of ${queue.length}` : "Audio playback"}</p>
         </div>
-        <div className="flex justify-between text-xs text-content-muted mt-1">
-          <span>{fmt(curTime)}</span>
-          <span>{fmt(duration)}</span>
-        </div>
-
-        <div className="flex items-center justify-center gap-4 mt-3">
-          {multi && (
-            <button onClick={() => step(-1)} className="p-2 rounded-full glass-hover" title="Previous">
-              <SkipBack className="h-5 w-5" />
-            </button>
-          )}
-          <button
-            onClick={toggle}
-            className="h-12 w-12 rounded-full accent-glass grid place-items-center"
-            title={playing ? "Pause" : "Play"}
-          >
-            {playing ? <Pause className="h-6 w-6" /> : <Play className="h-6 w-6 translate-x-0.5" />}
-          </button>
-          {multi && (
-            <button onClick={() => step(1)} className="p-2 rounded-full glass-hover" title="Next">
-              <SkipForward className="h-5 w-5" />
-            </button>
-          )}
-        </div>
-
-        <div className="flex items-center gap-3 mt-4">
-          {cur && (
-            <AddToPlaylistMenu
-              items={[cur]}
-              className="flex items-center gap-1 px-2 py-1.5 rounded-full glass-hover text-sm"
-            >
-              <Plus className="h-4 w-4" /> Add to playlist
-            </AddToPlaylistMenu>
-          )}
-          {controlled && (
-            <button
-              onClick={() => player.setShuffle(!player.shuffle)}
-              className={`p-1.5 rounded-full glass-hover ${player.shuffle ? "text-accent" : ""}`}
-              title="Shuffle"
-            >
-              <Shuffle className="h-5 w-5" />
-            </button>
-          )}
-          {controlled && (
-            <button
-              onClick={() => player.cycleRepeat()}
-              className={`p-1.5 rounded-full glass-hover ${player.repeat !== "off" ? "text-accent" : ""}`}
-              title={`Repeat: ${player.repeat}`}
-            >
-              {player.repeat === "one" ? <Repeat1 className="h-5 w-5" /> : <Repeat className="h-5 w-5" />}
-            </button>
-          )}
-          <button onClick={() => { const m = !muted; if (controlled) player.toggleMute(); else setLMuted(m); }} className="p-1.5 rounded-full glass-hover" title="Mute">
-            {muted || volume === 0 ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
-          </button>
-          <div className="relative h-1.5 flex-1 rounded-full bg-white/20 overflow-hidden">
-            <div className="absolute inset-y-0 left-0 bg-accent" style={{ width: `${(muted ? 0 : volume) * 100}%` }} />
+        
+        <div className="w-full space-y-2">
+          <div className="relative h-2 rounded-full bg-surface-muted overflow-hidden group">
+            <div className="absolute inset-y-0 left-0 bg-accent transition-all duration-100" style={{ width: `${pct}%` }} />
             <input
               type="range"
               min={0}
-              max={1}
-              step={0.01}
-              value={muted ? 0 : volume}
-              onChange={(e) => changeVol(Number(e.target.value))}
+              max={duration || 0}
+              step={0.1}
+              value={curTime}
+              onChange={(e) => seek(Number(e.target.value))}
               className="absolute inset-0 w-full opacity-0 cursor-pointer"
-              aria-label="Volume"
+              aria-label="Seek"
             />
+          </div>
+          <div className="flex justify-between text-xs font-medium text-content-muted font-mono">
+            <span>{fmt(curTime)}</span>
+            <span>{fmt(duration)}</span>
+          </div>
+        </div>
+
+        <div className="flex justify-between items-center px-4">
+          <div className="relative">
+            <button onClick={() => setShowRates(!showRates)} className="text-xs font-mono px-2 py-1 rounded-lg glass-hover text-content-muted hover:text-content">
+              {rate}x
+            </button>
+            {showRates && (
+              <div className="absolute bottom-full left-0 mb-2 glass-strong rounded-xl p-1 z-20 flex flex-col animate-scale-in">
+                {RATES.map((r) => (
+                  <button key={r} onClick={() => changeRate(r)} className={`px-4 py-1.5 text-xs font-mono rounded-lg hover:bg-accent/15 ${r === rate ? "text-accent bg-accent/10" : ""}`}>
+                    {r}x
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          
+          <div className="flex items-center gap-4">
+            {multi && (
+              <button onClick={() => step(-1)} className="p-2 rounded-full glass-hover" title="Previous">
+                <SkipBack className="h-6 w-6 text-content" />
+              </button>
+            )}
+            <button
+              onClick={toggle}
+              className="h-14 w-14 rounded-full bg-accent text-accent-fg grid place-items-center shadow-lg shadow-accent/30 hover:scale-105 transition-transform"
+              title={playing ? "Pause" : "Play"}
+            >
+              {playing ? <Pause className="h-6 w-6 fill-current" /> : <Play className="h-6 w-6 translate-x-0.5 fill-current" />}
+            </button>
+            {multi && (
+              <button onClick={() => step(1)} className="p-2 rounded-full glass-hover" title="Next">
+                <SkipForward className="h-6 w-6 text-content" />
+              </button>
+            )}
+          </div>
+          
+          <div className="group relative flex items-center">
+            <button onClick={() => { const m = !muted; if (controlled) player.toggleMute(); else setLMuted(m); }} className="p-2 rounded-full glass-hover" title="Mute">
+              {muted || volume === 0 ? <VolumeX className="h-5 w-5 text-content-muted" /> : <Volume2 className="h-5 w-5 text-content-muted hover:text-content" />}
+            </button>
+            {/* Hover Volume Slider */}
+            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 h-24 w-8 glass-strong rounded-full p-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none group-hover:pointer-events-auto flex items-end">
+              <div className="relative w-full h-full rounded-full bg-surface-muted overflow-hidden">
+                <div className="absolute bottom-0 inset-x-0 bg-accent" style={{ height: `${(muted ? 0 : volume) * 100}%` }} />
+                <input
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  value={muted ? 0 : volume}
+                  onChange={(e) => changeVol(Number(e.target.value))}
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer appearance-none"
+                  style={{ writingMode: 'bt-lr', WebkitAppearance: 'slider-vertical' } as any}
+                  aria-label="Volume"
+                />
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
       {fs && fullscreen}
-
       {!controlled && <audio ref={ref} src={url} preload="metadata" />}
     </div>
   );
@@ -444,19 +422,20 @@ function VideoPlayer({ url, item, autoPlay }: { url?: string; item?: FileItem; a
   const [vol, setVol] = useState(1);
   const [muted, setMuted] = useState(false);
   const [full, setFull] = useState(false);
+  const [theater, setTheater] = useState(false);
+  const [rate, setRate] = useState(1);
   const [subUrl, setSubUrl] = useState<string | null>(null);
   const [errored, setErrored] = useState(false);
   const [erroredMsg, setErroredMsg] = useState<string>("");
   const [src, setSrc] = useState(url);
   const [live, setLive] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const [showControls, setShowControls] = useState(true);
+  const controlsTimeout = useRef<number>();
 
   const ext = item?.extension?.toLowerCase() || "";
   const isMkv = ext === "mkv";
 
-  // Choose the playback source: unsupported containers (e.g. .mkv) are sent
-  // through the server-side ffmpeg transcoder when available; otherwise we
-  // fall back to the raw file (native attempt) and rely on the error fallback.
   useEffect(() => {
     let cancelled = false;
     if (item && needsTranscode(item)) {
@@ -475,7 +454,6 @@ function VideoPlayer({ url, item, autoPlay }: { url?: string; item?: FileItem; a
       setLive(false);
     }
     return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [url, item]);
 
   useEffect(() => {
@@ -515,18 +493,35 @@ function VideoPlayer({ url, item, autoPlay }: { url?: string; item?: FileItem; a
     if (!v) return;
     setErrored(false);
     v.load();
+    v.playbackRate = rate;
     setCur(0);
     if (autoPlay) v.play().catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [src]);
+  }, [src, autoPlay]);
 
-  // Keyboard shortcuts: arrows seek/volume, space play/pause, f fullscreen, m mute, esc exit fs.
+  const handleMouseMove = () => {
+    setShowControls(true);
+    window.clearTimeout(controlsTimeout.current);
+    if (playing) {
+      controlsTimeout.current = window.setTimeout(() => setShowControls(false), 2500);
+    }
+  };
+
+  useEffect(() => {
+    if (!playing) {
+      setShowControls(true);
+      window.clearTimeout(controlsTimeout.current);
+    } else {
+      controlsTimeout.current = window.setTimeout(() => setShowControls(false), 2500);
+    }
+  }, [playing]);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const v = ref.current;
       if (!v) return;
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA") return;
+      handleMouseMove();
       switch (e.key) {
         case "ArrowLeft": e.preventDefault(); v.currentTime = Math.max(0, v.currentTime - 10); break;
         case "ArrowRight": e.preventDefault(); v.currentTime = Math.min(v.duration || 0, v.currentTime + 10); break;
@@ -534,17 +529,24 @@ function VideoPlayer({ url, item, autoPlay }: { url?: string; item?: FileItem; a
         case "ArrowDown": e.preventDefault(); changeVol(Math.max(0, v.volume - 0.1)); break;
         case " ": e.preventDefault(); toggle(); break;
         case "f": case "F": toggleFull(); break;
+        case "t": case "T": setTheater(t => !t); break;
         case "m": case "M": doMute(); break;
-        case "Escape": if (full) exitFull(); break;
+        case "Escape": 
+          if (full) exitFull(); 
+          else if (theater) setTheater(false);
+          break;
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [url]);
+  }, [url, full, theater]);
 
   useEffect(() => {
-    const onFs = () => setFull(!!document.fullscreenElement);
+    const onFs = () => {
+      const isFull = !!document.fullscreenElement;
+      setFull(isFull);
+      if (isFull) setTheater(false); // Disable theater when entering fullscreen
+    };
     document.addEventListener("fullscreenchange", onFs);
     return () => document.removeEventListener("fullscreenchange", onFs);
   }, []);
@@ -576,6 +578,13 @@ function VideoPlayer({ url, item, autoPlay }: { url?: string; item?: FileItem; a
     if (!v) return;
     v.currentTime = Math.max(0, Math.min(v.duration || 0, v.currentTime + d));
   };
+  const changeRate = () => {
+    const v = ref.current;
+    if (!v) return;
+    const nextR = RATES[(RATES.indexOf(rate) + 1) % RATES.length];
+    setRate(nextR);
+    v.playbackRate = nextR;
+  };
   const toggleFull = () => {
     const el = wrapRef.current;
     if (!el) return;
@@ -598,22 +607,33 @@ function VideoPlayer({ url, item, autoPlay }: { url?: string; item?: FileItem; a
   const pct = dur > 0 ? (cur / dur) * 100 : 0;
   const dlUrl = item ? `/api/v1/files/raw?root=${encodeURIComponent(item.root_id)}&path=${encodeURIComponent(item.path)}&download=1` : (url || "#");
 
+  const wrapClasses = full
+    ? "fixed inset-0 z-[100] bg-black"
+    : theater
+    ? "fixed inset-0 z-40 bg-black/95 backdrop-blur-sm p-4 md:p-8 flex items-center justify-center animate-fade-in"
+    : "relative w-full max-w-5xl mx-auto rounded-2xl overflow-hidden shadow-2xl ring-1 ring-border/50 bg-black";
+
   return (
     <div
       ref={wrapRef}
-      className={`relative w-full ${full ? "video-fullscreen" : "max-w-4xl mx-auto"}`}
+      className={wrapClasses}
+      onMouseMove={handleMouseMove}
+      onMouseLeave={() => playing && setShowControls(false)}
     >
-      {/* OTT-style top bar (visible in fullscreen) */}
-      {full && (
-        <div className="absolute top-0 inset-x-0 z-10 flex items-center gap-3 p-4 bg-gradient-to-b from-black/70 to-transparent">
-          <button onClick={exitFull} className="flex items-center gap-2 px-3 py-2 rounded-full glass-hover text-white text-sm" title="Back / Exit">
-            <ArrowLeft className="h-5 w-5" /> Back
+      {/* Theater Close Overlay */}
+      {theater && !full && (
+        <button onClick={() => setTheater(false)} className="absolute top-4 right-4 z-50 p-3 rounded-full bg-black/50 text-white hover:bg-white/20 backdrop-blur-md">
+          <X className="h-6 w-6" />
+        </button>
+      )}
+
+      {/* Top Bar for Fullscreen */}
+      {full && showControls && (
+        <div className="absolute top-0 inset-x-0 z-10 flex items-center gap-4 p-6 bg-gradient-to-b from-black/80 to-transparent transition-opacity duration-300">
+          <button onClick={exitFull} className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 hover:bg-white/20 backdrop-blur-md text-white text-sm font-medium transition-colors" title="Back / Exit">
+            <ArrowLeft className="h-5 w-5" /> Exit Fullscreen
           </button>
-          <span className="text-white/90 font-medium truncate drop-shadow">{item?.name}</span>
-          <div className="flex-1" />
-          <button onClick={exitFull} className="p-2 rounded-full glass-hover text-white" title="Exit full screen">
-            <Minimize2 className="h-5 w-5" />
-          </button>
+          <span className="text-white font-semibold truncate drop-shadow-md text-lg">{item?.name}</span>
         </div>
       )}
 
@@ -622,35 +642,39 @@ function VideoPlayer({ url, item, autoPlay }: { url?: string; item?: FileItem; a
         src={src}
         controls={false}
         autoPlay={autoPlay}
-        className={full ? "w-full h-[100dvh] max-h-none bg-black" : "w-full max-h-[70vh] bg-black rounded-xl"}
+        className={full ? "w-full h-full object-contain" : theater ? "w-full h-full max-h-screen object-contain rounded-xl shadow-2xl" : "w-full aspect-video object-cover hover:object-contain transition-all"}
         onClick={toggle}
       >
         {subUrl && <track kind="subtitles" src={subUrl} srcLang="en" label="Subtitles" default />}
       </video>
 
       {errored ? (
-        <div className="absolute inset-0 grid place-items-center bg-black/85 rounded-xl p-6 text-center">
-          <div className="max-w-sm">
-            <p className="text-white font-medium mb-2">{erroredMsg}</p>
-            <p className="text-white/60 text-sm mb-4">
+        <div className="absolute inset-0 grid place-items-center bg-black/90 p-8 text-center backdrop-blur-sm">
+          <div className="max-w-md animate-scale-in">
+            <div className="h-16 w-16 rounded-full bg-danger/20 text-danger grid place-items-center mx-auto mb-4">
+              <MonitorPlay className="h-8 w-8" />
+            </div>
+            <p className="text-white font-bold text-xl mb-3">{erroredMsg}</p>
+            <p className="text-white/70 text-sm mb-6 leading-relaxed">
               {isMkv
-                ? "Try a browser that supports Matroska (e.g. Chromium-based), or download the file to play it in an external player."
-                : "The file may be corrupt or use an unsupported codec."}
+                ? "Matroska container (.mkv) is not natively supported by your browser. Try downloading the file or using a Chromium-based browser."
+                : "The file may be corrupt or encoded with an unsupported codec."}
             </p>
-            <a href={dlUrl} className="inline-flex items-center gap-2 px-4 py-2 rounded-full accent-glass" download>
-              Download file
-            </a>
+            <Button variant="primary" onClick={() => window.location.href = dlUrl} icon={<Download className="h-4 w-4" />}>
+              Download File
+            </Button>
           </div>
         </div>
       ) : (
-        <div className="absolute inset-x-0 bottom-0 p-3 bg-gradient-to-t from-black/70 to-transparent rounded-b-xl">
+        <div className={`absolute inset-x-0 bottom-0 p-4 md:p-6 bg-gradient-to-t from-black/90 via-black/60 to-transparent transition-opacity duration-300 ${showControls ? "opacity-100" : "opacity-0"}`}>
+          {/* Timeline */}
           {live ? (
-            <div className="h-1.5 rounded-full bg-white/25 overflow-hidden mb-2">
+            <div className="h-1.5 rounded-full bg-white/20 overflow-hidden mb-4">
               <div className="n-progress-indeterminate absolute inset-y-0 left-0 bg-accent" />
             </div>
           ) : (
-            <div className="relative h-1.5 rounded-full bg-white/25 overflow-hidden mb-2">
-              <div className="absolute inset-y-0 left-0 bg-accent" style={{ width: `${pct}%` }} />
+            <div className="relative h-1.5 md:h-2 rounded-full bg-white/30 overflow-hidden mb-4 cursor-pointer group hover:h-2.5 transition-all">
+              <div className="absolute inset-y-0 left-0 bg-accent transition-all duration-100" style={{ width: `${pct}%` }} />
               <input
                 type="range"
                 min={0}
@@ -663,40 +687,62 @@ function VideoPlayer({ url, item, autoPlay }: { url?: string; item?: FileItem; a
               />
             </div>
           )}
-          <div className="flex items-center gap-2 text-white">
-            <button onClick={() => skip(-10)} className="p-1.5 rounded-full hover:bg-white/15" title="Back 10s">
-              <Rewind className="h-5 w-5" />
+          
+          {/* Controls */}
+          <div className="flex items-center gap-2 md:gap-4 text-white">
+            <button onClick={toggle} className="p-2 rounded-full hover:bg-white/20 transition-colors" title={playing ? "Pause (Space)" : "Play (Space)"}>
+              {playing ? <Pause className="h-6 w-6 md:h-8 md:w-8 fill-current" /> : <Play className="h-6 w-6 md:h-8 md:w-8 fill-current" />}
             </button>
-            <button onClick={toggle} className="p-1.5 rounded-full hover:bg-white/15" title={playing ? "Pause" : "Play"}>
-              {playing ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
+            
+            <button onClick={() => skip(-10)} className="p-2 rounded-full hover:bg-white/20 transition-colors hidden sm:block" title="Back 10s (Left Arrow)">
+              <Rewind className="h-5 w-5 md:h-6 md:w-6" />
             </button>
-            <button onClick={() => skip(10)} className="p-1.5 rounded-full hover:bg-white/15" title="Forward 10s">
-              <FastForward className="h-5 w-5" />
+            <button onClick={() => skip(10)} className="p-2 rounded-full hover:bg-white/20 transition-colors hidden sm:block" title="Forward 10s (Right Arrow)">
+              <FastForward className="h-5 w-5 md:h-6 md:w-6" />
             </button>
-            <span className="text-xs tabular-nums">{live ? `${fmt(cur)} • LIVE` : `${fmt(cur)} / ${fmt(dur)}`}</span>
+            
+            <div className="flex items-center gap-3 ml-2">
+              <button onClick={doMute} className="p-2 rounded-full hover:bg-white/20 transition-colors hidden sm:block" title="Mute (M)">
+                {muted || vol === 0 ? <VolumeX className="h-5 w-5 md:h-6 md:w-6 text-white/50" /> : <Volume2 className="h-5 w-5 md:h-6 md:w-6" />}
+              </button>
+              <div className="relative h-1.5 w-16 md:w-24 rounded-full bg-white/30 overflow-hidden hidden md:block cursor-pointer group">
+                <div className="absolute inset-y-0 left-0 bg-white group-hover:bg-accent transition-colors" style={{ width: `${(muted ? 0 : vol) * 100}%` }} />
+                <input
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  value={muted ? 0 : vol}
+                  onChange={(e) => changeVol(Number(e.target.value))}
+                  className="absolute inset-0 w-full opacity-0 cursor-pointer"
+                  aria-label="Volume"
+                />
+              </div>
+            </div>
+            
+            <span className="text-xs md:text-sm font-mono tabular-nums opacity-80 ml-2">
+              {live ? `${fmt(cur)} • LIVE` : `${fmt(cur)} / ${fmt(dur)}`}
+            </span>
+            
             <div className="flex-1" />
-            <button onClick={() => fileRef.current?.click()} className={`p-1.5 rounded-full hover:bg-white/15 ${subUrl ? "text-accent" : ""}`} title="Load subtitles (.vtt/.srt)">
-              <Captions className="h-5 w-5" />
+            
+            <button onClick={changeRate} className="p-2 rounded-full hover:bg-white/20 transition-colors text-xs font-bold font-mono min-w-[3rem]" title="Playback Speed">
+              {rate}x
+            </button>
+            
+            <button onClick={() => fileRef.current?.click()} className={`p-2 rounded-full hover:bg-white/20 transition-colors ${subUrl ? "text-accent" : ""}`} title="Load subtitles (.vtt/.srt)">
+              <Captions className="h-5 w-5 md:h-6 md:w-6" />
             </button>
             <input ref={fileRef} type="file" accept=".vtt,.srt" className="hidden" onChange={onSubtitle} />
-            <button onClick={doMute} className="p-1.5 rounded-full hover:bg-white/15" title="Mute">
-              {muted || vol === 0 ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
-            </button>
-            <div className="relative h-1.5 w-24 rounded-full bg-white/25 overflow-hidden hidden sm:block">
-              <div className="absolute inset-y-0 left-0 bg-white" style={{ width: `${(muted ? 0 : vol) * 100}%` }} />
-              <input
-                type="range"
-                min={0}
-                max={1}
-                step={0.01}
-                value={muted ? 0 : vol}
-                onChange={(e) => changeVol(Number(e.target.value))}
-                className="absolute inset-0 w-full opacity-0 cursor-pointer"
-                aria-label="Volume"
-              />
-            </div>
-            <button onClick={toggleFull} className="p-1.5 rounded-full hover:bg-white/15" title="Fullscreen">
-              {full ? <Minimize2 className="h-5 w-5" /> : <Maximize2 className="h-5 w-5" />}
+            
+            {!full && (
+              <button onClick={() => setTheater(t => !t)} className={`p-2 rounded-full hover:bg-white/20 transition-colors hidden md:block ${theater ? "text-accent" : ""}`} title="Theater Mode (T)">
+                <MonitorPlay className="h-5 w-5 md:h-6 md:w-6" />
+              </button>
+            )}
+            
+            <button onClick={toggleFull} className="p-2 rounded-full hover:bg-white/20 transition-colors" title="Fullscreen (F)">
+              {full ? <Minimize2 className="h-5 w-5 md:h-6 md:w-6" /> : <Maximize2 className="h-5 w-5 md:h-6 md:w-6" />}
             </button>
           </div>
         </div>

@@ -3,9 +3,10 @@ import { useEffect, useRef, useState } from "react";
 export interface MenuItem {
   label: string;
   icon?: React.ReactNode;
-  onClick: () => void;
+  onClick?: () => void;
   danger?: boolean;
   disabled?: boolean;
+  divider?: boolean;
 }
 
 export default function ContextMenu({
@@ -24,8 +25,8 @@ export default function ContextMenu({
 
   useEffect(() => {
     // Keep menu on-screen.
-    const w = 200;
-    const h = items.length * 36 + 12;
+    const w = 220;
+    const h = items.length * 36 + 16;
     let nx = x;
     let ny = y;
     if (x + w > window.innerWidth) nx = window.innerWidth - w - 8;
@@ -70,23 +71,33 @@ export default function ContextMenu({
         ref={menuRef}
         role="menu"
         aria-label="File actions"
-        className="fixed z-50 min-w-[200px] glass-strong rounded-lg py-1 text-sm"
-        style={{ left: pos.x, top: pos.y }}
+        className="fixed z-50 min-w-[220px] glass-strong rounded-xl py-1.5 shadow-2xl animate-scale-in outline-none"
+        style={{ left: pos.x, top: pos.y, transformOrigin: 'top left' }}
+        tabIndex={-1}
       >
-        {items.map((it, i) => (
-          <button
-            key={i}
-            role="menuitem"
-            disabled={it.disabled}
-            onClick={() => { it.onClick(); onClose(); }}
-            className={`w-full flex items-center gap-2 px-3 py-2 text-left disabled:opacity-40 ${
-              it.danger ? "text-red-500 hover:bg-red-500/10" : "glass-hover"
-            }`}
-          >
-            {it.icon}
-            {it.label}
-          </button>
-        ))}
+        {items.map((it, i) => {
+          if (it.divider) {
+            return <div key={i} className="h-px w-full glass-divider my-1" />;
+          }
+          return (
+            <button
+              key={i}
+              role="menuitem"
+              disabled={it.disabled}
+              onClick={() => { it.onClick?.(); onClose(); }}
+              className={`w-full flex items-center gap-3 px-3 py-2 text-sm font-medium text-left outline-none transition-colors
+                ${it.disabled ? "opacity-40 cursor-not-allowed" : "cursor-default"}
+                ${
+                  it.danger 
+                    ? "text-danger hover:bg-danger/10 focus:bg-danger/10" 
+                    : "text-content hover:bg-accent/15 hover:text-accent focus:bg-accent/15 focus:text-accent"
+                }`}
+            >
+              <span className={`opacity-80 ${it.danger ? "text-danger" : ""}`}>{it.icon}</span>
+              <span className="flex-1">{it.label}</span>
+            </button>
+          );
+        })}
       </div>
     </>
   );

@@ -13,6 +13,7 @@ interface PlayerState {
   currentTime: number;
   duration: number;
   volume: number;
+  playbackRate: number;
   muted: boolean;
   primaryOpen: boolean;
   play: (queue: FileItem[], index?: number) => void;
@@ -22,6 +23,7 @@ interface PlayerState {
   setIndex: (i: number) => void;
   seek: (t: number) => void;
   setVolume: (v: number) => void;
+  setPlaybackRate: (r: number) => void;
   toggleMute: () => void;
   setPrimaryOpen: (b: boolean) => void;
   setShuffle: (s: boolean) => void;
@@ -38,6 +40,7 @@ interface Persist {
   volume: number;
   shuffle: boolean;
   repeat: Repeat;
+  playbackRate: number;
 }
 
 function loadPersist(): Persist {
@@ -45,7 +48,7 @@ function loadPersist(): Persist {
     const raw = localStorage.getItem(LS_KEY);
     if (raw) return JSON.parse(raw) as Persist;
   } catch { /* ignore */ }
-  return { queue: [], index: -1, volume: 1, shuffle: false, repeat: "off" };
+  return { queue: [], index: -1, volume: 1, shuffle: false, repeat: "off", playbackRate: 1 };
 }
 
 function savePersist(p: Persist) {
@@ -58,6 +61,7 @@ class PlayerEngine {
   bind(el: HTMLAudioElement) {
     this.audio = el;
     el.volume = usePlayer.getState().volume;
+    el.playbackRate = usePlayer.getState().playbackRate;
     el.addEventListener("play", () => usePlayer.setState({ isPlaying: true }));
     el.addEventListener("pause", () => usePlayer.setState({ isPlaying: false }));
     el.addEventListener("timeupdate", () => usePlayer.getState()._syncTime(el.currentTime, el.duration));
@@ -70,6 +74,7 @@ class PlayerEngine {
   seek(t: number) { if (this.audio) this.audio.currentTime = t; }
   setVolume(v: number) { if (this.audio) { this.audio.volume = v; this.audio.muted = false; } }
   setMuted(m: boolean) { if (this.audio) this.audio.muted = m; }
+  setPlaybackRate(r: number) { if (this.audio) this.audio.playbackRate = r; }
 }
 
 export const engine = new PlayerEngine();
@@ -85,6 +90,7 @@ export const usePlayer = create<PlayerState>((set, get) => ({
   currentTime: 0,
   duration: 0,
   volume: persisted.volume,
+  playbackRate: persisted.playbackRate || 1,
   muted: false,
   primaryOpen: false,
 
@@ -137,6 +143,12 @@ export const usePlayer = create<PlayerState>((set, get) => ({
     persist();
   },
 
+  setPlaybackRate: (r) => {
+    engine.setPlaybackRate(r);
+    set({ playbackRate: r });
+    persist();
+  },
+
   toggleMute: () => {
     const m = !get().muted;
     engine.setMuted(m);
@@ -159,7 +171,7 @@ export const usePlayer = create<PlayerState>((set, get) => ({
 
 function persist() {
   const s = usePlayer.getState();
-  savePersist({ queue: s.queue, index: s.index, volume: s.volume, shuffle: s.shuffle, repeat: s.repeat });
+  savePersist({ queue: s.queue, index: s.index, volume: s.volume, shuffle: s.shuffle, repeat: s.repeat, playbackRate: s.playbackRate });
 }
 
 export function currentAudioUrl(): string {

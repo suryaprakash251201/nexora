@@ -1,6 +1,6 @@
-import { useRef, useState, useCallback, useEffect } from "react";
+import { useRef, useState, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { get, post, del, put } from "../api/client";
+import { get, post, del } from "../api/client";
 import type { FileItem, Root, TrashItem, User, FavoriteItem, RecentItem, SearchResult, HomeData } from "../api/types";
 import { useUI } from "../store";
 import { usePlayer } from "../store/player";
@@ -20,6 +20,7 @@ import PlaylistsPanel from "./PlaylistsPanel";
 import AdminPanel from "./AdminPanel";
 import Toaster from "./Toaster";
 import PlayerBar from "./PlayerBar";
+import { MobileNav } from "./layout/MobileNav";
 import { AddToPlaylistMenu, PlaylistPickerPopover } from "./PlaylistAdder";
 import TransfersPanel from "./TransfersPanel";
 import { Modal } from "./Modal";
@@ -28,11 +29,17 @@ import FolderPickerModal from "./FolderPickerModal";
 import ProfileMenu from "./ProfileMenu";
 import { formatDate } from "../lib/format";
 import { previewKind, isEditable } from "../lib/preview";
-import { startUpload, startDownload } from "../lib/transfer";
 import {
-  Download, Trash2, Pencil, Scissors, Copy, Eye, FolderOpen, RotateCcw, LogOut,
+  Download, Trash2, Pencil, Scissors, Copy, Eye, FolderOpen, RotateCcw,
   Star, Share2, Archive, FolderInput, FileEdit, Play, ListMusic, HardDrive, Upload,
 } from "lucide-react";
+
+// Hooks
+import { useTransfers } from "./hooks/useTransfers";
+import { useFileOperations, extractZip } from "./hooks/useFileOperations";
+import { useDragAndDrop } from "./hooks/useDragAndDrop";
+import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
+import { useClipboard } from "./hooks/useClipboard";
 
 export default function Workspace({ user }: { user: User }) {
   const qc = useQueryClient();
@@ -40,8 +47,6 @@ export default function Workspace({ user }: { user: User }) {
   const toggleSelect = useUI((s) => s.toggleSelect);
   const selectMode = useUI((s) => s.selectMode);
   const clearSelection = useUI((s) => s.clearSelection);
-  const setSelection = useUI((s) => s.setSelection);
-  const setSelectMode = useUI((s) => s.setSelectMode);
   const openDrawer = useUI((s) => s.openDrawer);
   const drawerPath = useUI((s) => s.drawerPath);
   const pushToast = useUI((s) => s.pushToast);
@@ -61,12 +66,7 @@ export default function Workspace({ user }: { user: User }) {
   const [ctx, setCtx] = useState<{ x: number; y: number; item: FileItem } | null>(null);
   const [ctxPlaylist, setCtxPlaylist] = useState<{ x: number; y: number; items: FileItem[] } | null>(null);
   const [menu, setMenu] = useState<{ kind: string; item?: FileItem } | null>(null);
-  const [folderPicker, setFolderPicker] = useState<{ mode: "move" | "copy"; paths: string[] } | null>(null);
   const [rootModal, setRootModal] = useState(false);
-  const [dragActive, setDragActive] = useState(false);
-  const dragDepth = useRef(0);
-  const [dropPicker, setDropPicker] = useState(false);
-  const pendingDrop = useRef<FileList | null>(null);
   const [playlistModal, setPlaylistModal] = useState(false);
   const [playlistName, setPlaylistName] = useState("");
   const fileInput = useRef<HTMLInputElement>(null);
@@ -83,11 +83,7 @@ export default function Workspace({ user }: { user: User }) {
   const trash = useQuery({ queryKey: ["trash"], queryFn: () => get<{ items: TrashItem[] }>("/trash"), enabled: view === "trash" });
   const favorites = useQuery({ queryKey: ["favorites"], queryFn: () => get<{ items: FavoriteItem[] }>("/favorites"), enabled: view === "favorites" });
   const recents = useQuery({ queryKey: ["recents"], queryFn: () => get<{ items: RecentItem[] }>("/recents"), enabled: view === "recents" });
-  const home = useQuery({
-    queryKey: ["home"],
-    queryFn: () => get<HomeData>("/home"),
-    enabled: view === "home",
-  });
+  const home = useQuery({ queryKey: ["home"], queryFn: () => get<HomeData>("/home"), enabled: view === "home" });
   const favSet = useQuery({ queryKey: ["fav-set"], queryFn: () => get<{ items: FavoriteItem[] }>("/favorites") });
 
   const items = files.data?.items || [];
@@ -102,40 +98,18 @@ export default function Workspace({ user }: { user: User }) {
     qc.invalidateQueries({ queryKey: ["fav-set"] });
   }, [qc, rootId, path]);
 
-  const uploadFiles = useCallback(async (fileList: FileList | null, destRootId?: string, destPath?: string) => {
-    const rid = destRootId ?? rootId;
-    const p = destPath ?? path;
-    if (!fileList || !fileList.length || !rid) return;
-    startUpload(rid, p, fileList, () => refresh());
-  }, [rootId, path, refresh]);
-
-  // App-wide drag & drop. When a storage root + folder is active, files drop
-  // straight into it; otherwise the user is asked which root to upload into.
-  const onDragEnter = (e: React.DragEvent) => {
-    if (![...e.dataTransfer.types].includes("Files")) return;
-    e.preventDefault();
-    dragDepth.current += 1;
-    setDragActive(true);
-  };
-  const onDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    dragDepth.current -= 1;
-    if (dragDepth.current <= 0) { dragDepth.current = 0; setDragActive(false); }
-  };
-  const onDrop = (e: React.DragEvent) => {
-    if (![...e.dataTransfer.types].includes("Files")) return;
-    e.preventDefault();
-    dragDepth.current = 0;
-    setDragActive(false);
-    const files = e.dataTransfer.files;
-    if (!files || !files.length) return;
-    if (rootId && canWrite) {
-      uploadFiles(files);
-    } else {
-      pendingDrop.current = files;
-      setDropPicker(true);
-    }
-  };
+  // Use custom hooks
+  const { uploadFiles, downloadItem } = useTransfers(rootId, path, refresh);
+  const { doDelete, bulkDelete, archivePaths, toggleFavorite } = useFileOperations({ rootId, refresh, qc, selection, clearSelection, favSet });
+  const { folderPicker, setFolderPicker, moveSelectionTo, openMovePicker, openCopyPicker, applyFolderPicker } = useClipboard({ rootId, selection, clearSelection, refresh, canWrite });
+  const { dragProps, dragActive, dropPicker, setDropPicker, pendingDrop } = useDragAndDrop({ rootId, canWrite, uploadFiles });
+  
+  const isModalOpen = !!(preview || editItem || shareItem || menu || rootModal || folderPicker || dropPicker || playlistModal || ctx || ctxPlaylist);
+  
+  useKeyboardShortcuts({
+    canWrite, view, setView, selection, items, bulkDelete, setMenu,
+    fileInputRef: fileInput, isModalOpen
+  });
 
   const openItem = (item: FileItem) => {
     if (item.is_dir) {
@@ -144,7 +118,6 @@ export default function Workspace({ user }: { user: User }) {
     } else if (item.extension === "zip" && canWrite) {
       setMenu({ kind: "extract", item });
     } else if (item.mime.startsWith("audio/")) {
-      // Play audio directly in the mini player, queuing the folder's audio tracks.
       const audio = items.filter((i) => i.mime.startsWith("audio/"));
       const idx = audio.findIndex((i) => i.path === item.path);
       usePlayer.getState().play(audio, idx >= 0 ? idx : 0);
@@ -153,68 +126,12 @@ export default function Workspace({ user }: { user: User }) {
     }
   };
 
-  const doDelete = async (p: string) => {
-    try { await del("/files", { root: rootId!, path: p }); pushToast("success", "Moved to trash"); refresh(); }
-    catch (e: any) { pushToast("error", e.message); }
-  };
-
-  const bulkDelete = async () => {
-    for (const p of Array.from(selection)) {
-      try { await del("/files", { root: rootId!, path: p }); } catch (e: any) { pushToast("error", e.message); }
-    }
-    clearSelection();
-    pushToast("success", "Items moved to trash");
-    refresh();
-  };
-
-  const downloadItem = (item: FileItem) => {
-    if (!item.is_dir) startDownload(item.root_id, item.path, item.name);
-  };
-
-  // Move the current selection into a target folder (triggered by dragging
-  // the selection onto a folder tile in the file browser).
-  const moveSelectionTo = (_folder: FileItem) => {
-    if (!rootId || !canWrite) return;
-    const srcPaths = Array.from(selection);
-    if (srcPaths.length === 0) return;
-    setFolderPicker({ mode: "move", paths: srcPaths });
-  };
-
-  const openMovePicker = () => {
-    const paths = Array.from(selection);
-    if (!paths.length) return;
-    setFolderPicker({ mode: "move", paths });
-  };
-  const openCopyPicker = () => {
-    const paths = Array.from(selection);
-    if (!paths.length) return;
-    setFolderPicker({ mode: "copy", paths });
-  };
-
-  const applyFolderPicker = async (destPath: string) => {
-    const fp = folderPicker;
-    setFolderPicker(null);
-    if (!fp || !rootId) return;
-    const verb = fp.mode === "move" ? "Moving" : "Copying";
-    try {
-      for (const p of fp.paths) {
-        if (p === destPath || destPath.startsWith(p + "/")) continue; // skip self/descendant
-        await post(`/files/${fp.mode}`, { root: rootId, source: p, destination: (destPath ? destPath + "/" : "") + p.split("/").pop() });
-      }
-      pushToast("success", fp.mode === "move" ? "Moved" : "Copied");
-      clearSelection();
-      refresh();
-    } catch (e: any) {
-      pushToast("error", e.message || `${verb} failed`);
-    }
-  };
-
-  // Play the selected audio files (or the whole folder's audio) as a queue.
   const selectedItems = items.filter((i) => selection.has(i.path));
   const playSelected = () => {
     const audio = (selectedItems.length ? selectedItems : items).filter((i) => i.mime.startsWith("audio/"));
     if (audio.length) usePlayer.getState().play(audio, 0);
   };
+  
   const savePlaylist = () => {
     const audio = (selectedItems.length ? selectedItems : items).filter((i) => i.mime.startsWith("audio/"));
     if (!audio.length) { pushToast("error", "No audio files selected"); setPlaylistModal(false); return; }
@@ -222,46 +139,6 @@ export default function Workspace({ user }: { user: User }) {
     setPlaylistName("");
     setPlaylistModal(false);
     pushToast("success", "Playlist created");
-  };
-
-  // Archive selected items (or one) into a ZIP via a background job, then download.
-  const archivePaths = async (paths: string[], name: string) => {
-    if (!rootId || !paths.length) return;
-    try {
-      const res = await post<{ job: { id: string } }>("/archive", { root: rootId, paths, name });
-      pushToast("info", "Preparing archive…");
-      pollArchive(res.job.id);
-    } catch (e: any) { pushToast("error", e.message); }
-  };
-
-  const pollArchive = (jobId: string) => {
-    const es = new EventSource(`/api/v1/jobs/${jobId}/events`);
-    let settled = false;
-    const finish = (ok: boolean, msg?: string) => {
-      if (settled) return;
-      settled = true;
-      es.close();
-      if (ok) { pushToast("success", "Archive ready"); window.open(`/api/v1/jobs/${jobId}/download`, "_blank"); }
-      else pushToast("error", msg || "Archive failed");
-    };
-    es.addEventListener("progress", (ev: MessageEvent) => {
-      try {
-        const job = JSON.parse(ev.data);
-        if (job.status === "done") finish(true);
-        else if (job.status === "failed") finish(false, job.error);
-      } catch { /* ignore */ }
-    });
-    es.onerror = () => { es.close(); finish(false, "Archive stream interrupted"); };
-  };
-
-  const toggleFavorite = async (item: FileItem) => {
-    const isFav = favSet.data?.items.some((f) => f.root_id === rootId && f.path === item.path);
-    try {
-      if (isFav) { await del("/favorites", { root: rootId!, path: item.path }); pushToast("success", "Removed from favorites"); }
-      else { await post("/favorites", { root: rootId, path: item.path }); pushToast("success", "Added to favorites"); }
-      qc.invalidateQueries({ queryKey: ["favorites"] });
-      qc.invalidateQueries({ queryKey: ["fav-set"] });
-    } catch (e: any) { pushToast("error", e.message); }
   };
 
   const buildMenu = (item: FileItem, x: number, y: number): MenuItem[] => {
@@ -272,7 +149,6 @@ export default function Workspace({ user }: { user: User }) {
        { label: "Add to favorites", icon: <Star className="h-4 w-4" />, onClick: () => toggleFavorite(item) },
     ];
     if (!item.is_dir && item.mime.startsWith("audio/")) {
-      // When a multi-selection exists, add the whole selection; otherwise just this file.
       const targets = selectedItems.length ? selectedItems : [item];
       menuItems.push({
         label: selectedItems.length ? `Add ${selectedItems.length} to playlist` : "Add to playlist",
@@ -313,7 +189,6 @@ export default function Workspace({ user }: { user: User }) {
     qc.removeQueries({ queryKey: ["session"] });
   };
 
-  // Navigate to a search/favorite/recent result.
   const navigateTo = async (rid: string, p: string, isDir: boolean, name: string) => {
     setRootId(rid);
     const parent = p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "";
@@ -321,8 +196,6 @@ export default function Workspace({ user }: { user: User }) {
     setView("files");
     clearSelection();
     if (!isDir) {
-      // Fetch real metadata so the preview can classify the file correctly
-      // (mime/type), instead of a blank pseudo-item that always shows "no preview".
       try {
         const info = await get<FileItem>("/files/stat", { root: rid, path: p });
         setTimeout(() => setPreview(info), 50);
@@ -333,37 +206,10 @@ export default function Workspace({ user }: { user: User }) {
     }
   };
 
-  // Global keyboard shortcuts.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const tag = (e.target as HTMLElement)?.tagName;
-      const typing = tag === "INPUT" || tag === "TEXTAREA";
-      if (typing) return;
-      if (preview || editItem || shareItem || menu || rootModal) return;
-      if (e.key === "/") { e.preventDefault(); setView("search"); }
-      else if (e.key.toLowerCase() === "n" && canWrite && view === "files") { e.preventDefault(); setMenu({ kind: "newFolder" }); }
-      else if (e.key.toLowerCase() === "u" && canWrite && view === "files") { e.preventDefault(); fileInput.current?.click(); }
-      else       if (e.key === "Delete" && selection.size > 0 && canWrite) { e.preventDefault(); bulkDelete(); }
-      else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "a" && view === "files" && items.length) {
-        e.preventDefault();
-        if (selectMode) setSelection(items.map((i) => i.path));
-        else setSelectMode(true), setSelection(items.map((i) => i.path));
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  });
-
   const showTopBar = view === "files" && activeRoot;
 
   return (
-    <div
-      className="h-screen flex overflow-hidden"
-      onDragEnter={onDragEnter}
-      onDragOver={(e) => { if ([...e.dataTransfer.types].includes("Files")) e.preventDefault(); }}
-      onDragLeave={onDragLeave}
-      onDrop={onDrop}
-    >
+    <div className="h-screen flex overflow-hidden" {...dragProps}>
       <Sidebar
         roots={roots.data?.roots || []}
         activeRoot={rootId}
@@ -409,9 +255,7 @@ export default function Workspace({ user }: { user: User }) {
 
         <input ref={fileInput} type="file" multiple className="hidden" onChange={(e) => { uploadFiles(e.target.files); e.target.value = ""; }} />
 
-        <div
-          className="flex-1 overflow-auto flex flex-col"
-        >
+        <div className="flex-1 overflow-auto flex flex-col">
           {view === "files" && (
             <FileBrowser
               items={filtered}
@@ -423,26 +267,12 @@ export default function Workspace({ user }: { user: User }) {
               onOpen={openItem}
               onSelect={(it) => { toggleSelect(it.path); openDrawer(it.path); }}
               onContextMenu={onContextMenu}
-              onDropItem={(folder) => moveSelectionTo(folder)}
+              onDropItem={(folder) => moveSelectionTo()}
             />
           )}
-          {view === "trash" && (
-            <TrashView items={trash.data?.items || []} loading={trash.isLoading} onRestore={async (id) => { await post("/trash/restore", { id }); refresh(); }} onDelete={async (id) => { await del("/trash", { id }); refresh(); }} />
-          )}
-          {view === "favorites" && (
-            <SimpleList
-              loading={favorites.isLoading}
-              empty="No favorites yet. Star files to find them here."
-              rows={(favorites.data?.items || []).map((f) => ({ id: f.root_id + f.path, title: f.name, sub: `${f.root_name} / ${f.path}`, onClick: () => navigateTo(f.root_id, f.path, false, f.name) }))}
-            />
-          )}
-          {view === "recents" && (
-            <SimpleList
-              loading={recents.isLoading}
-              empty="No recent files yet."
-              rows={(recents.data?.items || []).map((f) => ({ id: f.root_id + f.path, title: f.name, sub: `${f.root_name} / ${f.path}`, meta: formatDate(f.accessed_at), onClick: () => navigateTo(f.root_id, f.path, false, f.name) }))}
-            />
-          )}
+          {view === "trash" && <TrashView items={trash.data?.items || []} loading={trash.isLoading} onRestore={async (id) => { await post("/trash/restore", { id }); refresh(); }} onDelete={async (id) => { await del("/trash", { id }); refresh(); }} />}
+          {view === "favorites" && <SimpleList loading={favorites.isLoading} empty="No favorites yet. Star files to find them here." rows={(favorites.data?.items || []).map((f) => ({ id: f.root_id + f.path, title: f.name, sub: `${f.root_name} / ${f.path}`, onClick: () => navigateTo(f.root_id, f.path, false, f.name) }))} />}
+          {view === "recents" && <SimpleList loading={recents.isLoading} empty="No recent files yet." rows={(recents.data?.items || []).map((f) => ({ id: f.root_id + f.path, title: f.name, sub: `${f.root_name} / ${f.path}`, meta: formatDate(f.accessed_at), onClick: () => navigateTo(f.root_id, f.path, false, f.name) }))} />}
           {view === "home" && (
             <div className="h-14 glass-bar flex items-center justify-between px-4">
               <span className="font-semibold">Home</span>
@@ -478,10 +308,7 @@ export default function Workspace({ user }: { user: User }) {
           <div className="glass-bottom px-4 py-2 flex items-center gap-3 text-sm flex-wrap">
             <span className="text-content-muted">{selection.size} selected</span>
             <button onClick={playSelected} className="flex items-center gap-1 hover:underline"><Play className="h-4 w-4" /> Play</button>
-            <AddToPlaylistMenu
-              items={selectedItems.length ? selectedItems : items}
-              className="flex items-center gap-1 hover:underline"
-            >
+            <AddToPlaylistMenu items={selectedItems.length ? selectedItems : items} className="flex items-center gap-1 hover:underline">
               <ListMusic className="h-4 w-4" /> Add to playlist
             </AddToPlaylistMenu>
             {canWrite && (
@@ -499,6 +326,11 @@ export default function Workspace({ user }: { user: User }) {
         <PlayerBar />
       </div>
 
+      <MobileNav 
+        view={view} 
+        onSelectView={(v) => { setView(v); clearSelection(); }} 
+        onMoreClick={() => setSidebarCollapsed(false)} 
+      />
       <TransfersPanel />
 
       {view === "files" && activeRoot && drawerPath && (
@@ -522,9 +354,7 @@ export default function Workspace({ user }: { user: User }) {
       )}
 
       {ctx && <ContextMenu x={ctx.x} y={ctx.y} items={buildMenu(ctx.item, ctx.x, ctx.y)} onClose={() => setCtx(null)} />}
-      {ctxPlaylist && (
-        <PlaylistPickerPopover x={ctxPlaylist.x} y={ctxPlaylist.y} items={ctxPlaylist.items} onClose={() => setCtxPlaylist(null)} />
-      )}
+      {ctxPlaylist && <PlaylistPickerPopover x={ctxPlaylist.x} y={ctxPlaylist.y} items={ctxPlaylist.items} onClose={() => setCtxPlaylist(null)} />}
       {preview && (
         <PreviewModal
           item={preview}
@@ -593,14 +423,6 @@ export default function Workspace({ user }: { user: User }) {
       <Toaster />
     </div>
   );
-}
-
-async function extractZip(rootId: string, src: string, dest: string, pushToast: (k: any, m: string) => void, refresh: () => void) {
-  try {
-    await post("/extract", { root: rootId, path: src, destination: dest });
-    pushToast("info", "Extracting archive…");
-    setTimeout(refresh, 1500);
-  } catch (e: any) { pushToast("error", e.message); }
 }
 
 function SimpleList({ loading, empty, rows }: { loading: boolean; empty: string; rows: { id: string; title: string; sub: string; meta?: string; onClick: () => void }[] }) {
@@ -757,7 +579,3 @@ function ActionModals({ menu, rootId, path, onClose, onDone, onArchiveExtract }:
   }
   return null;
 }
-
-
-
-

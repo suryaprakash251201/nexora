@@ -1,10 +1,13 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Search as SearchIcon } from "lucide-react";
+import { Search as SearchIcon, Filter } from "lucide-react";
 import { get } from "../api/client";
 import { formatBytes, formatDate } from "../lib/format";
 import type { Root, SearchResult, FileItem } from "../api/types";
 import { FileThumb, FolderTile } from "./FileThumb";
+import { Input } from "./ui/Input";
+import { EmptyState } from "./ui/EmptyState";
+import { SkeletonList } from "./ui/Skeleton";
 
 export default function SearchView({
   initialQuery,
@@ -21,6 +24,7 @@ export default function SearchView({
   const [kind, setKind] = useState("");
   const [ext, setExt] = useState("");
   const [sort, setSort] = useState("relevance");
+  const [showFilters, setShowFilters] = useState(true);
 
   useEffect(() => {
     const t = setTimeout(() => setDebounced(q), 300);
@@ -44,69 +48,107 @@ export default function SearchView({
   const results = data?.items || [];
 
   return (
-    <div className="flex-1 overflow-auto">
-      <div className="p-4 glass-bar space-y-3 sticky top-0 z-10">
-        <div className="relative">
-          <SearchIcon className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-content-muted" />
-          <input
-            autoFocus
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Search all authorized files…"
-            className="w-full pl-9 pr-3 py-2 rounded-lg bg-surface-muted border outline-none focus:ring-2 focus:ring-accent/40"
-          />
-        </div>
-        <div className="flex flex-wrap gap-2 text-sm">
-          <select value={root} onChange={(e) => setRoot(e.target.value)} className="rounded-lg bg-surface border px-2 py-1.5 outline-none">
-            <option value="">All roots</option>
-            {roots.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
-          </select>
-          <select value={kind} onChange={(e) => setKind(e.target.value)} className="rounded-lg bg-surface border px-2 py-1.5 outline-none">
-            <option value="">Any type</option>
-            <option value="image">Images</option>
-            <option value="video">Videos</option>
-            <option value="audio">Audio</option>
-            <option value="document">Documents</option>
-            <option value="archive">Archives</option>
-          </select>
-          <input value={ext} onChange={(e) => setExt(e.target.value)} placeholder="ext (e.g. pdf)" className="w-28 rounded-lg bg-surface border px-2 py-1.5 outline-none" />
-          <select value={sort} onChange={(e) => setSort(e.target.value)} className="rounded-lg bg-surface border px-2 py-1.5 outline-none">
-            <option value="relevance">Relevance</option>
-            <option value="newest">Newest</option>
-            <option value="largest">Largest</option>
-            <option value="name">Name</option>
-          </select>
+    <div className="flex-1 flex flex-col h-full bg-background">
+      <div className="px-6 pt-6 pb-4 border-b border-border/50 bg-surface/50 backdrop-blur-xl sticky top-0 z-10 shrink-0">
+        <div className="max-w-4xl mx-auto space-y-4 animate-slide-up">
+          <div className="flex gap-2">
+            <div className="flex-1">
+              <Input
+                autoFocus
+                variant="search"
+                icon={<SearchIcon className="h-5 w-5" />}
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Search all authorized files…"
+                className="h-12 text-base"
+              />
+            </div>
+            <button 
+              onClick={() => setShowFilters(!showFilters)}
+              className={`px-4 rounded-xl transition-colors border ${showFilters ? "bg-accent/15 text-accent border-accent/30" : "glass-input text-content-muted hover:text-content"}`}
+              title="Toggle filters"
+            >
+              <Filter className="h-5 w-5" />
+            </button>
+          </div>
+          
+          {showFilters && (
+            <div className="flex flex-wrap gap-3 animate-stagger-in">
+              <select value={root} onChange={(e) => setRoot(e.target.value)} className="rounded-xl glass-input px-3 py-2 text-sm outline-none cursor-pointer">
+                <option value="">All storage roots</option>
+                {roots.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+              </select>
+              
+              <select value={kind} onChange={(e) => setKind(e.target.value)} className="rounded-xl glass-input px-3 py-2 text-sm outline-none cursor-pointer">
+                <option value="">Any type</option>
+                <option value="image">Images</option>
+                <option value="video">Videos</option>
+                <option value="audio">Audio</option>
+                <option value="document">Documents</option>
+                <option value="archive">Archives</option>
+              </select>
+              
+              <div className="relative">
+                <input 
+                  value={ext} 
+                  onChange={(e) => setExt(e.target.value)} 
+                  placeholder="Extension (e.g. pdf)" 
+                  className="w-36 rounded-xl glass-input px-3 py-2 text-sm outline-none" 
+                />
+              </div>
+              
+              <select value={sort} onChange={(e) => setSort(e.target.value)} className="rounded-xl glass-input px-3 py-2 text-sm outline-none cursor-pointer ml-auto">
+                <option value="relevance">Sort: Relevance</option>
+                <option value="newest">Sort: Newest</option>
+                <option value="largest">Sort: Largest</option>
+                <option value="name">Sort: Name</option>
+              </select>
+            </div>
+          )}
         </div>
       </div>
 
-      <div className="p-2">
-        {isFetching && <p className="p-4 text-content-muted text-sm">Searching…</p>}
-        {!isFetching && results.length === 0 && (
-          <div className="p-10 text-center text-content-muted">
-            <p>{debounced ? "No results found." : "Type to search across your storage roots."}</p>
-            <p className="text-xs mt-1">Search uses a background metadata index. New files appear after a scan.</p>
-          </div>
-        )}
-        {results.map((r) => {
-          const rootName = roots.find((x) => x.id === r.root_id)?.name || "";
-          return (
-            <button
-              key={r.root_id + r.path}
-              onClick={() => onOpen(r)}
-              className="w-full grid grid-cols-[auto_1fr_auto] gap-3 items-center px-3 py-2 rounded-lg glass-hover text-left"
-            >
-              {r.is_dir ? <FolderTile /> : <FileThumb it={r as FileItem} />}
-              <div className="min-w-0">
-                <p className="truncate font-medium">{r.name}</p>
-                <p className="text-xs text-content-muted truncate">{rootName} / {r.path}</p>
-              </div>
-              <div className="text-right text-xs text-content-muted">
-                <p>{r.is_dir ? "" : formatBytes(r.size)}</p>
-                <p>{formatDate(r.modified)}</p>
-              </div>
-            </button>
-          );
-        })}
+      <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
+        <div className="max-w-4xl mx-auto">
+          {isFetching ? (
+            <div className="mt-4"><SkeletonList /></div>
+          ) : results.length === 0 ? (
+            <div className="mt-12">
+              <EmptyState 
+                variant="search" 
+                title={debounced ? "No results found" : "Type to start searching"} 
+                description={debounced ? "Try adjusting your filters or search terms." : "Search uses a background metadata index. New files appear after a scan."}
+              />
+            </div>
+          ) : (
+            <div className="space-y-1 stagger-children">
+              {results.map((r) => {
+                const rootName = roots.find((x) => x.id === r.root_id)?.name || "";
+                return (
+                  <button
+                    key={r.root_id + r.path}
+                    onClick={() => onOpen(r)}
+                    className="w-full group grid grid-cols-[auto_1fr_auto] gap-4 items-center px-4 py-3 rounded-xl glass-hover hover:bg-surface/60 border border-transparent hover:border-border/50 text-left transition-all duration-200 outline-none focus:ring-2 focus:ring-accent/40"
+                  >
+                    <div className="shrink-0 transition-transform duration-300 group-hover:scale-105">
+                      {r.is_dir ? <FolderTile /> : <FileThumb it={r as FileItem} />}
+                    </div>
+                    
+                    <div className="min-w-0 flex flex-col justify-center">
+                      <p className="truncate font-medium text-content group-hover:text-accent transition-colors">{r.name}</p>
+                      <p className="text-xs font-medium text-content-muted/80 truncate font-mono mt-0.5">{rootName} / {r.path}</p>
+                    </div>
+                    
+                    <div className="text-right flex flex-col justify-center">
+                      <p className="text-sm font-medium text-content-muted">{r.is_dir ? "—" : formatBytes(r.size)}</p>
+                      <p className="text-xs font-medium text-content-muted/70 mt-0.5 hidden sm:block">{formatDate(r.modified)}</p>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
