@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Search, LayoutGrid, List, FolderPlus, FilePlus, Upload, ChevronDown, RefreshCw, CheckSquare } from "lucide-react";
 import Breadcrumbs from "./Breadcrumbs";
+import ProfileMenu from "./ProfileMenu";
+import type { User } from "../api/types";
 import { useUI } from "../store";
 
 export default function TopBar({
@@ -19,6 +21,10 @@ export default function TopBar({
   onNewFile,
   onUpload,
   onRefresh,
+  user,
+  isAdmin,
+  onLogout,
+  onAdmin,
 }: {
   rootName: string;
   path: string;
@@ -34,6 +40,10 @@ export default function TopBar({
   onNewFile: () => void;
   onUpload: () => void;
   onRefresh: () => void;
+  user: User;
+  isAdmin: boolean;
+  onLogout: () => void;
+  onAdmin: () => void;
 }) {
   const viewMode = useUI((s) => s.viewMode);
   const setViewMode = useUI((s) => s.setViewMode);
@@ -165,6 +175,7 @@ export default function TopBar({
             )}
         </>
       )}
+      <ProfileMenu user={user} isAdmin={isAdmin} onLogout={onLogout} onAdmin={onAdmin} />
       <input id="file-upload-input" type="file" multiple className="hidden" />
     </div>
   );

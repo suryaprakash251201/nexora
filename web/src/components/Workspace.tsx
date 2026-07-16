@@ -25,6 +25,7 @@ import TransfersPanel from "./TransfersPanel";
 import { Modal } from "./Modal";
 import RootModal from "./RootModal";
 import FolderPickerModal from "./FolderPickerModal";
+import ProfileMenu from "./ProfileMenu";
 import { formatDate } from "../lib/format";
 import { previewKind, isEditable } from "../lib/preview";
 import { startUpload, startDownload } from "../lib/transfer";
@@ -370,7 +371,6 @@ export default function Workspace({ user }: { user: User }) {
         onSelectRoot={(id) => { setRootId(id); setPath(""); setView("files"); clearSelection(); }}
         onSelectView={(v) => { setView(v); clearSelection(); }}
         onNewRoot={() => isAdmin && setRootModal(true)}
-        onLogout={logout}
       />
 
       <div className="flex-1 flex flex-col min-w-0">
@@ -390,10 +390,17 @@ export default function Workspace({ user }: { user: User }) {
             onNewFile={() => setMenu({ kind: "newFile" })}
             onUpload={() => fileInput.current?.click()}
             onRefresh={refresh}
+            user={user}
+            isAdmin={isAdmin}
+            onLogout={logout}
+            onAdmin={() => setView("admin")}
           />
         )}
         {view !== "files" && view !== "home" && (
-          <div className="h-14 glass-bar flex items-center px-4 font-semibold capitalize">{view}</div>
+          <div className="h-14 glass-bar flex items-center justify-between px-4">
+            <span className="font-semibold capitalize">{view}</span>
+            <ProfileMenu user={user} isAdmin={isAdmin} onLogout={logout} onAdmin={() => setView("admin")} />
+          </div>
         )}
 
         <input ref={fileInput} type="file" multiple className="hidden" onChange={(e) => { uploadFiles(e.target.files); e.target.value = ""; }} />
@@ -431,6 +438,12 @@ export default function Workspace({ user }: { user: User }) {
               empty="No recent files yet."
               rows={(recents.data?.items || []).map((f) => ({ id: f.root_id + f.path, title: f.name, sub: `${f.root_name} / ${f.path}`, meta: formatDate(f.accessed_at), onClick: () => navigateTo(f.root_id, f.path, false, f.name) }))}
             />
+          )}
+          {view === "home" && (
+            <div className="h-14 glass-bar flex items-center justify-between px-4">
+              <span className="font-semibold">Home</span>
+              <ProfileMenu user={user} isAdmin={isAdmin} onLogout={logout} onAdmin={() => setView("admin")} />
+            </div>
           )}
           {view === "home" && (
             <HomePanel

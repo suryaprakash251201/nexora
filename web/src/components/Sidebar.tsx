@@ -1,10 +1,9 @@
-import { Trash2, Moon, Sun, Plus, Share2, Clock, Star, Search, Shield, ListMusic, LogOut, Home } from "lucide-react";
+import { Trash2, Plus, Share2, Clock, Star, Search, Shield, ListMusic, Home } from "lucide-react";
 import type { Root } from "../api/types";
 import { useUI } from "../store";
 import { usePlaylists } from "../store/playlists";
 import { rootIcon } from "../lib/rootIcons";
 import { get } from "../api/client";
-import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 export type SidebarView = "home" | "files" | "trash" | "favorites" | "recents" | "shares" | "playlists" | "search" | "admin";
@@ -17,7 +16,6 @@ export default function Sidebar({
   onSelectRoot,
   onSelectView,
   onNewRoot,
-  onLogout,
 }: {
   roots: Root[];
   activeRoot: string | null;
@@ -26,23 +24,8 @@ export default function Sidebar({
   onSelectRoot: (id: string) => void;
   onSelectView: (v: SidebarView) => void;
   onNewRoot: () => void;
-  onLogout: () => void;
 }) {
-  const theme = useUI((s) => s.theme);
-  const toggleTheme = useUI((s) => s.toggleTheme);
   const playlists = usePlaylists((s) => s.playlists);
-
-  // Reflect the *applied* theme (dark class) so "system" shows the right icon.
-  const [isDark, setIsDark] = useState(() =>
-    typeof document !== "undefined" && document.documentElement.classList.contains("dark"),
-  );
-  useEffect(() => {
-    const sync = () => setIsDark(document.documentElement.classList.contains("dark"));
-    sync();
-    const obs = new MutationObserver(sync);
-    obs.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
-    return () => obs.disconnect();
-  }, []);
 
   const version = useQuery({
     queryKey: ["version"],
@@ -153,25 +136,8 @@ export default function Sidebar({
         )}
       </nav>
 
-      <div className="p-2 border-t flex flex-col gap-2">
-        <div className="flex items-center justify-between px-1">
-          <span className="text-xs text-content-muted">{version.data?.version ? `v${version.data.version}` : ""}</span>
-          <button
-            onClick={toggleTheme}
-            className="p-2 rounded-lg glass-hover"
-            title="Toggle theme"
-            aria-label="Toggle theme"
-          >
-            {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-          </button>
-        </div>
-        <button
-          onClick={onLogout}
-          className="w-full flex items-center justify-center gap-2 px-2 py-2 rounded-lg text-sm text-content-muted glass-hover hover:text-red-500 hover:border-red-500/40"
-          title="Log out"
-        >
-          <LogOut className="h-4 w-4" /> Log out
-        </button>
+      <div className="p-2 border-t flex items-center justify-between px-1">
+        <span className="text-xs text-content-muted">{version.data?.version ? `v${version.data.version}` : ""}</span>
       </div>
     </aside>
   );
