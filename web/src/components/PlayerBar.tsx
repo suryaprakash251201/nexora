@@ -88,8 +88,9 @@ export default function PlayerBar() {
   const showMini = !primaryOpen || expanded;
 
   return createPortal(
-    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] w-[95%] max-w-[800px] pointer-events-none flex justify-center">
-      <audio ref={audioRef} preload="none" />
+    <>
+      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] w-[95%] max-w-[800px] pointer-events-none flex justify-center">
+        <audio ref={audioRef} preload="none" />
 
       {showMini && !expanded && (
         <div className={`pointer-events-auto transition-all duration-500 ease-out flex items-center p-2 rounded-[2rem] border border-white/20 shadow-2xl backdrop-blur-2xl
@@ -178,20 +179,23 @@ export default function PlayerBar() {
           </div>
         </div>
       )}
+      </div>
 
       {expanded && (
-        <MediaPlayer
-          kind="audio"
-          controlled
-          autoPlay
-          startFullscreen
-          onClose={() => {
-            setExpanded(false);
-            usePlayer.getState().setPrimaryOpen(false);
-          }}
-        />
+        <div className="pointer-events-auto relative z-[100]">
+          <MediaPlayer
+            kind="audio"
+            controlled
+            autoPlay
+            startFullscreen
+            onClose={() => {
+              setExpanded(false);
+              usePlayer.getState().setPrimaryOpen(false);
+            }}
+          />
+        </div>
       )}
-    </div>,
+    </>,
     document.body
   );
 }
