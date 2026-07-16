@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { Search, Clock, Sparkles } from "lucide-react";
-import type { RecentItem, FileItem } from "../api/types";
+import { Search, Clock, Sparkles, FileText, Music, Film, Plus, FilePlus, Upload, HardDrive, FolderPlus } from "lucide-react";
+import type { RecentItem, FileItem, HomeData } from "../api/types";
 import { FileThumb } from "./FileThumb";
 import { formatRelative } from "../lib/format";
 
@@ -8,7 +8,17 @@ function extOf(name: string): string {
   return name.includes(".") ? name.slice(name.lastIndexOf(".") + 1).toLowerCase() : "";
 }
 
-function HomeCard({ item, onClick }: { item: RecentItem; onClick: () => void }) {
+function mediaKind(item: RecentItem): "music" | "video" | "doc" | "file" {
+  const ext = extOf(item.name);
+  const music = ["mp3", "flac", "wav", "ogg", "m4a", "aac", "opus", "wma", "alac"];
+  const video = ["mp4", "mkv", "webm", "mov", "avi", "m4v", "ogv", "wmv", "flv", "ts"];
+  if (music.includes(ext)) return "music";
+  if (video.includes(ext)) return "video";
+  if (["pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "md", "csv", "rtf", "odt", "ods", "odp", "tex", "pages", "key", "numbers"].includes(ext)) return "doc";
+  return "file";
+}
+
+function HomeCard({ item, onOpen }: { item: RecentItem; onOpen: () => void }) {
   const fi: FileItem = {
     name: item.name,
     path: item.path,
@@ -19,10 +29,22 @@ function HomeCard({ item, onClick }: { item: RecentItem; onClick: () => void }) 
     root_id: item.root_id,
     extension: extOf(item.name),
   };
+  const kind = mediaKind(item);
+  const ring = "ring-1 ring-white/10 group-hover:ring-accent/50 group-hover:-translate-y-0.5 transition";
   return (
-    <button onClick={onClick} className="group w-40 shrink-0 text-left">
-      <div className="aspect-square rounded-2xl glass-strong ring-1 ring-white/10 mb-2 group-hover:ring-accent/50 group-hover:-translate-y-0.5 transition overflow-hidden">
+    <button onClick={onOpen} className="group w-40 shrink-0 text-left">
+      <div className={`relative aspect-square rounded-2xl glass-strong ${ring} mb-2 overflow-hidden`}>
         <FileThumb it={fi} fill />
+        {kind === "music" && (
+          <span className="absolute bottom-2 right-2 grid place-items-center h-8 w-8 rounded-full accent-glass">
+            <Music className="h-4 w-4" />
+          </span>
+        )}
+        {kind === "video" && (
+          <span className="absolute bottom-2 right-2 grid place-items-center h-8 w-8 rounded-full accent-glass">
+            <Film className="h-4 w-4" />
+          </span>
+        )}
       </div>
       <p className="truncate text-sm font-medium">{item.name}</p>
       <p className="truncate text-xs text-content-muted">{item.root_name}</p>
@@ -36,40 +58,63 @@ function Section({
   icon,
   items,
   onOpen,
+  action,
 }: {
   title: string;
   icon: React.ReactNode;
   items: RecentItem[];
   onOpen: (item: RecentItem) => void;
+  action?: React.ReactNode;
 }) {
+  if (!items.length) return null;
   return (
     <section>
       <div className="flex items-center gap-2 mb-3">
         {icon}
         <h2 className="font-semibold">{title}</h2>
         <span className="text-xs text-content-muted">{items.length}</span>
+        {action && <span className="ml-auto">{action}</span>}
       </div>
       <div className="flex gap-4 overflow-x-auto pb-2 -mx-1 px-1">
         {items.map((it) => (
-          <HomeCard key={it.root_id + it.path} item={it} onClick={() => onOpen(it)} />
+          <HomeCard key={it.root_id + it.path} item={it} onOpen={() => onOpen(it)} />
         ))}
       </div>
     </section>
   );
 }
 
+function AddTile({ icon, label, onClick }: { icon: React.ReactNode; label: string; onClick: () => void }) {
+  return (
+    <button onClick={onClick} className="group w-40 shrink-0 text-left">
+      <div className="aspect-square rounded-2xl glass-strong ring-1 ring-white/10 group-hover:ring-accent/50 group-hover:-translate-y-0.5 transition grid place-items-center text-content-muted group-hover:text-accent">
+        {icon}
+      </div>
+      <p className="mt-2 text-sm font-medium">{label}</p>
+    </button>
+  );
+}
+
 export default function HomePanel({
-  recent,
-  added,
+  data,
   isLoading,
+  isAdmin,
   onSearch,
-  onOpen,
+  onOpenRecent,
+  onUpload,
+  onNewFolder,
+  onNewFile,
+  onNewRoot,
 }: {
-  recent?: RecentItem[];
-  added?: RecentItem[];
+  data?: HomeData;
   isLoading: boolean;
+  isAdmin: boolean;
   onSearch: (q: string) => void;
-  onOpen: (item: RecentItem) => void;
+  onOpenRecent: (item: RecentItem) => void;
+  onUpload: () => void;
+  onNewFolder: () => void;
+  onNewFile: () => void;
+  onNewRoot: () => void;
 }) {
   const [q, setQ] = useState("");
   const submit = (e: React.FormEvent) => {
@@ -77,7 +122,13 @@ export default function HomePanel({
     const t = q.trim();
     if (t) onSearch(t);
   };
-  const hasContent = (recent && recent.length > 0) || (added && added.length > 0);
+  const recent = data?.recent ?? [];
+  const added = data?.added ?? [];
+  const documents = data?.documents ?? [];
+  const music = data?.music ?? [];
+  const video = data?.video ?? [];
+  const hasContent =
+    recent.length > 0 || added.length > 0 || documents.length > 0 || music.length > 0 || video.length > 0;
 
   return (
     <div className="flex-1 overflow-auto">
@@ -106,22 +157,68 @@ export default function HomePanel({
           </div>
         )}
 
-        {recent && recent.length > 0 && (
-          <Section
-            title="Recently played & viewed"
-            icon={<Clock className="h-4 w-4 text-accent" />}
-            items={recent}
-            onOpen={onOpen}
-          />
-        )}
+        {!isLoading && hasContent && (
+          <>
+            <section>
+              <div className="flex items-center gap-2 mb-3">
+                <Plus className="h-4 w-4 text-accent" />
+                <h2 className="font-semibold">Add more</h2>
+              </div>
+              <div className="flex gap-4 overflow-x-auto pb-2 -mx-1 px-1">
+                <AddTile icon={<Upload className="h-8 w-8" />} label="Upload files" onClick={onUpload} />
+                <AddTile icon={<FolderPlus className="h-8 w-8" />} label="New folder" onClick={onNewFolder} />
+                <AddTile icon={<FilePlus className="h-8 w-8" />} label="New text file" onClick={onNewFile} />
+                {isAdmin && (
+                  <AddTile icon={<HardDrive className="h-8 w-8" />} label="New storage root" onClick={onNewRoot} />
+                )}
+              </div>
+            </section>
 
-        {added && added.length > 0 && (
-          <Section
-            title="Newly added"
-            icon={<Sparkles className="h-4 w-4 text-accent" />}
-            items={added}
-            onOpen={onOpen}
-          />
+            {recent.length > 0 && (
+              <Section
+                title="Recently opened"
+                icon={<Clock className="h-4 w-4 text-accent" />}
+                items={recent}
+                onOpen={onOpenRecent}
+              />
+            )}
+
+            {documents.length > 0 && (
+              <Section
+                title="Recent documents"
+                icon={<FileText className="h-4 w-4 text-accent" />}
+                items={documents}
+                onOpen={onOpenRecent}
+              />
+            )}
+
+            {music.length > 0 && (
+              <Section
+                title="Recent music"
+                icon={<Music className="h-4 w-4 text-accent" />}
+                items={music}
+                onOpen={onOpenRecent}
+              />
+            )}
+
+            {video.length > 0 && (
+              <Section
+                title="Recent videos"
+                icon={<Film className="h-4 w-4 text-accent" />}
+                items={video}
+                onOpen={onOpenRecent}
+              />
+            )}
+
+            {added.length > 0 && (
+              <Section
+                title="Newly added"
+                icon={<Sparkles className="h-4 w-4 text-accent" />}
+                items={added}
+                onOpen={onOpenRecent}
+              />
+            )}
+          </>
         )}
       </div>
     </div>

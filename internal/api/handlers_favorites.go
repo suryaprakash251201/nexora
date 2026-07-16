@@ -1,8 +1,10 @@
 package api
 
 import (
+	"database/sql"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/nexora/nexora/internal/auth"
 	"github.com/nexora/nexora/internal/middleware"
@@ -178,6 +180,86 @@ func (s *Server) recentItems(userID, kind string, limit int) []map[string]any {
 	return out
 }
 
+// homeMediaKinds maps a recents kind to the file categories shown on Home.
+const (
+	homeKindDocuments = "documents"
+	homeKindMusic     = "music"
+	homeKindVideo     = "video"
+	homeKindAdded     = "added"
+)
+
+// classifyMedia returns the Home media category for a file path, or "" if the
+// file is not a recognized document/music/video type.
+func classifyMedia(path string) string {
+	ext := strings.ToLower(storage.Ext(path))
+	switch {
+	case docExt[ext]:
+		return homeKindDocuments
+	case musicExt[ext]:
+		return homeKindMusic
+	case videoExt[ext]:
+		return homeKindVideo
+	}
+	return ""
+}
+
+var docExt = map[string]bool{
+	"pdf": true, "doc": true, "docx": true, "xls": true, "xlsx": true,
+	"ppt": true, "pptx": true, "txt": true, "md": true, "csv": true,
+	"rtf": true, "odt": true, "ods": true, "odp": true, "tex": true,
+	"pages": true, "key": true, "numbers": true,
+}
+var musicExt = map[string]bool{
+	"mp3": true, "flac": true, "wav": true, "ogg": true, "m4a": true,
+	"aac": true, "opus": true, "wma": true, "alac": true,
+}
+var videoExt = map[string]bool{
+	"mp4": true, "mkv": true, "webm": true, "mov": true, "avi": true,
+	"m4v": true, "ogv": true, "wmv": true, "flv": true, "ts": true,
+}
+
+// homeSection returns recent items of the given media category (or the "added"
+// bucket) up to limit entries.
+func (s *Server) homeSection(userID, category string, limit int) []map[string]any {
+	var rows *sql.Rows
+	var err error
+	if category == homeKindAdded {
+		rows, err = s.DB.Query(
+			`SELECT rc.root_id, rc.path, rc.accessed_at, r.name
+			 FROM recents rc LEFT JOIN storage_roots r ON r.id=rc.root_id
+			 WHERE rc.user_id=? AND rc.kind='add' ORDER BY rc.accessed_at DESC LIMIT ?`,
+			userID, limit)
+	} else {
+		rows, err = s.DB.Query(
+			`SELECT rc.root_id, rc.path, rc.accessed_at, r.name
+			 FROM recents rc LEFT JOIN storage_roots r ON r.id=rc.root_id
+			 WHERE rc.user_id=? AND rc.kind='access' ORDER BY rc.accessed_at DESC LIMIT ?`,
+			userID, limit)
+	}
+	if err != nil {
+		return []map[string]any{}
+	}
+	defer rows.Close()
+	out := make([]map[string]any, 0)
+	for rows.Next() {
+		var rootID, path, accessedAt, rootName string
+		if err := rows.Scan(&rootID, &path, &accessedAt, &rootName); err != nil {
+			continue
+		}
+		if category != homeKindAdded && classifyMedia(path) != category {
+			continue
+		}
+		out = append(out, map[string]any{
+			"root_id":     rootID,
+			"root_name":   rootName,
+			"path":        path,
+			"name":        storage.NameFromPath(path),
+			"accessed_at": accessedAt,
+		})
+	}
+	return out
+}
+
 // handleHome returns dashboard data for the post-login Home view.
 func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 	user, ok := auth.UserFromContext(r.Context())
@@ -186,7 +268,10 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"recent": s.recentItems(user.ID, "access", 12),
-		"added":  s.recentItems(user.ID, "add", 12),
+		"recent":      s.recentItems(user.ID, "access", 12),
+		"added":       s.recentItems(user.ID, "add", 12),
+		"documents":   s.homeSection(user.ID, homeKindDocuments, 12),
+		"music":       s.homeSection(user.ID, homeKindMusic, 12),
+		"video":       s.homeSection(user.ID, homeKindVideo, 12),
 	})
 }

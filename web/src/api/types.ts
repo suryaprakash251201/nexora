@@ -135,3 +135,11 @@ export interface ApiError {
   message?: string;
   request?: string;
 }
+
+export interface HomeData {
+  recent: RecentItem[];
+  added: RecentItem[];
+  documents: RecentItem[];
+  music: RecentItem[];
+  video: RecentItem[];
+}

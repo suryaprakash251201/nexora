@@ -1,7 +1,7 @@
 import { useRef, useState, useCallback, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { get, post, del, put } from "../api/client";
-import type { FileItem, Root, TrashItem, User, FavoriteItem, RecentItem, SearchResult } from "../api/types";
+import type { FileItem, Root, TrashItem, User, FavoriteItem, RecentItem, SearchResult, HomeData } from "../api/types";
 import { useUI } from "../store";
 import { usePlayer } from "../store/player";
 import { usePlaylists } from "../store/playlists";
@@ -29,7 +29,7 @@ import { previewKind, isEditable } from "../lib/preview";
 import { startUpload, startDownload } from "../lib/transfer";
 import {
   Download, Trash2, Pencil, Scissors, Copy, Eye, FolderOpen, RotateCcw, LogOut,
-  Star, Share2, Archive, FolderInput, FileEdit, Play, ListMusic,
+  Star, Share2, Archive, FolderInput, FileEdit, Play, ListMusic, HardDrive, Upload,
 } from "lucide-react";
 
 export default function Workspace({ user }: { user: User }) {
@@ -57,6 +57,10 @@ export default function Workspace({ user }: { user: User }) {
   const [ctxPlaylist, setCtxPlaylist] = useState<{ x: number; y: number; items: FileItem[] } | null>(null);
   const [menu, setMenu] = useState<{ kind: string; item?: FileItem } | null>(null);
   const [rootModal, setRootModal] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
+  const dragDepth = useRef(0);
+  const [dropPicker, setDropPicker] = useState(false);
+  const pendingDrop = useRef<FileList | null>(null);
   const [playlistModal, setPlaylistModal] = useState(false);
   const [playlistName, setPlaylistName] = useState("");
   const fileInput = useRef<HTMLInputElement>(null);
@@ -75,7 +79,7 @@ export default function Workspace({ user }: { user: User }) {
   const recents = useQuery({ queryKey: ["recents"], queryFn: () => get<{ items: RecentItem[] }>("/recents"), enabled: view === "recents" });
   const home = useQuery({
     queryKey: ["home"],
-    queryFn: () => get<{ recent: RecentItem[]; added: RecentItem[] }>("/home"),
+    queryFn: () => get<HomeData>("/home"),
     enabled: view === "home",
   });
   const favSet = useQuery({ queryKey: ["fav-set"], queryFn: () => get<{ items: FavoriteItem[] }>("/favorites") });
@@ -92,10 +96,40 @@ export default function Workspace({ user }: { user: User }) {
     qc.invalidateQueries({ queryKey: ["fav-set"] });
   }, [qc, rootId, path]);
 
-  const uploadFiles = useCallback(async (fileList: FileList | null) => {
-    if (!fileList || !fileList.length || !rootId) return;
-    startUpload(rootId, path, fileList, () => refresh());
+  const uploadFiles = useCallback(async (fileList: FileList | null, destRootId?: string, destPath?: string) => {
+    const rid = destRootId ?? rootId;
+    const p = destPath ?? path;
+    if (!fileList || !fileList.length || !rid) return;
+    startUpload(rid, p, fileList, () => refresh());
   }, [rootId, path, refresh]);
+
+  // App-wide drag & drop. When a storage root + folder is active, files drop
+  // straight into it; otherwise the user is asked which root to upload into.
+  const onDragEnter = (e: React.DragEvent) => {
+    if (![...e.dataTransfer.types].includes("Files")) return;
+    e.preventDefault();
+    dragDepth.current += 1;
+    setDragActive(true);
+  };
+  const onDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    dragDepth.current -= 1;
+    if (dragDepth.current <= 0) { dragDepth.current = 0; setDragActive(false); }
+  };
+  const onDrop = (e: React.DragEvent) => {
+    if (![...e.dataTransfer.types].includes("Files")) return;
+    e.preventDefault();
+    dragDepth.current = 0;
+    setDragActive(false);
+    const files = e.dataTransfer.files;
+    if (!files || !files.length) return;
+    if (rootId && canWrite) {
+      uploadFiles(files);
+    } else {
+      pendingDrop.current = files;
+      setDropPicker(true);
+    }
+  };
 
   const openItem = (item: FileItem) => {
     if (item.is_dir) {
@@ -271,7 +305,13 @@ export default function Workspace({ user }: { user: User }) {
   const showTopBar = view === "files" && activeRoot;
 
   return (
-    <div className="h-screen flex overflow-hidden">
+    <div
+      className="h-screen flex overflow-hidden"
+      onDragEnter={onDragEnter}
+      onDragOver={(e) => { if ([...e.dataTransfer.types].includes("Files")) e.preventDefault(); }}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+    >
       <Sidebar
         roots={roots.data?.roots || []}
         activeRoot={rootId}
@@ -310,8 +350,6 @@ export default function Workspace({ user }: { user: User }) {
 
         <div
           className="flex-1 overflow-auto flex flex-col"
-          onDragOver={(e) => view === "files" && e.preventDefault()}
-          onDrop={(e) => { if (view === "files") { e.preventDefault(); uploadFiles(e.dataTransfer.files); } }}
         >
           {view === "files" && (
             <FileBrowser
@@ -345,11 +383,15 @@ export default function Workspace({ user }: { user: User }) {
           )}
           {view === "home" && (
             <HomePanel
-              recent={home.data?.recent}
-              added={home.data?.added}
+              data={home.data}
               isLoading={home.isLoading}
+              isAdmin={isAdmin}
               onSearch={(q) => { setSearch(q); setView("search"); }}
-              onOpen={(item) => navigateTo(item.root_id, item.path, false, item.name)}
+              onOpenRecent={(item) => navigateTo(item.root_id, item.path, false, item.name)}
+              onUpload={() => fileInput.current?.click()}
+              onNewFolder={() => setMenu({ kind: "newFolder" })}
+              onNewFile={() => setMenu({ kind: "newFile" })}
+              onNewRoot={() => isAdmin && setRootModal(true)}
             />
           )}
           {view === "shares" && <SharesPanel />}
@@ -425,6 +467,30 @@ export default function Workspace({ user }: { user: User }) {
       {menu && <ActionModals menu={menu} rootId={rootId!} path={path} onClose={() => setMenu(null)} onDone={() => { refresh(); setMenu(null); }} onArchiveExtract={(src, dest) => { extractZip(rootId!, src, dest, pushToast, refresh); setMenu(null); }} />}
       {rootModal && <RootModal onClose={() => setRootModal(false)} onDone={() => { refresh(); setRootModal(false); }} />}
 
+      {dropPicker && (
+        <DropRootPicker
+          roots={roots.data?.roots || []}
+          pending={pendingDrop}
+          onClose={() => { setDropPicker(false); pendingDrop.current = null; }}
+          onConfirm={(rid, destPath) => {
+            const files = pendingDrop.current;
+            pendingDrop.current = null;
+            setDropPicker(false);
+            if (files) uploadFiles(files, rid, destPath);
+          }}
+        />
+      )}
+
+      {dragActive && (
+        <div className="fixed inset-0 z-[70] grid place-items-center bg-black/40 backdrop-blur-sm pointer-events-none">
+          <div className="glass-strong rounded-2xl px-8 py-10 text-center">
+            <Upload className="h-12 w-12 mx-auto mb-3 text-accent" />
+            <p className="text-lg font-semibold">Drop to upload</p>
+            <p className="text-sm text-content-muted">{rootId && canWrite ? `Into ${activeRoot?.name} / ${path || "root"}` : "Choose a storage location"}</p>
+          </div>
+        </div>
+      )}
+
       {playlistModal && (
         <Modal title="Save playlist" onClose={() => setPlaylistModal(false)} footer={<button onClick={savePlaylist} className="px-3 py-1.5 rounded-lg accent-glass text-sm font-medium">Create</button>}>
           <label className="block text-sm mb-1 opacity-80">Playlist name</label>
@@ -468,6 +534,62 @@ function SimpleList({ loading, empty, rows }: { loading: boolean; empty: string;
         </button>
       ))}
     </div>
+  );
+}
+
+function DropRootPicker({ roots, pending, onClose, onConfirm }: {
+  roots: Root[];
+  pending: React.MutableRefObject<FileList | null>;
+  onClose: () => void;
+  onConfirm: (rootId: string, destPath: string) => void;
+}) {
+  const [picked, setPicked] = useState<string>("");
+  const [destPath, setDestPath] = useState("");
+  const writable = roots.filter((r) => r.permission === "write" && !r.read_only);
+  const fileCount = pending.current?.length ?? 0;
+  const effective = picked || writable[0]?.id || "";
+  return (
+    <Modal
+      title="Upload to…"
+      onClose={onClose}
+      footer={
+        <button
+          disabled={!effective}
+          onClick={() => onConfirm(effective, destPath.trim())}
+          className="px-3 py-1.5 rounded-lg accent-glass text-sm font-medium disabled:opacity-50"
+        >
+          Upload {fileCount > 0 ? `${fileCount} file${fileCount > 1 ? "s" : ""}` : ""}
+        </button>
+      }
+    >
+      <p className="text-sm text-content-muted mb-3">
+        {fileCount} file{fileCount !== 1 ? "s" : ""} selected. Choose a storage root and optional subfolder.
+      </p>
+      <div className="space-y-2 max-h-60 overflow-auto">
+        {writable.length === 0 && <p className="text-sm text-content-muted">No writable storage roots available.</p>}
+        {writable.map((r) => (
+          <button
+            key={r.id}
+            onClick={() => setPicked(r.id)}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left border transition ${
+              effective === r.id ? "border-accent bg-accent/10" : "border-transparent glass-hover"
+            }`}
+          >
+            <HardDrive className="h-5 w-5 text-accent shrink-0" />
+            <div className="min-w-0">
+              <p className="font-medium truncate">{r.name}</p>
+              <p className="text-xs text-content-muted truncate">{r.path || "root"}</p>
+            </div>
+          </button>
+        ))}
+      </div>
+      <input
+        value={destPath}
+        onChange={(e) => setDestPath(e.target.value)}
+        placeholder="Subfolder (optional, e.g. photos/2024)"
+        className="w-full mt-3 rounded-lg glass-input px-3 py-2 outline-none"
+      />
+    </Modal>
   );
 }
 
