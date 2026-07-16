@@ -49,6 +49,7 @@ export default function Workspace({ user }: { user: User }) {
 
   const isAdmin = user.role === "admin";
   const [view, setView] = useState<SidebarView>("home");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [rootId, setRootId] = useState<string | null>(null);
   const [path, setPath] = useState("");
   const [search, setSearch] = useState("");
@@ -368,9 +369,12 @@ export default function Workspace({ user }: { user: User }) {
         activeRoot={rootId}
         view={view}
         isAdmin={isAdmin}
+        collapsed={sidebarCollapsed}
+        onToggleCollapse={() => setSidebarCollapsed((c) => !c)}
         onSelectRoot={(id) => { setRootId(id); setPath(""); setView("files"); clearSelection(); }}
         onSelectView={(v) => { setView(v); clearSelection(); }}
         onNewRoot={() => isAdmin && setRootModal(true)}
+        onLogout={logout}
       />
 
       <div className="flex-1 flex flex-col min-w-0">
