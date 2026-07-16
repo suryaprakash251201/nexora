@@ -118,7 +118,7 @@ export const usePlayer = create<PlayerState>((set, get) => ({
       if (repeat === "all" || !auto) ni = 0;
       else { set({ isPlaying: false }); return; }
     }
-    set({ index: ni, currentTime: 0 });
+    set({ index: ni, currentTime: 0, isPlaying: true });
     persist();
   },
 
@@ -128,11 +128,11 @@ export const usePlayer = create<PlayerState>((set, get) => ({
     if (engine.audio && currentTime > 3) { engine.seek(0); return; }
     let pi = index - 1;
     if (pi < 0) pi = queue.length - 1;
-    set({ index: pi, currentTime: 0 });
+    set({ index: pi, currentTime: 0, isPlaying: true });
     persist();
   },
 
-  setIndex: (i) => { set({ index: i, currentTime: 0 }); persist(); },
+  setIndex: (i) => { set({ index: i, currentTime: 0, isPlaying: true }); persist(); },
 
   seek: (t) => engine.seek(t),
 
