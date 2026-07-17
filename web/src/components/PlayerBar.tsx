@@ -76,8 +76,6 @@ export default function PlayerBar() {
     else a.pause();
   }, [isPlaying]);
 
-  if (!current) return <audio ref={audioRef} preload="none" />;
-
   const stop = () => {
     engine.pause();
     usePlayer.setState({ queue: [], index: -1, isPlaying: false, currentTime: 0, duration: 0 });
@@ -89,16 +87,18 @@ export default function PlayerBar() {
 
   return createPortal(
     <>
-      <div className="fixed bottom-[72px] md:bottom-6 left-1/2 -translate-x-1/2 z-[60] w-[95%] max-w-[800px] pointer-events-none flex justify-center">
-        <audio ref={audioRef} preload="none" />
+      <audio ref={audioRef} preload="none" />
 
-      {showMini && !expanded && (
-        <div className={`pointer-events-auto transition-all duration-500 ease-out flex items-center p-2 rounded-[2rem] border border-white/20 shadow-2xl backdrop-blur-2xl
-          ${isPlaying ? 'bg-surface-strong/80 shadow-accent/20 ring-1 ring-accent/30 scale-100' : 'bg-surface-strong/60 shadow-black/10 scale-[0.98]'}`}>
-          
-          <div className="flex items-center gap-4 px-2">
-            <div className={`relative h-12 w-12 rounded-full overflow-hidden shrink-0 shadow-md transition-all duration-500 group ${isPlaying ? 'animate-[spin_8s_linear_infinite]' : ''}`}>
-              <Cover item={current} />
+      {current && (
+        <>
+          <div className="fixed bottom-[72px] md:bottom-6 left-1/2 -translate-x-1/2 z-[60] w-[95%] max-w-[800px] pointer-events-none flex justify-center">
+            {showMini && !expanded && (
+              <div className={`pointer-events-auto transition-all duration-500 ease-out flex items-center p-2 rounded-[2rem] border border-white/20 shadow-2xl backdrop-blur-2xl
+                ${isPlaying ? 'bg-surface-strong/80 shadow-accent/20 ring-1 ring-accent/30 scale-100' : 'bg-surface-strong/60 shadow-black/10 scale-[0.98]'}`}>
+                
+                <div className="flex items-center gap-4 px-2">
+                  <div className={`relative h-12 w-12 rounded-full overflow-hidden shrink-0 shadow-md transition-all duration-500 group ${isPlaying ? 'animate-[spin_8s_linear_infinite]' : ''}`}>
+                    <Cover item={current} />
               <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer" onClick={openExpanded}>
                 <ChevronUp className="h-5 w-5 text-white" />
               </div>
@@ -176,24 +176,26 @@ export default function PlayerBar() {
           
           <div className="absolute bottom-0 left-6 right-6 h-0.5 rounded-full bg-white/10 overflow-hidden hidden sm:block">
              <div className="h-full bg-gradient-to-r from-accent to-purple-500 transition-all duration-300 ease-out" style={{ width: `${duration > 0 ? (currentTime / duration) * 100 : 0}%` }} />
+                </div>
+              </div>
+            )}
           </div>
-        </div>
-      )}
-      </div>
 
-      {expanded && (
-        <div className="pointer-events-auto relative z-[100]">
-          <MediaPlayer
-            kind="audio"
-            controlled
-            autoPlay
-            startFullscreen
-            onClose={() => {
-              setExpanded(false);
-              usePlayer.getState().setPrimaryOpen(false);
-            }}
-          />
-        </div>
+          {expanded && (
+            <div className="pointer-events-auto relative z-[100]">
+              <MediaPlayer
+                kind="audio"
+                controlled
+                autoPlay
+                startFullscreen
+                onClose={() => {
+                  setExpanded(false);
+                  usePlayer.getState().setPrimaryOpen(false);
+                }}
+              />
+            </div>
+          )}
+        </>
       )}
     </>,
     document.body
