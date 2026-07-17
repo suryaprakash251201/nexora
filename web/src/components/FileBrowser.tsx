@@ -54,7 +54,7 @@ export default function FileBrowser({
 
   if (viewMode === "grid") {
     return (
-      <div className="p-6 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6 stagger-children pb-32">
+      <div className="p-4 sm:p-6 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-6 stagger-children pb-32">
         {items.map((it) => {
           const selected = selection.has(it.path);
           return (
@@ -163,7 +163,7 @@ export default function FileBrowser({
                   onDropItem?.(it);
                 }
               }}
-              className={`group grid grid-cols-[auto_1fr_auto_auto_auto] gap-4 px-6 py-3 rounded-2xl items-center cursor-pointer transition-all duration-200 outline-none
+              className={`group grid grid-cols-[auto_1fr_auto_auto_auto] gap-2 sm:gap-4 px-3 sm:px-6 py-4 sm:py-3 rounded-2xl items-center cursor-pointer transition-all duration-200 outline-none
                 ${selected ? "bg-accent/10 ring-1 ring-accent/30 shadow-sm" : idx % 2 === 0 ? "bg-surface/20" : "bg-transparent"} 
                 hover:bg-surface/80 hover:shadow-md hover:ring-1 hover:ring-border/50
                 ${dropTarget === it.path ? "ring-2 ring-accent bg-accent/20" : ""}`}

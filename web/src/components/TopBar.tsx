@@ -84,7 +84,7 @@ export default function TopBar({
   }, [menuOpen]);
 
   return (
-    <div className="h-[72px] glass-bar flex items-center gap-3 px-6 z-30">
+    <div className="h-14 sm:h-[72px] glass-bar flex items-center gap-2 sm:gap-3 px-3 sm:px-6 z-30">
       <div className="min-w-0 flex-1">
         <Breadcrumbs rootName={rootName} path={path} onNavigate={onNavigate} />
       </div>

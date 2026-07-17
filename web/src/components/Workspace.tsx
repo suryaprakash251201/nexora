@@ -255,7 +255,7 @@ export default function Workspace({ user }: { user: User }) {
 
         <input ref={fileInput} type="file" multiple className="hidden" onChange={(e) => { uploadFiles(e.target.files); e.target.value = ""; }} />
 
-        <div className="flex-1 overflow-auto flex flex-col">
+        <div className="flex-1 overflow-auto flex flex-col pb-20 md:pb-0">
           {view === "files" && (
             <FileBrowser
               items={filtered}

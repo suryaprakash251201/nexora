@@ -89,7 +89,7 @@ export default function PlayerBar() {
 
   return createPortal(
     <>
-      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] w-[95%] max-w-[800px] pointer-events-none flex justify-center">
+      <div className="fixed bottom-[72px] md:bottom-6 left-1/2 -translate-x-1/2 z-[60] w-[95%] max-w-[800px] pointer-events-none flex justify-center">
         <audio ref={audioRef} preload="none" />
 
       {showMini && !expanded && (

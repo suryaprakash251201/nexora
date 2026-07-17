@@ -54,7 +54,7 @@ export default function DetailsDrawer({
   return (
     <>
       <div className="fixed inset-0 z-40 bg-black/20 backdrop-blur-sm lg:hidden" onClick={onClose} />
-      <aside className="fixed inset-y-0 right-0 z-50 w-[340px] glass-strong border-l border-glass-border-soft flex flex-col shadow-2xl animate-drawer-in lg:relative lg:z-auto">
+      <aside className="fixed inset-y-0 right-0 z-50 w-full sm:w-[340px] glass-strong border-l border-glass-border-soft flex flex-col shadow-2xl animate-drawer-in lg:relative lg:z-auto">
         
         <div className="h-[72px] flex items-center justify-between px-5 border-b border-border/50 shrink-0">
           <span className="font-bold text-lg tracking-tight">Details</span>
