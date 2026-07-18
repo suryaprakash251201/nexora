@@ -290,6 +290,7 @@ export default function Workspace({ user }: { user: User }) {
               onNewFolder={() => setMenu({ kind: "newFolder" })}
               onNewFile={() => setMenu({ kind: "newFile" })}
               onNewRoot={() => isAdmin && setRootModal(true)}
+              onOpenPlaylist={() => setView("playlists")}
             />
           )}
           {view === "shares" && <SharesPanel />}

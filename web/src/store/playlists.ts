@@ -1,12 +1,17 @@
 import { create } from "zustand";
 import type { FileItem, Playlist as ApiPlaylist, PlaylistItem } from "../api/types";
-import { get, post, del, put } from "../api/client";
+import { get, post, del, put, patch } from "../api/client";
 import { usePlayer } from "./player";
 
 // Extend the API playlist to match what the frontend UI expects (FileItem array).
 // The backend returns partial FileItems in `items`, but we'll cast them.
 export interface Playlist extends Omit<ApiPlaylist, "items"> {
   items: FileItem[];
+}
+
+interface AddResult {
+  added: number;
+  skipped: number;
 }
 
 interface PlaylistsState {
@@ -16,8 +21,10 @@ interface PlaylistsState {
   create: (name: string, items: FileItem[]) => Promise<Playlist>;
   remove: (id: string) => Promise<void>;
   rename: (id: string, name: string) => Promise<void>;
-  addItems: (id: string, items: FileItem[]) => Promise<void>;
+  addItems: (id: string, items: FileItem[]) => Promise<AddResult>;
   removeItem: (id: string, path: string) => Promise<void>;
+  setCover: (id: string, coverRootId: string, coverPath: string) => Promise<void>;
+  setPublic: (id: string, isPublic: boolean) => Promise<void>;
   play: (id: string) => void;
   playFrom: (id: string, index: number) => void;
 }
@@ -39,30 +46,26 @@ export const usePlaylists = create<PlaylistsState>((set, getStore) => ({
   },
 
   create: async (name, items) => {
-    // Optimistic update not fully possible without ID, so just wait for network
     const plItems = items.map((i) => ({ root_id: i.root_id, path: i.path } as PlaylistItem));
     const pl = await post<Playlist>("/playlists", { name: name.trim() || "New playlist", items: plItems });
     
-    // The backend returns the new playlist. We cast the items back to FileItem for the UI.
     const next = [...getStore().playlists, pl];
     set({ playlists: next });
     return pl;
   },
 
   remove: async (id) => {
-    // Optimistic
     const prev = getStore().playlists;
     set({ playlists: prev.filter((p) => p.id !== id) });
     try {
       await del(`/playlists/${id}`);
     } catch (e) {
-      set({ playlists: prev }); // Revert on failure
+      set({ playlists: prev });
       throw e;
     }
   },
 
   rename: async (id, name) => {
-    // Optimistic
     const prev = getStore().playlists;
     set({ playlists: prev.map((p) => (p.id === id ? { ...p, name } : p)) });
     try {
@@ -76,21 +79,22 @@ export const usePlaylists = create<PlaylistsState>((set, getStore) => ({
   addItems: async (id, items) => {
     const plItems = items.map((i) => ({ root_id: i.root_id, path: i.path } as PlaylistItem));
     
-    // Optimistic update
+    // Optimistic update with dedup
     const prev = getStore().playlists;
     set({
       playlists: prev.map((p) => {
         if (p.id !== id) return p;
-        const existing = new Set(p.items.map((i) => i.path));
-        const added = items.filter((i) => !existing.has(i.path));
+        const existing = new Set(p.items.map((i) => `${i.root_id}:${i.path}`));
+        const added = items.filter((i) => !existing.has(`${i.root_id}:${i.path}`));
         return { ...p, items: [...p.items, ...added] };
       }),
     });
 
     try {
-      await post(`/playlists/${id}/items`, { items: plItems });
+      const res = await post<{ ok: boolean; added: number; skipped: number }>(`/playlists/${id}/items`, { items: plItems });
       // Re-fetch to get real item IDs from server
       await getStore().fetch();
+      return { added: res.added ?? items.length, skipped: res.skipped ?? 0 };
     } catch (e) {
       set({ playlists: prev });
       throw e;
@@ -102,13 +106,9 @@ export const usePlaylists = create<PlaylistsState>((set, getStore) => ({
     if (!pl) return;
     
     const itemToRemove = pl.items.find((i) => i.path === path);
-    // If we don't have the real item ID (e.g. from an optimistic add), we can't remove it from the backend easily.
-    // The backend `RemoveItem` expects `item_id`.
-    // We hack around this by finding the item ID from our state.
     const apiItemId = (itemToRemove as any)?.id;
     if (!apiItemId) {
       console.error("Cannot remove item without its server ID");
-      // Fetch to ensure we have the latest IDs and try again?
       return;
     }
 
@@ -121,6 +121,36 @@ export const usePlaylists = create<PlaylistsState>((set, getStore) => ({
 
     try {
       await del(`/playlists/${id}/items`, { item_id: apiItemId });
+    } catch (e) {
+      set({ playlists: prev });
+      throw e;
+    }
+  },
+
+  setCover: async (id, coverRootId, coverPath) => {
+    const prev = getStore().playlists;
+    set({
+      playlists: prev.map((p) =>
+        p.id === id ? { ...p, cover_root_id: coverRootId, cover_path: coverPath } : p
+      ),
+    });
+    try {
+      await patch(`/playlists/${id}`, { cover_root_id: coverRootId, cover_path: coverPath });
+    } catch (e) {
+      set({ playlists: prev });
+      throw e;
+    }
+  },
+
+  setPublic: async (id, isPublic) => {
+    const prev = getStore().playlists;
+    set({
+      playlists: prev.map((p) =>
+        p.id === id ? { ...p, is_public: isPublic } : p
+      ),
+    });
+    try {
+      await patch(`/playlists/${id}`, { is_public: isPublic });
     } catch (e) {
       set({ playlists: prev });
       throw e;
@@ -140,6 +170,5 @@ export const usePlaylists = create<PlaylistsState>((set, getStore) => ({
 
 // Auto-fetch on init
 if (typeof window !== "undefined") {
-  // Only fetch if authenticated (or let the request fail silently if not)
   usePlaylists.getState().fetch().catch(() => {});
 }

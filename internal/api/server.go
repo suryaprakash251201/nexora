@@ -157,6 +157,10 @@ func (s *Server) Routes() http.Handler {
 	authed.Put("/playlists/{id}", s.handleRenamePlaylist)
 	authed.Post("/playlists/{id}/items", s.handleAddPlaylistItems)
 	authed.Delete("/playlists/{id}/items", s.handleRemovePlaylistItem)
+	authed.Patch("/playlists/{id}", s.handleUpdatePlaylist)
+	authed.Get("/playlists/public", s.handleListPublicPlaylists)
+	authed.Post("/playlists/{id}/collaborators", s.handleManageCollaborators)
+	authed.Get("/playlists/{id}/collaborators", s.handleListCollaborators)
 
 	// Archive / extract jobs.
 	authed.Post("/archive", s.handleCreateArchive)

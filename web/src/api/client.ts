@@ -85,5 +85,6 @@ export async function api<T>(path: string, opts: RequestOptions = {}): Promise<T
 export const get = <T>(p: string, q?: RequestOptions["query"]) => api<T>(p, { method: "GET", query: q });
 export const post = <T>(p: string, body?: any) => api<T>(p, { method: "POST", body });
 export const put = <T>(p: string, body?: any) => api<T>(p, { method: "PUT", body });
+export const patch = <T>(p: string, body?: any) => api<T>(p, { method: "PATCH", body });
 export const del = <T>(p: string, q?: RequestOptions["query"]) => api<T>(p, { method: "DELETE", query: q });
 export const upload = <T>(p: string, form: FormData) => api<T>(p, { method: "POST", body: form, isForm: true });

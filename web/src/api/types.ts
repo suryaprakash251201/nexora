@@ -142,6 +142,7 @@ export interface HomeData {
   documents: RecentItem[];
   music: RecentItem[];
   video: RecentItem[];
+  playlists: Playlist[];
 }
 
 export interface PlaylistItem {
@@ -158,7 +159,18 @@ export interface PlaylistItem {
 export interface Playlist {
   id: string;
   name: string;
+  cover_root_id: string;
+  cover_path: string;
+  is_public: boolean;
   created_at: string;
   updated_at: string;
   items: PlaylistItem[];
+}
+
+export interface PlaylistCollaborator {
+  playlist_id: string;
+  user_id: string;
+  role: string;
+  created_at: string;
+  username?: string;
 }

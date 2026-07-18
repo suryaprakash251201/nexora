@@ -267,11 +267,16 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "unauthenticated", "Authentication required", middleware.GetRequestID(r.Context()))
 		return
 	}
+
+	pls, _ := s.Playlists.ListPublic()
+	s.hydratePlaylistItems(pls)
+
 	writeJSON(w, http.StatusOK, map[string]any{
 		"recent":      s.recentItems(user.ID, "access", 12),
 		"added":       s.recentItems(user.ID, "add", 12),
 		"documents":   s.homeSection(user.ID, homeKindDocuments, 12),
 		"music":       s.homeSection(user.ID, homeKindMusic, 12),
 		"video":       s.homeSection(user.ID, homeKindVideo, 12),
+		"playlists":   pls,
 	})
 }

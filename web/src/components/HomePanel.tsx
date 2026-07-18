@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Search, Clock, Sparkles, FileText, Music, Film, Plus, FilePlus, Upload, HardDrive, FolderPlus } from "lucide-react";
+import { Search, Clock, Sparkles, FileText, Music, Film, Plus, FilePlus, Upload, HardDrive, FolderPlus, Play } from "lucide-react";
 import type { RecentItem, FileItem, HomeData } from "../api/types";
 import { FileThumb } from "./FileThumb";
 import { formatRelative } from "../lib/format";
@@ -122,6 +122,7 @@ export default function HomePanel({
   onNewFolder,
   onNewFile,
   onNewRoot,
+  onOpenPlaylist,
 }: {
   data?: HomeData;
   isLoading: boolean;
@@ -132,6 +133,7 @@ export default function HomePanel({
   onNewFolder: () => void;
   onNewFile: () => void;
   onNewRoot: () => void;
+  onOpenPlaylist: () => void;
 }) {
   const [q, setQ] = useState("");
   const [greeting, setGreeting] = useState("Good day");
@@ -154,8 +156,9 @@ export default function HomePanel({
   const documents = data?.documents ?? [];
   const music = data?.music ?? [];
   const video = data?.video ?? [];
+  const playlists = data?.playlists ?? [];
   const hasContent =
-    recent.length > 0 || added.length > 0 || documents.length > 0 || music.length > 0 || video.length > 0;
+    recent.length > 0 || added.length > 0 || documents.length > 0 || music.length > 0 || video.length > 0 || playlists.length > 0;
 
   return (
     <div className="flex-1 overflow-auto custom-scrollbar bg-background">
@@ -213,6 +216,48 @@ export default function HomePanel({
 
         {!isLoading && hasContent && (
           <div className="stagger-children space-y-12">
+            {playlists.length > 0 && (
+              <section className="animate-slide-up">
+                <div className="flex items-center gap-3 mb-6 px-1">
+                  <div className="p-1.5 rounded-lg bg-accent/10 text-accent">
+                    <Music className="h-5 w-5" />
+                  </div>
+                  <h2 className="font-bold text-lg">Public Playlists</h2>
+                </div>
+                <div className="flex overflow-x-auto gap-4 pb-4 custom-scrollbar snap-x">
+                  {playlists.map((pl) => (
+                    <button
+                      key={pl.id}
+                      onClick={onOpenPlaylist}
+                      className="snap-start group relative w-40 sm:w-48 text-left outline-none shrink-0"
+                    >
+                      <div className="aspect-square rounded-2xl overflow-hidden mb-3 shadow-md border border-border/50 group-hover:border-accent/40 group-focus-visible:ring-2 group-focus-visible:ring-accent transition-all duration-300 relative bg-surface-muted/30">
+                        {pl.cover_root_id && pl.cover_path ? (
+                          <img
+                            src={`/api/v1/files/thumbnail?root=${pl.cover_root_id}&path=${encodeURIComponent(pl.cover_path)}`}
+                            alt={pl.name}
+                            className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-500"
+                          />
+                        ) : (
+                          <div className="h-full w-full grid place-items-center bg-gradient-to-br from-accent/40 via-purple-500/30 to-pink-500/20 group-hover:scale-105 transition-transform duration-500">
+                            <Music className="h-8 w-8 text-white/80" />
+                          </div>
+                        )}
+                        <div className="absolute inset-0 bg-black/10 group-hover:bg-black/30 transition-colors duration-300" />
+                        <div className="absolute inset-0 grid place-items-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 scale-90 group-hover:scale-100">
+                           <div className="h-12 w-12 rounded-full bg-accent/90 text-white grid place-items-center shadow-lg backdrop-blur-md">
+                             <Play className="h-6 w-6 ml-1" />
+                           </div>
+                        </div>
+                      </div>
+                      <p className="font-semibold text-[15px] truncate group-hover:text-accent transition-colors">{pl.name}</p>
+                      <p className="text-xs text-content-muted mt-0.5">{pl.items?.length || 0} tracks</p>
+                    </button>
+                  ))}
+                </div>
+              </section>
+            )}
+
             <section className="animate-slide-up">
               <div className="flex items-center gap-3 mb-6 px-1">
                 <div className="p-1.5 rounded-lg bg-accent/10 text-accent">
