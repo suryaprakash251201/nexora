@@ -63,6 +63,9 @@ func (s *Server) handleSharePublicVerify(w http.ResponseWriter, r *http.Request)
 func (s *Server) handleSharePublicRaw(w http.ResponseWriter, r *http.Request) {
 	token := chi.URLParam(r, "token")
 	password := r.URL.Query().Get("p")
+	if password == "" {
+		password = r.Header.Get("X-Share-Password")
+	}
 	sh, err := s.Shares.Access(token, password)
 	if err != nil {
 		s.writeShareError(w, r, err)
@@ -79,6 +82,9 @@ func (s *Server) handleSharePublicRaw(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleSharePublicDownload(w http.ResponseWriter, r *http.Request) {
 	token := chi.URLParam(r, "token")
 	password := r.URL.Query().Get("p")
+	if password == "" {
+		password = r.Header.Get("X-Share-Password")
+	}
 	sh, err := s.Shares.Access(token, password)
 	if err != nil {
 		s.writeShareError(w, r, err)

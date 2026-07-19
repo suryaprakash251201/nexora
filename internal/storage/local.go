@@ -9,6 +9,10 @@ import (
 	"github.com/nexora/nexora/internal/util"
 )
 
+// SystemTrashDir is the per-root directory where deleted items are moved before
+// permanent removal. It is hidden from normal file listings.
+const SystemTrashDir = ".nexora-trash"
+
 // LocalFilesystemProvider implements StorageProvider against a host directory.
 type LocalFilesystemProvider struct {
 	rootPath string
@@ -39,6 +43,10 @@ func (p *LocalFilesystemProvider) List(rel string) ([]FileInfo, error) {
 	}
 	out := make([]FileInfo, 0, len(entries))
 	for _, e := range entries {
+		// Hide the per-root trash directory so it doesn't clutter user listings.
+		if e.Name() == SystemTrashDir {
+			continue
+		}
 		fi, err := e.Info()
 		if err != nil {
 			continue

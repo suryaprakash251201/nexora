@@ -57,9 +57,41 @@ export default function SharePage({ token }: { token: string }) {
     }
   };
 
-  const pq = password ? `?p=${encodeURIComponent(password)}` : "";
-  const downloadUrl = `/api/v1/share/${encodeURIComponent(token)}/download${pq}`;
-  const rawViewUrl = `/api/v1/share/${encodeURIComponent(token)}/raw${pq}`;
+  const downloadUrl = `/api/v1/share/${encodeURIComponent(token)}/download`;
+  const rawViewUrl = `/api/v1/share/${encodeURIComponent(token)}/raw`;
+
+  const authFetch = (url: string) => fetch(url, {
+    headers: password ? { "X-Share-Password": password } : undefined,
+  });
+
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (info?.scope === "preview" && previewKind(info) === "image" && unlocked) {
+      authFetch(rawViewUrl).then((res) => {
+        if (res.ok) res.blob().then((b) => setPreviewUrl(URL.createObjectURL(b)));
+      });
+    }
+  }, [info, unlocked]);
+
+  const handleDownload = async () => {
+    const res = await authFetch(downloadUrl);
+    if (!res.ok) return;
+    const blob = await res.blob();
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = info?.name || "download";
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
+  const handlePreview = async () => {
+    const res = await authFetch(rawViewUrl);
+    if (!res.ok) return;
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    window.open(url, "_blank");
+  };
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-background relative overflow-hidden">
@@ -151,24 +183,20 @@ export default function SharePage({ token }: { token: string }) {
                 </form>
               ) : (
                 <div className="space-y-4 animate-slide-up">
-                  {info.scope === "preview" && previewKind(info) === "image" && (
+                  {info.scope === "preview" && previewKind(info) === "image" && previewUrl && (
                     <div className="bg-surface/30 rounded-xl p-2 border border-border/50 mb-6 flex justify-center">
-                      <img src={rawViewUrl} alt={info.name} className="max-h-64 rounded-lg object-contain" />
+                      <img src={previewUrl} alt={info.name} className="max-h-64 rounded-lg object-contain" />
                     </div>
                   )}
                   
-                  <a href={downloadUrl} className="block">
-                    <Button variant="primary" className="w-full h-12 text-base shadow-lg shadow-accent/20" icon={<Download className="h-5 w-5" />}>
-                      Download File
-                    </Button>
-                  </a>
+                  <Button variant="primary" className="w-full h-12 text-base shadow-lg shadow-accent/20" icon={<Download className="h-5 w-5" />} onClick={handleDownload}>
+                    Download File
+                  </Button>
                   
                   {info.scope === "preview" && (
-                    <a href={rawViewUrl} target="_blank" rel="noreferrer" className="block">
-                      <Button variant="secondary" className="w-full h-12" icon={<Eye className="h-5 w-5" />}>
-                        Open Preview
-                      </Button>
-                    </a>
+                    <Button variant="secondary" className="w-full h-12" icon={<Eye className="h-5 w-5" />} onClick={handlePreview}>
+                      Open Preview
+                    </Button>
                   )}
                   
                   {info.max_downloads > 0 && (

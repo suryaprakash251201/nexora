@@ -74,7 +74,7 @@ func (s *Server) Routes() http.Handler {
 		r.Use(s.Metrics.HTTPMiddleware())
 	}
 	r.Use(middleware.SecurityHeaders(s.Cfg))
-	r.Use(middleware.CSRF(csrfExempt))
+	r.Use(middleware.CSRF(csrfExempt, s.Cfg.SecureCookies))
 	r.Use(auth.SessionAuth(s.Sessions, s.Users))
 
 	// Health endpoints (no auth).
@@ -198,6 +198,7 @@ func (s *Server) Routes() http.Handler {
 	admin.Delete("/users/{id}/roots/{rootId}", s.handleAdminRevokeRoot)
 	admin.Get("/audit", s.handleAdminListAudit)
 	admin.Post("/search/reindex", s.handleAdminReindex)
+	admin.Get("/usage", s.handleAdminGetStorageUsage)
 	api.Mount("/admin", admin)
 
 	api.Mount("/", authed)

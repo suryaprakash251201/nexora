@@ -37,6 +37,13 @@ export function useClipboard({
     setFolderPicker({ mode: 'copy', paths });
   }, [selection]);
 
+  // Open the folder picker for an explicit set of paths (e.g. a single item
+  // from its context menu, where the bulk selection may be empty).
+  const openPickerFor = useCallback((mode: 'move' | 'copy', paths: string[]) => {
+    if (!paths.length) return;
+    setFolderPicker({ mode, paths });
+  }, []);
+
   const applyFolderPicker = useCallback(async (destPath: string) => {
     const fp = folderPicker;
     setFolderPicker(null);
@@ -65,6 +72,7 @@ export function useClipboard({
     moveSelectionTo,
     openMovePicker,
     openCopyPicker,
+    openPickerFor,
     applyFolderPicker,
   };
 }

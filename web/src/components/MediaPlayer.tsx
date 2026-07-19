@@ -19,11 +19,10 @@ import {
   FastForward,
   Plus,
   MonitorPlay,
-  Settings2,
   Download,
 } from "lucide-react";
 import type { FileItem } from "../api/types";
-import { thumbUrl, needsTranscode, transcodeUrl, serverSupportsTranscode } from "../lib/preview";
+import { thumbUrl, needsTranscode, transcodeUrl, serverSupportsTranscode, getAudioQuality } from "../lib/preview";
 import { usePlayer } from "../store/player";
 import { AddToPlaylistMenu } from "./PlaylistAdder";
 import { Button } from "./ui/Button";
@@ -134,6 +133,7 @@ function AudioPlayer({
   const [fs, setFs] = useState(startFullscreen || false);
   const [bgFailed, setBgFailed] = useState(false);
   const [showRates, setShowRates] = useState(false);
+  const fsWrapRef = useRef<HTMLDivElement>(null);
 
   const [showControls, setShowControls] = useState(true);
   const controlsTimeout = useRef<number>();
@@ -144,17 +144,20 @@ function AudioPlayer({
     if (!a) return;
     const onTime = () => setLCur(a.currentTime);
     const onMeta = () => setLDur(a.duration);
+    const onPlay = () => setLPlaying(true);
+    const onPause = () => setLPlaying(false);
+    const onEnded = () => step(1);
     a.addEventListener("timeupdate", onTime);
     a.addEventListener("loadedmetadata", onMeta);
-    a.addEventListener("play", () => setLPlaying(true));
-    a.addEventListener("pause", () => setLPlaying(false));
-    a.addEventListener("ended", () => step(1));
+    a.addEventListener("play", onPlay);
+    a.addEventListener("pause", onPause);
+    a.addEventListener("ended", onEnded);
     return () => {
       a.removeEventListener("timeupdate", onTime);
       a.removeEventListener("loadedmetadata", onMeta);
-      a.removeEventListener("play", () => setLPlaying(true));
-      a.removeEventListener("pause", () => setLPlaying(false));
-      a.removeEventListener("ended", () => step(1));
+      a.removeEventListener("play", onPlay);
+      a.removeEventListener("pause", onPause);
+      a.removeEventListener("ended", onEnded);
     };
   }, [url, controlled]);
 
@@ -212,10 +215,40 @@ function AudioPlayer({
   const rate = controlled ? rateV : lRate;
   const pct = duration > 0 ? (curTime / duration) * 100 : 0;
 
+  const openFs = () => {
+    setFs(true);
+    setShowControls(true);
+    // Request real browser fullscreen inside the user gesture so it isn't blocked.
+    requestAnimationFrame(() => fsWrapRef.current?.requestFullscreen?.().catch(() => {}));
+  };
+
   const closeFs = () => {
     setFs(false);
     onClose?.();
   };
+
+  // When the in-app overlay closes, make sure we also leave real fullscreen.
+  useEffect(() => {
+    if (!fs && document.fullscreenElement && document.fullscreenElement === fsWrapRef.current) {
+      document.exitFullscreen?.().catch(() => {});
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fs]);
+
+  const fsBtnToggle = useRef(false);
+  useEffect(() => {
+    const onFsChange = () => {
+      // If the user presses Esc to exit the browser fullscreen, also close the
+      // in-app overlay. (Skip when the exit came from our own toggle button.)
+      if (!document.fullscreenElement && fs && !fsBtnToggle.current) {
+        closeFs();
+      }
+      fsBtnToggle.current = false;
+    };
+    document.addEventListener("fullscreenchange", onFsChange);
+    return () => document.removeEventListener("fullscreenchange", onFsChange);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fs]);
 
   useEffect(() => {
     if (!fs) return;
@@ -253,6 +286,13 @@ function AudioPlayer({
           if (controlled) player.toggleMute();
           else setLMuted(!muted);
           break;
+        case "f":
+        case "F":
+          e.preventDefault();
+          fsBtnToggle.current = true;
+          if (document.fullscreenElement) document.exitFullscreen?.();
+          else fsWrapRef.current?.requestFullscreen?.();
+          break;
       }
     };
     window.addEventListener("keydown", onKey);
@@ -280,27 +320,33 @@ function AudioPlayer({
   }, [playing, fs]);
 
   const fullscreen = (
-    <div 
+    <div
+      ref={fsWrapRef}
       className={`fixed inset-0 z-[100] flex flex-col animate-fade-in bg-black/95 select-none ${showControls ? "" : "cursor-none"}`}
       onMouseMove={handleMouseMove}
       onClick={handleMouseMove}
     >
-      {/* Blurred cover-art backdrop (Apple-style) */}
+      {/* Blurred cover-art backdrop (Apple-style glass effect) */}
       {cur && !bgFailed && (
-        <img
-          src={thumbUrl(cur)}
-          alt=""
-          key={cur.path}
-          className="absolute inset-0 h-full w-full object-cover blur-3xl scale-125 opacity-40"
-          onError={() => setBgFailed(true)}
-        />
+        <div className="absolute inset-0 overflow-hidden">
+          <img
+            src={thumbUrl(cur)}
+            alt=""
+            key={cur.path}
+            className="absolute inset-0 h-full w-full object-cover blur-3xl scale-125 opacity-50"
+            onError={() => setBgFailed(true)}
+          />
+          {/* Frosted glass layer on top of the blurred art */}
+          <div className="absolute inset-0 glass backdrop-blur-2xl bg-surface/40" />
+          <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-black/60 to-black/90" />
+        </div>
       )}
-      <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-black/70 to-black/95 backdrop-blur-[100px]" />
+      <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-black/50 to-black/90" />
 
       {/* Top bar */}
       <div className={`absolute top-0 inset-x-0 z-30 flex items-center justify-between p-5 sm:p-7 transition-opacity duration-500 ${showControls ? "opacity-100" : "opacity-0 pointer-events-none"}`}>
         <button
-          onClick={closeFs}
+          onClick={(e) => { e.stopPropagation(); closeFs(); }}
           className="p-3 rounded-full glass-hover text-white transition-transform hover:scale-110"
           title="Close (Esc)"
         >
@@ -309,14 +355,21 @@ function AudioPlayer({
         <span className="text-white/55 text-sm font-medium tracking-wide uppercase">
           {multi ? `Track ${qIndex + 1} of ${queue.length}` : "Now Playing"}
         </span>
-        <div className="w-[44px]" />
+        <button
+          onClick={(e) => { e.stopPropagation(); fsBtnToggle.current = true; document.fullscreenElement ? document.exitFullscreen?.() : fsWrapRef.current?.requestFullscreen?.(); }}
+          className="p-3 rounded-full glass-hover text-white transition-transform hover:scale-110"
+          title="Toggle screen fullscreen (F)"
+        >
+          {document.fullscreenElement ? <Minimize2 className="h-6 w-6" /> : <Maximize2 className="h-6 w-6" />}
+        </button>
       </div>
 
-      <div className="relative z-10 flex-1 flex flex-col items-center justify-center w-full max-w-2xl mx-auto px-6 h-full pb-8">
+      <div className="relative z-10 flex-1 flex flex-col items-center justify-center w-full max-w-2xl mx-auto px-6 h-full pb-8" style={{ paddingBottom: "max(2rem, env(safe-area-inset-bottom))" }}>
         {/* Album Art — spinning vinyl when playing */}
         <div className="relative mb-10">
           <div
-            className={`audio-disc ${playing ? "" : "paused"} relative w-[58vw] max-w-[300px] sm:w-[340px] sm:max-w-[340px] aspect-square rounded-full overflow-hidden shadow-2xl shadow-black/60 ring-1 ring-white/10 transition-transform duration-500 ${playing ? "scale-100" : "scale-95"}`}
+            onClick={(e) => { e.stopPropagation(); toggle(); }}
+            className={`audio-disc ${playing ? "" : "paused"} relative w-[58vw] max-w-[300px] sm:w-[340px] sm:max-w-[340px] aspect-square rounded-full overflow-hidden shadow-2xl shadow-black/60 ring-1 ring-white/10 transition-transform duration-500 ${playing ? "scale-100" : "scale-95"} cursor-pointer`}
           >
             {cur ? (
               <CoverArt item={cur} className="rounded-full" />
@@ -332,32 +385,38 @@ function AudioPlayer({
 
         {/* Track Info */}
         <div className="w-full text-center mb-7">
-          <h2 className="text-white font-bold text-2xl sm:text-3xl truncate drop-shadow-md">{cur?.name}</h2>
+          <h2 className="text-white font-bold text-2xl sm:text-3xl truncate drop-shadow-md">{cur?.name?.replace(/\.[^.]+$/, '')}</h2>
+          {cur && getAudioQuality(cur).label && (
+            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${getAudioQuality(cur).color} bg-white/10 mt-2`}>
+              {getAudioQuality(cur).label}
+            </span>
+          )}
           <p className="text-white/55 text-base truncate font-medium mt-1">
             {cur ? (cur.extension ? cur.extension.replace(/^\./, "").toUpperCase() + " Audio" : "Audio") : ""}
           </p>
         </div>
 
-        {/* Progress Bar */}
-        <div className="w-full space-y-2">
-          <div className="relative h-1.5 rounded-full bg-white/20 overflow-hidden cursor-pointer group">
-            <div className="absolute inset-y-0 left-0 bg-white transition-all duration-100" style={{ width: `${pct}%` }} />
-            <input
-              type="range"
-              min={0}
-              max={duration || 0}
-              step={0.1}
-              value={curTime}
-              onChange={(e) => seek(Number(e.target.value))}
-              className="absolute inset-0 w-full opacity-0 cursor-pointer"
-              aria-label="Seek"
-            />
+        <div className={`w-full space-y-2 transition-opacity duration-500 ${showControls ? "opacity-100" : "opacity-0 pointer-events-none"}`} onClick={(e) => e.stopPropagation()}>
+          {/* Progress Bar */}
+          <div className="w-full space-y-2">
+            <div className="relative h-1.5 rounded-full bg-white/20 overflow-hidden cursor-pointer group">
+              <div className="absolute inset-y-0 left-0 bg-white transition-all duration-100" style={{ width: `${pct}%` }} />
+              <input
+                type="range"
+                min={0}
+                max={duration || 0}
+                step={0.1}
+                value={curTime}
+                onChange={(e) => seek(Number(e.target.value))}
+                className="absolute inset-0 w-full opacity-0 cursor-pointer"
+                aria-label="Seek"
+              />
+            </div>
+            <div className="flex justify-between text-xs font-medium text-white/55 font-mono tabular-nums">
+              <span>{fmt(curTime)}</span>
+              <span>{fmt(duration)}</span>
+            </div>
           </div>
-          <div className={`flex justify-between text-xs font-medium text-white/55 font-mono tabular-nums transition-opacity duration-500 ${showControls ? "opacity-100" : "opacity-0"}`}>
-            <span>{fmt(curTime)}</span>
-            <span>{fmt(duration)}</span>
-          </div>
-        </div>
 
         {/* Primary Controls */}
         <div className={`flex items-center justify-center gap-5 sm:gap-7 w-full mt-9 transition-opacity duration-500 ${showControls ? "opacity-100" : "opacity-0 pointer-events-none"}`}>
@@ -458,6 +517,7 @@ function AudioPlayer({
               <Plus className="h-5 w-5" />
             </AddToPlaylistMenu>
           )}
+          </div>
         </div>
       </div>
     </div>
@@ -465,7 +525,7 @@ function AudioPlayer({
 
   return (
     <div className="w-full max-w-lg mx-auto p-4 flex flex-col items-center">
-      <div className="relative aspect-square w-full max-w-[280px] sm:max-w-[320px] rounded-3xl overflow-hidden shadow-2xl ring-1 ring-border/50 group cursor-pointer" onClick={() => setFs(true)}>
+      <div className="relative aspect-square w-full max-w-[280px] sm:max-w-[320px] rounded-3xl overflow-hidden shadow-2xl ring-1 ring-border/50 group cursor-pointer" onClick={openFs}>
         {cur && <CoverArt item={cur} />}
         <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors duration-300 grid place-items-center">
           <Maximize2 className="h-10 w-10 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-300 drop-shadow-lg" />
@@ -474,7 +534,12 @@ function AudioPlayer({
 
       <div className="w-full mt-8 space-y-6 px-2">
         <div className="text-center">
-          <h3 className="font-bold text-xl truncate">{cur?.name}</h3>
+          <h3 className="font-bold text-xl truncate">{cur?.name?.replace(/\.[^.]+$/, '')}</h3>
+          {cur && getAudioQuality(cur).label && (
+            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${getAudioQuality(cur).color} bg-white/10 mt-2`}>
+              {getAudioQuality(cur).label}
+            </span>
+          )}
           <p className="text-content-muted text-sm mt-1">{multi ? `Track ${qIndex + 1} of ${queue.length}` : "Audio playback"}</p>
         </div>
         

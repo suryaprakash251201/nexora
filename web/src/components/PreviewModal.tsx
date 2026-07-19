@@ -100,7 +100,7 @@ export default function PreviewModal({
   const editable = !current.is_dir && isEditable(current);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 md:p-6 bg-black/60 backdrop-blur-sm animate-fade-in" onMouseDown={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 md:p-6 bg-black/60 backdrop-blur-sm animate-fade-in" onMouseDown={onClose} role="dialog" aria-modal="true" aria-label="File preview">
       <div 
         className={`w-full flex flex-col glass-strong bg-background/95 shadow-2xl transition-all duration-300 ease-out overflow-hidden
           ${isFullscreen ? "h-full max-w-none rounded-none" : "h-[85vh] max-w-6xl rounded-2xl animate-scale-in"}`} 

@@ -1,4 +1,4 @@
-import { useRef, useState, useCallback } from "react";
+import { useRef, useState, useCallback, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { get, post, del } from "../api/client";
 import type { FileItem, Root, TrashItem, User, FavoriteItem, RecentItem, SearchResult, HomeData } from "../api/types";
@@ -6,7 +6,7 @@ import { useUI } from "../store";
 import { usePlayer } from "../store/player";
 import { usePlaylists } from "../store/playlists";
 import Sidebar, { SidebarView } from "./Sidebar";
-import TopBar from "./TopBar";
+import CommandBar from "./CommandBar";
 import FileBrowser from "./FileBrowser";
 import DetailsDrawer from "./DetailsDrawer";
 import ContextMenu, { MenuItem } from "./ContextMenu";
@@ -21,17 +21,19 @@ import AdminPanel from "./AdminPanel";
 import Toaster from "./Toaster";
 import PlayerBar from "./PlayerBar";
 import { MobileNav } from "./layout/MobileNav";
-import { AddToPlaylistMenu, PlaylistPickerPopover } from "./PlaylistAdder";
+import { PlaylistPickerPopover } from "./PlaylistAdder";
 import TransfersPanel from "./TransfersPanel";
 import { Modal } from "./Modal";
 import RootModal from "./RootModal";
 import FolderPickerModal from "./FolderPickerModal";
 import ProfileMenu from "./ProfileMenu";
+import CommandPalette from "./CommandPalette";
 import { formatDate } from "../lib/format";
 import { previewKind, isEditable } from "../lib/preview";
 import {
-  Download, Trash2, Pencil, Scissors, Copy, Eye, FolderOpen, RotateCcw,
-  Star, Share2, Archive, FolderInput, FileEdit, Play, ListMusic, HardDrive, Upload,
+  Download, Trash2, Pencil, Copy, Eye, FolderOpen, RotateCcw,
+  Star, Share2, Archive, FolderInput, FileEdit, ListMusic, HardDrive, Upload,
+  Move, Info,
 } from "lucide-react";
 
 // Hooks
@@ -47,10 +49,12 @@ export default function Workspace({ user }: { user: User }) {
   const toggleSelect = useUI((s) => s.toggleSelect);
   const selectMode = useUI((s) => s.selectMode);
   const clearSelection = useUI((s) => s.clearSelection);
+  const toggleSelectMode = useUI((s) => s.toggleSelectMode);
   const openDrawer = useUI((s) => s.openDrawer);
   const drawerPath = useUI((s) => s.drawerPath);
   const pushToast = useUI((s) => s.pushToast);
   const viewMode = useUI((s) => s.viewMode);
+  const setViewMode = useUI((s) => s.setViewMode);
 
   const isAdmin = user.role === "admin";
   const [view, setView] = useState<SidebarView>("home");
@@ -58,6 +62,7 @@ export default function Workspace({ user }: { user: User }) {
   const [rootId, setRootId] = useState<string | null>(null);
   const [path, setPath] = useState("");
   const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState("all");
   const [sort, setSort] = useState("name");
   const [order, setOrder] = useState("asc");
   const [preview, setPreview] = useState<FileItem | null>(null);
@@ -67,8 +72,9 @@ export default function Workspace({ user }: { user: User }) {
   const [ctxPlaylist, setCtxPlaylist] = useState<{ x: number; y: number; items: FileItem[] } | null>(null);
   const [menu, setMenu] = useState<{ kind: string; item?: FileItem } | null>(null);
   const [rootModal, setRootModal] = useState(false);
-  const [playlistModal, setPlaylistModal] = useState(false);
+const [playlistModal, setPlaylistModal] = useState(false);
   const [playlistName, setPlaylistName] = useState("");
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
 
   const roots = useQuery({ queryKey: ["roots"], queryFn: () => get<{ roots: Root[] }>("/roots") });
@@ -87,8 +93,20 @@ export default function Workspace({ user }: { user: User }) {
   const favSet = useQuery({ queryKey: ["fav-set"], queryFn: () => get<{ items: FavoriteItem[] }>("/favorites") });
 
   const items = files.data?.items || [];
-  const filtered = search ? items.filter((i) => i.name.toLowerCase().includes(search.toLowerCase())) : items;
-  const audioQueue = items.filter((i) => i.mime.startsWith("audio/"));
+  const filtered = useMemo(() => {
+    let f = items;
+    if (filter !== "all") {
+      if (filter === "folders") f = f.filter((i) => i.is_dir);
+      else if (filter === "documents") f = f.filter((i) => !i.is_dir && (i.mime.startsWith("text/") || ["pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "odt", "ods", "odp", "pages", "numbers", "key", "md", "txt", "rtf"].includes(i.extension.toLowerCase())));
+      else if (filter === "images") f = f.filter((i) => i.mime.startsWith("image/"));
+      else if (filter === "videos") f = f.filter((i) => i.mime.startsWith("video/"));
+      else if (filter === "audio") f = f.filter((i) => i.mime.startsWith("audio/"));
+      else if (filter === "archives") f = f.filter((i) => ["zip", "tar", "gz", "7z", "rar", "iso"].includes(i.extension.toLowerCase()));
+    }
+    if (search) f = f.filter((i) => i.name.toLowerCase().includes(search.toLowerCase()));
+    return f;
+  }, [items, filter, search]);
+  const audioQueue = useMemo(() => items.filter((i) => i.mime.startsWith("audio/")), [items]);
 
   const refresh = useCallback(() => {
     qc.invalidateQueries({ queryKey: ["files", rootId, path] });
@@ -101,14 +119,15 @@ export default function Workspace({ user }: { user: User }) {
   // Use custom hooks
   const { uploadFiles, downloadItem } = useTransfers(rootId, path, refresh);
   const { doDelete, bulkDelete, archivePaths, toggleFavorite } = useFileOperations({ rootId, refresh, qc, selection, clearSelection, favSet });
-  const { folderPicker, setFolderPicker, moveSelectionTo, openMovePicker, openCopyPicker, applyFolderPicker } = useClipboard({ rootId, selection, clearSelection, refresh, canWrite });
+  const { folderPicker, setFolderPicker, moveSelectionTo, openPickerFor, applyFolderPicker } = useClipboard({ rootId, selection, clearSelection, refresh, canWrite });
   const { dragProps, dragActive, dropPicker, setDropPicker, pendingDrop } = useDragAndDrop({ rootId, canWrite, uploadFiles });
   
-  const isModalOpen = !!(preview || editItem || shareItem || menu || rootModal || folderPicker || dropPicker || playlistModal || ctx || ctxPlaylist);
+  const isModalOpen = useMemo(() => !!(preview || editItem || shareItem || menu || rootModal || folderPicker || dropPicker || playlistModal || ctx || ctxPlaylist), [preview, editItem, shareItem, menu, rootModal, folderPicker, dropPicker, playlistModal, ctx, ctxPlaylist]);
   
   useKeyboardShortcuts({
     canWrite, view, setView, selection, items, bulkDelete, setMenu,
-    fileInputRef: fileInput, isModalOpen
+    fileInputRef: fileInput, isModalOpen,
+    setCommandPaletteOpen
   });
 
   const openItem = (item: FileItem) => {
@@ -127,10 +146,6 @@ export default function Workspace({ user }: { user: User }) {
   };
 
   const selectedItems = items.filter((i) => selection.has(i.path));
-  const playSelected = () => {
-    const audio = (selectedItems.length ? selectedItems : items).filter((i) => i.mime.startsWith("audio/"));
-    if (audio.length) usePlayer.getState().play(audio, 0);
-  };
   
   const savePlaylist = () => {
     const audio = (selectedItems.length ? selectedItems : items).filter((i) => i.mime.startsWith("audio/"));
@@ -141,12 +156,50 @@ export default function Workspace({ user }: { user: User }) {
     pushToast("success", "Playlist created");
   };
 
+  // Selection actions for CommandBar
+  const handleSelectionAction = useCallback((action: "move" | "copy" | "delete" | "download" | "share" | "archive" | "favorite") => {
+    if (!selection.size) return;
+    const paths = Array.from(selection);
+    
+    switch (action) {
+      case "move":
+        openPickerFor("move", paths);
+        break;
+      case "copy":
+        openPickerFor("copy", paths);
+        break;
+      case "delete":
+        bulkDelete();
+        break;
+      case "download":
+        paths.forEach(p => { const it = items.find(i => i.path === p); if (it) downloadItem(it); });
+        break;
+      case "share":
+        // For single item share, open share dialog
+        if (paths.length === 1) {
+          const it = items.find(i => i.path === paths[0]);
+          if (it) setShareItem(it);
+        }
+        break;
+      case "archive":
+        archivePaths(paths, "selection");
+        break;
+      case "favorite":
+        paths.forEach(p => { const it = items.find(i => i.path === p); if (it) toggleFavorite(it); });
+        break;
+    }
+  }, [selection, items, openPickerFor, bulkDelete, downloadItem, setShareItem, archivePaths, toggleFavorite]);
+
+  const handleExitSelection = useCallback(() => {
+    clearSelection();
+  }, [clearSelection]);
+
   const buildMenu = (item: FileItem, x: number, y: number): MenuItem[] => {
     const menuItems: MenuItem[] = [
       { label: item.is_dir ? "Open" : "Preview", icon: item.is_dir ? <FolderOpen className="h-4 w-4" /> : <Eye className="h-4 w-4" />, onClick: () => openItem(item) },
       { label: "Download", icon: <Download className="h-4 w-4" />, onClick: () => downloadItem(item) },
       { label: "Share", icon: <Share2 className="h-4 w-4" />, onClick: () => setShareItem(item) },
-       { label: "Add to favorites", icon: <Star className="h-4 w-4" />, onClick: () => toggleFavorite(item) },
+      { label: "Add to favorites", icon: <Star className="h-4 w-4" />, onClick: () => toggleFavorite(item) },
     ];
     if (!item.is_dir && item.mime.startsWith("audio/")) {
       const targets = selectedItems.length ? selectedItems : [item];
@@ -170,11 +223,12 @@ export default function Workspace({ user }: { user: User }) {
       }
       menuItems.push(
         { label: "Rename", icon: <Pencil className="h-4 w-4" />, onClick: () => setMenu({ kind: "rename", item }) },
-        { label: "Move", icon: <Scissors className="h-4 w-4" />, onClick: () => setMenu({ kind: "move", item }) },
-        { label: "Copy", icon: <Copy className="h-4 w-4" />, onClick: () => setMenu({ kind: "copy", item }) },
+        { label: "Move", icon: <Move className="h-4 w-4" />, onClick: () => openPickerFor("move", [item.path]) },
+        { label: "Copy", icon: <Copy className="h-4 w-4" />, onClick: () => openPickerFor("copy", [item.path]) },
         { label: "Delete", icon: <Trash2 className="h-4 w-4" />, danger: true, onClick: () => doDelete(item.path) },
       );
     }
+    menuItems.push({ label: "Properties", icon: <Info className="h-4 w-4" />, onClick: () => openDrawer(item.path) });
     return menuItems;
   };
 
@@ -206,7 +260,7 @@ export default function Workspace({ user }: { user: User }) {
     }
   };
 
-  const showTopBar = view === "files" && activeRoot;
+  const showCommandBar = view === "files" && activeRoot;
 
   return (
     <div className="h-screen flex overflow-hidden" {...dragProps}>
@@ -224,22 +278,27 @@ export default function Workspace({ user }: { user: User }) {
       />
 
       <div className="flex-1 flex flex-col min-w-0">
-        {showTopBar && (
-          <TopBar
+        {showCommandBar && (
+          <CommandBar
             rootName={activeRoot!.name}
             path={path}
             onNavigate={(p) => { setPath(p); clearSelection(); }}
             search={search}
             setSearch={setSearch}
+            filter={filter}
+            setFilter={setFilter}
             sort={sort}
             setSort={setSort}
             order={order}
             setOrder={setOrder}
             canWrite={canWrite}
+            selectionCount={selection.size}
             onNewFolder={() => setMenu({ kind: "newFolder" })}
             onNewFile={() => setMenu({ kind: "newFile" })}
             onUpload={() => fileInput.current?.click()}
             onRefresh={refresh}
+            onSelectionAction={handleSelectionAction}
+            onExitSelection={handleExitSelection}
             user={user}
             isAdmin={isAdmin}
             onLogout={logout}
@@ -255,7 +314,7 @@ export default function Workspace({ user }: { user: User }) {
 
         <input ref={fileInput} type="file" multiple className="hidden" onChange={(e) => { uploadFiles(e.target.files); e.target.value = ""; }} />
 
-        <div className="flex-1 overflow-auto flex flex-col pb-20 md:pb-0">
+        <div className="flex-1 overflow-auto flex flex-col">
           {view === "files" && (
             <FileBrowser
               items={filtered}
@@ -265,14 +324,15 @@ export default function Workspace({ user }: { user: User }) {
               selectMode={selectMode}
               canWrite={canWrite}
               onOpen={openItem}
-              onSelect={(it) => { toggleSelect(it.path); openDrawer(it.path); }}
+               onSelect={(it) => { toggleSelect(it.path); }}
+
               onContextMenu={onContextMenu}
               onDropItem={(folder) => moveSelectionTo()}
             />
           )}
-          {view === "trash" && <TrashView items={trash.data?.items || []} loading={trash.isLoading} onRestore={async (id) => { await post("/trash/restore", { id }); refresh(); }} onDelete={async (id) => { await del("/trash", { id }); refresh(); }} />}
-          {view === "favorites" && <SimpleList loading={favorites.isLoading} empty="No favorites yet. Star files to find them here." rows={(favorites.data?.items || []).map((f) => ({ id: f.root_id + f.path, title: f.name, sub: `${f.root_name} / ${f.path}`, onClick: () => navigateTo(f.root_id, f.path, false, f.name) }))} />}
-          {view === "recents" && <SimpleList loading={recents.isLoading} empty="No recent files yet." rows={(recents.data?.items || []).map((f) => ({ id: f.root_id + f.path, title: f.name, sub: `${f.root_name} / ${f.path}`, meta: formatDate(f.accessed_at), onClick: () => navigateTo(f.root_id, f.path, false, f.name) }))} />}
+          {view === "trash" && <TrashView items={trash.data?.items || []} loading={trash.isLoading} onRestore={async (id) => { await post("/trash/restore", { id }); refresh(); }} onDelete={async (id) => { await del("/trash", { id }); refresh(); }} selection={selection} selectMode={selectMode} onSelect={(id) => toggleSelect(id)} />}
+          {view === "favorites" && <SimpleList loading={favorites.isLoading} empty="No favorites yet. Star files to find them here." selection={selection} selectMode={selectMode} onSelect={(id) => toggleSelect(id)} rows={(favorites.data?.items || []).map((f) => ({ id: f.root_id + f.path, title: f.name, sub: `${f.root_name} / ${f.path}`, onClick: () => navigateTo(f.root_id, f.path, false, f.name) }))} />}
+          {view === "recents" && <SimpleList loading={recents.isLoading} empty="No recent files yet." selection={selection} selectMode={selectMode} onSelect={(id) => toggleSelect(id)} rows={(recents.data?.items || []).map((f) => ({ id: f.root_id + f.path, title: f.name, sub: `${f.root_name} / ${f.path}`, meta: formatDate(f.accessed_at), onClick: () => navigateTo(f.root_id, f.path, false, f.name) }))} />}
           {view === "home" && (
             <div className="h-14 glass-bar flex items-center justify-between px-4">
               <span className="font-semibold">Home</span>
@@ -301,28 +361,12 @@ export default function Workspace({ user }: { user: User }) {
               initialQuery={search}
               roots={roots.data?.roots || []}
               onOpen={(r: SearchResult) => navigateTo(r.root_id, r.path, r.is_dir, r.name)}
+              selection={selection}
+              selectMode={selectMode}
+              onSelect={(id) => toggleSelect(id)}
             />
           )}
         </div>
-
-        {selection.size > 0 && view === "files" && (
-          <div className="glass-bottom px-4 py-2 flex items-center gap-3 text-sm flex-wrap">
-            <span className="text-content-muted">{selection.size} selected</span>
-            <button onClick={playSelected} className="flex items-center gap-1 hover:underline"><Play className="h-4 w-4" /> Play</button>
-            <AddToPlaylistMenu items={selectedItems.length ? selectedItems : items} className="flex items-center gap-1 hover:underline">
-              <ListMusic className="h-4 w-4" /> Add to playlist
-            </AddToPlaylistMenu>
-            {canWrite && (
-              <>
-                <button onClick={openMovePicker} className="flex items-center gap-1 hover:underline"><FolderInput className="h-4 w-4" /> Move</button>
-                <button onClick={openCopyPicker} className="flex items-center gap-1 hover:underline"><Copy className="h-4 w-4" /> Copy</button>
-                <button onClick={() => archivePaths(Array.from(selection), "selection")} className="flex items-center gap-1 hover:underline"><Archive className="h-4 w-4" /> Archive</button>
-                <button onClick={bulkDelete} className="flex items-center gap-1 text-red-500 hover:underline"><Trash2 className="h-4 w-4" /> Delete</button>
-              </>
-            )}
-            <button onClick={clearSelection} className="text-content-muted hover:underline">Clear</button>
-          </div>
-        )}
 
         <PlayerBar />
       </div>
@@ -330,7 +374,6 @@ export default function Workspace({ user }: { user: User }) {
       <MobileNav 
         view={view} 
         onSelectView={(v) => { setView(v); clearSelection(); }} 
-        onMoreClick={() => setSidebarCollapsed(false)} 
       />
       <TransfersPanel />
 
@@ -346,8 +389,8 @@ export default function Workspace({ user }: { user: User }) {
           onPreview={() => { const it = items.find((i) => i.path === drawerPath); if (it) setPreview(it); }}
           onRename={() => { const it = items.find((i) => i.path === drawerPath); if (it) setMenu({ kind: "rename", item: it }); }}
           onDelete={() => { const it = items.find((i) => i.path === drawerPath); if (it) doDelete(it.path); }}
-          onMove={() => { const it = items.find((i) => i.path === drawerPath); if (it) setMenu({ kind: "move", item: it }); }}
-          onCopy={() => { const it = items.find((i) => i.path === drawerPath); if (it) setMenu({ kind: "copy", item: it }); }}
+          onMove={() => { const it = items.find((i) => i.path === drawerPath); if (it) openPickerFor("move", [it.path]); }}
+          onCopy={() => { const it = items.find((i) => i.path === drawerPath); if (it) openPickerFor("copy", [it.path]); }}
           onShare={() => { const it = items.find((i) => i.path === drawerPath); if (it) setShareItem(it); }}
           onFavorite={() => { const it = items.find((i) => i.path === drawerPath); if (it) toggleFavorite(it); }}
           onEdit={() => { const it = items.find((i) => i.path === drawerPath); if (it) setEditItem(it); }}
@@ -422,24 +465,75 @@ export default function Workspace({ user }: { user: User }) {
         </Modal>
       )}
       <Toaster />
+      <CommandPalette
+        isOpen={commandPaletteOpen}
+        onClose={() => setCommandPaletteOpen(false)}
+        user={user}
+        isAdmin={isAdmin}
+        view={view}
+        setView={setView}
+        rootId={rootId}
+        path={path}
+        canWrite={canWrite}
+        selection={selection}
+        items={items}
+        activeRoot={activeRoot}
+        onNewFolder={() => setMenu({ kind: "newFolder" })}
+        onNewFile={() => setMenu({ kind: "newFile" })}
+        onUpload={() => fileInput.current?.click()}
+        onRefresh={refresh}
+        onLogout={logout}
+        onAdmin={() => setView("admin")}
+        clearSelection={clearSelection}
+        toggleSelectMode={toggleSelectMode}
+        selectMode={selectMode}
+        viewMode={viewMode}
+        setViewMode={setViewMode}
+        sort={sort}
+        setSort={setSort}
+        order={order}
+        setOrder={setOrder}
+      />
     </div>
   );
 }
 
-function SimpleList({ loading, empty, rows }: { loading: boolean; empty: string; rows: { id: string; title: string; sub: string; meta?: string; onClick: () => void }[] }) {
+function SimpleList({ loading, empty, rows, selection, selectMode, onSelect }: {
+  loading: boolean;
+  empty: string;
+  rows: { id: string; title: string; sub: string; meta?: string; onClick: () => void }[];
+  selection?: Set<string>;
+  selectMode?: boolean;
+  onSelect?: (id: string) => void;
+}) {
   if (loading) return <div className="p-8 text-content-muted">Loading…</div>;
   if (!rows.length) return <div className="p-10 text-center text-content-muted">{empty}</div>;
   return (
     <div className="p-2">
-      {rows.map((r) => (
-        <button key={r.id} onClick={r.onClick} className="w-full grid grid-cols-[1fr_auto] gap-2 px-3 py-2 rounded-lg items-center glass-hover text-left">
-          <div className="min-w-0">
-            <p className="truncate font-medium">{r.title}</p>
-            <p className="text-xs text-content-muted truncate">{r.sub}</p>
+      {rows.map((r) => {
+        const selected = selection?.has(r.id) ?? false;
+        return (
+          <div key={r.id} className={`relative flex items-center gap-2 rounded-lg transition-colors ${selected ? "bg-accent/10 ring-1 ring-accent/30" : "hover:bg-surface/50"}`}>
+            {(selectMode || selection?.size) && onSelect && (
+              <label className="pl-3 py-2 flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={selected}
+                  onChange={() => onSelect(r.id)}
+                  className={`w-4 h-4 rounded border-2 border-border/80 bg-surface/80 text-accent focus:ring-accent cursor-pointer transition-all ${selected ? "opacity-100" : "opacity-60 hover:opacity-100"}`}
+                />
+              </label>
+            )}
+            <button onClick={r.onClick} className={`flex-1 grid grid-cols-[1fr_auto] gap-2 py-2 pr-3 text-left ${selectMode || selection?.size ? "" : "pl-3"}`}>
+              <div className="min-w-0">
+                <p className="truncate font-medium">{r.title}</p>
+                <p className="text-xs text-content-muted truncate">{r.sub}</p>
+              </div>
+              {r.meta && <span className="text-xs text-content-muted whitespace-nowrap">{r.meta}</span>}
+            </button>
           </div>
-          {r.meta && <span className="text-xs text-content-muted whitespace-nowrap">{r.meta}</span>}
-        </button>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -500,23 +594,47 @@ function DropRootPicker({ roots, pending, onClose, onConfirm }: {
   );
 }
 
-function TrashView({ items, loading, onRestore, onDelete }: {
+function TrashView({ items, loading, onRestore, onDelete, selection, selectMode, onSelect }: {
   items: TrashItem[]; loading: boolean; onRestore: (id: string) => void; onDelete: (id: string) => void;
+  selection?: Set<string>; selectMode?: boolean; onSelect?: (id: string) => void;
 }) {
   if (loading) return <div className="p-8 text-content-muted">Loading…</div>;
   if (!items.length) return <div className="p-10 text-center text-content-muted">Trash is empty.</div>;
+  const selectedCount = selection?.size ?? 0;
   return (
-    <div className="p-2">
-      {items.map((t) => (
-           <div key={t.id} className="grid grid-cols-[1fr_auto_auto] gap-2 px-3 py-2 rounded-lg items-center glass-hover">
-           <div className="min-w-0">
-             <p className="truncate font-medium">{t.name}</p>
-             <p className="text-xs text-content-muted truncate">{t.root_name} · {t.original_path}</p>
-           </div>
-           <button onClick={() => onRestore(t.id)} className="flex items-center gap-1 px-2 py-1 text-sm rounded-lg glass-hover border"><RotateCcw className="h-4 w-4" /> Restore</button>
-          <button onClick={() => onDelete(t.id)} className="flex items-center gap-1 px-2 py-1 text-sm rounded-lg text-red-500 hover:bg-red-500/10"><Trash2 className="h-4 w-4" /> Delete</button>
+    <div>
+      {selectedCount > 0 && (
+        <div className="sticky top-0 z-10 flex items-center gap-3 px-4 py-2 glass-bar border-b border-border/50">
+          <span className="text-sm font-medium">{selectedCount} selected</span>
+          <div className="flex gap-2 ml-auto">
+            <button onClick={() => { items.filter((t) => selection?.has(t.id)).forEach((t) => onRestore(t.id)); }} className="flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg glass-hover border"><RotateCcw className="h-4 w-4" /> Restore</button>
+            <button onClick={() => { items.filter((t) => selection?.has(t.id)).forEach((t) => onDelete(t.id)); }} className="flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg text-red-500 hover:bg-red-500/10"><Trash2 className="h-4 w-4" /> Delete</button>
+          </div>
         </div>
-      ))}
+      )}
+      <div className="p-2">
+        {items.map((t) => {
+          const selected = selection?.has(t.id) ?? false;
+          return (
+            <div key={t.id} className={`flex items-center gap-2 rounded-lg transition-colors ${selected ? "bg-accent/10 ring-1 ring-accent/30" : "hover:bg-surface/50"}`}>
+              {onSelect && (
+                <label className="pl-3 py-2 flex items-center cursor-pointer">
+                  <input type="checkbox" checked={selected} onChange={() => onSelect(t.id)}
+                    className="w-4 h-4 rounded border-2 border-border/80 bg-surface/80 text-accent focus:ring-accent cursor-pointer transition-all" />
+                </label>
+              )}
+              <div className="flex-1 grid grid-cols-[1fr_auto_auto] gap-2 py-2 pr-3">
+                <div className="min-w-0">
+                  <p className="truncate font-medium">{t.name}</p>
+                  <p className="text-xs text-content-muted truncate">{t.root_name} · {t.original_path}</p>
+                </div>
+                <button onClick={() => onRestore(t.id)} className="flex items-center gap-1 px-2 py-1 text-sm rounded-lg glass-hover border"><RotateCcw className="h-4 w-4" /> Restore</button>
+                <button onClick={() => onDelete(t.id)} className="flex items-center gap-1 px-2 py-1 text-sm rounded-lg text-red-500 hover:bg-red-500/10"><Trash2 className="h-4 w-4" /> Delete</button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -556,15 +674,6 @@ function ActionModals({ menu, rootId, path, onClose, onDone, onArchiveExtract }:
     return (
       <Modal title="Rename" onClose={onClose} footer={<button onClick={() => run(() => post("/files/rename", { root: rootId, path: menu.item!.path, name: value }), "Renamed")} className="px-3 py-1.5 rounded-lg accent-glass text-sm">Rename</button>}>
         <input autoFocus defaultValue={menu.item.name} onChange={(e) => setValue(e.target.value)} className="w-full rounded-lg bg-surface border px-3 py-2 outline-none focus:ring-2 focus:ring-accent/40" />
-      </Modal>
-    );
-  }
-  if ((menu.kind === "move" || menu.kind === "copy") && menu.item) {
-    const isMove = menu.kind === "move";
-    return (
-      <Modal title={isMove ? "Move to" : "Copy to"} onClose={onClose} footer={<button onClick={() => run(() => post(`/files/${isMove ? "move" : "copy"}`, { root: rootId, source: menu.item!.path, destination: (value ? value + "/" : "") + menu.item!.name }), isMove ? "Moved" : "Copied")} className="px-3 py-1.5 rounded-lg accent-glass text-sm">{isMove ? "Move" : "Copy"}</button>}>
-        <p className="text-sm text-content-muted mb-2">Destination folder (relative path, empty = root):</p>
-        <input autoFocus value={value} onChange={(e) => setValue(e.target.value)} placeholder="e.g. docs" className="w-full rounded-lg bg-surface border px-3 py-2 outline-none focus:ring-2 focus:ring-accent/40" />
       </Modal>
     );
   }

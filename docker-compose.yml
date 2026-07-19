@@ -44,7 +44,7 @@ services:
       - ./data/media:/mnt/media:ro
       - ./data/backups:/mnt/backups
       - ./data/shared:/mnt/shared
-      - /data:/mnt/data:ro
+      - /data:/mnt/data
     # Read-only root filesystem with tmpfs for scratch space.
     read_only: true
     tmpfs:

@@ -90,3 +90,16 @@ export function serverSupportsTranscode(): Promise<boolean> {
       return false;
     });
 }
+
+export function getAudioQuality(item: { extension?: string; mime?: string }): { label: string; color: string } {
+  const ext = item.extension?.toLowerCase() || '';
+  const mime = item.mime || '';
+  if (ext === 'flac') return { label: 'FLAC · Lossless', color: 'text-emerald-400' };
+  if (ext === 'wav') return { label: 'WAV · Lossless', color: 'text-blue-400' };
+  if (ext === 'alac') return { label: 'ALAC · Lossless', color: 'text-emerald-400' };
+  if (ext === 'mp3') return { label: 'MP3 · High Quality', color: 'text-amber-400' };
+  if (ext === 'ogg' || ext === 'opus') return { label: 'Opus · High Quality', color: 'text-purple-400' };
+  if (ext === 'aac') return { label: 'AAC · High Quality', color: 'text-orange-400' };
+  if (mime.startsWith('audio/')) return { label: 'Audio', color: 'text-white/70' };
+  return { label: '', color: 'text-white/50' };
+}

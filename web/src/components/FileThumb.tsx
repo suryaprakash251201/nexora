@@ -2,6 +2,7 @@ import { useState } from "react";
 import { FileItem } from "../api/types";
 import { iconForFile, colorClasses } from "./FileIcon";
 import { thumbUrl } from "../lib/preview";
+import { Music, Video } from "lucide-react";
 
 export const IMAGE_EXT = ["jpg", "jpeg", "png", "gif", "webp", "bmp", "avif"];
 
@@ -25,10 +26,29 @@ export function FileThumb({ it, large, fill }: { it: FileItem; large?: boolean; 
   const ext = it.extension.toLowerCase();
   
   const isImage = it.mime.startsWith("image/") || IMAGE_EXT.includes(ext);
-  const isAudioCover = it.mime.startsWith("audio/") || ext === "mp3" || ext === "flac";
+  const isAudio = it.mime.startsWith("audio/") || ["mp3", "flac", "wav", "ogg", "m4a"].includes(ext);
+  const isVideo = it.mime.startsWith("video/") || ["mp4", "webm", "mov", "mkv", "avi"].includes(ext);
   const dim = fill ? "h-full w-full" : large ? "h-16 w-16" : "h-9 w-9";
   
-  if ((!isImage && !isAudioCover) || failed) {
+  // For audio files without cover art, show music icon directly
+  if (isAudio && !isImage) {
+    return (
+      <div className={`grid place-items-center rounded-xl transition-transform duration-300 group-hover:scale-105 shadow-sm bg-gradient-to-br from-emerald-400/20 to-teal-500/30 border border-emerald-400/20 ${dim}`}>
+        <Music className={`text-emerald-400 drop-shadow-md ${large ? "h-8 w-8" : "h-5 w-5"}`} />
+      </div>
+    );
+  }
+  
+  // For video files without thumbnail, show video icon
+  if (isVideo && !isImage) {
+    return (
+      <div className={`grid place-items-center rounded-xl transition-transform duration-300 group-hover:scale-105 shadow-sm bg-gradient-to-br from-purple-400/20 to-pink-500/30 border border-purple-400/20 ${dim}`}>
+        <Video className={`text-purple-400 drop-shadow-md ${large ? "h-8 w-8" : "h-5 w-5"}`} />
+      </div>
+    );
+  }
+  
+  if ((!isImage) || failed) {
     const { icon: Icon, color } = iconForFile(it);
     const colorClass = colorClasses[color];
     return (

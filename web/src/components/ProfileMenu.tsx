@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { Shield, LogOut, Sun, Moon, ChevronDown, CheckCircle2 } from "lucide-react";
 import type { User } from "../api/types";
 import { useUI } from "../store";
+import { useClickOutside } from "./hooks/useClickOutside";
 
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -52,26 +53,7 @@ export default function ProfileMenu({
     setPos({ top: r.bottom + 8, right: window.innerWidth - r.right });
   }, [open]);
 
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      if (
-        ref.current && !ref.current.contains(e.target as Node) &&
-        btnRef.current && !btnRef.current.contains(e.target as Node) &&
-        menuRef.current && !menuRef.current.contains(e.target as Node)
-      ) setOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
-    const onScroll = () => setOpen(false);
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onKey);
-    window.addEventListener("scroll", onScroll, true);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("keydown", onKey);
-      window.removeEventListener("scroll", onScroll, true);
-    };
-  }, [open]);
+  useClickOutside([ref, btnRef, menuRef], () => setOpen(false), open);
 
   return (
     <div className="relative" ref={ref}>

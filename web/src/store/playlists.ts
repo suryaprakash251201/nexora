@@ -2,6 +2,7 @@ import { create } from "zustand";
 import type { FileItem, Playlist as ApiPlaylist, PlaylistItem } from "../api/types";
 import { get, post, del, put, patch } from "../api/client";
 import { usePlayer } from "./player";
+import { useUI } from "../store";
 
 // Extend the API playlist to match what the frontend UI expects (FileItem array).
 // The backend returns partial FileItems in `items`, but we'll cast them.
@@ -108,7 +109,7 @@ export const usePlaylists = create<PlaylistsState>((set, getStore) => ({
     const itemToRemove = pl.items.find((i) => i.path === path);
     const apiItemId = (itemToRemove as any)?.id;
     if (!apiItemId) {
-      console.error("Cannot remove item without its server ID");
+      useUI.getState().pushToast("error", "Cannot remove item without its server ID");
       return;
     }
 

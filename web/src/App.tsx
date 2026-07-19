@@ -6,7 +6,6 @@ import Workspace from "./components/Workspace";
 import type { User } from "./api/types";
 
 export default function App() {
-  const qc = useQueryClient();
   return (
     <>
       <div className="nexora-bg" aria-hidden="true" />

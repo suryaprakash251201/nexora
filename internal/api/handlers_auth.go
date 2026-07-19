@@ -239,7 +239,7 @@ func (s *Server) startSession(w http.ResponseWriter, r *http.Request, userID str
 		Path:     "/",
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
-		Secure:   false,
+		Secure:   s.Cfg.SecureCookies,
 		MaxAge:   int(s.Cfg.SessionLifetime.Seconds()),
 	})
 }

@@ -2,13 +2,15 @@ export function SkeletonLine({ width = '100%', height = '16px' }: { width?: stri
   return <div className="skeleton" style={{ width, height }} />;
 }
 
-export function SkeletonFileRow() {
+export function SkeletonFileRow({ index = 0 }: { index?: number }) {
+  const widths = ['75%', '65%', '80%', '55%', '70%', '85%', '60%', '90%'];
+  const subWidths = ['45%', '35%', '50%', '40%'];
   return (
     <div className="flex items-center gap-3 px-3 py-2.5">
       <div className="skeleton w-9 h-9 rounded-lg shrink-0" />
       <div className="flex-1 space-y-1.5">
-        <div className="skeleton h-3.5" style={{ width: `${60 + Math.random() * 30}%` }} />
-        <div className="skeleton h-2.5" style={{ width: `${30 + Math.random() * 20}%` }} />
+        <div className="skeleton h-3.5" style={{ width: widths[index % widths.length] }} />
+        <div className="skeleton h-2.5" style={{ width: subWidths[index % subWidths.length] }} />
       </div>
       <div className="skeleton h-3 w-16 shrink-0" />
     </div>
@@ -36,7 +38,7 @@ export function SkeletonGrid({ count = 8 }: { count?: number }) {
 export function SkeletonList({ count = 8 }: { count?: number }) {
   return (
     <div className="divide-y divide-border/30">
-      {Array.from({ length: count }).map((_, i) => <SkeletonFileRow key={i} />)}
+      {Array.from({ length: count }).map((_, i) => <SkeletonFileRow key={i} index={i} />)}
     </div>
   );
 }

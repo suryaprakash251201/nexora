@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Loader2, ShieldCheck, ArrowRight, CheckCircle2, User as UserIcon, Lock, Mail } from "lucide-react";
+import { ShieldCheck, ArrowRight, CheckCircle2, User as UserIcon, Lock, Mail } from "lucide-react";
 import { post } from "../api/client";
 import { useUI } from "../store";
 import { Input } from "./ui/Input";

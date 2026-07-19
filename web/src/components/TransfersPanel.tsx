@@ -1,31 +1,29 @@
 import { useState, useEffect } from "react";
-import { Upload, Download, X, CheckCircle2, AlertCircle, Trash2, Maximize2, Minimize2, Activity, Play, Pause } from "lucide-react";
+import { Upload, Download, X, CheckCircle2, AlertCircle, Trash2, Maximize2, Minimize2, Activity } from "lucide-react";
 import { useTransfers, type Transfer } from "../store/transfers";
 import { speedLabel } from "../lib/transfer";
+import { formatBytes } from "../lib/format";
 
 function pct(t: Transfer): number {
   if (t.total > 0) return Math.min(100, (t.loaded / t.total) * 100);
   return t.status === "done" ? 100 : 0;
 }
 
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 B';
-  const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
-}
-
-function Row({ t }: { t: Transfer }) {
+function Row({ t, onDismiss }: { t: Transfer; onDismiss: () => void }) {
   const remove = useTransfers((s) => s.remove);
   
   const progress = pct(t);
   const isDone = t.status === "done";
   const isError = t.status === "error";
   const isActive = t.status === "active";
+  const finished = isDone || isError;
   
   return (
-    <div className="p-3 border-b border-border/30 last:border-0 hover:bg-surface/30 transition-colors group">
+    <div
+      className="p-3 border-b border-border/30 last:border-0 hover:bg-surface/30 transition-colors group"
+      onClick={finished ? onDismiss : undefined}
+      title={finished ? "Click to dismiss" : undefined}
+    >
       <div className="flex items-start gap-3">
         {/* Icon based on status and kind */}
         <div className={`mt-0.5 p-1.5 rounded-lg shrink-0 ${
@@ -43,7 +41,7 @@ function Row({ t }: { t: Transfer }) {
           <div className="flex items-center justify-between mb-1">
             <span className="text-sm font-medium text-content truncate pr-2">{t.name}</span>
             <button 
-              onClick={() => remove(t.id)} 
+              onClick={(e) => { e.stopPropagation(); remove(t.id); }} 
               className="p-1 rounded-md text-content-muted hover:text-content hover:bg-surface opacity-0 group-hover:opacity-100 transition-opacity shrink-0" 
               title="Dismiss"
             >
@@ -88,34 +86,55 @@ function Row({ t }: { t: Transfer }) {
 export default function TransfersPanel() {
   const transfers = useTransfers((s) => s.transfers);
   const clearFinished = useTransfers((s) => s.clearFinished);
+  const remove = useTransfers((s) => s.remove);
   const [open, setOpen] = useState(true);
   const [isExpanded, setIsExpanded] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
+
+  const active = transfers.filter((t) => t.status === "active" || t.status === "paused").length;
+  const allDone = active === 0;
 
   // Auto-open when new transfers are added
   useEffect(() => {
     if (transfers.length > 0 && transfers.some(t => t.status === 'active')) {
       setOpen(true);
+      setDismissed(false);
     }
   }, [transfers.length]);
 
-  if (transfers.length === 0) return null;
+  // Once everything finishes, reveal the panel (in case it was collapsed) so the
+  // user sees the result; it still auto-dismisses after 30s.
+  useEffect(() => {
+    if (allDone && transfers.length > 0) setOpen(true);
+  }, [allDone, transfers.length]);
+
+  // Re-show the panel when a new transfer starts after being dismissed.
+  useEffect(() => {
+    if (transfers.length > 0 && !dismissed) setOpen(true);
+  }, [transfers.length, dismissed]);
+
+  if (transfers.length === 0 || dismissed) return null;
   
-  const active = transfers.filter((t) => t.status === "active").length;
   const done = transfers.filter((t) => t.status === "done").length;
   const totalLoaded = transfers.filter(t => t.status === 'active').reduce((acc, t) => acc + t.loaded, 0);
   const totalSize = transfers.filter(t => t.status === 'active').reduce((acc, t) => acc + t.total, 0);
   const overallProgress = totalSize > 0 ? Math.min(100, (totalLoaded / totalSize) * 100) : 0;
 
   return (
-    <div className={`fixed z-[65] transition-all duration-300 ease-in-out glass-strong rounded-2xl shadow-2xl border border-border/50 overflow-hidden
+    <div aria-live="polite" aria-label="File transfers" className={`fixed z-[65] transition-all duration-300 ease-in-out glass-strong rounded-2xl shadow-2xl border border-border/50 overflow-hidden
       ${isExpanded 
-        ? "bottom-4 right-4 w-96 max-w-[calc(100vw-2rem)] max-h-[80vh] flex flex-col" 
-        : "bottom-4 right-4 w-80 max-w-[calc(100vw-2rem)]"}`}
+        ? "bottom-4 right-4 max-w-[calc(100vw-2rem)] sm:w-96 max-h-[80vh] flex flex-col" 
+        : "bottom-4 right-4 max-w-[calc(100vw-2rem)] sm:w-80"}`}
+      style={{ left: 'env(safe-area-inset-left, 0.5rem)', right: 'env(safe-area-inset-right, 0.5rem)' }}
     >
       {/* Header */}
       <div 
         className="flex items-center justify-between p-3 border-b border-border/50 bg-surface/50 backdrop-blur-md cursor-pointer hover:bg-surface/70 transition-colors"
-        onClick={() => setOpen((o) => !o)}
+        title={allDone ? "Click to dismiss" : "Click to expand/collapse"}
+        onClick={() => {
+          if (allDone) { setDismissed(true); return; }
+          setOpen((o) => !o);
+        }}
       >
         <div className="flex items-center gap-3">
           <div className="relative">
@@ -165,9 +184,9 @@ export default function TransfersPanel() {
           )}
           
           <button 
-            onClick={() => setOpen((o) => !o)} 
-            className={`p-1.5 rounded-md text-content-muted hover:text-content hover:bg-surface transition-all ${open ? "rotate-180" : ""}`} 
-            title={open ? "Collapse" : "Expand"}
+            onClick={() => { if (allDone) setDismissed(true); else setOpen((o) => !o); }} 
+            className={`p-1.5 rounded-md text-content-muted hover:text-content hover:bg-surface transition-all ${open && !allDone ? "rotate-180" : ""}`} 
+            title={allDone ? "Dismiss" : (open ? "Collapse" : "Expand")}
           >
             <X className="h-4 w-4" />
           </button>
@@ -180,7 +199,7 @@ export default function TransfersPanel() {
           ${open ? (isExpanded ? "flex-1 overflow-auto max-h-[60vh]" : "max-h-72 overflow-auto") : "max-h-0"}`}
       >
         <div className="custom-scrollbar">
-          {transfers.map((t) => <Row key={t.id} t={t} />)}
+          {transfers.map((t) => <Row key={t.id} t={t} onDismiss={() => remove(t.id)} />)}
         </div>
       </div>
     </div>

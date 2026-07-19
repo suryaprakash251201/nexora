@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { ListMusic, Play, Pencil, Trash2, Plus, X, Music, Image as ImageIcon, Eye, EyeOff, ChevronDown } from "lucide-react";
+import { ListMusic, Play, Pencil, Trash2, Plus, X, Music, Eye, EyeOff, ChevronDown } from "lucide-react";
 import { usePlaylists } from "../store/playlists";
 import { usePlayer } from "../store/player";
 import { useUI } from "../store";
 import { thumbUrl } from "../lib/preview";
+import { Modal } from "./Modal";
 
 function PlaylistCover({ playlist }: { playlist: any }) {
   const [failed, setFailed] = useState(false);
@@ -43,6 +44,13 @@ export default function PlaylistsPanel() {
   const current = usePlayer((s) => s.current());
   const pushToast = useUI((s) => s.pushToast);
   const [expanded, setExpanded] = useState<string | null>(playlists[0]?.id ?? null);
+  const [newModal, setNewModal] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [renameTarget, setRenameTarget] = useState<{ id: string; name: string } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
+  const [coverModal, setCoverModal] = useState<{ id: string } | null>(null);
+  const [coverRootId, setCoverRootId] = useState("");
+  const [coverPath, setCoverPath] = useState("");
 
   const addCurrent = async (id: string) => {
     if (!current) {
@@ -63,20 +71,30 @@ export default function PlaylistsPanel() {
   };
 
   const newPlaylist = async () => {
-    const name = window.prompt("Playlist name", `Playlist ${playlists.length + 1}`);
-    if (name !== null) {
-      const pl = await create(name.trim() || `Playlist ${playlists.length + 1}`, []);
-      setExpanded(pl.id);
-    }
+    setNewName(`Playlist ${playlists.length + 1}`);
+    setNewModal(true);
+  };
+
+  const doCreate = async () => {
+    if (!newName.trim()) return;
+    const pl = await create(newName.trim(), []);
+    setExpanded(pl.id);
+    setNewModal(false);
   };
 
   const doRename = (id: string, current: string) => {
-    const name = window.prompt("Rename playlist", current);
-    if (name && name.trim()) rename(id, name.trim());
+    setRenameTarget({ id, name: current });
+  };
+
+  const doRenameConfirm = () => {
+    if (renameTarget && renameTarget.name.trim()) {
+      rename(renameTarget.id, renameTarget.name.trim());
+      setRenameTarget(null);
+    }
   };
 
   const doRemove = (id: string, name: string) => {
-    if (confirm(`Delete playlist "${name}"?`)) remove(id);
+    setDeleteTarget({ id, name });
   };
 
   const doRemoveItem = (id: string, path: string) => {
@@ -85,12 +103,16 @@ export default function PlaylistsPanel() {
   };
 
   const doSetCover = (id: string) => {
-    const rootId = window.prompt("Enter the root ID of the cover image:");
-    if (!rootId) return;
-    const path = window.prompt("Enter the file path of the cover image:");
-    if (!path) return;
-    setCover(id, rootId.trim(), path.trim());
+    setCoverModal({ id });
+    setCoverRootId("");
+    setCoverPath("");
+  };
+
+  const doCoverConfirm = async () => {
+    if (!coverModal || !coverRootId.trim() || !coverPath.trim()) return;
+    setCover(coverModal.id, coverRootId.trim(), coverPath.trim());
     pushToast("success", "Cover image updated");
+    setCoverModal(null);
   };
 
   const doTogglePublic = (id: string, currentState: boolean) => {
@@ -209,6 +231,62 @@ export default function PlaylistsPanel() {
             </div>
           ))}
         </div>
+      )}
+
+      {newModal && (
+        <Modal title="New playlist" onClose={() => setNewModal(false)}
+          footer={<button onClick={doCreate} className="px-3 py-1.5 rounded-lg accent-glass text-sm font-medium">Create</button>}>
+          <input
+            autoFocus
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            className="w-full rounded-lg glass-input px-3 py-2 outline-none text-sm"
+            placeholder="Playlist name"
+            onKeyDown={(e) => { if (e.key === "Enter") doCreate(); }}
+          />
+        </Modal>
+      )}
+
+      {renameTarget && (
+        <Modal title="Rename playlist" onClose={() => setRenameTarget(null)}
+          footer={<button onClick={doRenameConfirm} className="px-3 py-1.5 rounded-lg accent-glass text-sm font-medium">Rename</button>}>
+          <input
+            autoFocus
+            value={renameTarget.name}
+            onChange={(e) => setRenameTarget({ ...renameTarget, name: e.target.value })}
+            className="w-full rounded-lg glass-input px-3 py-2 outline-none text-sm"
+            onKeyDown={(e) => { if (e.key === "Enter") doRenameConfirm(); }}
+          />
+        </Modal>
+      )}
+
+      {deleteTarget && (
+        <Modal title="Delete playlist" onClose={() => setDeleteTarget(null)}
+          description={`Are you sure you want to delete "${deleteTarget.name}"?`}
+          footer={
+            <>
+              <button onClick={() => setDeleteTarget(null)} className="px-3 py-1.5 rounded-lg glass-hover text-sm font-medium">Cancel</button>
+              <button onClick={() => { remove(deleteTarget.id); setDeleteTarget(null); pushToast("info", "Playlist deleted"); }} className="px-3 py-1.5 rounded-lg bg-danger text-white text-sm font-medium">Delete</button>
+            </>
+          }>
+          <></>
+        </Modal>
+      )}
+
+      {coverModal && (
+        <Modal title="Set cover image" onClose={() => setCoverModal(null)}
+          footer={<button onClick={doCoverConfirm} disabled={!coverRootId.trim() || !coverPath.trim()} className="px-3 py-1.5 rounded-lg accent-glass text-sm font-medium disabled:opacity-50">Set cover</button>}>
+          <div className="space-y-3">
+            <div>
+              <label className="block text-xs font-medium text-content-muted mb-1">Root ID</label>
+              <input autoFocus value={coverRootId} onChange={(e) => setCoverRootId(e.target.value)} className="w-full rounded-lg glass-input px-3 py-2 outline-none text-sm" placeholder="e.g. root_id" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-content-muted mb-1">File path</label>
+              <input value={coverPath} onChange={(e) => setCoverPath(e.target.value)} className="w-full rounded-lg glass-input px-3 py-2 outline-none text-sm" placeholder="e.g. photos/cover.jpg" onKeyDown={(e) => { if (e.key === "Enter") doCoverConfirm(); }} />
+            </div>
+          </div>
+        </Modal>
       )}
     </div>
   );

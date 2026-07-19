@@ -76,6 +76,15 @@ func (s *Server) handleListFiles(w http.ResponseWriter, r *http.Request) {
 		s.writeProviderError(w, r, err)
 		return
 	}
+	// Hide the system trash directory from user-facing listings.
+	filtered := items[:0]
+	for _, it := range items {
+		if it.Name == ".nexora-trash" {
+			continue
+		}
+		filtered = append(filtered, it)
+	}
+	items = filtered
 	items = sortFiles(items, queryParam(r, "sort", "name"), queryParam(r, "order", "asc"), queryParam(r, "dirs_first", "true") == "true")
 
 	// Apply cursor-free offset pagination for very large directories.
@@ -636,6 +645,7 @@ func fileToMap(f storage.FileInfo, rootID string) map[string]any {
 }
 
 func (s *Server) handleCreateFile(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 10<<20) // 10 MB limit
 	var req struct {
 		Root    string `json:"root"`
 		Path    string `json:"path"`

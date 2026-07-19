@@ -12,15 +12,15 @@ const csrfCookieName = "nexora_csrf"
 // CSRF implements the double-submit cookie pattern. It issues a random token in
 // a readable cookie and requires matching X-CSRF-Token header on unsafe
 // methods. Paths whose prefix is in exempt are skipped (e.g. login, share).
-func CSRF(exemptPrefixes []string) func(http.Handler) http.Handler {
+func CSRF(exemptPrefixes []string, secure bool) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			token := getCookie(r, csrfCookieName)
 			if token == "" {
 				token = newToken()
-				setCSRFCookie(w, token)
+				setCSRFCookie(w, token, secure)
 			} else {
-				setCSRFCookie(w, token)
+				setCSRFCookie(w, token, secure)
 			}
 
 			if isUnsafeMethod(r.Method) && !isExempt(r.URL.Path, exemptPrefixes) {
@@ -54,14 +54,14 @@ func isExempt(path string, exempt []string) bool {
 	return false
 }
 
-func setCSRFCookie(w http.ResponseWriter, token string) {
+func setCSRFCookie(w http.ResponseWriter, token string, secure bool) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     csrfCookieName,
 		Value:    token,
 		Path:     "/",
 		HttpOnly: false, // readable by JS to send as header
 		SameSite: http.SameSiteLaxMode,
-		Secure:   false, // set via proxy/TLS terminator as needed
+		Secure:   secure,
 		MaxAge:   86400 * 30,
 	})
 }

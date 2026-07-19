@@ -1,6 +1,5 @@
 import { ChevronRight } from "lucide-react";
-import { useRef, useState } from "react";
-import { useUI } from "../store";
+import { useState } from "react";
 
 export default function Breadcrumbs({
   rootName,
@@ -14,8 +13,6 @@ export default function Breadcrumbs({
   const segments = path.split("/").filter(Boolean);
   let acc = "";
   
-  // Drag and drop support
-  const pushToast = useUI((s) => s.pushToast);
   const [dragTarget, setDragTarget] = useState<string | null>(null);
   
   // To implement drag and drop, we'd need a drop handler, but for now we add the UI highlighting

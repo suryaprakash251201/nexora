@@ -1,7 +1,5 @@
 import { Trash2, Plus, Share2, Clock, Star, Search, Shield, ListMusic, Home, PanelLeftClose, PanelLeftOpen, LogOut, X } from "lucide-react";
 import type { Root } from "../api/types";
-import { useUI } from "../store";
-import { usePlaylists } from "../store/playlists";
 import { rootIcon } from "../lib/rootIcons";
 import { get } from "../api/client";
 import { useQuery } from "@tanstack/react-query";
@@ -31,12 +29,20 @@ export default function Sidebar({
   onNewRoot: () => void;
   onLogout: () => void;
 }) {
-  const playlists = usePlaylists((s) => s.playlists);
-
   const version = useQuery({
     queryKey: ["version"],
     queryFn: () => get<{ version: string }>("/version"),
   });
+
+  const usage = useQuery({
+    queryKey: ["storage-usage"],
+    queryFn: () => get<{ total: number; used: number; available: number }>("/admin/usage"),
+    enabled: isAdmin,
+  });
+
+  const usedPercent = usage.data && usage.data.total > 0
+    ? Math.round((usage.data.used / usage.data.total) * 100)
+    : 0;
 
   const navBtn = (v: SidebarView, icon: React.ReactNode, label: string) => (
     <button
@@ -87,7 +93,7 @@ export default function Sidebar({
         )}
 
         {/* Navigation */}
-        <nav className={`flex-1 overflow-y-auto space-y-1.5 custom-scrollbar ${collapsed ? "px-2 w-full" : "px-3 w-full"}`}>
+        <nav aria-label="Main navigation" className={`flex-1 overflow-y-auto space-y-1.5 custom-scrollbar ${collapsed ? "px-2 w-full" : "px-3 w-full"}`}>
           {navBtn("home", <Home className="h-5 w-5 shrink-0" />, "Home")}
           {navBtn("search", <Search className="h-5 w-5 shrink-0" />, "Search")}
 
@@ -140,10 +146,10 @@ export default function Sidebar({
             <div className="px-3 py-3 rounded-xl bg-surface/50 border border-border/50 mb-2">
               <div className="flex justify-between text-xs mb-1.5 font-medium">
                 <span>Storage usage</span>
-                <span className="text-content-muted">75%</span>
+                <span className="text-content-muted">{usage.isLoading ? "…" : `${usedPercent}%`}</span>
               </div>
               <div className="quota-bar">
-                <div className="quota-bar-fill" style={{ width: '75%' }} />
+                <div className="quota-bar-fill" style={{ width: usage.isLoading ? '0%' : `${usedPercent}%` }} />
               </div>
             </div>
           )}

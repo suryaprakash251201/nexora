@@ -13,10 +13,16 @@ export default function SearchView({
   initialQuery,
   roots,
   onOpen,
+  selection,
+  selectMode,
+  onSelect,
 }: {
   initialQuery: string;
   roots: Root[];
   onOpen: (r: SearchResult) => void;
+  selection?: Set<string>;
+  selectMode?: boolean;
+  onSelect?: (id: string) => void;
 }) {
   const [q, setQ] = useState(initialQuery);
   const [debounced, setDebounced] = useState(initialQuery);
@@ -124,12 +130,20 @@ export default function SearchView({
             <div className="space-y-1 stagger-children">
               {results.map((r) => {
                 const rootName = roots.find((x) => x.id === r.root_id)?.name || "";
+                const id = r.root_id + r.path;
+                const selected = selection?.has(id) ?? false;
                 return (
-                  <button
-                    key={r.root_id + r.path}
-                    onClick={() => onOpen(r)}
-                    className="w-full group grid grid-cols-[auto_1fr_auto] gap-4 items-center px-4 py-3 rounded-xl glass-hover hover:bg-surface/60 border border-transparent hover:border-border/50 text-left transition-all duration-200 outline-none focus:ring-2 focus:ring-accent/40"
-                  >
+                  <div key={id} className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${selected ? "bg-accent/10 ring-1 ring-accent/30" : "hover:bg-surface/60"}`}>
+                    {(selectMode || selection?.size) && onSelect && (
+                      <label className="flex items-center cursor-pointer shrink-0">
+                        <input type="checkbox" checked={selected} onChange={() => onSelect(id)}
+                          className="w-4 h-4 rounded border-2 border-border/80 bg-surface/80 text-accent focus:ring-accent cursor-pointer transition-all" />
+                      </label>
+                    )}
+                    <button
+                      onClick={() => onOpen(r)}
+                      className="flex-1 group grid grid-cols-[auto_1fr_auto] gap-4 items-center text-left outline-none focus:ring-2 focus:ring-accent/40"
+                    >
                     <div className="shrink-0 transition-transform duration-300 group-hover:scale-105">
                       {r.is_dir ? <FolderTile /> : <FileThumb it={r as FileItem} />}
                     </div>
@@ -144,6 +158,7 @@ export default function SearchView({
                       <p className="text-xs font-medium text-content-muted/70 mt-0.5 hidden sm:block">{formatDate(r.modified)}</p>
                     </div>
                   </button>
+                  </div>
                 );
               })}
             </div>

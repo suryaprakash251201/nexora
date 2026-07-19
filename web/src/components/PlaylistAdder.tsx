@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { ListMusic, Plus } from "lucide-react";
 import { usePlaylists } from "../store/playlists";
 import { useUI } from "../store";
 import type { FileItem } from "../api/types";
+import { useClickOutside } from "./hooks/useClickOutside";
 
 function audioOnly(items: FileItem[]): FileItem[] {
   return items.filter((i) => i.mime.startsWith("audio/"));
@@ -85,14 +86,7 @@ export function AddToPlaylistMenu({
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", onDown);
-    return () => document.removeEventListener("mousedown", onDown);
-  }, [open]);
+  useClickOutside(ref, () => setOpen(false), open);
   return (
     <div className="relative" ref={ref}>
       <button type="button" onClick={() => setOpen((o) => !o)} className={className} disabled={!audioOnly(items).length}>
@@ -121,20 +115,7 @@ export function PlaylistPickerPopover({
   onClose: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const onDown = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [onClose]);
+  useClickOutside(ref, onClose, true);
   const w = 240;
   const h = 340;
   let nx = x;

@@ -161,3 +161,43 @@ func atoiOrDefault(s string, def int) int {
 	}
 	return n
 }
+
+func (s *Server) handleAdminGetStorageUsage(w http.ResponseWriter, r *http.Request) {
+	roots, err := s.StorageRoots.List()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "could not list roots", middleware.GetRequestID(r.Context()))
+		return
+	}
+	type usageInfo struct {
+		ID        string `json:"id"`
+		Name      string `json:"name"`
+		Total     int64  `json:"total"`
+		Available int64  `json:"available"`
+		Used      int64  `json:"used"`
+	}
+	out := make([]usageInfo, 0, len(roots))
+	var aggTotal, aggAvailable, aggUsed int64
+	for _, root := range roots {
+		prov := s.StorageRoots.ProviderFor(root)
+		if prov == nil {
+			continue
+		}
+		q, err := prov.GetQuota()
+		if err != nil {
+			continue
+		}
+		out = append(out, usageInfo{
+			ID: root.ID, Name: root.Name,
+			Total: q.Total, Available: q.Available, Used: q.Used,
+		})
+		aggTotal += q.Total
+		aggAvailable += q.Available
+		aggUsed += q.Used
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"roots":     out,
+		"total":     aggTotal,
+		"available": aggAvailable,
+		"used":      aggUsed,
+	})
+}

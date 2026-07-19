@@ -63,9 +63,9 @@
   --scrim: rgba(0, 0, 0, 0.75);
 
   /* Glassmorphism tokens (dark) — frosted white over pitch black */
-  --glass-bg: rgba(255, 255, 255, 0.03);
-  --glass-bg-strong: rgba(255, 255, 255, 0.08);
-  --glass-bg-subtle: rgba(255, 255, 255, 0.02);
+  --glass-bg: rgba(255, 255, 255, 0.08);
+  --glass-bg-strong: rgba(255, 255, 255, 0.14);
+  --glass-bg-subtle: rgba(255, 255, 255, 0.05);
   --glass-border: rgba(255, 255, 255, 0.08);
   --glass-border-soft: rgba(255, 255, 255, 0.04);
   --glass-highlight: rgba(255, 255, 255, 0.05);
@@ -86,6 +86,11 @@ html,
 body,
 #root {
   height: 100%;
+}
+
+/* Safe-area padding for mobile nav bottom bar */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
 body {

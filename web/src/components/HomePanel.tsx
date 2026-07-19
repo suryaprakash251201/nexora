@@ -5,7 +5,6 @@ import { FileThumb } from "./FileThumb";
 import { formatRelative } from "../lib/format";
 import { Input } from "./ui/Input";
 import { EmptyState } from "./ui/EmptyState";
-import { SkeletonList } from "./ui/Skeleton";
 
 function extOf(name: string): string {
   return name.includes(".") ? name.slice(name.lastIndexOf(".") + 1).toLowerCase() : "";
