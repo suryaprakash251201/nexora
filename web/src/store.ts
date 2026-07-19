@@ -23,6 +23,7 @@ interface UIState {
   toggleSelect: (path: string) => void;
   clearSelection: () => void;
   setSelection: (paths: string[]) => void;
+  selectRange: (paths: string[]) => void;
   setSelectMode: (b: boolean) => void;
   toggleSelectMode: () => void;
   openDrawer: (path: string | null) => void;
@@ -76,6 +77,7 @@ export const useUI = create<UIState>((set, get) => ({
   },
   clearSelection: () => set({ selection: new Set<string>() }),
   setSelection: (paths) => set({ selection: new Set(paths) }),
+  selectRange: (paths) => set({ selection: new Set(paths), selectMode: true }),
   setSelectMode: (b) => set({ selectMode: b, ...(b ? {} : { selection: new Set<string>() }) }),
   toggleSelectMode: () => {
     const b = !get().selectMode;

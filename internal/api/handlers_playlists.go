@@ -29,13 +29,13 @@ func (s *Server) hydratePlaylistItems(pls []playlists.Playlist) {
 }
 
 func (s *Server) handleListPlaylists(w http.ResponseWriter, r *http.Request) {
-	user, ok := auth.UserFromContext(r.Context())
+	_, ok := auth.UserFromContext(r.Context())
 	if !ok {
 		writeError(w, http.StatusUnauthorized, "unauthenticated", "Authentication required", middleware.GetRequestID(r.Context()))
 		return
 	}
 
-	pls, err := s.Playlists.List(user.ID)
+	pls, err := s.Playlists.ListAll()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error", "Failed to list playlists", middleware.GetRequestID(r.Context()))
 		return
@@ -60,6 +60,11 @@ func (s *Server) handleCreatePlaylist(w http.ResponseWriter, r *http.Request) {
 	user, ok := auth.UserFromContext(r.Context())
 	if !ok {
 		writeError(w, http.StatusUnauthorized, "unauthenticated", "Authentication required", middleware.GetRequestID(r.Context()))
+		return
+	}
+
+	if user.Role != auth.RoleAdmin {
+		writeError(w, http.StatusForbidden, "forbidden", "Only admins can create playlists", middleware.GetRequestID(r.Context()))
 		return
 	}
 
@@ -88,7 +93,7 @@ func (s *Server) handleCreatePlaylist(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		// Refresh items
-		pls, _ := s.Playlists.List(user.ID)
+		pls, _ := s.Playlists.ListAll()
 		for _, p := range pls {
 			if p.ID == pl.ID {
 				pl = &p
@@ -319,6 +324,10 @@ func (s *Server) handleManageCollaborators(w http.ResponseWriter, r *http.Reques
 
 	collabs, _ := s.Playlists.ListCollaborators(id)
 	writeJSON(w, http.StatusOK, map[string]any{"collaborators": collabs})
+}
+
+func (s *Server) handleCoverConfig(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{"cover_path": s.Cfg.PlaylistCoverPath})
 }
 
 func (s *Server) handleListCollaborators(w http.ResponseWriter, r *http.Request) {

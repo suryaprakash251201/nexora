@@ -64,6 +64,8 @@ func (s *Server) Routes() http.Handler {
 	csrfExempt := []string{
 		"/healthz", "/readyz",
 		"/api/v1/auth/setup", "/api/v1/auth/login",
+		"/api/v1/auth/forgot-password", "/api/v1/auth/reset-password",
+		"/api/v1/auth/totp/verify-login",
 		"/api/v1/share", "/api/v1/csrf",
 	}
 
@@ -111,13 +113,19 @@ func (s *Server) Routes() http.Handler {
 	authRouter := chi.NewRouter()
 	authRouter.Post("/setup", s.handleSetup)
 	authRouter.With(s.Limiter.RateLimit(middleware.KeyByClientIP())).Post("/login", s.handleLogin)
+	authRouter.With(s.Limiter.RateLimit(middleware.KeyByClientIP())).Post("/forgot-password", s.handleForgotPassword)
+	authRouter.With(s.Limiter.RateLimit(middleware.KeyByClientIP())).Post("/reset-password", s.handleResetPassword)
 	authRouter.Get("/needs-setup", s.handleNeedsSetup)
 	authRouter.Get("/session", s.handleSession)
 	authRouter.Group(func(protected chi.Router) {
 		protected.Use(auth.RequireAuth)
 		protected.Post("/logout", s.handleLogout)
 		protected.Post("/password", s.handleChangePassword)
+		protected.Post("/totp/setup", s.handleTOTPSetup)
+		protected.Post("/totp/verify", s.handleTOTPVerify)
+		protected.Post("/totp/disable", s.handleTOTPDisable)
 	})
+	authRouter.With(s.Limiter.RateLimit(middleware.KeyByClientIP())).Post("/totp/verify-login", s.handleTOTPVerifyLogin)
 	api.Mount("/auth", authRouter)
 
 	// Authenticated routes (everything else).
@@ -158,6 +166,7 @@ func (s *Server) Routes() http.Handler {
 	authed.Post("/playlists/{id}/items", s.handleAddPlaylistItems)
 	authed.Delete("/playlists/{id}/items", s.handleRemovePlaylistItem)
 	authed.Patch("/playlists/{id}", s.handleUpdatePlaylist)
+	authed.Get("/playlists/cover-config", s.handleCoverConfig)
 	authed.Get("/playlists/public", s.handleListPublicPlaylists)
 	authed.Post("/playlists/{id}/collaborators", s.handleManageCollaborators)
 	authed.Get("/playlists/{id}/collaborators", s.handleListCollaborators)

@@ -1,17 +1,38 @@
 import { useRef, useState } from "react";
-import { ListMusic, Plus } from "lucide-react";
+import { Plus, Music } from "lucide-react";
 import { usePlaylists } from "../store/playlists";
 import { useUI } from "../store";
 import type { FileItem } from "../api/types";
+import { thumbUrl } from "../lib/preview";
 import { useClickOutside } from "./hooks/useClickOutside";
 
 function audioOnly(items: FileItem[]): FileItem[] {
   return items.filter((i) => i.mime.startsWith("audio/"));
 }
 
-// PlaylistPickerList renders the actual list of playlists plus a "New
-// playlist" action. It is shared by the dropdown (AddToPlaylistMenu) and the
-// floating popover (PlaylistPickerPopover) so behaviour stays identical.
+function MiniCover({ playlist }: { playlist: any }) {
+  const [failed, setFailed] = useState(false);
+  const hasCover = playlist.cover_root_id && playlist.cover_path;
+
+  if (hasCover && !failed) {
+    const item = { root_id: playlist.cover_root_id, path: playlist.cover_path, name: "", extension: "", mime: "image/jpeg", is_dir: false, size: 0, modified: "" };
+    return (
+      <img
+        src={thumbUrl(item)}
+        alt=""
+        className="h-8 w-8 rounded-lg object-cover shrink-0"
+        onError={() => setFailed(true)}
+      />
+    );
+  }
+
+  return (
+    <div className="h-8 w-8 rounded-lg shrink-0 grid place-items-center bg-gradient-to-br from-accent/40 via-purple-500/30 to-pink-500/20">
+      <Music className="h-4 w-4 text-white/80" />
+    </div>
+  );
+}
+
 export function PlaylistPickerList({ items, onClose }: { items: FileItem[]; onClose: () => void }) {
   const playlists = usePlaylists((s) => s.playlists);
   const create = usePlaylists((s) => s.create);
@@ -55,24 +76,26 @@ export function PlaylistPickerList({ items, onClose }: { items: FileItem[]; onCl
         <button
           key={pl.id}
           onClick={() => add(pl.id)}
-          className="w-full flex items-center gap-2 px-3 py-2 text-left glass-hover"
+          className="w-full flex items-center gap-2.5 px-3 py-2 text-left glass-hover"
         >
-          <ListMusic className="h-4 w-4 text-accent shrink-0" />
-          <span className="truncate flex-1 text-left">{pl.name}</span>
+          <MiniCover playlist={pl} />
+          <span className="truncate flex-1 text-left text-sm">{pl.name}</span>
           <span className="text-xs text-content-muted tabular-nums">{pl.items.length}</span>
         </button>
       ))}
       <button
         onClick={() => add(undefined)}
-        className="w-full flex items-center gap-2 px-3 py-2 text-left glass-hover border-t glass-divider mt-1"
+        className="w-full flex items-center gap-2.5 px-3 py-2 text-left glass-hover border-t glass-divider mt-1"
       >
-        <Plus className="h-4 w-4 shrink-0" /> New playlist…
+        <div className="h-8 w-8 rounded-lg grid place-items-center bg-accent/10 text-accent shrink-0">
+          <Plus className="h-4 w-4" />
+        </div>
+        New playlist…
       </button>
     </div>
   );
 }
 
-// AddToPlaylistMenu is a self-contained trigger button + dropdown.
 export function AddToPlaylistMenu({
   items,
   className,
@@ -101,8 +124,6 @@ export function AddToPlaylistMenu({
   );
 }
 
-// PlaylistPickerPopover is a free-floating picker anchored at (x, y) — used by
-// the file context menu where there is no trigger button.
 export function PlaylistPickerPopover({
   x,
   y,

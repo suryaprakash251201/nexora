@@ -285,8 +285,13 @@ export default function FileBrowser({
   const renderListView = () => (
     <div ref={dropZoneRef} className="p-4 stagger-children pb-32 max-w-7xl mx-auto">
       <div className="grid grid-cols-[auto_1fr_auto_auto_auto] gap-4 px-6 py-4 text-xs font-bold uppercase tracking-widest text-content-muted/60 border-b border-border/30 sticky top-0 bg-background/80 backdrop-blur-xl z-10 rounded-t-2xl">
-        <span className="w-6 text-center">
-          {selectMode && <span className="opacity-50">All</span>}
+        <span className="w-6 flex justify-center items-center">
+          <input
+            type="checkbox"
+            checked={allSelected}
+            onChange={toggleSelectAll}
+            className="w-4 h-4 rounded border-2 border-border/80 bg-surface/80 text-accent focus:ring-accent cursor-pointer transition-all"
+          />
         </span>
         <span>Name</span>
         <span className="w-32 text-right hidden lg:block">Kind</span>

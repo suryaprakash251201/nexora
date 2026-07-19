@@ -28,6 +28,7 @@ import RootModal from "./RootModal";
 import FolderPickerModal from "./FolderPickerModal";
 import ProfileMenu from "./ProfileMenu";
 import CommandPalette from "./CommandPalette";
+import SelectionBar from "./SelectionBar";
 import { formatDate } from "../lib/format";
 import { previewKind, isEditable } from "../lib/preview";
 import {
@@ -146,7 +147,25 @@ const [playlistModal, setPlaylistModal] = useState(false);
   };
 
   const selectedItems = items.filter((i) => selection.has(i.path));
-  
+  const lastClickedRef = useRef<string | null>(null);
+  const selectRange = useUI((s) => s.selectRange);
+
+  const handleSelect = useCallback((item: FileItem, e: React.MouseEvent | React.ChangeEvent) => {
+    if ("shiftKey" in e && e.shiftKey && lastClickedRef.current) {
+      const paths = filtered.map((i) => i.path);
+      const lastIdx = paths.indexOf(lastClickedRef.current);
+      const curIdx = paths.indexOf(item.path);
+      if (lastIdx !== -1 && curIdx !== -1) {
+        const start = Math.min(lastIdx, curIdx);
+        const end = Math.max(lastIdx, curIdx);
+        selectRange(filtered.slice(start, end + 1).map((i) => i.path));
+        return;
+      }
+    }
+    toggleSelect(item.path);
+    lastClickedRef.current = item.path;
+  }, [filtered, toggleSelect, selectRange]);
+
   const savePlaylist = () => {
     const audio = (selectedItems.length ? selectedItems : items).filter((i) => i.mime.startsWith("audio/"));
     if (!audio.length) { pushToast("error", "No audio files selected"); setPlaylistModal(false); return; }
@@ -324,7 +343,7 @@ const [playlistModal, setPlaylistModal] = useState(false);
               selectMode={selectMode}
               canWrite={canWrite}
               onOpen={openItem}
-               onSelect={(it) => { toggleSelect(it.path); }}
+               onSelect={handleSelect}
 
               onContextMenu={onContextMenu}
               onDropItem={(folder) => moveSelectionTo()}
@@ -354,7 +373,7 @@ const [playlistModal, setPlaylistModal] = useState(false);
             />
           )}
           {view === "shares" && <SharesPanel />}
-          {view === "playlists" && <PlaylistsPanel />}
+          {view === "playlists" && <PlaylistsPanel user={user} />}
           {view === "admin" && isAdmin && <AdminPanel />}
           {view === "search" && (
             <SearchView
@@ -367,6 +386,18 @@ const [playlistModal, setPlaylistModal] = useState(false);
             />
           )}
         </div>
+
+        <SelectionBar
+          count={selection.size}
+          onDownload={() => handleSelectionAction("download")}
+          onMove={() => handleSelectionAction("move")}
+          onCopy={() => handleSelectionAction("copy")}
+          onDelete={() => handleSelectionAction("delete")}
+          onShare={() => handleSelectionAction("share")}
+          onArchive={() => handleSelectionAction("archive")}
+          onFavorite={() => handleSelectionAction("favorite")}
+          onClear={clearSelection}
+        />
 
         <PlayerBar />
       </div>

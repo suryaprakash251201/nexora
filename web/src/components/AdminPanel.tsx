@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Users, ScrollText, RefreshCw, Plus, Shield, Settings, HardDrive, Sun, Moon, Monitor, LayoutGrid, List, Pencil, Trash2, ShieldCheck, Clock } from "lucide-react";
+import { Users, ScrollText, RefreshCw, Plus, Shield, Settings, HardDrive, Sun, Moon, Monitor, LayoutGrid, List, Pencil, Trash2, ShieldCheck, Clock, KeyRound, Loader2, AlertCircle } from "lucide-react";
 import { get, post, put, del } from "../api/client";
 import { Modal } from "./Modal";
 import RootModal from "./RootModal";
@@ -71,6 +71,11 @@ function UsersTab() {
   const { data, isLoading } = useQuery({ queryKey: ["admin-users"], queryFn: () => get<{ users: User[] }>("/admin/users") });
   const [showCreate, setShowCreate] = useState(false);
   const [permUser, setPermUser] = useState<User | null>(null);
+  const [resetPwUser, setResetPwUser] = useState<User | null>(null);
+  const [resetPwValue, setResetPwValue] = useState("");
+  const [resetPwConfirm, setResetPwConfirm] = useState("");
+  const [resetPwBusy, setResetPwBusy] = useState(false);
+  const [resetPwError, setResetPwError] = useState<string | null>(null);
 
   const reindex = async () => {
     try { await post("/admin/search/reindex"); pushToast("success", "Reindex started in background"); }
@@ -86,6 +91,25 @@ function UsersTab() {
     if (!confirm(`Delete user "${u.username}"? This cannot be undone.`)) return;
     try { await del(`/admin/users/${u.id}`); pushToast("success", "User deleted"); qc.invalidateQueries({ queryKey: ["admin-users"] }); }
     catch (e: any) { pushToast("error", e.message); }
+  };
+
+  const resetPassword = async () => {
+    if (!resetPwUser) return;
+    setResetPwError(null);
+    if (resetPwValue !== resetPwConfirm) { setResetPwError("Passwords do not match"); return; }
+    if (resetPwValue.length < 8) { setResetPwError("Password must be at least 8 characters"); return; }
+    setResetPwBusy(true);
+    try {
+      await put(`/admin/users/${resetPwUser.id}`, { password: resetPwValue });
+      pushToast("success", `Password reset for ${resetPwUser.username}`);
+      setResetPwUser(null);
+      setResetPwValue("");
+      setResetPwConfirm("");
+    } catch (e: any) {
+      setResetPwError(e.message || "Failed to reset password");
+    } finally {
+      setResetPwBusy(false);
+    }
   };
 
   const users = data?.users || [];
@@ -168,6 +192,13 @@ function UsersTab() {
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-2 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={() => { setResetPwUser(u); setResetPwValue(""); setResetPwConfirm(""); setResetPwError(null); }}
+                          className="p-2 rounded-lg glass-hover text-accent hover:bg-accent/10 transition-colors"
+                          title="Reset Password"
+                        >
+                          <KeyRound className="h-4 w-4" />
+                        </button>
                         <button 
                           onClick={() => setPermUser(u)} 
                           className="p-2 rounded-lg glass-hover text-accent hover:bg-accent/10 transition-colors" 
@@ -194,6 +225,27 @@ function UsersTab() {
       
       {showCreate && <CreateUserModal onClose={() => setShowCreate(false)} onDone={() => { setShowCreate(false); qc.invalidateQueries({ queryKey: ["admin-users"] }); }} />}
       {permUser && <PermModal user={permUser} onClose={() => setPermUser(null)} />}
+      {resetPwUser && (
+        <Modal title={`Reset Password: ${resetPwUser.username}`} onClose={() => { setResetPwUser(null); setResetPwError(null); }}
+          footer={
+            <button onClick={resetPassword} disabled={resetPwBusy || !resetPwValue || !resetPwConfirm} className="px-3 py-1.5 rounded-lg accent-glass text-sm font-medium disabled:opacity-50 flex items-center gap-1.5">
+              {resetPwBusy && <Loader2 className="h-4 w-4 animate-spin" />} Set Password
+            </button>
+          }>
+          <div className="space-y-4">
+            <p className="text-sm text-content-muted">Set a new password for <strong>{resetPwUser.username}</strong>. The user will be logged out of all sessions.</p>
+            <div>
+              <label className="text-xs font-bold text-content-muted uppercase tracking-wider ml-1">New Password</label>
+              <input type="password" value={resetPwValue} onChange={(e) => { setResetPwValue(e.target.value); setResetPwError(null); }} className="w-full rounded-lg glass-input px-3 py-2.5 outline-none text-sm mt-1" placeholder="Min 8 characters" />
+            </div>
+            <div>
+              <label className="text-xs font-bold text-content-muted uppercase tracking-wider ml-1">Confirm Password</label>
+              <input type="password" value={resetPwConfirm} onChange={(e) => { setResetPwConfirm(e.target.value); setResetPwError(null); }} className="w-full rounded-lg glass-input px-3 py-2.5 outline-none text-sm mt-1" placeholder="Repeat password" />
+            </div>
+            {resetPwError && <p className="text-sm text-danger flex items-center gap-1.5"><AlertCircle className="h-4 w-4" /> {resetPwError}</p>}
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

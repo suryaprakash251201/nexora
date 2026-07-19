@@ -49,8 +49,8 @@ type Collaborator struct {
 	Username   string `json:"username,omitempty"`
 }
 
-func (s *Store) List(userID string) ([]Playlist, error) {
-	rows, err := s.db.Query(`SELECT id, name, COALESCE(cover_root_id,''), COALESCE(cover_path,''), COALESCE(is_public,0), created_at, updated_at FROM playlists WHERE user_id = ? ORDER BY created_at DESC`, userID)
+func (s *Store) ListAll() ([]Playlist, error) {
+	rows, err := s.db.Query(`SELECT id, user_id, name, COALESCE(cover_root_id,''), COALESCE(cover_path,''), COALESCE(is_public,0), created_at, updated_at FROM playlists ORDER BY created_at DESC`)
 	if err != nil {
 		return nil, err
 	}
@@ -59,8 +59,7 @@ func (s *Store) List(userID string) ([]Playlist, error) {
 	var playlists []Playlist
 	for rows.Next() {
 		var p Playlist
-		p.UserID = userID
-		if err := rows.Scan(&p.ID, &p.Name, &p.CoverRootID, &p.CoverPath, &p.IsPublic, &p.CreatedAt, &p.UpdatedAt); err != nil {
+		if err := rows.Scan(&p.ID, &p.UserID, &p.Name, &p.CoverRootID, &p.CoverPath, &p.IsPublic, &p.CreatedAt, &p.UpdatedAt); err != nil {
 			return nil, err
 		}
 		p.Items = make([]PlaylistItem, 0)

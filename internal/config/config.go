@@ -45,9 +45,10 @@ type Config struct {
 	EnableFFmpegThumbs bool
 	MaxEditableSize  int64
 	DefaultRoots     []RootConfig
-	AllowRegistration bool
-	SecureCookies     bool
-	ReadonlyFS       bool
+	AllowRegistration   bool
+	SecureCookies       bool
+	ReadonlyFS          bool
+	PlaylistCoverPath   string
 }
 
 // Load reads configuration from .env (if present) then environment variables.
@@ -76,9 +77,10 @@ func Load() (*Config, error) {
 		EnableFFmpegThumbs: envBool("NEXORA_ENABLE_FFMPEG_THUMBS", false),
 		MaxEditableSize:   envBytes("NEXORA_MAX_EDITABLE_SIZE", 5<<20),
 		DefaultRoots:      parseRoots(env("NEXORA_DEFAULT_ROOTS", "Files:/mnt/files:false,Media:/mnt/media:true,Backups:/mnt/backups:false,Shared:/mnt/shared:false")),
-		AllowRegistration: envBool("NEXORA_ALLOW_REGISTRATION", true),
-		SecureCookies:     envBool("NEXORA_SECURE_COOKIES", false),
-		ReadonlyFS:        envBool("NEXORA_READONLY_FS", false),
+		AllowRegistration:   envBool("NEXORA_ALLOW_REGISTRATION", true),
+		SecureCookies:       envBool("NEXORA_SECURE_COOKIES", false),
+		ReadonlyFS:          envBool("NEXORA_READONLY_FS", false),
+		PlaylistCoverPath:   env("NEXORA_PLAYLIST_COVER_PATH", ""),
 	}
 	c.DatabasePath = env("NEXORA_DATABASE_PATH", c.DataDir+"/nexora.db")
 	c.ThumbnailCacheDir = env("NEXORA_THUMBNAIL_CACHE_DIR", c.DataDir+"/cache/thumbnails")

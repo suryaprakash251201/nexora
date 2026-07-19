@@ -2,6 +2,7 @@ package auth
 
 import (
 	"database/sql"
+	"fmt"
 
 	"github.com/nexora/nexora/internal/util"
 )
@@ -116,6 +117,22 @@ func (s *UserStore) UpdatePassword(id, hash string) error {
 	return err
 }
 
+// UpdateTOTPSecret sets the TOTP secret for a user.
+func (s *UserStore) UpdateTOTPSecret(id, secret string) error {
+	_, err := s.db.Exec(`UPDATE users SET totp_secret=?, updated_at=? WHERE id=?`, secret, util.NowUTC(), id)
+	return err
+}
+
+// UpdateTOTPEnabled sets the TOTP enabled flag.
+func (s *UserStore) UpdateTOTPEnabled(id string, enabled bool) error {
+	v := 0
+	if enabled {
+		v = 1
+	}
+	_, err := s.db.Exec(`UPDATE users SET totp_enabled=?, updated_at=? WHERE id=?`, v, util.NowUTC(), id)
+	return err
+}
+
 // UpdateRole changes a user's role and status.
 func (s *UserStore) UpdateRole(id string, role Role, status string) error {
 	_, err := s.db.Exec(`UPDATE users SET role=?, status=?, updated_at=? WHERE id=?`, string(role), status, util.NowUTC(), id)
@@ -144,4 +161,43 @@ func (s *UserStore) List() ([]User, error) {
 // account status.
 func (u User) IsAuthorized() bool {
 	return u.Status == "active"
+}
+
+// ResetToken represents a one-time password reset token.
+type ResetToken struct {
+	ID        string
+	UserID    string
+	TokenHash string
+	ExpiresAt string
+	CreatedAt string
+}
+
+// CreateResetToken stores a hashed reset token with expiry.
+func (s *UserStore) CreateResetToken(userID, tokenHash, expiresAt string) error {
+	id := util.NewID("rt_", 12)
+	_, err := s.db.Exec(`INSERT INTO reset_tokens(id, user_id, token_hash, expires_at, created_at) VALUES(?,?,?,?,?)`,
+		id, userID, tokenHash, expiresAt, util.NowUTC())
+	return err
+}
+
+// ConsumeResetToken looks up a hashed token and returns the user ID if valid and not expired.
+// Deletes the token after successful lookup (one-time use).
+func (s *UserStore) ConsumeResetToken(tokenHash string) (string, error) {
+	var id, userID, expiresAt string
+	err := s.db.QueryRow(`SELECT id, user_id, expires_at FROM reset_tokens WHERE token_hash=?`, tokenHash).Scan(&id, &userID, &expiresAt)
+	if err != nil {
+		return "", err
+	}
+	// Delete regardless (one-time use).
+	_, _ = s.db.Exec(`DELETE FROM reset_tokens WHERE id=?`, id)
+	if expiresAt < util.NowUTC() {
+		return "", fmt.Errorf("reset token expired")
+	}
+	return userID, nil
+}
+
+// CleanupExpiredResetTokens removes expired reset tokens.
+func (s *UserStore) CleanupExpiredResetTokens() error {
+	_, err := s.db.Exec(`DELETE FROM reset_tokens WHERE expires_at < ?`, util.NowUTC())
+	return err
 }
