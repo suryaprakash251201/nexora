@@ -256,19 +256,6 @@ Because migrations are embedded and forward-only, downgrades are not automatic.
 To roll back: restore the previous image tag **and** the database backup taken
 before the upgrade.
 
----
-
-## Roadmap (phases)
-
-- **Phase 1 (done):** scaffold, DB/migrations, config, Docker, health, auth,
-  first-run setup, CSRF, rate limiting, roles.
-- **Phase 2:** storage-root management, file listing/metadata, upload/download,
-  create/rename/move/copy/delete/trash.
-- **Phase 3:** React UI shell, login/setup, responsive file browser, context
-  menus, details drawer, search/filters.
-- **Phase 4:** media/doc previews, editor, archive jobs, favorites/recent.
-- **Phase 5:** share links, audit UI, metadata search index, hardening,
-  tests, docs, perf pass.
 
 ---
 
