@@ -37,7 +37,7 @@ export function SkeletonGrid({ count = 8 }: { count?: number }) {
 
 export function SkeletonList({ count = 8 }: { count?: number }) {
   return (
-    <div className="divide-y divide-border/30">
+    <div className="divide-y divide-[rgba(255,255,255,0.06)]">
       {Array.from({ length: count }).map((_, i) => <SkeletonFileRow key={i} index={i} />)}
     </div>
   );

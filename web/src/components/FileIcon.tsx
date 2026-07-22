@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
-export type IconColor = "blue" | "red" | "green" | "yellow" | "purple" | "cyan" | "orange" | "gray" | "pink" | "emerald";
+export type IconColor = "blue" | "red" | "green" | "yellow" | "purple" | "cyan" | "orange" | "gray" | "pink" | "emerald" | "amber";
 
 export function iconForFile(item: { is_dir: boolean; mime: string; extension: string }): { icon: LucideIcon; color: IconColor } {
   if (item.is_dir) return { icon: Folder, color: "blue" };
@@ -32,7 +32,7 @@ export function iconForFile(item: { is_dir: boolean; mime: string; extension: st
   if (m.startsWith("audio/")) return { icon: Music, color: "pink" };
   
   if (m === "application/pdf" || ext === "pdf") return { icon: FileText, color: "red" };
-  if (m.includes("zip") || m.includes("tar") || ["zip", "tar", "gz", "7z", "rar", "iso"].includes(ext)) return { icon: Archive, color: "amber" as any };
+  if (m.includes("zip") || m.includes("tar") || ["zip", "tar", "gz", "7z", "rar", "iso"].includes(ext)) return { icon: Archive, color: "amber" };
   if (["json", "yaml", "yml", "toml", "ini", "xml", "webmanifest", "env"].includes(ext)) return { icon: FileJson, color: "yellow" };
   if (["js", "ts", "jsx", "tsx", "go", "py", "sh", "bash", "rs", "java", "c", "cpp", "h", "rb", "php"].includes(ext)) return { icon: FileCode, color: "orange" };
   if (["html", "css", "scss", "less"].includes(ext)) return { icon: FileCode, color: "orange" };

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useMemo } from "react";
 import { createPortal } from "react-dom";
-import { Search, Keyboard, Command, X, FolderOpen, File, Download, Upload, Share2, Star, Trash2, Pencil, Move, Copy, Archive, Settings, HelpCircle, Palette, RefreshCw, ChevronRight, Clock, Music, Archive as ArchiveIcon, FolderPlus, FilePlus, LayoutGrid, List, CheckSquare } from "lucide-react";
+import { Search, Keyboard, Command, X, FolderOpen, File, Download, Upload, Share2, Star, Trash2, Pencil, Move, Copy, Archive, Settings, HelpCircle, RefreshCw, ChevronRight, Clock, Music, Archive as ArchiveIcon, FolderPlus, FilePlus, LayoutGrid, List, CheckSquare } from "lucide-react";
 import type { FileItem, Root, User } from "../api/types";
 import type { SidebarView } from "./Sidebar";
 
@@ -117,7 +117,6 @@ export default function CommandPalette({
       { id: "toggle-order", label: "Toggle Sort Order", description: "Switch between ascending and descending", icon: <ChevronRight className="h-4 w-4" />, category: "view", action: () => { setOrder(order === "asc" ? "desc" : "asc"); onClose(); }, keywords: ["sort", "order", "ascending", "descending"] },
 
       // Settings
-      { id: "theme", label: "Toggle Theme", description: "Switch between light and dark mode", icon: <Palette className="h-4 w-4" />, shortcut: "⌘⇧L", category: "settings", action: () => { onClose(); }, keywords: ["theme", "dark", "light", "mode"] },
       { id: "settings", label: "Settings", description: "Open settings panel", icon: <Settings className="h-4 w-4" />, shortcut: "⌘,", category: "settings", action: () => { setView("admin"); onClose(); }, keywords: ["settings", "preferences", "config"] },
 
       // Help

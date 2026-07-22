@@ -3,12 +3,14 @@ import { get, post } from "./api/client";
 import Login from "./components/Login";
 import Setup from "./components/Setup";
 import Workspace from "./components/Workspace";
+import MouseGlow from "./components/MouseGlow";
 import type { User } from "./api/types";
 
 export default function App() {
   return (
     <>
       <div className="nexora-bg" aria-hidden="true" />
+      <MouseGlow />
       <AppInner />
     </>
   );

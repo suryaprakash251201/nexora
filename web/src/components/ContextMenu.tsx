@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { motion, AnimatePresence } from "motion/react";
 
 export interface MenuItem {
   label: string;
@@ -10,21 +11,14 @@ export interface MenuItem {
 }
 
 export default function ContextMenu({
-  x,
-  y,
-  items,
-  onClose,
+  x, y, items, onClose,
 }: {
-  x: number;
-  y: number;
-  items: MenuItem[];
-  onClose: () => void;
+  x: number; y: number; items: MenuItem[]; onClose: () => void;
 }) {
   const [pos, setPos] = useState({ x, y });
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // Keep menu on-screen.
     const w = 220;
     const h = items.length * 36 + 16;
     let nx = x;
@@ -43,42 +37,34 @@ export default function ContextMenu({
       if (!menu) return;
       const entries = Array.from(menu.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'));
       const idx = entries.indexOf(document.activeElement as HTMLButtonElement);
-      if (e.key === "Escape") {
-        e.preventDefault();
-        onClose();
-      } else if (e.key === "ArrowDown") {
-        e.preventDefault();
-        entries[(idx + 1 + entries.length) % entries.length]?.focus();
-      } else if (e.key === "ArrowUp") {
-        e.preventDefault();
-        entries[(idx - 1 + entries.length) % entries.length]?.focus();
-      } else if (e.key === "Home") {
-        e.preventDefault();
-        entries[0]?.focus();
-      } else if (e.key === "End") {
-        e.preventDefault();
-        entries[entries.length - 1]?.focus();
-      }
+      if (e.key === "Escape") { e.preventDefault(); onClose(); }
+      else if (e.key === "ArrowDown") { e.preventDefault(); entries[(idx + 1 + entries.length) % entries.length]?.focus(); }
+      else if (e.key === "ArrowUp") { e.preventDefault(); entries[(idx - 1 + entries.length) % entries.length]?.focus(); }
+      else if (e.key === "Home") { e.preventDefault(); entries[0]?.focus(); }
+      else if (e.key === "End") { e.preventDefault(); entries[entries.length - 1]?.focus(); }
     };
-    menuRef.current?.addEventListener("keydown", onKey);
-    return () => menuRef.current?.removeEventListener("keydown", onKey);
+    const el = menuRef.current;
+    el?.addEventListener("keydown", onKey);
+    return () => el?.removeEventListener("keydown", onKey);
   }, [onClose, items.length]);
 
   return (
-    <>
+    <AnimatePresence>
       <div className="fixed inset-0 z-40" onClick={onClose} onContextMenu={(e) => { e.preventDefault(); onClose(); }} />
-      <div
+      <motion.div
         ref={menuRef}
+        initial={{ opacity: 0, scale: 0.95, y: -4 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: -4 }}
+        transition={{ duration: 0.12, ease: [0.25, 0.1, 0.25, 1] }}
         role="menu"
         aria-label="File actions"
-        className="fixed z-50 min-w-[220px] glass-strong rounded-xl py-1.5 shadow-2xl animate-scale-in outline-none"
-        style={{ left: pos.x, top: pos.y, transformOrigin: 'top left' }}
+        className="fixed z-50 min-w-[220px] glass-strong rounded-xl py-1.5 shadow-2xl outline-none"
+        style={{ left: pos.x, top: pos.y, transformOrigin: "top left" }}
         tabIndex={-1}
       >
         {items.map((it, i) => {
-          if (it.divider) {
-            return <div key={i} className="h-px w-full glass-divider my-1" />;
-          }
+          if (it.divider) return <div key={i} className="h-px w-full glass-divider my-1" />;
           return (
             <button
               key={i}
@@ -87,18 +73,14 @@ export default function ContextMenu({
               onClick={() => { it.onClick?.(); onClose(); }}
               className={`w-full flex items-center gap-3 px-3 py-2 text-sm font-medium text-left outline-none transition-colors
                 ${it.disabled ? "opacity-40 cursor-not-allowed" : "cursor-default"}
-                ${
-                  it.danger 
-                    ? "text-danger hover:bg-danger/10 focus:bg-danger/10" 
-                    : "text-content hover:bg-accent/15 hover:text-accent focus:bg-accent/15 focus:text-accent"
-                }`}
+                ${it.danger ? "text-danger hover:bg-danger/10 focus:bg-danger/10" : "text-content hover:bg-accent/15 hover:text-accent focus:bg-accent/15 focus:text-accent"}`}
             >
               <span className={`opacity-80 ${it.danger ? "text-danger" : ""}`}>{it.icon}</span>
               <span className="flex-1">{it.label}</span>
             </button>
           );
         })}
-      </div>
-    </>
+      </motion.div>
+    </AnimatePresence>
   );
 }

@@ -1,18 +1,34 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
+import path from "path";
 
-// Build the SPA to ../web/dist (relative to the Dockerfile's web context).
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
+  resolve: {
+    alias: {
+      "@": path.resolve(__dirname, "./src"),
+    },
+  },
   build: {
     outDir: "dist",
     sourcemap: false,
     chunkSizeWarningLimit: 1200,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          "vendor-react": ["react", "react-dom"],
+          "vendor-motion": ["motion"],
+          "vendor-query": ["@tanstack/react-query"],
+          "vendor-icons": ["lucide-react"],
+          "vendor-ui": ["@base-ui/react", "cmdk", "sonner"],
+        },
+      },
+    },
   },
   server: {
     port: 5173,
     proxy: {
-      // Proxy API calls to the Go backend during development.
       "/api": "http://localhost:8080",
       "/healthz": "http://localhost:8080",
     },

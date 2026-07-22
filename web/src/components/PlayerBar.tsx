@@ -132,8 +132,8 @@ export default function PlayerBar() {
                 </button>
                 <button
                   onClick={() => usePlayer.getState().toggle()}
-                  className={`h-9 w-9 rounded-full grid place-items-center text-white shadow-lg transition-all duration-300 hover:scale-105 active:scale-95
-                    ${isPlaying ? 'bg-gradient-to-br from-accent to-purple-500 shadow-accent/40' : 'bg-surface-muted border border-white/20 text-content'}`}
+                    className={`h-9 w-9 rounded-full grid place-items-center text-white shadow-lg transition-all duration-300 hover:scale-105 active:scale-95
+                    ${isPlaying ? 'bg-gradient-to-br from-accent to-purple-500 shadow-accent/40 player-glow' : 'bg-surface-muted border border-white/20 text-content'}`}
                   title={isPlaying ? "Pause" : "Play"}
                 >
                   {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4 translate-x-0.5" />}
@@ -165,7 +165,12 @@ export default function PlayerBar() {
                   </button>
                   <div className="absolute bottom-full right-0 mb-2 w-28 glass-strong rounded-lg p-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none group-hover:pointer-events-auto">
                     <div className="relative h-1.5 w-full rounded-full bg-white/20">
-                      <div className="absolute inset-y-0 left-0 bg-accent rounded-full" style={{ width: `${(muted ? 0 : volume) * 100}%` }} />
+                      <div className="absolute inset-y-0 left-0" style={{
+                        width: `${(muted ? 0 : volume) * 100}%`,
+                        background: muted || volume === 0 ? '#73809A' : volume < 0.3 ? 'linear-gradient(90deg, #F59E0B, #FB923C)' : volume < 0.7 ? 'linear-gradient(90deg, #5B8CFF, #7A5CFF)' : 'linear-gradient(90deg, #22C55E, #2DD4BF)',
+                        borderRadius: 'inherit',
+                        transition: 'all 0.1s ease-out'
+                      }} />
                       <input
                         type="range"
                         min={0}
@@ -187,7 +192,7 @@ export default function PlayerBar() {
 
             <div className="mt-2">
               <div className="relative h-1.5 rounded-full bg-white/20 overflow-hidden cursor-pointer group">
-                <div className="absolute inset-y-0 left-0 bg-accent rounded-full transition-all duration-100" style={{ width: `${pct}%` }} />
+                <div className="absolute inset-y-0 left-0 progress-fill" style={{ width: `${pct}%` }} />
                 <input
                   type="range"
                   min={0}

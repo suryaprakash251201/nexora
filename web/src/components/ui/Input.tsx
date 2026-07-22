@@ -14,11 +14,11 @@ export const Input = forwardRef<HTMLInputElement, InputProps>((
   const [focused, setFocused] = useState(false);
   const inputId = id || (label ? label.toLowerCase().replace(/\s+/g, '-') : undefined);
 
-  const base = 'w-full transition-all duration-200 outline-none text-sm';
+  const base = 'w-full transition-all duration-200 outline-none text-sm text-foreground';
   const variants = {
     default: 'glass-input rounded-xl px-3 py-2.5',
     search: 'glass-input rounded-xl pl-9 pr-3 py-2.5',
-    ghost: 'bg-transparent border-b border-border/50 px-1 py-2 focus:border-accent/70',
+    ghost: 'bg-transparent border-b border-glass-border px-1 py-2 focus:border-accent/70',
   };
 
   return (
@@ -27,13 +27,13 @@ export const Input = forwardRef<HTMLInputElement, InputProps>((
         <label
           htmlFor={inputId}
           className={`absolute left-3 transition-all duration-200 pointer-events-none
-            ${focused || props.value ? 'top-0.5 text-[10px] text-accent font-medium' : 'top-2.5 text-sm text-content-muted'}`}
+            ${focused || props.value ? 'top-0.5 text-[10px] text-accent font-medium' : 'top-2.5 text-sm text-text-tertiary'}`}
         >
           {label}
         </label>
       )}
       {icon && variant === 'search' && (
-        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-content-muted">{icon}</span>
+        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary">{icon}</span>
       )}
       <input
         ref={ref}

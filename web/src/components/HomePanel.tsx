@@ -1,10 +1,12 @@
 import { useState, useEffect } from "react";
-import { Search, Clock, Sparkles, FileText, Music, Film, Plus, FilePlus, Upload, HardDrive, FolderPlus, Play } from "lucide-react";
+import { motion } from "motion/react";
+import { Search, Clock, Sparkles, FileText, Music, Film, Plus, FilePlus, Upload, HardDrive, FolderPlus, Play, Sun, Moon, Star } from "lucide-react";
 import type { RecentItem, FileItem, HomeData } from "../api/types";
 import { FileThumb } from "./FileThumb";
 import { formatRelative } from "../lib/format";
 import { Input } from "./ui/Input";
 import { EmptyState } from "./ui/EmptyState";
+import { staggerContainer, staggerItem, cardHover, slideUp } from "@/lib/animations";
 
 function extOf(name: string): string {
   return name.includes(".") ? name.slice(name.lastIndexOf(".") + 1).toLowerCase() : "";
@@ -33,14 +35,15 @@ function HomeCard({ item, onOpen }: { item: RecentItem; onOpen: () => void }) {
   };
   const kind = mediaKind(item);
   return (
-    <button 
-      onClick={onOpen} 
-      className="group w-full text-left outline-none flex items-center gap-4 p-3 rounded-2xl glass-strong border border-border/50 hover:border-accent/40 focus-visible:ring-2 focus-visible:ring-accent hover:shadow-lg hover:bg-surface/50 transition-all duration-300"
+    <motion.button
+      variants={staggerItem}
+      {...cardHover}
+      onClick={onOpen}
+      className="group w-full text-left outline-none flex items-center gap-4 p-3 rounded-2xl glass-strong border border-border/50 hover:border-accent/40 focus-visible:ring-2 focus-visible:ring-accent transition-all duration-300"
     >
       <div className="relative h-16 w-16 shrink-0 rounded-xl overflow-hidden shadow-sm">
         <FileThumb it={fi} fill />
         <div className="absolute inset-0 bg-black/10 group-hover:bg-black/20 transition-colors duration-300" />
-        
         {kind === "music" && (
           <span className="absolute bottom-1 right-1 grid place-items-center h-6 w-6 rounded-full bg-surface/90 backdrop-blur-md shadow-sm border border-border/50 text-content group-hover:text-accent transition-colors">
             <Music className="h-3 w-3" />
@@ -60,68 +63,59 @@ function HomeCard({ item, onOpen }: { item: RecentItem; onOpen: () => void }) {
           <p className="truncate text-xs font-medium text-content-muted/70 uppercase tracking-wider">{formatRelative(item.accessed_at)}</p>
         </div>
       </div>
-    </button>
+    </motion.button>
   );
 }
 
-function Section({
-  title,
-  icon,
-  items,
-  onOpen,
-  action,
-}: {
+function Section({ title, icon, items, onOpen, action, color = "accent" }: {
   title: string;
   icon: React.ReactNode;
   items: RecentItem[];
   onOpen: (item: RecentItem) => void;
   action?: React.ReactNode;
+  color?: string;
 }) {
   if (!items.length) return null;
   return (
-    <section className="animate-slide-up">
-      <div className="flex items-center gap-3 mb-4 px-1">
-        <div className="p-1.5 rounded-lg bg-accent/10 text-accent">
+    <motion.section variants={staggerContainer} initial="initial" animate="animate">
+      <motion.div variants={slideUp} className="flex items-center gap-3 mb-4 px-1">
+        <div className="p-1.5 rounded-lg" style={{ backgroundColor: `${color}18`, color }}>
           {icon}
         </div>
         <h2 className="font-bold text-lg">{title}</h2>
         <span className="px-2 py-0.5 rounded-full bg-surface-muted text-xs font-bold text-content-muted">{items.length}</span>
         {action && <span className="ml-auto">{action}</span>}
-      </div>
+      </motion.div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-2">
         {items.map((it) => (
           <HomeCard key={it.root_id + it.path} item={it} onOpen={() => onOpen(it)} />
         ))}
       </div>
-    </section>
+    </motion.section>
   );
 }
 
 function AddTile({ icon, label, onClick }: { icon: React.ReactNode; label: string; onClick: () => void }) {
   return (
-    <button onClick={onClick} className="group w-full text-left outline-none">
-      <div className="flex items-center gap-4 p-4 rounded-2xl glass-strong border border-border/50 hover:border-accent/40 focus-visible:ring-2 focus-visible:ring-accent hover:shadow-lg transition-all duration-300 group-hover:bg-surface-muted/30 relative overflow-hidden">
+    <motion.button
+      variants={staggerItem}
+      {...cardHover}
+      onClick={onClick}
+      className="group w-full text-left outline-none"
+    >
+      <div className="flex items-center gap-4 p-4 rounded-2xl glass-strong border border-border/50 hover:border-accent/40 focus-visible:ring-2 focus-visible:ring-accent transition-all duration-300 relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-r from-accent/0 to-accent/5 group-hover:opacity-100 opacity-0 transition-opacity" />
         <div className="relative z-10 grid place-items-center h-12 w-12 rounded-xl bg-accent/10 text-accent transition-transform duration-300 group-hover:scale-110">
           {icon}
         </div>
         <p className="relative z-10 text-[15px] font-semibold text-content group-hover:text-accent transition-colors">{label}</p>
       </div>
-    </button>
+    </motion.button>
   );
 }
 
 export default function HomePanel({
-  data,
-  isLoading,
-  isAdmin,
-  onSearch,
-  onOpenRecent,
-  onUpload,
-  onNewFolder,
-  onNewFile,
-  onNewRoot,
-  onOpenPlaylist,
+  data, isLoading, isAdmin, onSearch, onOpenRecent, onUpload, onNewFolder, onNewFile, onNewRoot, onOpenPlaylist,
 }: {
   data?: HomeData;
   isLoading: boolean;
@@ -136,12 +130,15 @@ export default function HomePanel({
 }) {
   const [q, setQ] = useState("");
   const [greeting, setGreeting] = useState("Good day");
-  
+  const [greetingIcon, setGreetingIcon] = useState<React.ReactNode>(<Star className="h-8 w-8" />);
+
   useEffect(() => {
     const hour = new Date().getHours();
-    if (hour < 12) setGreeting("Good morning");
-    else if (hour < 18) setGreeting("Good afternoon");
-    else setGreeting("Good evening");
+    if (hour < 5) { setGreeting("Late night"); setGreetingIcon(<Moon className="h-8 w-8" />); }
+    else if (hour < 12) { setGreeting("Good morning"); setGreetingIcon(<Sun className="h-8 w-8" />); }
+    else if (hour < 18) { setGreeting("Good afternoon"); setGreetingIcon(<Sun className="h-8 w-8" />); }
+    else if (hour < 22) { setGreeting("Good evening"); setGreetingIcon(<Moon className="h-8 w-8" />); }
+    else { setGreeting("Late night"); setGreetingIcon(<Moon className="h-8 w-8" />); }
   }, []);
 
   const submit = (e: React.FormEvent) => {
@@ -149,7 +146,7 @@ export default function HomePanel({
     const t = q.trim();
     if (t) onSearch(t);
   };
-  
+
   const recent = data?.recent ?? [];
   const added = data?.added ?? [];
   const documents = data?.documents ?? [];
@@ -160,19 +157,40 @@ export default function HomePanel({
     recent.length > 0 || added.length > 0 || documents.length > 0 || music.length > 0 || video.length > 0 || playlists.length > 0;
 
   return (
-    <div className="flex-1 overflow-auto custom-scrollbar bg-background">
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.25 }}
+      className="flex-1 overflow-auto custom-scrollbar bg-background"
+    >
       {/* Hero Banner */}
       <div className="relative overflow-hidden border-b border-border/50 bg-surface/30">
         <div className="absolute inset-0 bg-gradient-to-r from-accent/10 via-transparent to-transparent opacity-50" />
-        <div className="max-w-6xl mx-auto px-6 py-10 md:py-14 relative z-10 animate-fade-in">
-          <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight mb-2">
-            {greeting}
-          </h1>
-          <p className="text-content-muted text-base md:text-lg max-w-2xl">
-            Pick up where you left off or discover new files.
-          </p>
+        <div className="max-w-6xl mx-auto px-6 py-10 md:py-14 relative z-10">
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, ease: [0.25, 0.1, 0.25, 1] }}>
+            <div className="flex items-center gap-4 mb-2">
+              <div className="p-3 rounded-2xl bg-accent/10 text-accent">
+                {greetingIcon}
+              </div>
+              <div>
+                <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight">
+                  {greeting}
+                </h1>
+                <p className="text-content-muted text-base md:text-lg max-w-2xl">
+                  Pick up where you left off or discover new files.
+                </p>
+              </div>
+            </div>
+          </motion.div>
 
-          <form onSubmit={submit} className="relative mt-8 max-w-2xl group animate-slide-up" style={{ animationDelay: '0.1s' }}>
+          <motion.form
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1, duration: 0.35, ease: [0.25, 0.1, 0.25, 1] }}
+            onSubmit={submit}
+            className="relative mt-8 max-w-2xl group"
+          >
             <Input
               variant="search"
               icon={<Search className="h-5 w-5" />}
@@ -181,7 +199,7 @@ export default function HomePanel({
               placeholder="Search your files, folders, and documents…"
               className="h-14 text-lg bg-surface/80 backdrop-blur-md shadow-lg border-border/50 focus:border-accent/50 focus:ring-accent/20"
             />
-          </form>
+          </motion.form>
         </div>
       </div>
 
@@ -204,29 +222,36 @@ export default function HomePanel({
         )}
 
         {!isLoading && !hasContent && (
-          <div className="py-10 animate-fade-in">
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="py-10">
             <EmptyState
               title="Nothing here yet"
               description="Files you view, play, or add will automatically show up on your home dashboard."
               icon={<Sparkles className="h-10 w-10 text-accent opacity-80" />}
             />
-          </div>
+          </motion.div>
         )}
 
         {!isLoading && hasContent && (
-          <div className="stagger-children space-y-12">
+          <motion.div
+            variants={staggerContainer}
+            initial="initial"
+            animate="animate"
+            className="space-y-12"
+          >
             {playlists.length > 0 && (
-              <section className="animate-slide-up">
+              <motion.section variants={staggerItem}>
                 <div className="flex items-center gap-3 mb-6 px-1">
-                  <div className="p-1.5 rounded-lg bg-accent/10 text-accent">
+                  <div className="p-1.5 rounded-lg" style={{ backgroundColor: "#F472B618", color: "#F472B6" }}>
                     <Music className="h-5 w-5" />
                   </div>
                   <h2 className="font-bold text-lg">Public Playlists</h2>
                 </div>
                 <div className="flex overflow-x-auto gap-4 pb-4 custom-scrollbar snap-x">
                   {playlists.map((pl) => (
-                    <button
+                    <motion.button
                       key={pl.id}
+                      whileHover={{ scale: 1.02, y: -4 }}
+                      transition={{ duration: 0.2, ease: "easeOut" }}
                       onClick={onOpenPlaylist}
                       className="snap-start group relative w-40 sm:w-48 text-left outline-none shrink-0"
                     >
@@ -244,22 +269,22 @@ export default function HomePanel({
                         )}
                         <div className="absolute inset-0 bg-black/10 group-hover:bg-black/30 transition-colors duration-300" />
                         <div className="absolute inset-0 grid place-items-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 scale-90 group-hover:scale-100">
-                           <div className="h-12 w-12 rounded-full bg-accent/90 text-white grid place-items-center shadow-lg backdrop-blur-md">
-                             <Play className="h-6 w-6 ml-1" />
-                           </div>
+                          <div className="h-12 w-12 rounded-full bg-accent/90 text-white grid place-items-center shadow-lg backdrop-blur-md">
+                            <Play className="h-6 w-6 ml-1" />
+                          </div>
                         </div>
                       </div>
                       <p className="font-semibold text-[15px] truncate group-hover:text-accent transition-colors">{pl.name}</p>
                       <p className="text-xs text-content-muted mt-0.5">{pl.items?.length || 0} tracks</p>
-                    </button>
+                    </motion.button>
                   ))}
                 </div>
-              </section>
+              </motion.section>
             )}
 
-            <section className="animate-slide-up">
+            <motion.section variants={staggerItem}>
               <div className="flex items-center gap-3 mb-6 px-1">
-                <div className="p-1.5 rounded-lg bg-accent/10 text-accent">
+                <div className="p-1.5 rounded-lg" style={{ backgroundColor: "#5B8CFF18", color: "#5B8CFF" }}>
                   <Plus className="h-5 w-5" />
                 </div>
                 <h2 className="font-bold text-lg">Quick Actions</h2>
@@ -272,55 +297,26 @@ export default function HomePanel({
                   <AddTile icon={<HardDrive className="h-6 w-6" />} label="New Storage Root" onClick={onNewRoot} />
                 )}
               </div>
-            </section>
+            </motion.section>
 
             {recent.length > 0 && (
-              <Section
-                title="Recently Opened"
-                icon={<Clock className="h-5 w-5" />}
-                items={recent}
-                onOpen={onOpenRecent}
-              />
+              <Section title="Recently Opened" icon={<Clock className="h-5 w-5" />} items={recent} onOpen={onOpenRecent} color="#A78BFA" />
             )}
-
             {documents.length > 0 && (
-              <Section
-                title="Recent Documents"
-                icon={<FileText className="h-5 w-5" />}
-                items={documents}
-                onOpen={onOpenRecent}
-              />
+              <Section title="Recent Documents" icon={<FileText className="h-5 w-5" />} items={documents} onOpen={onOpenRecent} color="#FBBF24" />
             )}
-
             {music.length > 0 && (
-              <Section
-                title="Recent Music"
-                icon={<Music className="h-5 w-5" />}
-                items={music}
-                onOpen={onOpenRecent}
-              />
+              <Section title="Recent Music" icon={<Music className="h-5 w-5" />} items={music} onOpen={onOpenRecent} color="#F472B6" />
             )}
-
             {video.length > 0 && (
-              <Section
-                title="Recent Videos"
-                icon={<Film className="h-5 w-5" />}
-                items={video}
-                onOpen={onOpenRecent}
-              />
+              <Section title="Recent Videos" icon={<Film className="h-5 w-5" />} items={video} onOpen={onOpenRecent} color="#2DD4BF" />
             )}
-
             {added.length > 0 && (
-              <Section
-                title="Newly Added"
-                icon={<Sparkles className="h-5 w-5" />}
-                items={added}
-                onOpen={onOpenRecent}
-              />
+              <Section title="Newly Added" icon={<Sparkles className="h-5 w-5" />} items={added} onOpen={onOpenRecent} color="#34D399" />
             )}
-          </div>
+          </motion.div>
         )}
       </div>
-    </div>
+    </motion.div>
   );
 }

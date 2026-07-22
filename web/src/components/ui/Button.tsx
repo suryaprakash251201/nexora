@@ -1,65 +1,68 @@
-import { forwardRef, useRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
-import { Loader2 } from 'lucide-react';
+import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from "react";
+import { cva, type VariantProps } from "class-variance-authority";
+import { cn } from "@/lib/utils";
+import { Loader2 } from "lucide-react";
 
-interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
-  size?: 'sm' | 'md' | 'lg';
+const buttonVariants = cva(
+  "inline-flex items-center justify-center rounded-xl text-sm font-medium transition-all duration-200 ease-out whitespace-nowrap outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  {
+    variants: {
+      variant: {
+        primary:
+          "bg-primary text-primary-foreground shadow-[0_4px_16px_var(--color-accent-glow)] hover:opacity-90 hover:shadow-[0_6px_24px_var(--color-accent-glow)] active:translate-y-px",
+        secondary:
+          "bg-glass-bg text-foreground border border-glass-border hover:bg-glass-bg-strong hover:border-accent/30 active:translate-y-px",
+        ghost:
+          "text-text-secondary hover:bg-accent hover:text-accent-foreground active:translate-y-px",
+        danger:
+          "bg-danger/10 text-danger border border-danger/20 hover:bg-danger/20 active:translate-y-px",
+        outline:
+          "border border-glass-border bg-transparent text-foreground hover:bg-glass-bg active:translate-y-px",
+        default:
+          "bg-primary text-primary-foreground shadow-[0_4px_16px_var(--color-accent-glow)] hover:opacity-90 active:translate-y-px",
+        link:
+          "text-accent underline-offset-4 hover:underline",
+      },
+      size: {
+        sm: "h-7 gap-1 px-2.5 text-xs rounded-lg [&_svg:not([class*='size-'])]:size-3.5",
+        md: "h-9 gap-2 px-3.5 text-sm",
+        lg: "h-10 gap-2.5 px-5 text-base",
+        default: "h-9 gap-2 px-3.5 text-sm",
+        xs: "h-6 gap-1 rounded-lg px-2 text-xs [&_svg:not([class*='size-'])]:size-3",
+        "icon-sm": "size-7 rounded-lg p-0 [&_svg:not([class*='size-'])]:size-4",
+        icon: "size-9 rounded-xl p-0",
+        "icon-lg": "size-10 rounded-xl p-0",
+      },
+    },
+    defaultVariants: {
+      variant: "secondary",
+      size: "md",
+    },
+  }
+);
+
+interface ButtonProps
+  extends ButtonHTMLAttributes<HTMLButtonElement>,
+    VariantProps<typeof buttonVariants> {
   loading?: boolean;
   icon?: ReactNode;
-  children?: ReactNode;
 }
 
-const sizeClasses = {
-  sm: 'px-2.5 py-1 text-xs gap-1.5 rounded-lg',
-  md: 'px-3.5 py-2 text-sm gap-2 rounded-xl',
-  lg: 'px-5 py-2.5 text-base gap-2.5 rounded-xl',
-};
+export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
+  ({ className, variant, size, loading, icon, children, ...props }, ref) => {
+    return (
+      <button
+        ref={ref}
+        className={cn(buttonVariants({ variant, size, className }))}
+        disabled={props.disabled || loading}
+        {...props}
+      >
+        {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : icon}
+        {children}
+      </button>
+    );
+  }
+);
+Button.displayName = "Button";
 
-const variantClasses = {
-  primary: 'accent-glass font-medium',
-  secondary: 'glass-hover border font-medium hover:border-accent/30',
-  ghost: 'hover:bg-accent/10 text-content font-medium',
-  danger: 'bg-danger/15 text-danger border border-danger/20 hover:bg-danger/25 font-medium',
-};
-
-export const Button = forwardRef<HTMLButtonElement, ButtonProps>((
-  { variant = 'secondary', size = 'md', loading, icon, children, className = '', disabled, onClick, ...props },
-  ref
-) => {
-  const btnRef = useRef<HTMLButtonElement>(null);
-  const resolvedRef = (ref as React.RefObject<HTMLButtonElement>) || btnRef;
-
-  const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
-    // Ripple effect
-    const btn = resolvedRef.current;
-    if (btn && variant === 'primary') {
-      const rect = btn.getBoundingClientRect();
-      const ripple = document.createElement('span');
-      const size = Math.max(rect.width, rect.height);
-      ripple.style.width = ripple.style.height = size + 'px';
-      ripple.style.left = e.clientX - rect.left - size / 2 + 'px';
-      ripple.style.top = e.clientY - rect.top - size / 2 + 'px';
-      ripple.className = 'ripple';
-      btn.appendChild(ripple);
-      setTimeout(() => ripple.remove(), 600);
-    }
-    onClick?.(e);
-  };
-
-  return (
-    <button
-      ref={resolvedRef}
-      className={`inline-flex items-center justify-center transition-all duration-150 ripple-container
-        ${sizeClasses[size]} ${variantClasses[variant]}
-        ${disabled || loading ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}
-        ${className}`}
-      disabled={disabled || loading}
-      onClick={handleClick}
-      {...props}
-    >
-      {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : icon}
-      {children}
-    </button>
-  );
-});
-Button.displayName = 'Button';
+export { buttonVariants };

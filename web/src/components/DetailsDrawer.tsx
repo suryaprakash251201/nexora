@@ -6,6 +6,7 @@ import { formatBytes, formatDate } from "../lib/format";
 import { useUI } from "../store";
 import { FileThumb, FolderTile } from "./FileThumb";
 import { Button } from "./ui/Button";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetClose } from "./ui/sheet";
 
 type Tab = "details" | "activity" | "shares";
 
@@ -28,34 +29,19 @@ interface DetailsDrawerProps {
 }
 
 export default function DetailsDrawer({
-  rootName,
-  rootId,
-  path,
-  canWrite,
-  isFavorite,
-  onClose,
-  onDownload,
-  onPreview,
-  onRename,
-  onDelete,
-  onMove,
-  onCopy,
-  onShare,
-  onFavorite,
-  onEdit,
+  rootName, rootId, path, canWrite, isFavorite, onClose, onDownload, onPreview, onRename, onDelete, onMove, onCopy, onShare, onFavorite, onEdit,
 }: DetailsDrawerProps) {
   const [activeTab, setActiveTab] = useState<Tab>("details");
   const [renaming, setRenaming] = useState(false);
   const [_renameValue, setRenameValue] = useState("");
   const pushToast = useUI((s) => s.pushToast);
   const qc = useQueryClient();
-  
+
   const { data: stat, isLoading } = useQuery({
     queryKey: ["stat", rootId, path],
     queryFn: () => get<any>("/files/stat", { root: rootId, path }),
     enabled: !!path,
   });
-
 
   const handleDelete = async () => {
     if (!window.confirm(`Delete "${stat?.name}"? This moves it to trash.`)) return;
@@ -70,28 +56,19 @@ export default function DetailsDrawer({
     }
   };
 
-  const handleFavorite = () => onFavorite();
-
-  const handleMove = () => onMove();
-  const handleCopy = () => onCopy();
-
-  const handleShare = () => onShare();
-
   useEffect(() => {
     if (stat && !renaming) setRenameValue(stat.name);
   }, [stat, renaming]);
 
   return (
-    <>
-      <div className="fixed inset-0 z-40 bg-black/20 backdrop-blur-sm lg:hidden" onClick={onClose} />
-      <aside className="fixed inset-y-0 right-0 z-50 w-full sm:w-[380px] glass-strong border-l border-glass-border-soft flex flex-col shadow-2xl animate-drawer-in lg:relative lg:z-auto">
-        
-        <div className="h-[64px] flex items-center justify-between px-4 sm:px-6 border-b border-border/50 shrink-0">
-          <span className="font-semibold text-base tracking-tight">Details</span>
-          <button onClick={onClose} className="p-2 rounded-xl glass-hover text-content-muted hover:text-content transition-colors" aria-label="Close details">
+    <Sheet open={!!path} onOpenChange={(open) => { if (!open) onClose(); }}>
+      <SheetContent className="w-full sm:w-[380px] p-0 flex flex-col overflow-hidden">
+        <SheetHeader className="h-14 flex-row items-center justify-between px-4 sm:px-6 border-b border-border/50 shrink-0 space-y-0">
+          <SheetTitle className="font-semibold text-base">Details</SheetTitle>
+          <SheetClose className="p-2 rounded-xl glass-hover text-content-muted hover:text-content transition-colors">
             <X className="h-5 w-5" />
-          </button>
-        </div>
+          </SheetClose>
+        </SheetHeader>
 
         {!path ? (
           <div className="flex-1 flex flex-col items-center justify-center p-8 text-center opacity-60">
@@ -131,98 +108,54 @@ export default function DetailsDrawer({
                   {stat.name}
                 </h3>
                 <p className="text-xs font-medium text-content-muted uppercase tracking-wider">
-                  {stat.is_dir ? "Folder" : stat.extension || "File"} • {stat.is_dir ? "—" : formatBytes(stat.size)}
+                  {stat.is_dir ? "Folder" : stat.extension || "File"} &bull; {stat.is_dir ? "\u2014" : formatBytes(stat.size)}
                 </p>
               </div>
             </div>
 
             {/* Tabs */}
             <div className="flex p-2 bg-surface-muted/50 border-y border-border/50">
-              <button 
-                onClick={() => setActiveTab("details")}
-                className={`flex-1 flex items-center justify-center gap-2 py-2 text-xs font-medium rounded-lg transition-all ${
-                  activeTab === "details" ? "bg-surface shadow-sm text-content" : "text-content-muted hover:text-content hover:bg-surface/50"
-                }`}
-              >
-                <FileText className="h-3.5 w-3.5" /> Details
-              </button>
-              <button 
-                onClick={() => setActiveTab("activity")}
-                className={`flex-1 flex items-center justify-center gap-2 py-2 text-xs font-medium rounded-lg transition-all ${
-                  activeTab === "activity" ? "bg-surface shadow-sm text-content" : "text-content-muted hover:text-content hover:bg-surface/50"
-                }`}
-              >
-                <Activity className="h-3.5 w-3.5" /> Activity
-              </button>
-              <button 
-                onClick={() => setActiveTab("shares")}
-                className={`flex-1 flex items-center justify-center gap-2 py-2 text-xs font-medium rounded-lg transition-all ${
-                  activeTab === "shares" ? "bg-surface shadow-sm text-content" : "text-content-muted hover:text-content hover:bg-surface/50"
-                }`}
-              >
-                <Share className="h-3.5 w-3.5" /> Shares
-              </button>
+              <TabButton active={activeTab === "details"} onClick={() => setActiveTab("details")} icon={<FileText className="h-3.5 w-3.5" />} label="Details" />
+              <TabButton active={activeTab === "activity"} onClick={() => setActiveTab("activity")} icon={<Activity className="h-3.5 w-3.5" />} label="Activity" />
+              <TabButton active={activeTab === "shares"} onClick={() => setActiveTab("shares")} icon={<Share className="h-3.5 w-3.5" />} label="Shares" />
             </div>
 
             {/* Content area */}
             <div className="flex-1 overflow-y-auto custom-scrollbar p-5 space-y-6">
-              
               {activeTab === "details" && (
                 <>
-                  {/* Info Grid */}
                   <div className="space-y-4">
                     <div className="grid grid-cols-2 gap-4 text-sm">
-                      <div className="p-3 rounded-xl bg-surface/40 border border-border/40">
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-content-muted mb-1">Modified</p>
-                        <p className="font-medium">{formatDate(stat.modified)}</p>
-                      </div>
-                      
-                      <div className="p-3 rounded-xl bg-surface/40 border border-border/40">
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-content-muted mb-1">Created</p>
-                        <p className="font-medium">{stat.created ? formatDate(stat.created) : "—"}</p>
-                      </div>
-                      
-                      <div className="p-3 rounded-xl bg-surface/40 border border-border/40">
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-content-muted mb-1">Size</p>
-                        <p className="font-medium">{stat.is_dir ? "—" : formatBytes(stat.size)}</p>
-                      </div>
-                      
-                      <div className="p-3 rounded-xl bg-surface/40 border border-border/40">
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-content-muted mb-1">Type</p>
-                        <p className="font-medium text-xs break-all font-mono">{stat.mime}</p>
-                      </div>
+                      <InfoTile label="Modified" value={formatDate(stat.modified)} />
+                      <InfoTile label="Created" value={stat.created ? formatDate(stat.created) : "\u2014"} />
+                      <InfoTile label="Size" value={stat.is_dir ? "\u2014" : formatBytes(stat.size)} />
+                      <InfoTile label="Type" value={stat.mime} mono />
                     </div>
 
-                    {/* Location */}
                     <div className="p-3 rounded-xl bg-surface/40 border border-border/40">
                       <p className="text-[10px] font-bold uppercase tracking-wider text-content-muted mb-1">Location</p>
                       <p className="font-medium break-all text-xs font-mono text-content">{rootName} / {stat.path}</p>
                     </div>
 
-                    {/* Additional metadata for files */}
                     {!stat.is_dir && stat.checksum && (
                       <div className="p-3 rounded-xl bg-surface/40 border border-border/40">
                         <p className="text-[10px] font-bold uppercase tracking-wider text-content-muted mb-1">SHA-256</p>
                         <div className="flex items-center gap-2">
                           <code className="flex-1 text-xs font-mono break-all bg-surface/50 px-2 py-1 rounded">{stat.checksum}</code>
-                          <button 
-                            onClick={() => { navigator.clipboard.writeText(stat.checksum); pushToast("success", "Checksum copied"); }}
-                            className="p-1.5 rounded-lg glass-hover text-content-muted hover:text-content transition-colors"
-                            title="Copy checksum"
-                          >
+                          <button onClick={() => { navigator.clipboard.writeText(stat.checksum); pushToast("success", "Checksum copied"); }}
+                            className="p-1.5 rounded-lg glass-hover text-content-muted hover:text-content transition-colors" title="Copy checksum">
                             <Link className="h-3.5 w-3.5" />
                           </button>
                         </div>
                       </div>
                     )}
 
-                    {/* Media metadata placeholder */}
                     {!stat.is_dir && stat.media && (
                       <div className="p-3 rounded-xl bg-accent/5 text-accent border border-accent/10">
                         <p className="text-xs font-medium mb-1 flex items-center gap-1">
-                          <Info className="h-3.5 w-3.5" /> Media metadata available
+                          <Info className="h-3.5 w-3.5" /> Media metadata
                         </p>
-                        <p className="text-xs font-mono opacity-80">Duration: {stat.media.duration}s • {stat.media.width}×{stat.media.height}</p>
+                        <p className="text-xs font-mono opacity-80">Duration: {stat.media.duration}s &bull; {stat.media.width}&times;{stat.media.height}</p>
                       </div>
                     )}
                   </div>
@@ -234,74 +167,61 @@ export default function DetailsDrawer({
                 </>
               )}
 
-              {activeTab === "activity" && (
-                <ActivityFeed rootId={rootId} path={stat.path} />
-              )}
-
-              {activeTab === "shares" && (
-                <SharesList rootId={rootId} path={stat.path} />
-              )}
+              {activeTab === "activity" && <ActivityFeed rootId={rootId} path={stat.path} />}
+              {activeTab === "shares" && <SharesList rootId={rootId} path={stat.path} />}
             </div>
 
             {/* Actions Footer */}
             <div className="p-4 border-t border-border/50 bg-surface/30 space-y-3 shrink-0">
               <div className="grid grid-cols-2 gap-2">
-                <Button variant="primary" size="sm" onClick={onDownload} icon={<Download className="h-4 w-4" />}>
-                  Download
-                </Button>
-                
-                {!stat.is_dir && (
-                  <Button size="sm" onClick={onPreview} icon={<Eye className="h-4 w-4" />}>
-                    Preview
-                  </Button>
-                )}
+                <Button variant="primary" size="sm" onClick={onDownload} icon={<Download className="h-4 w-4" />}>Download</Button>
+                {!stat.is_dir && <Button size="sm" onClick={onPreview} icon={<Eye className="h-4 w-4" />}>Preview</Button>}
               </div>
-              
               <div className="grid grid-cols-2 gap-2">
-                <Button size="sm" onClick={handleShare} icon={<Share2 className="h-4 w-4" />}>
-                  Share
-                </Button>
-                
-                <Button 
-                  size="sm" 
-                  onClick={handleFavorite} 
-                  className={isFavorite ? "text-amber-500 hover:text-amber-600" : ""} 
-                  icon={<Star className={`h-4 w-4 ${isFavorite ? "fill-current" : ""}`} />}
-                >
+                <Button size="sm" onClick={() => onShare()} icon={<Share2 className="h-4 w-4" />}>Share</Button>
+                <Button size="sm" onClick={onFavorite} className={isFavorite ? "text-amber-500 hover:text-amber-600" : ""}
+                  icon={<Star className={`h-4 w-4 ${isFavorite ? "fill-current" : ""}`} />}>
                   {isFavorite ? "Unstar" : "Star"}
                 </Button>
               </div>
-
               {canWrite && (
                 <div className="pt-2 mt-2 border-t border-border/50 space-y-2">
-                  {!stat.is_dir && (
-                    <Button size="sm" onClick={onEdit} icon={<Pencil className="h-4 w-4" />}>
-                      Edit
-                    </Button>
-                  )}
+                  {!stat.is_dir && <Button size="sm" onClick={onEdit} icon={<Pencil className="h-4 w-4" />}>Edit</Button>}
                   <div className="grid grid-cols-2 gap-2">
-                    <Button size="sm" onClick={() => { setRenameValue(stat.name); setRenaming(true); }} icon={<Pencil className="h-4 w-4" />}>
-                      Rename
-                    </Button>
-                    <Button size="sm" onClick={handleMove} icon={<Scissors className="h-4 w-4" />}>
-                      Move
-                    </Button>
+                    <Button size="sm" onClick={() => { setRenameValue(stat.name); setRenaming(true); }} icon={<Pencil className="h-4 w-4" />}>Rename</Button>
+                    <Button size="sm" onClick={onMove} icon={<Scissors className="h-4 w-4" />}>Move</Button>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
-                    <Button size="sm" onClick={handleCopy} icon={<Copy className="h-4 w-4" />}>
-                      Copy
-                    </Button>
-                    <Button variant="danger" size="sm" onClick={handleDelete} className="col-span-2" icon={<Trash2 className="h-4 w-4" />}>
-                      Delete
-                    </Button>
+                    <Button size="sm" onClick={onCopy} icon={<Copy className="h-4 w-4" />}>Copy</Button>
+                    <Button variant="danger" size="sm" onClick={handleDelete} icon={<Trash2 className="h-4 w-4" />}>Delete</Button>
                   </div>
                 </div>
               )}
             </div>
           </div>
         ) : null}
-      </aside>
-    </>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+function TabButton({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string }) {
+  return (
+    <button onClick={onClick}
+      className={`flex-1 flex items-center justify-center gap-2 py-2 text-xs font-medium rounded-lg transition-all ${
+        active ? "bg-surface shadow-sm text-content" : "text-content-muted hover:text-content hover:bg-surface/50"
+      }`}>
+      {icon} {label}
+    </button>
+  );
+}
+
+function InfoTile({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+  return (
+    <div className="p-3 rounded-xl bg-surface/40 border border-border/40">
+      <p className="text-[10px] font-bold uppercase tracking-wider text-content-muted mb-1">{label}</p>
+      <p className={`font-medium ${mono ? "text-xs break-all font-mono" : ""}`}>{value}</p>
+    </div>
   );
 }
 
@@ -313,15 +233,14 @@ function ActivityFeed({ rootId, path }: { rootId: string; path: string }) {
   });
 
   const activity = (data?.items || []).map((a) => ({
-    id: a.id,
-    action: a.action,
-    user: a.user_name || "Unknown",
-    time: formatDate(a.created_at),
-    detail: a.detail,
+    id: a.id, action: a.action, user: a.user_name || "Unknown",
+    time: formatDate(a.created_at), detail: a.detail,
   }));
 
-  if (isLoading) return <div className="p-4 text-center text-content-muted">Loading activity…</div>;
-  if (!activity.length) return <div className="flex flex-col items-center justify-center h-full text-center opacity-60"><Activity className="h-10 w-10 mb-3 text-content-muted" /><p className="text-sm font-medium">No activity yet</p></div>;
+  if (isLoading) return <div className="p-4 text-center text-content-muted">Loading activity&hellip;</div>;
+  if (!activity.length) return <div className="flex flex-col items-center justify-center h-full text-center opacity-60">
+    <Activity className="h-10 w-10 mb-3 text-content-muted" /><p className="text-sm font-medium">No activity yet</p>
+  </div>;
 
   return (
     <div className="space-y-4">
@@ -332,7 +251,7 @@ function ActivityFeed({ rootId, path }: { rootId: string; path: string }) {
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium">{a.action}</p>
-            <p className="text-xs text-content-muted">{a.user} • {a.time}</p>
+            <p className="text-xs text-content-muted">{a.user} &bull; {a.time}</p>
             {a.detail && <p className="text-xs text-content-muted/80 mt-0.5 truncate">{a.detail}</p>}
           </div>
         </div>
@@ -359,9 +278,7 @@ function SharesList({ rootId, path }: { rootId: string; path: string }) {
       await post("/shares", { root: rootId, path, expires_at: null, max_downloads: null });
       pushToast("success", "Share link created");
       qc.invalidateQueries({ queryKey: shareKey });
-    } catch (e: any) {
-      pushToast("error", e.message);
-    }
+    } catch (e: any) { pushToast("error", e.message); }
     setCreating(false);
   };
 
@@ -370,13 +287,11 @@ function SharesList({ rootId, path }: { rootId: string; path: string }) {
       await del("/shares", { id });
       pushToast("success", "Share removed");
       qc.invalidateQueries({ queryKey: shareKey });
-    } catch (e: any) {
-      pushToast("error", e.message);
-    }
+    } catch (e: any) { pushToast("error", e.message); }
   };
 
   const items = shares?.items || [];
-  if (isLoading) return <div className="p-4 text-center text-content-muted">Loading shares…</div>;
+  if (isLoading) return <div className="p-4 text-center text-content-muted">Loading shares&hellip;</div>;
 
   return (
     <div className="space-y-4">
@@ -384,15 +299,11 @@ function SharesList({ rootId, path }: { rootId: string; path: string }) {
         <Share2 className="h-4 w-4" />
         <span>Create a link to share this item</span>
       </div>
-
       {items.length === 0 ? (
-        <button 
-          onClick={createShare}
-          disabled={creating}
-          className="w-full p-4 rounded-xl glass-hover border border-dashed border-border/50 flex items-center justify-center gap-2 text-content-muted hover:text-content hover:border-accent/50 transition-colors"
-        >
+        <button onClick={createShare} disabled={creating}
+          className="w-full p-4 rounded-xl glass-hover border border-dashed border-border/50 flex items-center justify-center gap-2 text-content-muted hover:text-content hover:border-accent/50 transition-colors">
           <Share2 className="h-5 w-5" />
-          <span className="font-medium">{creating ? "Creating…" : "Create share link"}</span>
+          <span className="font-medium">{creating ? "Creating&hellip;" : "Create share link"}</span>
         </button>
       ) : (
         <div className="space-y-3">
@@ -403,33 +314,17 @@ function SharesList({ rootId, path }: { rootId: string; path: string }) {
                   <Link className="h-4 w-4 text-accent" />
                   <span className="text-xs font-mono text-content-muted">{`/s/${s.token}`}</span>
                 </div>
-                <button 
-                  onClick={() => {
-                    navigator.clipboard.writeText(`/s/${s.token}`);
-                    pushToast("success", "Link copied");
-                  }}
-                  className="p-1.5 rounded-lg glass-hover text-content-muted hover:text-content transition-colors"
-                  title="Copy link"
-                >
+                <button onClick={() => { navigator.clipboard.writeText(`/s/${s.token}`); pushToast("success", "Link copied"); }}
+                  className="p-1.5 rounded-lg glass-hover text-content-muted hover:text-content transition-colors" title="Copy link">
                   <Link className="h-3.5 w-3.5" />
                 </button>
               </div>
               <div className="flex items-center gap-4 text-[10px] font-medium text-content-muted">
-                <span className="flex items-center gap-1">
-                  <Clock className="h-3 w-3" />
-                  {s.expires_at ? formatDate(s.expires_at) : "No expiry"}
-                </span>
-                <span className="flex items-center gap-1">
-                  <Activity className="h-3 w-3" />
-                  {s.downloads} / {s.max_downloads ?? "∞"} downloads
-                </span>
+                <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{s.expires_at ? formatDate(s.expires_at) : "No expiry"}</span>
+                <span className="flex items-center gap-1"><Activity className="h-3 w-3" />{s.downloads} / {s.max_downloads ?? "\u221E"} downloads</span>
               </div>
-              <button 
-                onClick={() => deleteShare(s.id)}
-                className="w-full mt-2 p-1.5 rounded-lg text-red-500 hover:bg-red-500/10 text-xs font-medium transition-colors"
-              >
-                Remove share
-              </button>
+              <button onClick={() => deleteShare(s.id)}
+                className="w-full mt-2 p-1.5 rounded-lg text-red-500 hover:bg-red-500/10 text-xs font-medium transition-colors">Remove share</button>
             </div>
           ))}
         </div>

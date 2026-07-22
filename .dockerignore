@@ -1,32 +1,11 @@
-# Build context exclusions for `docker build` / `docker compose build`.
-# Keeps the context small and prevents local dev data from leaking into the image.
-
-# Frontend
+.git
+.gitignore
+*.md
+node_modules
 web/node_modules
 web/dist
-
-# Go build artifacts
-bin
-*.exe
-
-# Local runtime data, database, and logs
-data
-nexora-files
-nexora-media
-C
-*.db
-*.db-shm
-*.db-wal
-*.log
-nexora-server.log
-
-# Env files (secrets) — use .env.example as a template only
 .env
 .env.*
-!.env.example
-
-# Editor / OS
-.DS_Store
-Thumbs.db
-.idea
-.vscode
+data/
+**/__pycache__
+**/.DS_Store
