@@ -165,11 +165,11 @@ export default function CommandBar({
         </div>
       </div>
 
-      <div className="hidden md:flex items-center gap-1.5">
+      <div className="md:flex items-center gap-1.5">
         <button
           ref={filterBtnRef}
           onClick={toggleFilter}
-          className={`p-2 rounded-xl glass-input glass-hover transition-colors ${filterOpen ? "bg-surface text-content" : "text-content-muted hover:text-content"}`}
+          className="p-2 rounded-xl glass-input glass-hover transition-colors text-content-muted hover:text-content hidden sm:block min-w-[36px] min-h-[36px]"
           title="Filter (Alt+F)"
           aria-label="Filter"
           aria-expanded={filterOpen}
@@ -180,7 +180,7 @@ export default function CommandBar({
         <button
           ref={sortBtnRef}
           onClick={toggleSort}
-          className={`p-2 rounded-xl glass-input glass-hover transition-colors ${sortOpen ? "bg-surface text-content" : "text-content-muted hover:text-content"}`}
+          className="p-2 rounded-xl glass-input glass-hover transition-colors text-content-muted hover:text-content hidden sm:block min-w-[36px] min-h-[36px]"
           title="Sort (Alt+S)"
           aria-label="Sort"
           aria-expanded={sortOpen}
@@ -190,8 +190,9 @@ export default function CommandBar({
 
         <button
           onClick={onRefresh}
-          className="p-2 rounded-xl glass-hover text-content-muted hover:text-content transition-colors"
+          className="p-2 rounded-xl glass-hover text-content-muted hover:text-content transition-colors min-w-[36px] min-h-[36px]"
           title="Refresh (F5)"
+          aria-label="Refresh"
         >
           <RefreshCw className="h-4 w-4" />
         </button>
@@ -199,15 +200,19 @@ export default function CommandBar({
         <div className="flex rounded-xl overflow-hidden glass-input p-0.5">
           <button
             onClick={() => setViewMode("list")}
-            className={`p-1.5 rounded-lg transition-colors ${viewMode === "list" ? "bg-surface shadow-sm text-content" : "text-content-muted hover:text-content"}`}
+            className={`p-1.5 rounded-lg transition-colors min-w-[36px] min-h-[36px] ${viewMode === "list" ? "bg-surface shadow-sm text-content" : "text-content-muted hover:text-content"}`}
             title="List view"
+            aria-label="List view"
+            aria-pressed={viewMode === "list"}
           >
             <List className="h-4 w-4" />
           </button>
           <button
             onClick={() => setViewMode("grid")}
-            className={`p-1.5 rounded-lg transition-colors ${viewMode === "grid" ? "bg-surface shadow-sm text-content" : "text-content-muted hover:text-content"}`}
+            className={`p-1.5 rounded-lg transition-colors min-w-[36px] min-h-[36px] ${viewMode === "grid" ? "bg-surface shadow-sm text-content" : "text-content-muted hover:text-content"}`}
             title="Grid view"
+            aria-label="Grid view"
+            aria-pressed={viewMode === "grid"}
           >
             <LayoutGrid className="h-4 w-4" />
           </button>

@@ -131,12 +131,12 @@ export default function Login({ onSuccess }: { onSuccess: () => void }) {
           {step === "login" && (
             <form onSubmit={submit} className="space-y-5">
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-content-muted uppercase tracking-wider ml-1">Username or Email</label>
-                <Input autoFocus value={login} onChange={(e) => { setLogin(e.target.value); if (error) setError(null); }} placeholder="admin" icon={<User className="h-5 w-5" />} className="h-14 text-base bg-surface/50 backdrop-blur-md" />
+                <label htmlFor="login-username" className="text-xs font-bold text-content-muted uppercase tracking-wider ml-1">Username or Email</label>
+                <Input id="login-username" autoFocus value={login} onChange={(e) => { setLogin(e.target.value); if (error) setError(null); }} placeholder="admin" icon={<User className="h-5 w-5" />} className="h-14 text-base bg-surface/50 backdrop-blur-md" />
               </div>
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-content-muted uppercase tracking-wider ml-1">Password</label>
-                <Input type="password" value={password} onChange={(e) => { setPassword(e.target.value); if (error) setError(null); }} placeholder="••••••••" icon={<Lock className="h-5 w-5" />} className="h-14 text-base bg-surface/50 backdrop-blur-md" />
+                <label htmlFor="login-password" className="text-xs font-bold text-content-muted uppercase tracking-wider ml-1">Password</label>
+                <Input id="login-password" type="password" value={password} onChange={(e) => { setPassword(e.target.value); if (error) setError(null); }} placeholder="••••••••" icon={<Lock className="h-5 w-5" />} className="h-14 text-base bg-surface/50 backdrop-blur-md" />
               </div>
               {error && (
                 <div className="p-4 rounded-xl bg-danger/10 border border-danger/20 text-danger text-sm font-medium animate-slide-up flex items-start gap-3 mt-4">
@@ -155,8 +155,8 @@ export default function Login({ onSuccess }: { onSuccess: () => void }) {
           {step === "forgot-request" && (
             <div className="space-y-5">
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-content-muted uppercase tracking-wider ml-1">Username or Email</label>
-                <Input autoFocus value={forgotLogin} onChange={(e) => { setForgotLogin(e.target.value); setError(null); }} placeholder="admin" icon={<User className="h-5 w-5" />} className="h-14 text-base bg-surface/50 backdrop-blur-md" />
+                <label htmlFor="forgot-login" className="text-xs font-bold text-content-muted uppercase tracking-wider ml-1">Username or Email</label>
+                <Input id="forgot-login" autoFocus value={forgotLogin} onChange={(e) => { setForgotLogin(e.target.value); setError(null); }} placeholder="admin" icon={<User className="h-5 w-5" />} className="h-14 text-base bg-surface/50 backdrop-blur-md" />
               </div>
               {error && (
                 <div className="p-4 rounded-xl bg-danger/10 border border-danger/20 text-danger text-sm font-medium flex items-start gap-3">
@@ -200,8 +200,9 @@ export default function Login({ onSuccess }: { onSuccess: () => void }) {
           {step === "totp" && (
             <form onSubmit={submitTotp} className="space-y-5">
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-content-muted uppercase tracking-wider ml-1">Authentication Code</label>
+                <label htmlFor="totp-code" className="text-xs font-bold text-content-muted uppercase tracking-wider ml-1">Authentication Code</label>
                 <Input
+                  id="totp-code"
                   autoFocus
                   value={totpCode}
                   onChange={(e) => { setTotpCode(e.target.value.replace(/\D/g, "").slice(0, 6)); setError(null); }}

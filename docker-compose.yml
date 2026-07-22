@@ -33,9 +33,9 @@ services:
       NEXORA_DATABASE_PATH: /app/data/nexora.db
       NEXORA_THUMBNAIL_CACHE_DIR: /app/data/cache/thumbnails
       NEXORA_WEB_ROOT: /app/web
-      NEXORA_LISTEN_ADDR: ":8080"
+      NEXORA_LISTEN_ADDR: ":80"
     ports:
-      - "8080:8080"
+      - "80:80"
     volumes:
       # Persistent application data (SQLite DB, config, cache).
       - nexora-data:/app/data
@@ -54,7 +54,7 @@ services:
     cap_drop:
       - ALL
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:8080/healthz"]
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:80/healthz"]
       interval: 30s
       timeout: 5s
       retries: 3

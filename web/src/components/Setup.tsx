@@ -73,8 +73,9 @@ export default function Setup({ onSuccess }: { onSuccess: () => void }) {
               <div className={`absolute inset-0 transition-all duration-500 ease-in-out ${step === 1 ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-full pointer-events-none'}`}>
                 <div className="space-y-4">
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-content-muted uppercase tracking-wider">Username</label>
+                    <label htmlFor="setup-username" className="text-xs font-bold text-content-muted uppercase tracking-wider">Username</label>
                     <Input 
+                      id="setup-username"
                       value={username} 
                       onChange={(e) => setUsername(e.target.value)} 
                       placeholder="admin" 
@@ -85,8 +86,9 @@ export default function Setup({ onSuccess }: { onSuccess: () => void }) {
                   </div>
                   
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-content-muted uppercase tracking-wider">Email Address</label>
+                    <label htmlFor="setup-email" className="text-xs font-bold text-content-muted uppercase tracking-wider">Email Address</label>
                     <Input 
+                      id="setup-email"
                       type="email" 
                       value={email} 
                       onChange={(e) => setEmail(e.target.value)} 
@@ -97,10 +99,11 @@ export default function Setup({ onSuccess }: { onSuccess: () => void }) {
                   </div>
                   
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-content-muted uppercase tracking-wider flex justify-between">
+                    <label htmlFor="setup-display" className="text-xs font-bold text-content-muted uppercase tracking-wider flex justify-between">
                       Display Name <span className="opacity-50 font-normal normal-case">Optional</span>
                     </label>
                     <Input 
+                      id="setup-display"
                       value={displayName} 
                       onChange={(e) => setDisplayName(e.target.value)} 
                       placeholder="Administrator" 
@@ -126,8 +129,9 @@ export default function Setup({ onSuccess }: { onSuccess: () => void }) {
               <div className={`absolute inset-0 transition-all duration-500 ease-in-out ${step === 2 ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-full pointer-events-none'}`}>
                 <div className="space-y-4">
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-content-muted uppercase tracking-wider">Secure Password</label>
+                    <label htmlFor="setup-password" className="text-xs font-bold text-content-muted uppercase tracking-wider">Secure Password</label>
                     <Input 
+                      id="setup-password"
                       type="password" 
                       value={password} 
                       onChange={(e) => {

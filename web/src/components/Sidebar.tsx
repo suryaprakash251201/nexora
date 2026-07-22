@@ -4,7 +4,7 @@ import { rootIcon } from "../lib/rootIcons";
 import { get } from "../api/client";
 import { useQuery } from "@tanstack/react-query";
 
-export type SidebarView = "home" | "files" | "trash" | "favorites" | "recents" | "shares" | "playlists" | "search" | "admin";
+export type SidebarView = "home" | "files" | "trash" | "favorites" | "recents" | "shares" | "playlists" | "search" | "admin" | "video";
 
 export default function Sidebar({
   roots,
@@ -48,7 +48,7 @@ export default function Sidebar({
     <button
       onClick={() => onSelectView(v)}
       title={collapsed ? label : undefined}
-      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-sm font-medium transition-colors ${
+      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-sm font-medium transition-colors min-h-[44px] ${
         view === v ? "bg-accent/15 text-accent" : "glass-hover text-content hover:text-accent"
       } ${collapsed ? "justify-center" : ""}`}
     >
@@ -67,18 +67,18 @@ export default function Sidebar({
       )}
 
       <aside className={`shrink-0 border-r border-glass-border-soft glass-strong flex flex-col h-full transition-all duration-300 z-50
-        ${collapsed ? "w-[72px] items-center py-4 hidden md:flex" : "w-64 fixed inset-y-0 left-0 md:relative"}`}>
+        ${collapsed ? "w-[72px] items-center py-4 hidden md:flex" : "w-64 pt-3 fixed inset-y-0 left-0 md:relative"}`}>
         
         {/* Header */}
-        <div className={`flex items-center gap-3 mb-6 ${collapsed ? "px-0" : "px-5 w-full"}`}>
+        <div className={`flex items-center gap-3 mb-3 ${collapsed ? "px-0" : "px-5 w-full"}`}>
           <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-accent to-purple-500 grid place-items-center text-white font-bold shadow-lg shadow-accent/20 shrink-0">N</div>
           {!collapsed && (
             <>
               <span className="font-bold text-xl tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-accent to-purple-500">Nexora</span>
-              <button onClick={onToggleCollapse} className="ml-auto p-1.5 rounded-lg glass-hover md:hidden">
+              <button onClick={onToggleCollapse} className="ml-auto p-1.5 rounded-lg glass-hover md:hidden" aria-label="Close sidebar">
                 <X className="h-4 w-4" />
               </button>
-              <button onClick={onToggleCollapse} className="ml-auto p-1.5 rounded-lg glass-hover hidden md:block">
+              <button onClick={onToggleCollapse} className="ml-auto p-1.5 rounded-lg glass-hover hidden md:block" aria-label="Collapse sidebar">
                 <PanelLeftClose className="h-4 w-4 text-content-muted" />
               </button>
             </>
@@ -87,7 +87,7 @@ export default function Sidebar({
 
         {/* Expand button when collapsed */}
         {collapsed && (
-          <button onClick={onToggleCollapse} title="Expand sidebar" className="mb-4 p-2.5 rounded-xl glass-hover">
+          <button onClick={onToggleCollapse} title="Expand sidebar" aria-label="Expand sidebar" className="mb-4 p-2.5 rounded-xl glass-hover min-h-[44px] min-w-[44px]">
             <PanelLeftOpen className="h-4 w-4 text-content-muted" />
           </button>
         )}
@@ -108,7 +108,7 @@ export default function Sidebar({
                 key={r.id}
                 onClick={() => onSelectRoot(r.id)}
                 title={collapsed ? r.name : undefined}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-sm font-medium transition-colors ${
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-sm font-medium transition-colors min-h-[44px] ${
                   view === "files" && activeRoot === r.id ? "bg-accent/15 text-accent" : "glass-hover text-content hover:text-accent"
                 } ${collapsed ? "justify-center" : ""}`}
               >
@@ -124,7 +124,7 @@ export default function Sidebar({
           })}
           
           {!collapsed && isAdmin && (
-            <button onClick={onNewRoot} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-sm font-medium text-content-muted glass-hover hover:text-accent border border-dashed border-border/50 mt-2">
+            <button onClick={onNewRoot} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-sm font-medium text-content-muted glass-hover hover:text-accent border border-dashed border-border/50 mt-2 min-h-[44px]">
               <Plus className="h-5 w-5 shrink-0" /> New storage
             </button>
           )}
@@ -158,7 +158,7 @@ export default function Sidebar({
             <button
               onClick={() => onSelectView("admin")}
               title={collapsed ? "Admin" : undefined}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-sm font-medium transition-colors ${view === "admin" ? "bg-accent/15 text-accent" : "glass-hover text-content"} ${collapsed ? "justify-center" : ""}`}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-sm font-medium transition-colors min-h-[44px] ${view === "admin" ? "bg-accent/15 text-accent" : "glass-hover text-content"} ${collapsed ? "justify-center" : ""}`}
             >
               <Shield className="h-5 w-5 shrink-0" />
               {!collapsed && <span>Admin</span>}
@@ -168,7 +168,7 @@ export default function Sidebar({
           <button
             onClick={onLogout}
             title={collapsed ? "Log out" : undefined}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-sm font-medium text-danger/80 glass-hover hover:bg-danger/10 hover:text-danger transition-colors ${collapsed ? "justify-center" : ""}`}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-sm font-medium text-danger/80 glass-hover hover:bg-danger/10 hover:text-danger transition-colors min-h-[44px] ${collapsed ? "justify-center" : ""}`}
           >
             <LogOut className="h-5 w-5 shrink-0" />
             {!collapsed && <span>Log out</span>}

@@ -20,6 +20,8 @@ import PlaylistsPanel from "./PlaylistsPanel";
 import AdminPanel from "./AdminPanel";
 import Toaster from "./Toaster";
 import PlayerBar from "./PlayerBar";
+import VideoView from "./VideoView";
+import ImageView from "./ImageView";
 import { MobileNav } from "./layout/MobileNav";
 import { PlaylistPickerPopover } from "./PlaylistAdder";
 import TransfersPanel from "./TransfersPanel";
@@ -30,6 +32,7 @@ import ProfileMenu from "./ProfileMenu";
 import CommandPalette from "./CommandPalette";
 import SelectionBar from "./SelectionBar";
 import { formatDate } from "../lib/format";
+import { SkeletonList } from "./ui/Skeleton";
 import { previewKind, isEditable } from "../lib/preview";
 import {
   Download, Trash2, Pencil, Copy, Eye, FolderOpen, RotateCcw,
@@ -67,6 +70,9 @@ export default function Workspace({ user }: { user: User }) {
   const [sort, setSort] = useState("name");
   const [order, setOrder] = useState("asc");
   const [preview, setPreview] = useState<FileItem | null>(null);
+  const [imageItem, setImageItem] = useState<FileItem | null>(null);
+  const [videoItem, setVideoItem] = useState<FileItem | null>(null);
+  const [prevView, setPrevView] = useState<SidebarView>("files");
   const [editItem, setEditItem] = useState<FileItem | null>(null);
   const [shareItem, setShareItem] = useState<FileItem | null>(null);
   const [ctx, setCtx] = useState<{ x: number; y: number; item: FileItem } | null>(null);
@@ -108,6 +114,7 @@ const [playlistModal, setPlaylistModal] = useState(false);
     return f;
   }, [items, filter, search]);
   const audioQueue = useMemo(() => items.filter((i) => i.mime.startsWith("audio/")), [items]);
+  const imageList = useMemo(() => filtered.filter((i) => i.mime.startsWith("image/") || ["jpg", "jpeg", "png", "gif", "webp", "bmp", "avif"].includes(i.extension.toLowerCase())), [filtered]);
 
   const refresh = useCallback(() => {
     qc.invalidateQueries({ queryKey: ["files", rootId, path] });
@@ -123,7 +130,7 @@ const [playlistModal, setPlaylistModal] = useState(false);
   const { folderPicker, setFolderPicker, moveSelectionTo, openPickerFor, applyFolderPicker } = useClipboard({ rootId, selection, clearSelection, refresh, canWrite });
   const { dragProps, dragActive, dropPicker, setDropPicker, pendingDrop } = useDragAndDrop({ rootId, canWrite, uploadFiles });
   
-  const isModalOpen = useMemo(() => !!(preview || editItem || shareItem || menu || rootModal || folderPicker || dropPicker || playlistModal || ctx || ctxPlaylist), [preview, editItem, shareItem, menu, rootModal, folderPicker, dropPicker, playlistModal, ctx, ctxPlaylist]);
+  const isModalOpen = useMemo(() => !!(preview || imageItem || editItem || shareItem || menu || rootModal || folderPicker || dropPicker || playlistModal || ctx || ctxPlaylist), [preview, imageItem, editItem, shareItem, menu, rootModal, folderPicker, dropPicker, playlistModal, ctx, ctxPlaylist]);
   
   useKeyboardShortcuts({
     canWrite, view, setView, selection, items, bulkDelete, setMenu,
@@ -141,6 +148,12 @@ const [playlistModal, setPlaylistModal] = useState(false);
       const audio = items.filter((i) => i.mime.startsWith("audio/"));
       const idx = audio.findIndex((i) => i.path === item.path);
       usePlayer.getState().play(audio, idx >= 0 ? idx : 0);
+    } else if (item.mime.startsWith("image/") || ["jpg", "jpeg", "png", "gif", "webp", "bmp", "avif"].includes(item.extension.toLowerCase())) {
+      setImageItem(item);
+    } else if (item.mime.startsWith("video/")) {
+      setPrevView("files");
+      setVideoItem(item);
+      setView("video");
     } else {
       setPreview(item);
     }
@@ -271,7 +284,15 @@ const [playlistModal, setPlaylistModal] = useState(false);
     if (!isDir) {
       try {
         const info = await get<FileItem>("/files/stat", { root: rid, path: p });
-        setTimeout(() => setPreview(info), 50);
+        if (info.mime?.startsWith("image/") || ["jpg", "jpeg", "png", "gif", "webp", "bmp", "avif"].includes((info.extension || "").toLowerCase())) {
+          setImageItem(info);
+        } else if (info.mime?.startsWith("video/")) {
+          setVideoItem(info);
+          setPrevView("files");
+          setView("video");
+        } else {
+          setTimeout(() => setPreview(info), 50);
+        }
       } catch {
         const ext = name.includes(".") ? name.slice(name.lastIndexOf(".") + 1).toLowerCase() : "";
         setTimeout(() => setPreview({ name, path: p, size: 0, is_dir: false, modified: "", mime: "", root_id: rid, extension: ext } as FileItem), 50);
@@ -324,7 +345,7 @@ const [playlistModal, setPlaylistModal] = useState(false);
             onAdmin={() => setView("admin")}
           />
         )}
-        {view !== "files" && view !== "home" && (
+        {view !== "files" && view !== "home" && view !== "video" && (
           <div className="h-14 glass-bar flex items-center justify-between px-4">
             <span className="font-semibold capitalize">{view}</span>
             <ProfileMenu user={user} isAdmin={isAdmin} onLogout={logout} onAdmin={() => setView("admin")} />
@@ -334,7 +355,14 @@ const [playlistModal, setPlaylistModal] = useState(false);
         <input ref={fileInput} type="file" multiple className="hidden" onChange={(e) => { uploadFiles(e.target.files); e.target.value = ""; }} />
 
         <div className="flex-1 overflow-auto flex flex-col">
-          {view === "files" && (
+          {view === "video" && videoItem ? (
+            <VideoView
+              item={videoItem}
+              rootId={rootId!}
+              onClose={() => { setView(prevView); setVideoItem(null); }}
+              onShare={(it) => setShareItem(it)}
+            />
+          ) : view === "files" && (
             <FileBrowser
               items={filtered}
               loading={files.isLoading}
@@ -387,17 +415,19 @@ const [playlistModal, setPlaylistModal] = useState(false);
           )}
         </div>
 
-        <SelectionBar
-          count={selection.size}
-          onDownload={() => handleSelectionAction("download")}
-          onMove={() => handleSelectionAction("move")}
-          onCopy={() => handleSelectionAction("copy")}
-          onDelete={() => handleSelectionAction("delete")}
-          onShare={() => handleSelectionAction("share")}
-          onArchive={() => handleSelectionAction("archive")}
-          onFavorite={() => handleSelectionAction("favorite")}
-          onClear={clearSelection}
-        />
+        {view !== "video" && (
+          <SelectionBar
+            count={selection.size}
+            onDownload={() => handleSelectionAction("download")}
+            onMove={() => handleSelectionAction("move")}
+            onCopy={() => handleSelectionAction("copy")}
+            onDelete={() => handleSelectionAction("delete")}
+            onShare={() => handleSelectionAction("share")}
+            onArchive={() => handleSelectionAction("archive")}
+            onFavorite={() => handleSelectionAction("favorite")}
+            onClear={clearSelection}
+          />
+        )}
 
         <PlayerBar />
       </div>
@@ -430,6 +460,15 @@ const [playlistModal, setPlaylistModal] = useState(false);
 
       {ctx && <ContextMenu x={ctx.x} y={ctx.y} items={buildMenu(ctx.item, ctx.x, ctx.y)} onClose={() => setCtx(null)} />}
       {ctxPlaylist && <PlaylistPickerPopover x={ctxPlaylist.x} y={ctxPlaylist.y} items={ctxPlaylist.items} onClose={() => setCtxPlaylist(null)} />}
+      {imageItem && (
+        <ImageView
+          item={imageItem}
+          images={imageList}
+          rootId={rootId!}
+          onClose={() => setImageItem(null)}
+          onShare={(it) => setShareItem(it)}
+        />
+      )}
       {preview && (
         <PreviewModal
           item={preview}
@@ -537,7 +576,7 @@ function SimpleList({ loading, empty, rows, selection, selectMode, onSelect }: {
   selectMode?: boolean;
   onSelect?: (id: string) => void;
 }) {
-  if (loading) return <div className="p-8 text-content-muted">Loading…</div>;
+  if (loading) return <div className="p-2"><SkeletonList count={5} /></div>;
   if (!rows.length) return <div className="p-10 text-center text-content-muted">{empty}</div>;
   return (
     <div className="p-2">
@@ -629,7 +668,7 @@ function TrashView({ items, loading, onRestore, onDelete, selection, selectMode,
   items: TrashItem[]; loading: boolean; onRestore: (id: string) => void; onDelete: (id: string) => void;
   selection?: Set<string>; selectMode?: boolean; onSelect?: (id: string) => void;
 }) {
-  if (loading) return <div className="p-8 text-content-muted">Loading…</div>;
+  if (loading) return <div className="p-2"><SkeletonList count={5} /></div>;
   if (!items.length) return <div className="p-10 text-center text-content-muted">Trash is empty.</div>;
   const selectedCount = selection?.size ?? 0;
   return (

@@ -160,16 +160,16 @@ export default function ProfileMenu({
           }>
           <div className="space-y-4">
             <div>
-              <label className="text-xs font-bold text-content-muted uppercase tracking-wider ml-1">Current Password</label>
-              <input type="password" value={pwCurrent} onChange={(e) => setPwCurrent(e.target.value)} className="w-full rounded-lg glass-input px-3 py-2.5 outline-none text-sm mt-1" placeholder="Current password" />
+              <label htmlFor="pw-current" className="text-xs font-bold text-content-muted uppercase tracking-wider ml-1">Current Password</label>
+              <input id="pw-current" type="password" value={pwCurrent} onChange={(e) => setPwCurrent(e.target.value)} className="w-full rounded-lg glass-input px-3 py-2.5 outline-none text-sm mt-1" placeholder="Current password" />
             </div>
             <div>
-              <label className="text-xs font-bold text-content-muted uppercase tracking-wider ml-1">New Password</label>
-              <input type="password" value={pwNew} onChange={(e) => setPwNew(e.target.value)} className="w-full rounded-lg glass-input px-3 py-2.5 outline-none text-sm mt-1" placeholder="Min 8 characters" />
+              <label htmlFor="pw-new" className="text-xs font-bold text-content-muted uppercase tracking-wider ml-1">New Password</label>
+              <input id="pw-new" type="password" value={pwNew} onChange={(e) => setPwNew(e.target.value)} className="w-full rounded-lg glass-input px-3 py-2.5 outline-none text-sm mt-1" placeholder="Min 8 characters" />
             </div>
             <div>
-              <label className="text-xs font-bold text-content-muted uppercase tracking-wider ml-1">Confirm New Password</label>
-              <input type="password" value={pwConfirm} onChange={(e) => setPwConfirm(e.target.value)} className="w-full rounded-lg glass-input px-3 py-2.5 outline-none text-sm mt-1" placeholder="Repeat new password" />
+              <label htmlFor="pw-confirm" className="text-xs font-bold text-content-muted uppercase tracking-wider ml-1">Confirm New Password</label>
+              <input id="pw-confirm" type="password" value={pwConfirm} onChange={(e) => setPwConfirm(e.target.value)} className="w-full rounded-lg glass-input px-3 py-2.5 outline-none text-sm mt-1" placeholder="Repeat new password" />
             </div>
             {pwError && <p className="text-sm text-danger flex items-center gap-1.5"><AlertCircle className="h-4 w-4" /> {pwError}</p>}
           </div>

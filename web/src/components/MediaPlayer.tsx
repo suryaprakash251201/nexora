@@ -641,6 +641,7 @@ function VideoPlayer({ url, item, autoPlay }: { url?: string; item?: FileItem; a
   const [full, setFull] = useState(false);
   const [theater, setTheater] = useState(false);
   const [rate, setRate] = useState(1);
+  const [showRates, setShowRates] = useState(false);
   const [subUrl, setSubUrl] = useState<string | null>(null);
   const [errored, setErrored] = useState(false);
   const [erroredMsg, setErroredMsg] = useState<string>("");
@@ -715,8 +716,16 @@ function VideoPlayer({ url, item, autoPlay }: { url?: string; item?: FileItem; a
     if (autoPlay) v.play().catch(() => {});
   }, [src, autoPlay]);
 
+  useEffect(() => {
+    if (!showRates) return;
+    const onClose = () => setShowRates(false);
+    window.addEventListener("click", onClose);
+    return () => window.removeEventListener("click", onClose);
+  }, [showRates]);
+
   const handleMouseMove = () => {
     setShowControls(true);
+    setShowRates(false);
     window.clearTimeout(controlsTimeout.current);
     if (playing) {
       controlsTimeout.current = window.setTimeout(() => setShowControls(false), 2500);
@@ -762,7 +771,7 @@ function VideoPlayer({ url, item, autoPlay }: { url?: string; item?: FileItem; a
     const onFs = () => {
       const isFull = !!document.fullscreenElement;
       setFull(isFull);
-      if (isFull) setTheater(false); // Disable theater when entering fullscreen
+      if (isFull) setTheater(false);
     };
     document.addEventListener("fullscreenchange", onFs);
     return () => document.removeEventListener("fullscreenchange", onFs);
@@ -795,12 +804,10 @@ function VideoPlayer({ url, item, autoPlay }: { url?: string; item?: FileItem; a
     if (!v) return;
     v.currentTime = Math.max(0, Math.min(v.duration || 0, v.currentTime + d));
   };
-  const changeRate = () => {
-    const v = ref.current;
-    if (!v) return;
-    const nextR = RATES[(RATES.indexOf(rate) + 1) % RATES.length];
-    setRate(nextR);
-    v.playbackRate = nextR;
+  const changeRate = (r: number) => {
+    setRate(r);
+    setShowRates(false);
+    if (ref.current) ref.current.playbackRate = r;
   };
   const toggleFull = () => {
     const el = wrapRef.current;
@@ -827,21 +834,27 @@ function VideoPlayer({ url, item, autoPlay }: { url?: string; item?: FileItem; a
   const wrapClasses = full
     ? "fixed inset-0 z-[100] bg-black"
     : theater
-    ? "fixed inset-0 z-40 bg-black/95 backdrop-blur-sm p-4 md:p-8 flex items-center justify-center animate-fade-in"
-    : "relative w-full max-w-5xl mx-auto rounded-2xl overflow-hidden shadow-2xl ring-1 ring-border/50 bg-black";
+    ? "fixed inset-0 z-40 bg-black/95 backdrop-blur-sm p-4 md:p-8 flex items-center justify-center theater-enter"
+    : "relative w-full max-w-5xl mx-auto overflow-hidden shadow-2xl ring-1 ring-border/50 bg-black rounded-2xl";
 
   return (
     <div
       ref={wrapRef}
-      className={wrapClasses}
+      className={`${wrapClasses} ${showControls ? "" : "cursor-none"} select-none`}
       onMouseMove={handleMouseMove}
       onMouseLeave={() => playing && setShowControls(false)}
     >
-      {/* Theater Close Overlay */}
+      {/* Theater mode top bar */}
       {theater && !full && (
-        <button onClick={() => setTheater(false)} className="absolute top-4 right-4 z-50 p-3 rounded-full bg-black/50 text-white hover:bg-white/20 backdrop-blur-md">
-          <X className="h-6 w-6" />
-        </button>
+        <div className={`absolute top-0 inset-x-0 z-50 flex items-center justify-between p-5 md:p-7 bg-gradient-to-b from-black/80 to-transparent transition-opacity duration-500 ${showControls ? "opacity-100" : "opacity-0 pointer-events-none"}`}>
+          <div className="flex items-center gap-3">
+            <span className="px-3 py-1 rounded-full bg-white/10 backdrop-blur-md text-white text-[11px] font-semibold tracking-wider uppercase">Theater</span>
+            <span className="text-white/70 text-sm font-medium truncate hidden sm:block max-w-[300px]">{item?.name}</span>
+          </div>
+          <button onClick={() => setTheater(false)} className="p-2.5 rounded-full bg-white/10 hover:bg-white/20 backdrop-blur-md text-white transition-all hover:scale-105" title="Close Theater (Esc)">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
       )}
 
       {/* Top Bar for Fullscreen */}
@@ -859,7 +872,7 @@ function VideoPlayer({ url, item, autoPlay }: { url?: string; item?: FileItem; a
         src={src}
         controls={false}
         autoPlay={autoPlay}
-        className={full ? "w-full h-full object-contain" : theater ? "w-full h-full max-h-screen object-contain rounded-xl shadow-2xl" : "w-full aspect-video object-cover hover:object-contain transition-all"}
+        className={full ? "w-full h-full object-contain" : theater ? "w-full h-full max-h-screen object-contain rounded-xl shadow-2xl" : "w-full aspect-video object-cover hover:object-contain transition-all duration-500"}
         onClick={toggle}
       >
         {subUrl && <track kind="subtitles" src={subUrl} srcLang="en" label="Subtitles" default />}
@@ -883,14 +896,14 @@ function VideoPlayer({ url, item, autoPlay }: { url?: string; item?: FileItem; a
           </div>
         </div>
       ) : (
-        <div className={`absolute inset-x-0 bottom-0 p-4 md:p-6 bg-gradient-to-t from-black/90 via-black/60 to-transparent transition-opacity duration-300 ${showControls ? "opacity-100" : "opacity-0"}`}>
+        <div className={`absolute inset-x-0 bottom-0 p-5 md:p-7 bg-gradient-to-t from-black/95 via-black/70 to-transparent transition-all duration-300 ${showControls ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4 pointer-events-none"}`}>
           {/* Timeline */}
           {live ? (
-            <div className="h-1.5 rounded-full bg-white/20 overflow-hidden mb-4">
-              <div className="n-progress-indeterminate absolute inset-y-0 left-0 bg-accent" />
+            <div className="relative h-1.5 rounded-full bg-white/20 overflow-hidden mb-4">
+              <div className="n-progress-indeterminate bg-accent" />
             </div>
           ) : (
-            <div className="relative h-1.5 md:h-2 rounded-full bg-white/30 overflow-hidden mb-4 cursor-pointer group hover:h-2.5 transition-all">
+            <div className="relative h-2 rounded-full bg-white/30 overflow-hidden mb-5 cursor-pointer group hover:h-2.5 transition-all">
               <div className="absolute inset-y-0 left-0 bg-accent transition-all duration-100" style={{ width: `${pct}%` }} />
               <input
                 type="range"
@@ -902,27 +915,32 @@ function VideoPlayer({ url, item, autoPlay }: { url?: string; item?: FileItem; a
                 className="absolute inset-0 w-full opacity-0 cursor-pointer"
                 aria-label="Seek"
               />
+              <div className="absolute top-0 h-full bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity" style={{ left: `${pct}%`, width: "2px" }} />
             </div>
           )}
-          
+
           {/* Controls */}
           <div className="flex items-center gap-2 md:gap-4 text-white">
-            <button onClick={toggle} className="p-2 rounded-full hover:bg-white/20 transition-colors" title={playing ? "Pause (Space)" : "Play (Space)"}>
-              {playing ? <Pause className="h-6 w-6 md:h-8 md:w-8 fill-current" /> : <Play className="h-6 w-6 md:h-8 md:w-8 fill-current" />}
+            {/* Play/Pause */}
+            <button onClick={toggle} className="p-2 md:p-3 rounded-full hover:bg-white/15 hover:scale-105 active:scale-95 transition-all" title={playing ? "Pause (Space)" : "Play (Space)"}>
+              {playing ? <Pause className="h-7 w-7 md:h-9 md:w-9 fill-current" /> : <Play className="h-7 w-7 md:h-9 md:w-9 fill-current translate-x-0.5" />}
             </button>
-            
-            <button onClick={() => skip(-10)} className="p-2 rounded-full hover:bg-white/20 transition-colors hidden sm:block" title="Back 10s (Left Arrow)">
+
+            {/* Skip Back */}
+            <button onClick={() => skip(-10)} className="p-2 rounded-full hover:bg-white/15 hover:scale-105 transition-all hidden sm:block" title="Back 10s (Left Arrow)">
               <Rewind className="h-5 w-5 md:h-6 md:w-6" />
             </button>
-            <button onClick={() => skip(10)} className="p-2 rounded-full hover:bg-white/20 transition-colors hidden sm:block" title="Forward 10s (Right Arrow)">
+            {/* Skip Forward */}
+            <button onClick={() => skip(10)} className="p-2 rounded-full hover:bg-white/15 hover:scale-105 transition-all hidden sm:block" title="Forward 10s (Right Arrow)">
               <FastForward className="h-5 w-5 md:h-6 md:w-6" />
             </button>
-            
-            <div className="flex items-center gap-3 ml-2">
-              <button onClick={doMute} className="p-2 rounded-full hover:bg-white/20 transition-colors hidden sm:block" title="Mute (M)">
-                {muted || vol === 0 ? <VolumeX className="h-5 w-5 md:h-6 md:w-6 text-white/50" /> : <Volume2 className="h-5 w-5 md:h-6 md:w-6" />}
+
+            {/* Volume */}
+            <div className="flex items-center gap-2 group ml-1">
+              <button onClick={doMute} className="p-2 rounded-full hover:bg-white/15 transition-colors" title="Mute (M)">
+                {muted || vol === 0 ? <VolumeX className="h-5 w-5 md:h-6 md:w-6 opacity-50" /> : <Volume2 className="h-5 w-5 md:h-6 md:w-6" />}
               </button>
-              <div className="relative h-1.5 w-16 md:w-24 rounded-full bg-white/30 overflow-hidden hidden md:block cursor-pointer group">
+              <div className="relative h-1.5 w-0 md:w-20 lg:w-24 group-hover:w-20 lg:group-hover:w-24 transition-all duration-300 rounded-full bg-white/30 overflow-hidden cursor-pointer">
                 <div className="absolute inset-y-0 left-0 bg-white group-hover:bg-accent transition-colors" style={{ width: `${(muted ? 0 : vol) * 100}%` }} />
                 <input
                   type="range"
@@ -936,29 +954,51 @@ function VideoPlayer({ url, item, autoPlay }: { url?: string; item?: FileItem; a
                 />
               </div>
             </div>
-            
-            <span className="text-xs md:text-sm font-mono tabular-nums opacity-80 ml-2">
-              {live ? `${fmt(cur)} • LIVE` : `${fmt(cur)} / ${fmt(dur)}`}
+
+            {/* Time */}
+            <span className="text-xs md:text-sm font-semibold font-mono tabular-nums ml-1">
+              <span className="text-white/90">{fmt(cur)}</span>
+              <span className="text-white/40"> / {fmt(dur)}</span>
+              {live && <span className="text-accent ml-1.5 font-bold">LIVE</span>}
             </span>
-            
+
             <div className="flex-1" />
-            
-            <button onClick={changeRate} className="p-2 rounded-full hover:bg-white/20 transition-colors text-xs font-bold font-mono min-w-[3rem]" title="Playback Speed">
-              {rate}x
-            </button>
-            
-            <button onClick={() => fileRef.current?.click()} className={`p-2 rounded-full hover:bg-white/20 transition-colors ${subUrl ? "text-accent" : ""}`} title="Load subtitles (.vtt/.srt)">
+
+            {/* Playback Speed */}
+            <div className="relative">
+              <button onClick={(e) => { e.stopPropagation(); setShowRates(!showRates); }} className="px-3 py-1.5 rounded-lg text-xs font-bold font-mono hover:bg-white/15 transition-colors" title="Playback speed">
+                {rate}x
+              </button>
+              {showRates && (
+                <div className="absolute bottom-full right-0 mb-2 glass-strong rounded-xl p-1 z-50 flex flex-col animate-scale-in min-w-[72px] shadow-2xl" onClick={(e) => e.stopPropagation()}>
+                  {RATES.map((r) => (
+                    <button
+                      key={r}
+                      onClick={() => changeRate(r)}
+                      className={`px-4 py-1.5 text-xs font-mono rounded-lg hover:bg-accent/15 transition-colors ${r === rate ? "text-accent bg-accent/10 font-bold" : "text-white/80"}`}
+                    >
+                      {r}x
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Subtitles */}
+            <button onClick={() => fileRef.current?.click()} className={`p-2 rounded-full hover:bg-white/15 transition-colors ${subUrl ? "text-accent" : ""}`} title="Load subtitles (.vtt/.srt)">
               <Captions className="h-5 w-5 md:h-6 md:w-6" />
             </button>
             <input ref={fileRef} type="file" accept=".vtt,.srt" className="hidden" onChange={onSubtitle} />
-            
+
+            {/* Theater Mode */}
             {!full && (
-              <button onClick={() => setTheater(t => !t)} className={`p-2 rounded-full hover:bg-white/20 transition-colors hidden md:block ${theater ? "text-accent" : ""}`} title="Theater Mode (T)">
+              <button onClick={() => setTheater(t => !t)} className={`p-2 rounded-full hover:bg-white/15 transition-colors hidden md:block ${theater ? "text-accent bg-white/10" : ""}`} title="Theater Mode (T)">
                 <MonitorPlay className="h-5 w-5 md:h-6 md:w-6" />
               </button>
             )}
-            
-            <button onClick={toggleFull} className="p-2 rounded-full hover:bg-white/20 transition-colors" title="Fullscreen (F)">
+
+            {/* Fullscreen */}
+            <button onClick={toggleFull} className="p-2 md:p-3 rounded-full hover:bg-white/15 hover:scale-105 transition-all" title="Fullscreen (F)">
               {full ? <Minimize2 className="h-5 w-5 md:h-6 md:w-6" /> : <Maximize2 className="h-5 w-5 md:h-6 md:w-6" />}
             </button>
           </div>

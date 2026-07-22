@@ -14,7 +14,7 @@ interface UIState {
   viewMode: ViewMode;
   selection: Set<string>;
   selectMode: boolean;
-  drawerPath: string | null; // relative path currently shown in details drawer
+  drawerPath: string | null;
   mobileNavOpen: boolean;
   toasts: Toast[];
   setTheme: (t: Theme) => void;

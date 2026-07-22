@@ -7,6 +7,36 @@ fast alternative to File Browser. It runs efficiently on low-spec hardware (2
 vCPU / 1 GB RAM) and deploys as a single Docker container with a small image
 and low idle memory.
 
+## Brand Guidelines
+
+### Logo
+- **Primary logo**: [logo.svg](web/public/logo.svg) - SVG vector with gradient
+- **Favicon**: [favicon.svg](web/public/favicon.svg) - Simplified N-shape with blue gradient
+
+### Colors
+- **Primary blue**: `#2563EB` (accessible for colorblind users)
+- **Dark mode blue**: `#3B82F6`
+- Consistent theming across light and dark modes with WCAG AA contrast ratios
+
+### Design Philosophy
+- **Glassmorphism**: Translucent layered effects with backdrop blur
+- **Accessibility**: All text meets 4.5:1 contrast ratio, keyboard navigation
+- **Performance**: Optimized animations with reduced motion support
+- **Consistency**: 12-column grid, spacing scale, unified component system
+
+## Resources
+
+### Design System
+See [docs/design-system.md](docs/design-system.md) for complete design guidelines, color palette, typography, and component specifications.
+
+### Brand Assets
+All official brand assets are in the `web/public/` directory.
+
+### Live Demo
+Deploy with Docker: `docker compose up -d --build`
+
+Visit `http://localhost:80` to see the live application.
+
 ---
 
 ## Why Nexora

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { X, Download, Pencil, Share2, Copy, Check, ZoomIn, ZoomOut, Maximize, Minimize } from "lucide-react";
 import type { FileItem } from "../api/types";
 import { previewKind, isEditable, rawUrl, codeLanguage } from "../lib/preview";
@@ -35,6 +35,10 @@ export default function PreviewModal({
   const [zoom, setZoom] = useState(1);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
+  const handleClose = useCallback(() => {
+    onClose();
+  }, [onClose]);
+
   const url = rawUrl(current.root_id || rootId, current.path);
 
   const audioQueue = useMemo(
@@ -67,12 +71,12 @@ export default function PreviewModal({
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         if (isFullscreen) setIsFullscreen(false);
-        else onClose();
+        else handleClose();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose, isFullscreen]);
+  }, [handleClose, isFullscreen]);
 
   useEffect(() => {
     if (kind === "audio" && audioQueue.length) {
@@ -100,13 +104,13 @@ export default function PreviewModal({
   const editable = !current.is_dir && isEditable(current);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 md:p-6 bg-black/60 backdrop-blur-sm animate-fade-in" onMouseDown={onClose} role="dialog" aria-modal="true" aria-label="File preview">
+    <div className={`fixed inset-0 z-50 flex items-center justify-center ${kind === "video" ? "p-0" : "p-2 md:p-6"} bg-black/60 backdrop-blur-sm animate-fade-in`} onMouseDown={handleClose} role="dialog" aria-modal="true" aria-label="File preview">
       <div 
         className={`w-full flex flex-col glass-strong bg-background/95 shadow-2xl transition-all duration-300 ease-out overflow-hidden
-          ${isFullscreen ? "h-full max-w-none rounded-none" : "h-[85vh] max-w-6xl rounded-2xl animate-scale-in"}`} 
+          ${isFullscreen ? "h-full max-w-none rounded-none" : kind === "video" ? "h-[90vh] max-w-6xl rounded-none sm:rounded-2xl" : "h-[85vh] max-w-6xl rounded-2xl animate-scale-in"}`} 
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border/50 shrink-0">
+        <div className={`flex items-center justify-between px-5 py-4 shrink-0 ${kind === "video" ? "" : "border-b border-border/50"}`}>
           <div className="flex items-center gap-3 min-w-0 pr-4">
             <span className="font-bold text-lg truncate drop-shadow-sm">{current.name}</span>
             <span className="px-2 py-0.5 rounded-md bg-surface-muted text-xs font-mono text-content-muted hidden sm:block">
@@ -151,7 +155,7 @@ export default function PreviewModal({
               {isFullscreen ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}
             </button>
             
-            <button onClick={onClose} className="p-2 rounded-lg hover:bg-danger/10 text-content-muted hover:text-danger transition-colors ml-1" title="Close">
+            <button onClick={handleClose} className="p-2 rounded-lg hover:bg-danger/10 text-content-muted hover:text-danger transition-colors ml-1" title="Close">
               <X className="h-5 w-5" />
             </button>
           </div>
@@ -171,7 +175,7 @@ export default function PreviewModal({
             </div>
           )}
           {kind === "video" && (
-            <div className="w-full h-full">
+            <div className="w-full h-full bg-black">
               <MediaPlayer kind="video" url={url} item={current} autoPlay />
             </div>
           )}
