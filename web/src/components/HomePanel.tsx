@@ -1,12 +1,16 @@
 import { useState, useEffect } from "react";
 import { motion } from "motion/react";
-import { Search, Clock, Sparkles, FileText, Music, Film, Plus, FilePlus, Upload, HardDrive, FolderPlus, Play, Sun, Moon, Star } from "lucide-react";
+import { Search, Clock, Sparkles, FileText, Music, Film, Plus, FilePlus, Upload, HardDrive, FolderPlus, Play, Sun, Moon, Star, FolderOpen, Share, TrendingUp } from "lucide-react";
 import type { RecentItem, FileItem, HomeData } from "../api/types";
 import { FileThumb } from "./FileThumb";
 import { formatRelative } from "../lib/format";
 import { Input } from "./ui/Input";
 import { EmptyState } from "./ui/EmptyState";
 import { staggerContainer, staggerItem, cardHover, slideUp } from "@/lib/animations";
+import { cn } from "@/lib/utils";
+import { formatBytes } from "../lib/format";
+import { get } from "../api/client";
+import { useQuery } from "@tanstack/react-query";
 
 function extOf(name: string): string {
   return name.includes(".") ? name.slice(name.lastIndexOf(".") + 1).toLowerCase() : "";
@@ -20,6 +24,70 @@ function mediaKind(item: RecentItem): "music" | "video" | "doc" | "file" {
   if (video.includes(ext)) return "video";
   if (["pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "md", "csv", "rtf", "odt", "ods", "odp", "tex", "pages", "key", "numbers"].includes(ext)) return "doc";
   return "file";
+}
+
+function StatsBar() {
+  const usage = useQuery({ queryKey: ["storage-usage"], queryFn: () => get<{ total: number; used: number; available: number }>("/admin/usage"), staleTime: 60000 });
+  const home = useQuery({ queryKey: ["home"], queryFn: () => get<HomeData>("/home"), staleTime: 30000 });
+  
+  const stats = [
+    {
+      label: "Storage Used",
+      value: usage.data ? formatBytes(usage.data.used) : "—",
+      sub: usage.data ? `of ${formatBytes(usage.data.total)}` : "",
+      icon: HardDrive,
+      color: "from-blue-500 to-indigo-500",
+      glow: "shadow-blue-500/20",
+    },
+    {
+      label: "Total Files",
+      value: home.data ? `${(home.data.recent?.length ?? 0)}+` : "—",
+      sub: "files tracked",
+      icon: FolderOpen,
+      color: "from-emerald-500 to-teal-500",
+      glow: "shadow-emerald-500/20",
+    },
+    {
+      label: "Recent Activity",
+      value: home.data?.recent?.length?.toString() ?? "0",
+      sub: "recent items",
+      icon: TrendingUp,
+      color: "from-purple-500 to-violet-500",
+      glow: "shadow-purple-500/20",
+    },
+    {
+      label: "Shared Items",
+      value: home.data?.playlists?.length?.toString() ?? "0",
+      sub: "active shares",
+      icon: Share,
+      color: "from-amber-500 to-orange-500",
+      glow: "shadow-amber-500/20",
+    },
+  ];
+
+  return (
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
+      {stats.map((s, i) => (
+        <motion.div
+          key={s.label}
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: i * 0.08, duration: 0.4 }}
+          className="glass-subtle border border-white/[0.06] rounded-2xl p-4 relative overflow-hidden group hover:border-white/[0.12] transition-all duration-300"
+        >
+          <div className="absolute inset-0 bg-gradient-to-br from-white/[0.02] via-transparent to-transparent pointer-events-none" />
+          <div className="flex items-center gap-3 mb-2">
+            <div className={cn("p-2 rounded-xl bg-gradient-to-br shadow-lg", s.color, s.glow)}>
+              <s.icon className="h-4 w-4 text-white" />
+            </div>
+            <span className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{s.label}</span>
+          </div>
+          <div className="text-2xl font-bold text-text-primary">{s.value}</div>
+          <div className="text-[11px] text-text-tertiary mt-0.5">{s.sub}</div>
+        </motion.div>
+      ))}
+    </div>
+  );
 }
 
 function HomeCard({ item, onOpen }: { item: RecentItem; onOpen: () => void }) {
@@ -177,7 +245,7 @@ export default function HomePanel({
                 {greetingIcon}
               </div>
               <div>
-                <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight">
+                <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-text-primary via-accent to-accent-secondary">
                   {greeting}
                 </h1>
                 <p className="text-content-muted text-base md:text-lg max-w-2xl">
@@ -241,6 +309,7 @@ export default function HomePanel({
             animate="animate"
             className="space-y-12"
           >
+            <StatsBar />
             {playlists.length > 0 && (
               <motion.section variants={staggerItem}>
                 <div className="flex items-center gap-3 mb-6 px-1">

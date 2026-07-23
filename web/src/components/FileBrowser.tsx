@@ -10,6 +10,8 @@ import { EmptyState } from "./ui/EmptyState";
 import { SkeletonGrid, SkeletonList } from "./ui/Skeleton";
 import { cn } from "@/lib/utils";
 import { staggerContainer, staggerItem } from "@/lib/animations";
+import { ZoomSlider, getGridColClass, getStoredZoom, type GridZoom } from "./ui/ZoomSlider";
+import { TagChip } from "./TagManager";
 
 interface FileBrowserProps {
   items: FileItem[];
@@ -32,13 +34,18 @@ const FileIconForItem = memo(function FileIconForItem({ item, large, fill }: { i
     return <FileThumb it={item} large={large} fill={fill} />;
   }
 
-  const { icon: Icon, color } = iconForFile(item);
+  const { icon: Icon, color, customIcon: CustomIcon } = iconForFile(item);
   const c = colorClasses[color] || "text-gray-500 bg-gray-500/10";
   const [, bg] = c.split(" ");
+  const customSize = large ? 36 : 20;
 
   return (
     <div className={cn("grid place-items-center rounded-xl transition-all duration-300 group-hover:scale-105", bg || "bg-surface-muted", "border", iconGlowClasses[color] || "border-glass-border-soft shadow-sm", dim)}>
-      <Icon className={cn("drop-shadow-md", large ? "h-8 w-8" : "h-5 w-5", c.split(" ")[0] || "text-text-secondary")} />
+      {CustomIcon ? (
+        <CustomIcon size={customSize} className="drop-shadow-md" />
+      ) : (
+        <Icon className={cn("drop-shadow-md", large ? "h-8 w-8" : "h-5 w-5", c.split(" ")[0] || "text-text-secondary")} />
+      )}
     </div>
   );
 });
@@ -55,6 +62,7 @@ export default function FileBrowser({
   onContextMenu,
   onDropItem,
 }: FileBrowserProps) {
+  const [gridZoom, setGridZoom] = useState<GridZoom>(getStoredZoom);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const dropZoneRef = useRef<HTMLDivElement>(null);
@@ -171,11 +179,16 @@ export default function FileBrowser({
               <span className="text-xs text-text-tertiary">{selection.size} of {items.length} selected</span>
             </div>
           )}
+          {viewMode === "grid" && (
+            <div className="flex justify-end px-2 mb-3 mt-2">
+              <ZoomSlider value={gridZoom} onChange={setGridZoom} />
+            </div>
+          )}
           <motion.div
             variants={staggerContainer}
             initial="initial"
             animate="animate"
-            className="p-4 sm:p-6 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-5 pb-32"
+            className={cn("p-4 sm:p-6 grid gap-4 sm:gap-5 pb-32", getGridColClass(gridZoom))}
             role="grid"
             aria-label="File grid"
           >
@@ -216,6 +229,24 @@ export default function FileBrowser({
                       dragOver ? "opacity-50" : ""
                     )}
                   >
+                    {/* Accent color stripe */}
+                    <div className={cn("absolute top-0 left-0 right-0 h-[2px] rounded-t-2xl opacity-60", (() => {
+                      const { color } = iconForFile(item);
+                      const stripeColors: Record<string, string> = {
+                        blue: "bg-gradient-to-r from-blue-500 to-indigo-500",
+                        red: "bg-gradient-to-r from-red-500 to-rose-500",
+                        green: "bg-gradient-to-r from-green-500 to-emerald-500",
+                        emerald: "bg-gradient-to-r from-emerald-500 to-teal-500",
+                        yellow: "bg-gradient-to-r from-yellow-500 to-amber-500",
+                        amber: "bg-gradient-to-r from-amber-500 to-orange-500",
+                        purple: "bg-gradient-to-r from-purple-500 to-violet-500",
+                        cyan: "bg-gradient-to-r from-cyan-500 to-sky-500",
+                        orange: "bg-gradient-to-r from-orange-500 to-amber-500",
+                        gray: "bg-gradient-to-r from-slate-500 to-gray-500",
+                        pink: "bg-gradient-to-r from-pink-500 to-rose-500",
+                      };
+                      return stripeColors[color] || stripeColors.gray;
+                    })())} />
                     {/* Inner glow highlight */}
                     <div className="absolute inset-0 bg-gradient-to-br from-white/[0.03] via-transparent to-transparent pointer-events-none rounded-2xl" />
                     <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
@@ -277,6 +308,11 @@ export default function FileBrowser({
                         <p className="truncate text-sm font-semibold text-foreground leading-tight group-hover:text-accent-purple transition-colors" title={item.name}>
                           {item.name}
                         </p>
+                        {item.tags && item.tags.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {item.tags.map(t => <TagChip key={t.id} tag={t} small />)}
+                          </div>
+                        )}
                         <p className="truncate text-[11px] font-medium text-text-tertiary flex items-center justify-center gap-1.5 w-full mt-0.5">
                           <span className="truncate">{item.is_dir ? "Folder" : formatBytes(item.size)}</span>
                           <span className="w-1 h-1 rounded-full bg-glass-border hidden sm:inline-block" />
@@ -342,6 +378,7 @@ export default function FileBrowser({
                     whileHover={{ backgroundColor: "rgba(255,255,255,0.04)" }}
                     className={cn(
                       "group grid grid-cols-[auto_1fr_auto_auto_auto] gap-2 sm:gap-4 px-3 sm:px-6 py-3 rounded-xl items-center cursor-pointer transition-all duration-200 outline-none border border-transparent",
+                      index % 2 === 0 ? "bg-white/[0.01]" : "",
                       selected
                         ? "bg-accent/8 border-accent/15"
                         : "hover:border-glass-border-soft",
@@ -369,6 +406,12 @@ export default function FileBrowser({
                         <span className="truncate font-medium text-sm text-foreground group-hover:text-accent-purple transition-colors" title={item.name}>
                           {item.name}
                         </span>
+
+                        {item.tags && item.tags.length > 0 && (
+                          <div className="flex items-center gap-1 overflow-hidden shrink-0">
+                            {item.tags.map(t => <TagChip key={t.id} tag={t} small />)}
+                          </div>
+                        )}
 
                         {!selectMode && (
                           <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center gap-1" onClick={(e) => e.stopPropagation()}>

@@ -5,8 +5,9 @@ import { rootIcon } from "../lib/rootIcons";
 import { get } from "../api/client";
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
+import { formatBytes } from "../lib/format";
 
-export type SidebarView = "home" | "files" | "trash" | "favorites" | "recents" | "shares" | "playlists" | "search" | "admin" | "video";
+export type SidebarView = "home" | "files" | "trash" | "favorites" | "recents" | "shares" | "playlists" | "search" | "admin" | "video" | "image";
 
 const viewColors: Record<string, string> = {
   home: "#5B8CFF",
@@ -17,7 +18,54 @@ const viewColors: Record<string, string> = {
   shares: "#FBBF24",
   playlists: "#F472B6",
   trash: "#FB7185",
-  admin: "#34D399",
+  admin: "#F87171",
+  video: "#818CF8",
+  image: "#34D399"
+};
+
+const NavItem = ({ v, icon, label, isActive, badge, collapsed, onSelectView }: { v: SidebarView; icon: React.ReactNode; label: string; isActive: boolean; badge?: number; collapsed: boolean; onSelectView: (v: SidebarView) => void; }) => {
+  const accent = viewColors[v] || "#5B8CFF";
+  return (
+    <button onClick={() => onSelectView(v)} title={collapsed ? label : undefined}
+      className={cn("relative w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-sm font-medium transition-all duration-200 min-h-[44px] group overflow-hidden", 
+        collapsed ? "justify-center px-0" : "",
+        isActive ? "bg-white/[0.04] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]" : "hover:bg-white/[0.02]"
+      )}
+    >
+      {isActive && (
+        <motion.div layoutId="sidebar-active"
+          className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 rounded-r-full"
+          style={{ backgroundColor: accent, boxShadow: `1px 0 10px ${accent}80` }}
+          transition={{ type: "spring", stiffness: 400, damping: 30 }}
+        />
+      )}
+      <div className={cn("flex items-center gap-3 w-full rounded-lg transition-all duration-200", collapsed ? "justify-center" : "pl-2")}
+        style={isActive ? { color: accent } : undefined}
+      >
+        <span className={cn("shrink-0 transition-transform duration-200 relative", isActive ? "scale-110" : "group-hover:scale-110")}
+          style={isActive ? { color: accent } : undefined}>
+          {icon}
+          {collapsed && badge !== undefined && badge > 0 && (
+            <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-1 rounded-full bg-accent text-[9px] font-bold text-white grid place-items-center">
+              {badge > 99 ? "99+" : badge}
+            </span>
+          )}
+        </span>
+        <AnimatePresence>
+          {!collapsed && (
+            <motion.span initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -8 }} transition={{ duration: 0.15 }} className="truncate flex-1">
+              {label}
+            </motion.span>
+          )}
+        </AnimatePresence>
+        {!collapsed && badge !== undefined && badge > 0 && (
+          <span className="ml-auto px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-white/[0.06] text-text-tertiary border border-white/[0.04]">
+            {badge > 99 ? "99+" : badge}
+          </span>
+        )}
+      </div>
+    </button>
+  );
 };
 
 export default function Sidebar({
@@ -38,36 +86,14 @@ export default function Sidebar({
   const usage = useQuery({ queryKey: ["storage-usage"], queryFn: () => get<{ total: number; used: number; available: number }>("/admin/usage"), enabled: isAdmin, });
   const usedPercent = usage.data && usage.data.total > 0 ? Math.round((usage.data.used / usage.data.total) * 100) : 0;
 
-  const NavItem = ({ v, icon, label, isActive }: { v: SidebarView; icon: React.ReactNode; label: string; isActive: boolean }) => {
-    const accent = viewColors[v] || "#5B8CFF";
-    return (
-      <button onClick={() => onSelectView(v)} title={collapsed ? label : undefined}
-        className={cn("relative w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-sm font-medium transition-all duration-200 min-h-[44px] group", collapsed ? "justify-center px-0" : "")}
-      >
-        {isActive && (
-          <motion.div layoutId="sidebar-active"
-            className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-full"
-            style={{ backgroundColor: accent, boxShadow: `0 0 8px ${accent}80` }}
-            transition={{ type: "spring", stiffness: 400, damping: 30 }}
-          />
-        )}
-        <div className={cn("flex items-center gap-3 w-full rounded-lg transition-all duration-200", collapsed ? "justify-center" : "pl-2")}
-          style={isActive ? { color: accent } : undefined}
-        >
-          <span className={cn("shrink-0 transition-transform duration-200", isActive ? "scale-110" : "group-hover:scale-110")}
-            style={isActive ? { color: accent } : undefined}>
-            {icon}
-          </span>
-          <AnimatePresence>
-            {!collapsed && (
-              <motion.span initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -8 }} transition={{ duration: 0.15 }} className="truncate">
-                {label}
-              </motion.span>
-            )}
-          </AnimatePresence>
-        </div>
-      </button>
-    );
+  const trashCount = useQuery({ queryKey: ["trash-count"], queryFn: () => get<{ items: unknown[] }>("/trash").then(d => d.items?.length ?? 0), staleTime: 30000 });
+  const sharesCount = useQuery({ queryKey: ["shares-count"], queryFn: () => get<{ shares: unknown[] }>("/shares").then(d => d.shares?.length ?? 0), staleTime: 30000 });
+  const favsCount = useQuery({ queryKey: ["favs-count"], queryFn: () => get<{ favorites: unknown[] }>("/favorites").then(d => d.favorites?.length ?? 0), staleTime: 30000 });
+
+  const badgeCounts: Partial<Record<SidebarView, number>> = {
+    trash: typeof trashCount.data === "number" ? trashCount.data : 0,
+    shares: typeof sharesCount.data === "number" ? sharesCount.data : 0,
+    favorites: typeof favsCount.data === "number" ? favsCount.data : 0,
   };
 
   return (
@@ -78,9 +104,7 @@ export default function Sidebar({
         transition={{ duration: 0.25, ease: [0.25, 0.1, 0.25, 1] }}
         className={cn("shrink-0 glass-strong flex flex-col h-full z-50 overflow-hidden border-r border-white/[0.06] relative", "fixed inset-y-0 left-0 md:relative", collapsed ? "items-center" : "")}
       >
-        {/* Inner highlight gradient */}
         <div className="absolute inset-0 bg-gradient-to-b from-white/[0.02] via-transparent to-transparent pointer-events-none" />
-        {/* Header */}
         <div className={cn("flex items-center gap-3 mb-4 mt-3", collapsed ? "justify-center px-0" : "px-4 w-full")}>
           <motion.div whileHover={{ scale: 1.05 }}
             className="h-9 w-9 rounded-xl bg-gradient-to-br from-accent via-accent-secondary to-accent-tertiary grid place-items-center text-white font-bold shadow-lg shadow-accent-glow shrink-0">
@@ -100,12 +124,24 @@ export default function Sidebar({
         {collapsed && <button onClick={onToggleCollapse} title="Expand sidebar" aria-label="Expand sidebar" className="mb-4 p-2.5 rounded-xl hover:bg-glass-bg transition-colors min-h-[44px] min-w-[44px]"><PanelLeftOpen className="h-4 w-4 text-text-tertiary mx-auto" /></button>}
 
         <nav aria-label="Main navigation" className={cn("flex-1 overflow-y-auto space-y-0.5", collapsed ? "px-2 w-full" : "px-2 w-full")}>
-          <NavItem v="home" icon={<Home className="h-5 w-5" />} label="Home" isActive={view === "home"} />
-          <NavItem v="search" icon={<Search className="h-5 w-5" />} label="Search" isActive={view === "search"} />
+          <NavItem v="home" icon={<Home className="w-[18px] h-[18px]" />} label="Home" isActive={view === "home"} collapsed={collapsed} onSelectView={onSelectView} />
+          <NavItem v="search" icon={<Search className="w-[18px] h-[18px]" />} label="Search" isActive={view === "search"} collapsed={collapsed} onSelectView={onSelectView} />
+          <div className="my-1.5 mx-3 h-px bg-white/[0.06]" />
+        
+          <NavItem v="recents" icon={<Clock className="w-[18px] h-[18px]" />} label="Recent" isActive={view === "recents"} collapsed={collapsed} onSelectView={onSelectView} />
+          <NavItem v="favorites" icon={<Star className="w-[18px] h-[18px]" />} label="Favorites" isActive={view === "favorites"} badge={badgeCounts.favorites} collapsed={collapsed} onSelectView={onSelectView} />
+          <NavItem v="shares" icon={<Share2 className="w-[18px] h-[18px]" />} label="Shared" isActive={view === "shares"} badge={badgeCounts.shares} collapsed={collapsed} onSelectView={onSelectView} />
+          <NavItem v="playlists" icon={<ListMusic className="w-[18px] h-[18px]" />} label="Playlists" isActive={view === "playlists"} collapsed={collapsed} onSelectView={onSelectView} />
+        
+          <div className="my-1.5 mx-3 h-px bg-white/[0.06]" />
+          <NavItem v="trash" icon={<Trash2 className="w-[18px] h-[18px]" />} label="Trash" isActive={view === "trash"} badge={badgeCounts.trash} collapsed={collapsed} onSelectView={onSelectView} />
 
-          <div className={cn("mt-6 mb-1", collapsed ? "px-0" : "px-3")}>
-            <p className={cn("text-[10px] font-semibold uppercase tracking-widest text-text-tertiary", collapsed ? "text-center" : "")}>{collapsed ? "•" : "Storage"}</p>
-          </div>
+          {isAdmin && (
+            <>
+              <div className="my-1.5 mx-3 h-px bg-white/[0.06]" />
+              <NavItem v="admin" icon={<Shield className="w-[18px] h-[18px]" />} label="Administration" isActive={view === "admin"} collapsed={collapsed} onSelectView={onSelectView} />
+            </>
+          )}
 
           {roots.map((r) => {
             const Icon = rootIcon(r.icon);
@@ -138,32 +174,26 @@ export default function Sidebar({
               <span>New storage</span>
             </button>
           )}
-
-          <div className={cn("mt-6 mb-1", collapsed ? "px-0" : "px-3")}>
-            <p className={cn("text-[10px] font-semibold uppercase tracking-widest text-text-tertiary", collapsed ? "text-center" : "")}>{collapsed ? "•" : "Workspace"}</p>
-          </div>
-
-          <NavItem v="favorites" icon={<Star className="h-5 w-5" />} label="Favorites" isActive={view === "favorites"} />
-          <NavItem v="recents" icon={<Clock className="h-5 w-5" />} label="Recent" isActive={view === "recents"} />
-          <NavItem v="shares" icon={<Share2 className="h-5 w-5" />} label="Shared" isActive={view === "shares"} />
-          <NavItem v="playlists" icon={<ListMusic className="h-5 w-5" />} label="Playlists" isActive={view === "playlists"} />
-          <NavItem v="trash" icon={<Trash2 className="h-5 w-5" />} label="Trash" isActive={view === "trash"} />
         </nav>
 
-        {/* Footer Area */}
         <div className={cn("mt-auto flex flex-col gap-2 w-full", collapsed ? "p-2" : "p-2")}>
           {!collapsed && (
             <div className="px-3 py-2.5 rounded-xl glass-subtle border border-white/[0.06] mb-1">
               <div className="flex justify-between text-[11px] mb-1.5 font-medium">
                 <span className="text-text-tertiary">Storage</span>
-                <span className="text-text-secondary">{usage.isLoading ? "…" : `${usedPercent}%`}</span>
+                <span className="text-text-secondary">
+                  {usage.isLoading ? "…" : usage.data ? `${formatBytes(usage.data.used)} / ${formatBytes(usage.data.total)}` : `${usedPercent}%`}
+                </span>
               </div>
-              <div className="quota-bar">
+              <div className="quota-bar relative">
                 <motion.div className="quota-bar-fill"
                   initial={{ width: "0%" }}
                   animate={{ width: usage.isLoading ? "0%" : `${usedPercent}%` }}
                   transition={{ duration: 0.8, ease: [0.25, 0.1, 0.25, 1] }}
                 />
+              </div>
+              <div className="text-[10px] text-text-tertiary mt-1.5">
+                {usedPercent}% used
               </div>
             </div>
           )}

@@ -134,6 +134,8 @@ func (s *Server) Routes() http.Handler {
 	authed.Get("/roots", s.handleListRoots)
 	authed.Get("/files", s.handleListFiles)
 	authed.Get("/files/stat", s.handleStatFile)
+	authed.Get("/files/duplicates", s.handleFindDuplicates)
+	authed.Get("/stats", s.handleStorageStats)
 	authed.Post("/files/directory", s.handleCreateDir)
 	authed.Post("/files/rename", s.handleRename)
 	authed.Post("/files/move", s.handleMove)
@@ -185,6 +187,12 @@ func (s *Server) Routes() http.Handler {
 	authed.Delete("/favorites", s.handleRemoveFavorite)
 	authed.Get("/recents", s.handleListRecents)
 	authed.Get("/home", s.handleHome)
+
+	// Tags
+	authed.Get("/tags", s.handleListTags)
+	authed.Post("/tags", s.handleCreateTag)
+	authed.Post("/files/tag", s.handleTagFile)
+	authed.Delete("/files/tag", s.handleUntagFile)
 
 	// Share links (authenticated management).
 	authed.Get("/shares", s.handleListShares)

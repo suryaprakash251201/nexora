@@ -29,6 +29,7 @@ export interface FileItem {
   mime: string;
   root_id: string;
   extension: string;
+  tags?: Tag[];
 }
 
 export interface FileList {
@@ -174,3 +175,18 @@ export interface PlaylistCollaborator {
   created_at: string;
   username?: string;
 }
+
+export interface Tag {
+  id: string;
+  name: string;
+  color: string;
+  count?: number;
+  created_at: string;
+}
+
+export interface FileTag {
+  tag_id: string;
+  root_id: string;
+  path: string;
+}
+
