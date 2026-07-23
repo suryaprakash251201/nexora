@@ -72,12 +72,14 @@ export default function Sidebar({
 
   return (
     <>
-      {!collapsed && <div className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm md:hidden sidebar-overlay" onClick={onToggleCollapse} />}
+      {!collapsed && <div className="fixed inset-0 z-40 bg-black/70 backdrop-blur-md md:hidden sidebar-overlay" onClick={onToggleCollapse} />}
       <motion.aside
         animate={{ width: collapsed ? 72 : 256 }}
         transition={{ duration: 0.25, ease: [0.25, 0.1, 0.25, 1] }}
-        className={cn("shrink-0 glass-strong flex flex-col h-full z-50 overflow-hidden border-r border-glass-border", "fixed inset-y-0 left-0 md:relative", collapsed ? "items-center" : "")}
+        className={cn("shrink-0 glass-strong flex flex-col h-full z-50 overflow-hidden border-r border-white/[0.06] relative", "fixed inset-y-0 left-0 md:relative", collapsed ? "items-center" : "")}
       >
+        {/* Inner highlight gradient */}
+        <div className="absolute inset-0 bg-gradient-to-b from-white/[0.02] via-transparent to-transparent pointer-events-none" />
         {/* Header */}
         <div className={cn("flex items-center gap-3 mb-4 mt-3", collapsed ? "justify-center px-0" : "px-4 w-full")}>
           <motion.div whileHover={{ scale: 1.05 }}
@@ -151,7 +153,7 @@ export default function Sidebar({
         {/* Footer Area */}
         <div className={cn("mt-auto flex flex-col gap-2 w-full", collapsed ? "p-2" : "p-2")}>
           {!collapsed && (
-            <div className="px-3 py-2.5 rounded-xl bg-glass-bg-subtle border border-glass-border mb-1">
+            <div className="px-3 py-2.5 rounded-xl glass-subtle border border-white/[0.06] mb-1">
               <div className="flex justify-between text-[11px] mb-1.5 font-medium">
                 <span className="text-text-tertiary">Storage</span>
                 <span className="text-text-secondary">{usage.isLoading ? "…" : `${usedPercent}%`}</span>

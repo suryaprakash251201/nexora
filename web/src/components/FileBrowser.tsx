@@ -5,7 +5,7 @@ import { Play, MoreVertical } from "lucide-react";
 import { FileItem } from "../api/types";
 import { formatBytes, formatDate } from "../lib/format";
 import { FileThumb } from "./FileThumb";
-import { iconForFile, colorClasses } from "./FileIcon";
+import { iconForFile, colorClasses, iconGlowClasses } from "./FileIcon";
 import { EmptyState } from "./ui/EmptyState";
 import { SkeletonGrid, SkeletonList } from "./ui/Skeleton";
 import { cn } from "@/lib/utils";
@@ -37,7 +37,7 @@ const FileIconForItem = memo(function FileIconForItem({ item, large, fill }: { i
   const [, bg] = c.split(" ");
 
   return (
-    <div className={cn("grid place-items-center rounded-xl transition-transform duration-300 group-hover:scale-105 shadow-sm", bg || "bg-surface-muted", "border border-glass-border-soft", dim)}>
+    <div className={cn("grid place-items-center rounded-xl transition-all duration-300 group-hover:scale-105", bg || "bg-surface-muted", "border", iconGlowClasses[color] || "border-glass-border-soft shadow-sm", dim)}>
       <Icon className={cn("drop-shadow-md", large ? "h-8 w-8" : "h-5 w-5", c.split(" ")[0] || "text-text-secondary")} />
     </div>
   );
@@ -205,23 +205,26 @@ export default function FileBrowser({
                         onDropItem?.(item);
                       }
                     }}
-                    whileHover={{ y: -6, boxShadow: "0 8px 24px rgba(0,0,0,0.15), 0 0 40px rgba(91,140,255,0.06)" }}
+                    whileHover={{ y: -6, boxShadow: "0 8px 32px rgba(0,0,0,0.22), 0 0 48px rgba(91,140,255,0.10), 0 0 0 1px rgba(255,255,255,0.08)" }}
                     whileTap={{ scale: 0.98 }}
                     className={cn(
-                      "group relative flex flex-col items-center p-5 rounded-2xl text-center transition-all duration-200 outline-none cursor-pointer border",
+                      "group relative flex flex-col items-center p-5 rounded-2xl text-center transition-all duration-200 outline-none cursor-pointer border overflow-hidden",
                       selected
-                        ? "bg-accent/10 border-accent/30 shadow-lg shadow-accent/10"
-                        : "glass border-glass-border-soft hover:border-accent-purple/25",
+                        ? "bg-accent/12 border-accent/35 shadow-lg shadow-accent/15"
+                        : "glass border-white/[0.06] hover:border-accent-purple/30",
                       dropTarget === item.path ? "ring-2 ring-accent bg-accent/15 scale-105" : "",
                       dragOver ? "opacity-50" : ""
                     )}
                   >
+                    {/* Inner glow highlight */}
+                    <div className="absolute inset-0 bg-gradient-to-br from-white/[0.03] via-transparent to-transparent pointer-events-none rounded-2xl" />
+                    <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
                     <div className="w-full flex justify-center mb-4 transition-transform duration-300 relative">
                       <FileIconForItem item={item} large />
 
                       {!selectMode && (
                         <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                          <div className="flex gap-2 p-1.5 rounded-2xl bg-black/70 backdrop-blur-xl border border-glass-border shadow-xl" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex gap-2 p-1.5 rounded-2xl bg-black/80 backdrop-blur-2xl border border-white/10 shadow-2xl" onClick={(e) => e.stopPropagation()}>
                             <motion.button
                               whileHover={{ scale: 1.1 }}
                               whileTap={{ scale: 0.9 }}
@@ -336,7 +339,7 @@ export default function FileBrowser({
                         onDropItem?.(item);
                       }
                     }}
-                    whileHover={{ backgroundColor: "var(--color-glass-bg)" }}
+                    whileHover={{ backgroundColor: "rgba(255,255,255,0.04)" }}
                     className={cn(
                       "group grid grid-cols-[auto_1fr_auto_auto_auto] gap-2 sm:gap-4 px-3 sm:px-6 py-3 rounded-xl items-center cursor-pointer transition-all duration-200 outline-none border border-transparent",
                       selected

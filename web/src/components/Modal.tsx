@@ -30,7 +30,7 @@ export function Modal({ title, description, icon, onClose, children, footer }: {
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         transition={{ duration: 0.12 }}
-        className="fixed inset-0 z-50 grid place-items-center p-4 scrim backdrop-blur-sm"
+        className="fixed inset-0 z-50 grid place-items-center p-4 scrim"
         onMouseDown={onClose}
       >
         <motion.div
@@ -43,10 +43,10 @@ export function Modal({ title, description, icon, onClose, children, footer }: {
           aria-modal="true"
           aria-labelledby={titleId}
           tabIndex={-1}
-          className="w-full max-w-md glass-strong rounded-xl outline-none shadow-2xl"
+          className="w-full max-w-md glass-strong rounded-2xl outline-none shadow-2xl shadow-black/30 overflow-hidden"
           onMouseDown={(e) => e.stopPropagation()}
         >
-          <div className="flex items-start justify-between px-6 py-4 border-b border-border/50 bg-surface/30">
+          <div className="flex items-start justify-between px-6 py-4 border-b border-white/[0.06] bg-gradient-to-r from-white/[0.02] via-transparent to-transparent">
             <div className="flex gap-4">
               {icon && (
                 <div className="h-12 w-12 rounded-2xl bg-accent/10 flex items-center justify-center shrink-0 border border-accent/20">
@@ -63,7 +63,7 @@ export function Modal({ title, description, icon, onClose, children, footer }: {
             </button>
           </div>
           <div className="p-6">{children}</div>
-          {footer && <div className="px-6 py-4 border-t border-border/50 bg-surface/50 flex justify-end gap-3">{footer}</div>}
+          {footer && <div className="px-6 py-4 border-t border-white/[0.06] bg-white/[0.02] flex justify-end gap-3">{footer}</div>}
         </motion.div>
       </motion.div>
     </AnimatePresence>

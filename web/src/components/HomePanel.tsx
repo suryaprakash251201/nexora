@@ -39,8 +39,11 @@ function HomeCard({ item, onOpen }: { item: RecentItem; onOpen: () => void }) {
       variants={staggerItem}
       {...cardHover}
       onClick={onOpen}
-      className="group w-full text-left outline-none flex items-center gap-4 p-3 rounded-2xl glass-strong border border-border/50 hover:border-accent/40 focus-visible:ring-2 focus-visible:ring-accent transition-all duration-300"
+      className="group w-full text-left outline-none flex items-center gap-4 p-3 rounded-2xl glass-strong border border-white/[0.06] hover:border-accent/40 focus-visible:ring-2 focus-visible:ring-accent transition-all duration-300 overflow-hidden relative"
     >
+      {/* Inner card glow */}
+      <div className="absolute inset-0 bg-gradient-to-br from-white/[0.03] via-transparent to-transparent pointer-events-none rounded-2xl" />
+      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/8 to-transparent" />
       <div className="relative h-16 w-16 shrink-0 rounded-xl overflow-hidden shadow-sm">
         <FileThumb it={fi} fill />
         <div className="absolute inset-0 bg-black/10 group-hover:bg-black/20 transition-colors duration-300" />
@@ -103,7 +106,7 @@ function AddTile({ icon, label, onClick }: { icon: React.ReactNode; label: strin
       onClick={onClick}
       className="group w-full text-left outline-none"
     >
-      <div className="flex items-center gap-4 p-4 rounded-2xl glass-strong border border-border/50 hover:border-accent/40 focus-visible:ring-2 focus-visible:ring-accent transition-all duration-300 relative overflow-hidden">
+      <div className="flex items-center gap-4 p-4 rounded-2xl glass-strong border border-white/[0.06] hover:border-accent/40 focus-visible:ring-2 focus-visible:ring-accent transition-all duration-300 relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-r from-accent/0 to-accent/5 group-hover:opacity-100 opacity-0 transition-opacity" />
         <div className="relative z-10 grid place-items-center h-12 w-12 rounded-xl bg-accent/10 text-accent transition-transform duration-300 group-hover:scale-110">
           {icon}
@@ -165,7 +168,7 @@ export default function HomePanel({
       className="flex-1 overflow-auto custom-scrollbar bg-background"
     >
       {/* Hero Banner */}
-      <div className="relative overflow-hidden border-b border-border/50 bg-surface/30">
+      <div className="relative overflow-hidden border-b border-white/[0.06] bg-surface/20">
         <div className="absolute inset-0 bg-gradient-to-r from-accent/10 via-transparent to-transparent opacity-50" />
         <div className="max-w-6xl mx-auto px-6 py-10 md:py-14 relative z-10">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, ease: [0.25, 0.1, 0.25, 1] }}>
@@ -197,7 +200,7 @@ export default function HomePanel({
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Search your files, folders, and documents…"
-              className="h-14 text-lg bg-surface/80 backdrop-blur-md shadow-lg border-border/50 focus:border-accent/50 focus:ring-accent/20"
+              className="h-14 text-lg bg-surface/60 backdrop-blur-2xl shadow-lg shadow-black/20 border-white/[0.08] focus:border-accent/50 focus:ring-accent/20"
             />
           </motion.form>
         </div>
@@ -255,7 +258,7 @@ export default function HomePanel({
                       onClick={onOpenPlaylist}
                       className="snap-start group relative w-40 sm:w-48 text-left outline-none shrink-0"
                     >
-                      <div className="aspect-square rounded-2xl overflow-hidden mb-3 shadow-md border border-border/50 group-hover:border-accent/40 group-focus-visible:ring-2 group-focus-visible:ring-accent transition-all duration-300 relative bg-surface-muted/30">
+                      <div className="aspect-square rounded-2xl overflow-hidden mb-3 shadow-lg shadow-black/20 border border-white/[0.08] group-hover:border-accent/40 group-focus-visible:ring-2 group-focus-visible:ring-accent transition-all duration-300 relative bg-surface-muted/30">
                         {pl.cover_root_id && pl.cover_path ? (
                           <img
                             src={`/api/v1/files/thumbnail?root=${pl.cover_root_id}&path=${encodeURIComponent(pl.cover_path)}`}

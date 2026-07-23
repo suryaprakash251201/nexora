@@ -1,4 +1,8 @@
-import { useState } from "react";
+import sys
+with open('/home/suryaprakash/Documents/Projects/nexora/web/src/components/FileThumb.tsx', 'r') as f:
+    lines = f.readlines()
+
+new_content = """import { useState } from "react";
 import { FileItem } from "../api/types";
 import { iconForFile, colorClasses } from "./FileIcon";
 import { thumbUrl } from "../lib/preview";
@@ -103,3 +107,7 @@ export function FileThumb({ it, large, fill }: { it: FileItem; large?: boolean; 
     </div>
   );
 }
+"""
+
+with open('/home/suryaprakash/Documents/Projects/nexora/web/src/components/FileThumb.tsx', 'w') as f:
+    f.write(new_content)
