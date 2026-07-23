@@ -1,4 +1,5 @@
-import { useRef, useState, useCallback, useMemo } from "react";
+import { useRef, useState, useCallback, useMemo, useEffect } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { get, post, del } from "../api/client";
@@ -11,18 +12,20 @@ import CommandBar from "./CommandBar";
 import FileBrowser from "./FileBrowser";
 import DetailsDrawer from "./DetailsDrawer";
 import ContextMenu, { MenuItem } from "./ContextMenu";
-import PreviewModal from "./PreviewModal";
-import HomePanel from "./HomePanel";
-import Editor from "./Editor";
-import ShareDialog from "./ShareDialog";
-import SearchView from "./SearchView";
-import SharesPanel from "./SharesPanel";
-import PlaylistsPanel from "./PlaylistsPanel";
-import AdminPanel from "./AdminPanel";
+import React, { Suspense } from "react";
 import Toaster from "./Toaster";
 import PlayerBar from "./PlayerBar";
-import VideoView from "./VideoView";
-import ImageView from "./ImageView";
+import HomePanel from "./HomePanel";
+const PreviewModal = React.lazy(() => import("./PreviewModal"));
+const Editor = React.lazy(() => import("./Editor"));
+const ShareDialog = React.lazy(() => import("./ShareDialog"));
+const AdminPanel = React.lazy(() => import("./AdminPanel"));
+const SearchView = React.lazy(() => import("./SearchView"));
+const SharesPanel = React.lazy(() => import("./SharesPanel"));
+const PlaylistsPanel = React.lazy(() => import("./PlaylistsPanel"));
+const VideoView = React.lazy(() => import("./VideoView"));
+const ImageView = React.lazy(() => import("./ImageView"));
+import { TagPicker } from "./TagManager";
 import { MobileNav } from "./layout/MobileNav";
 import { PlaylistPickerPopover } from "./PlaylistAdder";
 import TransfersPanel from "./TransfersPanel";
@@ -34,11 +37,11 @@ import CommandPalette from "./CommandPalette";
 import SelectionBar from "./SelectionBar";
 import { formatDate } from "../lib/format";
 import { SkeletonList } from "./ui/Skeleton";
-import { previewKind, isEditable } from "../lib/preview";
+import { isEditable } from "../lib/preview";
 import {
   Download, Trash2, Pencil, Copy, Eye, FolderOpen, RotateCcw,
   Star, Share2, Archive, FolderInput, FileEdit, ListMusic, HardDrive, Upload,
-  Move, Info,
+  Move, Info, Tag as TagIcon
 } from "lucide-react";
 
 // Hooks
@@ -47,6 +50,7 @@ import { useFileOperations, extractZip } from "./hooks/useFileOperations";
 import { useDragAndDrop } from "./hooks/useDragAndDrop";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import { useClipboard } from "./hooks/useClipboard";
+import { useModals } from "./hooks/useModals";
 
 export default function Workspace({ user }: { user: User }) {
   const qc = useQueryClient();
@@ -62,27 +66,56 @@ export default function Workspace({ user }: { user: User }) {
   const setViewMode = useUI((s) => s.setViewMode);
 
   const isAdmin = user.role === "admin";
-  const [view, setView] = useState<SidebarView>("home");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [rootId, setRootId] = useState<string | null>(null);
-  const [path, setPath] = useState("");
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  let view: SidebarView = "home";
+  let rootId: string | null = null;
+  let path = "";
+
+  const pathname = location.pathname;
+  if (pathname.startsWith("/files/")) {
+    view = "files";
+    const parts = pathname.split("/").filter(Boolean);
+    if (parts.length > 1) rootId = parts[1];
+    if (parts.length > 2) path = parts.slice(2).join("/");
+  } else if (pathname === "/search") view = "search";
+  else if (pathname === "/trash") view = "trash";
+  else if (pathname === "/shares") view = "shares";
+  else if (pathname === "/favorites") view = "favorites";
+  else if (pathname === "/recents") view = "recents";
+  else if (pathname === "/playlists") view = "playlists";
+  else if (pathname.startsWith("/admin")) view = "admin";
+  
+  const setView = useCallback((v: SidebarView, rId?: string) => {
+    if (v === "home") navigate("/");
+    else if (v === "files" && rId) navigate(`/files/${rId}`);
+    else if (v === "search") navigate("/search");
+    else if (v === "trash") navigate("/trash");
+    else if (v === "shares") navigate("/shares");
+    else if (v === "favorites") navigate("/favorites");
+    else if (v === "recents") navigate("/recents");
+    else if (v === "playlists") navigate("/playlists");
+    else if (v === "admin") navigate("/admin");
+  }, [navigate]);
+
+  const setRootId = useCallback((id: string | null) => {
+    if (id) navigate(`/files/${id}`);
+  }, [navigate]);
+
+  const setPath = useCallback((p: string) => {
+    if (rootId) {
+      if (p) navigate(`/files/${rootId}/${p}`);
+      else navigate(`/files/${rootId}`);
+    }
+  }, [rootId, navigate]);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [sort, setSort] = useState("name");
   const [order, setOrder] = useState("asc");
-  const [preview, setPreview] = useState<FileItem | null>(null);
-  const [imageItem, setImageItem] = useState<FileItem | null>(null);
-  const [videoItem, setVideoItem] = useState<FileItem | null>(null);
-  const [prevView, setPrevView] = useState<SidebarView>("files");
-  const [editItem, setEditItem] = useState<FileItem | null>(null);
-  const [shareItem, setShareItem] = useState<FileItem | null>(null);
-  const [ctx, setCtx] = useState<{ x: number; y: number; item: FileItem } | null>(null);
-  const [ctxPlaylist, setCtxPlaylist] = useState<{ x: number; y: number; items: FileItem[] } | null>(null);
-  const [menu, setMenu] = useState<{ kind: string; item?: FileItem } | null>(null);
-  const [rootModal, setRootModal] = useState(false);
-const [playlistModal, setPlaylistModal] = useState(false);
-  const [playlistName, setPlaylistName] = useState("");
-  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const modals = useModals();
+  const { preview, setPreview, imageItem, setImageItem, videoItem, setVideoItem, setPrevView, editItem, setEditItem, shareItem, setShareItem, ctx, setCtx, ctxPlaylist, setCtxPlaylist, menu, setMenu, rootModal, setRootModal, playlistModal, setPlaylistModal, playlistName, setPlaylistName, commandPaletteOpen, setCommandPaletteOpen, tagPicker, setTagPicker } = modals;
   const fileInput = useRef<HTMLInputElement>(null);
 
   const roots = useQuery({ queryKey: ["roots"], queryFn: () => get<{ roots: Root[] }>("/roots") });
@@ -101,20 +134,22 @@ const [playlistModal, setPlaylistModal] = useState(false);
   const favSet = useQuery({ queryKey: ["fav-set"], queryFn: () => get<{ items: FavoriteItem[] }>("/favorites") });
 
   const items = files.data?.items || [];
-  const filtered = useMemo(() => {
-    let f = items;
-    if (filter !== "all") {
-      if (filter === "folders") f = f.filter((i) => i.is_dir);
-      else if (filter === "documents") f = f.filter((i) => !i.is_dir && (i.mime.startsWith("text/") || ["pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "odt", "ods", "odp", "pages", "numbers", "key", "md", "txt", "rtf"].includes(i.extension.toLowerCase())));
-      else if (filter === "images") f = f.filter((i) => i.mime.startsWith("image/"));
-      else if (filter === "videos") f = f.filter((i) => i.mime.startsWith("video/"));
-      else if (filter === "audio") f = f.filter((i) => i.mime.startsWith("audio/"));
-      else if (filter === "archives") f = f.filter((i) => ["zip", "tar", "gz", "7z", "rar", "iso"].includes(i.extension.toLowerCase()));
+  
+  const [filtered, setFiltered] = useState<FileItem[]>([]);
+  const workerRef = useRef<Worker | null>(null);
+
+  useEffect(() => {
+    workerRef.current = new Worker(new URL('../workers/filter.worker.ts', import.meta.url), { type: 'module' });
+    workerRef.current.onmessage = (e) => setFiltered(e.data);
+    return () => workerRef.current?.terminate();
+  }, []);
+
+  useEffect(() => {
+    if (workerRef.current) {
+      workerRef.current.postMessage({ items, filter, search });
     }
-    if (search) f = f.filter((i) => i.name.toLowerCase().includes(search.toLowerCase()));
-    return f;
   }, [items, filter, search]);
-  const audioQueue = useMemo(() => items.filter((i) => i.mime.startsWith("audio/")), [items]);
+  
   const imageList = useMemo(() => filtered.filter((i) => i.mime.startsWith("image/") || ["jpg", "jpeg", "png", "gif", "webp", "bmp", "avif"].includes(i.extension.toLowerCase())), [filtered]);
 
   const refresh = useCallback(() => {
@@ -131,7 +166,7 @@ const [playlistModal, setPlaylistModal] = useState(false);
   const { folderPicker, setFolderPicker, moveSelectionTo, openPickerFor, applyFolderPicker } = useClipboard({ rootId, selection, clearSelection, refresh, canWrite });
   const { dragProps, dragActive, dropPicker, setDropPicker, pendingDrop } = useDragAndDrop({ rootId, canWrite, uploadFiles });
   
-  const isModalOpen = useMemo(() => !!(preview || imageItem || editItem || shareItem || menu || rootModal || folderPicker || dropPicker || playlistModal || ctx || ctxPlaylist), [preview, imageItem, editItem, shareItem, menu, rootModal, folderPicker, dropPicker, playlistModal, ctx, ctxPlaylist]);
+  const isModalOpen = modals.isModalOpen || !!folderPicker || !!dropPicker;
   
   useKeyboardShortcuts({
     canWrite, view, setView, selection, items, bulkDelete, setMenu,
@@ -190,7 +225,7 @@ const [playlistModal, setPlaylistModal] = useState(false);
   };
 
   // Selection actions for CommandBar
-  const handleSelectionAction = useCallback((action: "move" | "copy" | "delete" | "download" | "share" | "archive" | "favorite") => {
+  const handleSelectionAction = useCallback((action: "move" | "copy" | "delete" | "download" | "share" | "archive" | "favorite" | "tag") => {
     if (!selection.size) return;
     const paths = Array.from(selection);
     
@@ -210,8 +245,8 @@ const [playlistModal, setPlaylistModal] = useState(false);
       case "share":
         // For single item share, open share dialog
         if (paths.length === 1) {
-          const it = items.find(i => i.path === paths[0]);
-          if (it) setShareItem(it);
+           const it = items.find(i => i.path === paths[0]);
+           if (it) setShareItem(it);
         }
         break;
       case "archive":
@@ -220,8 +255,11 @@ const [playlistModal, setPlaylistModal] = useState(false);
       case "favorite":
         paths.forEach(p => { const it = items.find(i => i.path === p); if (it) toggleFavorite(it); });
         break;
+      case "tag":
+        if (rootId) setTagPicker({ rootId, paths });
+        break;
     }
-  }, [selection, items, openPickerFor, bulkDelete, downloadItem, setShareItem, archivePaths, toggleFavorite]);
+  }, [selection, items, openPickerFor, bulkDelete, downloadItem, setShareItem, archivePaths, toggleFavorite, rootId, setTagPicker]);
 
   const handleExitSelection = useCallback(() => {
     clearSelection();
@@ -256,6 +294,7 @@ const [playlistModal, setPlaylistModal] = useState(false);
       }
       menuItems.push(
         { label: "Rename", icon: <Pencil className="h-4 w-4" />, onClick: () => setMenu({ kind: "rename", item }) },
+        { label: "Tags...", icon: <TagIcon className="h-4 w-4" />, onClick: () => setTagPicker({ rootId: activeRoot!.id, paths: [item.path] }) },
         { label: "Move", icon: <Move className="h-4 w-4" />, onClick: () => openPickerFor("move", [item.path]) },
         { label: "Copy", icon: <Copy className="h-4 w-4" />, onClick: () => openPickerFor("copy", [item.path]) },
         { label: "Delete", icon: <Trash2 className="h-4 w-4" />, danger: true, onClick: () => doDelete(item.path) },
@@ -346,7 +385,7 @@ const [playlistModal, setPlaylistModal] = useState(false);
             onAdmin={() => setView("admin")}
           />
         )}
-        {view !== "files" && view !== "home" && view !== "video" && (
+        {view !== "files" && view !== "home" && !videoItem && (
           <div className="h-14 glass-bar flex items-center justify-between px-4">
             <span className="font-semibold capitalize">{view}</span>
             <ProfileMenu user={user} isAdmin={isAdmin} onLogout={logout} onAdmin={() => setView("admin")} />
@@ -357,21 +396,14 @@ const [playlistModal, setPlaylistModal] = useState(false);
 
         <AnimatePresence mode="wait">
           <motion.div
-            key={view + (view === "video" && videoItem ? videoItem.path : "")}
+            key={view + (videoItem ? videoItem.path : "")}
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
             transition={{ duration: 0.15, ease: [0.25, 0.1, 0.25, 1] }}
             className="flex-1 overflow-auto flex flex-col"
           >
-            {view === "video" && videoItem ? (
-              <VideoView
-                item={videoItem}
-                rootId={rootId!}
-                onClose={() => { setView(prevView); setVideoItem(null); }}
-                onShare={(it) => setShareItem(it)}
-              />
-            ) : view === "files" && (
+            {view === "files" && (
               <FileBrowser
                 items={filtered}
                 loading={files.isLoading}
@@ -425,7 +457,7 @@ const [playlistModal, setPlaylistModal] = useState(false);
           </motion.div>
         </AnimatePresence>
 
-        {view !== "video" && (
+        {!videoItem && (
           <SelectionBar
             count={selection.size}
             onDownload={() => handleSelectionAction("download")}
@@ -470,31 +502,12 @@ const [playlistModal, setPlaylistModal] = useState(false);
 
       {ctx && <ContextMenu x={ctx.x} y={ctx.y} items={buildMenu(ctx.item, ctx.x, ctx.y)} onClose={() => setCtx(null)} />}
       {ctxPlaylist && <PlaylistPickerPopover x={ctxPlaylist.x} y={ctxPlaylist.y} items={ctxPlaylist.items} onClose={() => setCtxPlaylist(null)} />}
-      {imageItem && (
-        <ImageView
-          item={imageItem}
-          images={imageList}
-          rootId={rootId!}
-          onClose={() => setImageItem(null)}
-          onShare={(it) => setShareItem(it)}
-        />
-      )}
-      {preview && (
-        <PreviewModal
-          item={preview}
-          rootId={rootId!}
-          playlist={previewKind(preview) === "audio" ? audioQueue : undefined}
-          canWrite={canWrite}
-          onClose={() => setPreview(null)}
-          onEdit={(it) => { setPreview(null); setEditItem(it); }}
-          onShare={(it) => { setShareItem(it); }}
-        />
-      )}
-      {editItem && <Editor item={editItem} rootId={rootId!} onClose={() => { setEditItem(null); refresh(); }} />}
-      {shareItem && <ShareDialog item={shareItem} rootId={rootId!} onClose={() => setShareItem(null)} />}
+      <Suspense fallback={null}>
+        {videoItem && <VideoView item={videoItem} rootId={rootId!} onClose={() => setVideoItem(null)} />}
+        {imageItem && <ImageView item={imageItem} images={imageList} rootId={rootId!} onClose={() => setImageItem(null)} />}
+      </Suspense>
       {menu && <ActionModals menu={menu} rootId={rootId!} path={path} onClose={() => setMenu(null)} onDone={() => { refresh(); setMenu(null); }} onArchiveExtract={(src, dest) => { extractZip(rootId!, src, dest, pushToast, refresh); setMenu(null); }} />}
-      {rootModal && <RootModal onClose={() => setRootModal(false)} onDone={() => { refresh(); setRootModal(false); }} />}
-
+      
       {folderPicker && rootId && (
         <FolderPickerModal
           rootId={rootId}
@@ -544,6 +557,24 @@ const [playlistModal, setPlaylistModal] = useState(false);
           </p>
         </Modal>
       )}
+      <Suspense fallback={null}>
+        <AnimatePresence>
+          {preview && <PreviewModal item={preview} rootId={rootId!} onClose={() => setPreview(null)} />}
+          {editItem && <Editor item={editItem} rootId={rootId!} onClose={() => { setEditItem(null); refresh(); }} />}
+          {shareItem && <ShareDialog item={shareItem} rootId={rootId!} onClose={() => setShareItem(null)} />}
+          {rootModal && <RootModal root={rootModal === true ? null : rootModal} onClose={() => setRootModal(false)} onDone={() => { setRootModal(false); refresh(); }} />}
+          {tagPicker && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setTagPicker(null)}>
+              <TagPicker
+                rootId={tagPicker.rootId}
+                paths={tagPicker.paths}
+                existingTags={tagPicker.paths.length === 1 ? items.find(i => i.path === tagPicker.paths[0])?.tags : undefined}
+                onClose={() => setTagPicker(null)}
+              />
+            </div>
+          )}
+        </AnimatePresence>
+      </Suspense>
       <Toaster />
       <CommandPalette
         isOpen={commandPaletteOpen}

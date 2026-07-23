@@ -43,7 +43,7 @@ interface CommandBarProps {
   onNewFile: () => void;
   onUpload: () => void;
   onRefresh: () => void;
-  onSelectionAction: (action: "move" | "copy" | "delete" | "download" | "share" | "archive" | "favorite") => void;
+  onSelectionAction: (action: "move" | "copy" | "delete" | "download" | "share" | "archive" | "favorite" | "tag") => void;
   onExitSelection: () => void;
   user: User;
   isAdmin: boolean;
@@ -301,6 +301,7 @@ export default function CommandBar({
               <div className="flex rounded-xl overflow-hidden bg-glass-bg-subtle p-0.5">
                 <Button variant="ghost" size="xs" icon={<Download className="h-3.5 w-3.5" />} onClick={() => onSelectionAction("download")}>DL</Button>
                 <Button variant="ghost" size="xs" icon={<Share2 className="h-3.5 w-3.5" />} onClick={() => onSelectionAction("share")}>Share</Button>
+                <Button variant="ghost" size="xs" onClick={() => onSelectionAction("tag")}>Tags...</Button>
                 <Button variant="ghost" size="xs" icon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => onSelectionAction("delete")} className="text-danger">Del</Button>
                 <Button variant="ghost" size="xs" onClick={onExitSelection}><X className="h-3.5 w-3.5" /></Button>
               </div>

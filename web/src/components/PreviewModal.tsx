@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
-import { X, Download, Pencil, Share2, Copy, Check, ZoomIn, ZoomOut, Maximize, Minimize } from "lucide-react";
+import { X, Download, Pencil, Share2, Copy, Check, ZoomIn, ZoomOut, Maximize, Minimize, ChevronLeft, ChevronRight, Info } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import type { FileItem } from "../api/types";
 import { previewKind, isEditable, rawUrl, codeLanguage } from "../lib/preview";
 import { renderMarkdown } from "../lib/markdown";
 import { usePlayer } from "../store/player";
 import MediaPlayer from "./MediaPlayer";
 import { Button } from "./ui/Button";
+import { formatBytes, formatDate } from "../lib/format";
+import { cn } from "@/lib/utils";
 
 const MAX_TEXT = 400000;
 
@@ -34,10 +37,28 @@ export default function PreviewModal({
   const [copied, setCopied] = useState(false);
   const [zoom, setZoom] = useState(1);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showInfo, setShowInfo] = useState(false);
 
   const handleClose = useCallback(() => {
     onClose();
   }, [onClose]);
+
+  // Gallery navigation for images
+  const galleryItems = useMemo(() => {
+    if (!playlist) return [];
+    return playlist.filter(
+      (f) => f.mime.startsWith("image/") || ["jpg", "jpeg", "png", "gif", "webp", "bmp", "avif"].includes(f.extension.toLowerCase())
+    );
+  }, [playlist]);
+  
+  const galleryIndex = galleryItems.findIndex((f) => f.path === current.path);
+  const hasGallery = galleryItems.length > 1 && galleryIndex >= 0;
+  
+  const navigateGallery = useCallback((direction: 1 | -1) => {
+    if (!hasGallery) return;
+    const nextIdx = (galleryIndex + direction + galleryItems.length) % galleryItems.length;
+    setCurrent(galleryItems[nextIdx]);
+  }, [hasGallery, galleryIndex, galleryItems]);
 
   const url = rawUrl(current.root_id || rootId, current.path);
 
@@ -73,10 +94,17 @@ export default function PreviewModal({
         if (isFullscreen) setIsFullscreen(false);
         else handleClose();
       }
+      if (hasGallery && kind === "image") {
+        if (e.key === "ArrowLeft") { e.preventDefault(); navigateGallery(-1); }
+        if (e.key === "ArrowRight") { e.preventDefault(); navigateGallery(1); }
+      }
+      if (e.key === "i" && !e.ctrlKey && !e.metaKey) {
+        setShowInfo((s) => !s);
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [handleClose, isFullscreen]);
+  }, [handleClose, isFullscreen, hasGallery, kind, navigateGallery]);
 
   useEffect(() => {
     if (kind === "audio" && audioQueue.length) {
@@ -151,6 +179,9 @@ export default function PreviewModal({
             
             <div className="w-px h-6 bg-border/50 mx-1 hidden sm:block" />
             
+            <button onClick={() => setShowInfo(!showInfo)} className={cn("p-2 rounded-lg glass-hover transition-colors hidden sm:block", showInfo ? "text-accent bg-accent/10" : "text-content-muted hover:text-content")} title="File info (I)">
+              <Info className="h-4 w-4" />
+            </button>
             <button onClick={() => setIsFullscreen(!isFullscreen)} className="p-2 rounded-lg glass-hover text-content-muted hover:text-content hidden sm:block" title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}>
               {isFullscreen ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}
             </button>
@@ -161,20 +192,43 @@ export default function PreviewModal({
           </div>
         </div>
 
-        <div className="flex-1 overflow-auto grid place-items-center bg-black/5 relative">
-          {kind === "image" && (
-            <div className="w-full h-full overflow-auto custom-scrollbar grid place-items-center relative">
-              {/* Checkerboard background for transparent images */}
-              <div className="absolute inset-0 pointer-events-none opacity-20" style={{ backgroundImage: 'repeating-linear-gradient(45deg, #808080 25%, transparent 25%, transparent 75%, #808080 75%, #808080), repeating-linear-gradient(45deg, #808080 25%, transparent 25%, transparent 75%, #808080 75%, #808080)', backgroundPosition: '0 0, 10px 10px', backgroundSize: '20px 20px', zIndex: -1 }} />
-              <img 
-                src={url} 
-                alt={current.name} 
-                className="max-w-none transition-transform duration-200 shadow-2xl" 
-                style={{ transform: `scale(${zoom})`, transformOrigin: 'center' }} 
-              />
-            </div>
-          )}
-          {kind === "video" && (
+        <div className="flex-1 flex overflow-hidden">
+          <div className="flex-1 overflow-auto grid place-items-center bg-black/5 relative">
+            {kind === "image" && (
+              <div className="w-full h-full overflow-auto custom-scrollbar grid place-items-center relative">
+                {/* Checkerboard background for transparent images */}
+                <div className="absolute inset-0 pointer-events-none opacity-20" style={{ backgroundImage: 'repeating-linear-gradient(45deg, #808080 25%, transparent 25%, transparent 75%, #808080 75%, #808080), repeating-linear-gradient(45deg, #808080 25%, transparent 25%, transparent 75%, #808080 75%, #808080)', backgroundPosition: '0 0, 10px 10px', backgroundSize: '20px 20px', zIndex: -1 }} />
+                <img 
+                  src={url} 
+                  alt={current.name} 
+                  className="max-w-none transition-transform duration-200 shadow-2xl" 
+                  style={{ transform: `scale(${zoom})`, transformOrigin: 'center' }} 
+                />
+                {/* Gallery navigation arrows */}
+                {hasGallery && (
+                  <>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); navigateGallery(-1); }}
+                      className="absolute left-4 top-1/2 -translate-y-1/2 p-3 rounded-full glass-strong border border-white/10 text-white/80 hover:text-white hover:bg-white/10 transition-all duration-200 shadow-xl z-10"
+                      title="Previous image (←)"
+                    >
+                      <ChevronLeft className="h-6 w-6" />
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); navigateGallery(1); }}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 p-3 rounded-full glass-strong border border-white/10 text-white/80 hover:text-white hover:bg-white/10 transition-all duration-200 shadow-xl z-10"
+                      title="Next image (→)"
+                    >
+                      <ChevronRight className="h-6 w-6" />
+                    </button>
+                    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-full glass-strong border border-white/10 text-xs font-mono text-white/70 z-10">
+                      {galleryIndex + 1} / {galleryItems.length}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+            {kind === "video" && (
             <div className="w-full h-full bg-black">
               <MediaPlayer kind="video" url={url} item={current} autoPlay />
             </div>
@@ -229,6 +283,45 @@ export default function PreviewModal({
               </Button>
             </div>
           )}
+          </div>
+          {/* Info panel */}
+          <AnimatePresence>
+            {showInfo && (
+              <motion.div
+                initial={{ width: 0, opacity: 0 }}
+                animate={{ width: 280, opacity: 1 }}
+                exit={{ width: 0, opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="shrink-0 border-l border-white/[0.06] overflow-hidden bg-surface/30"
+              >
+                <div className="w-[280px] p-5 space-y-4">
+                  <h3 className="text-sm font-semibold text-text-secondary">File Information</h3>
+                  <div className="space-y-3 text-xs">
+                    <div>
+                      <span className="text-text-tertiary block mb-0.5">Name</span>
+                      <span className="text-text-primary font-medium break-all">{current.name}</span>
+                    </div>
+                    <div>
+                      <span className="text-text-tertiary block mb-0.5">Type</span>
+                      <span className="text-text-primary">{current.mime || current.extension.toUpperCase()}</span>
+                    </div>
+                    <div>
+                      <span className="text-text-tertiary block mb-0.5">Size</span>
+                      <span className="text-text-primary">{formatBytes(current.size)}</span>
+                    </div>
+                    <div>
+                      <span className="text-text-tertiary block mb-0.5">Modified</span>
+                      <span className="text-text-primary">{current.modified ? formatDate(current.modified) : '—'}</span>
+                    </div>
+                    <div>
+                      <span className="text-text-tertiary block mb-0.5">Path</span>
+                      <span className="text-text-primary font-mono text-[10px] break-all">{current.path}</span>
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </div>
     </div>

@@ -1109,3 +1109,142 @@ body {
     font-family: var(--font-family-sans);
   }
 }
+
+/* ============================================================
+   Phase 1: Enhanced Card Effects & Folder Animations
+   ============================================================ */
+
+/* Card parallax tilt on hover — applied via style transform in JS */
+.card-tilt {
+  perspective: 800px;
+  transform-style: preserve-3d;
+}
+
+.card-tilt-inner {
+  transition: transform 0.3s ease-out;
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+
+/* Folder hover — flap lift animation */
+.nexora-folder {
+  position: relative;
+}
+
+.nexora-folder::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 25%;
+  right: 25%;
+  height: 2px;
+  border-radius: 0 0 4px 4px;
+  background: rgba(255,255,255,0.08);
+  opacity: 0;
+  transform: translateY(-2px);
+  transition: opacity 0.3s, transform 0.3s;
+}
+
+.nexora-folder:hover::after,
+.group:hover .nexora-folder::after,
+.group\/folder:hover .nexora-folder::after {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Stats bar card shimmer effect */
+.stats-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.stats-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255,255,255,0.03) 50%,
+    transparent 100%
+  );
+  animation: stats-shimmer 3s ease-in-out infinite;
+}
+
+@keyframes stats-shimmer {
+  0%, 100% { left: -100%; }
+  50% { left: 100%; }
+}
+
+/* Grid zoom card sizing */
+.grid-zoom-compact .file-card {
+  padding: 0.75rem;
+}
+
+.grid-zoom-compact .file-card .file-card-icon {
+  height: 2.5rem;
+  width: 2.5rem;
+}
+
+.grid-zoom-gallery .file-card {
+  padding: 1.25rem;
+}
+
+.grid-zoom-gallery .file-card .file-card-icon {
+  height: 5rem;
+  width: 5rem;
+}
+
+/* List view alternating rows */
+.list-row-even {
+  background: rgba(255,255,255,0.01);
+}
+
+.list-row-even:hover {
+  background: rgba(255,255,255,0.04);
+}
+
+/* File type badge on thumbnails */
+.file-type-badge {
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  background: rgba(0,0,0,0.65);
+  color: rgba(255,255,255,0.8);
+  backdrop-filter: blur(8px);
+  letter-spacing: 0.5px;
+}
+
+/* Enhanced accent stripe for cards */
+.card-accent-stripe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  border-radius: 999px 999px 0 0;
+  opacity: 0.6;
+  transition: opacity 0.3s;
+}
+
+.group:hover .card-accent-stripe {
+  opacity: 0.9;
+}
+
+/* Circular progress ring for stats */
+.progress-ring {
+  transform: rotate(-90deg);
+  transform-origin: 50% 50%;
+}
+
+.progress-ring circle {
+  transition: stroke-dashoffset 0.8s ease-in-out;
+}

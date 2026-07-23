@@ -1,6 +1,7 @@
 package api
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -100,11 +101,54 @@ func (s *Server) handleListFiles(w http.ResponseWriter, r *http.Request) {
 	for _, it := range items {
 		out = append(out, fileToMap(it, rootID))
 	}
+
+	// Attach tags
+	user, _ := auth.UserFromContext(r.Context())
+	attachTags(s.DB, out, rootID, user.ID)
+
 	writeJSON(w, http.StatusOK, map[string]any{
 		"root": rootID,
 		"path": rel,
 		"items": out,
 	})
+}
+
+func attachTags(db *sql.DB, files []map[string]any, rootID, userID string) {
+	if len(files) == 0 {
+		return
+	}
+
+	// Build a map of path -> tags
+	tagsByPath := make(map[string][]Tag)
+
+	rows, err := db.Query(`
+		SELECT ft.path, t.id, t.name, t.color
+		FROM file_tags ft
+		JOIN tags t ON ft.tag_id = t.id
+		WHERE ft.root_id = ? AND t.user_id = ?
+	`, rootID, userID)
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var path, id, name, color string
+			if err := rows.Scan(&path, &id, &name, &color); err == nil {
+				tagsByPath[path] = append(tagsByPath[path], Tag{
+					ID:    id,
+					Name:  name,
+					Color: color,
+				})
+			}
+		}
+	}
+
+	for _, fileMap := range files {
+		path, _ := fileMap["path"].(string)
+		if tags, ok := tagsByPath[path]; ok {
+			fileMap["tags"] = tags
+		} else {
+			fileMap["tags"] = []Tag{}
+		}
+	}
 }
 
 func sortFiles(items []storage.FileInfo, sort, order string, dirsFirst bool) []storage.FileInfo {
