@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Users, ScrollText, RefreshCw, Plus, Shield, Settings, HardDrive, Sun, Moon, Monitor, LayoutGrid, List, Pencil, Trash2, ShieldCheck, Clock, KeyRound, Loader2, AlertCircle } from "lucide-react";
+import { motion } from "motion/react";
+import { Users, ScrollText, RefreshCw, Plus, Shield, Settings, HardDrive, Sun, LayoutGrid, List, Pencil, Trash2, ShieldCheck, Clock, KeyRound, Loader2, AlertCircle } from "lucide-react";
+import { accentThemes, setAccentTheme } from "../lib/useAccentTheme";
 import { get, post, put, del } from "../api/client";
 import { Modal } from "./Modal";
 import RootModal from "./RootModal";
@@ -55,13 +57,36 @@ function TabButton({ active, onClick, icon, children }: { active: boolean; onCli
   return (
     <button 
       onClick={onClick} 
-      className={`flex items-center gap-2 px-5 py-2.5 text-sm font-medium transition-all duration-200 border-b-2 
+      className={`relative flex items-center gap-2 px-5 py-2.5 text-sm font-medium transition-all duration-200
         ${active 
-          ? "border-accent text-accent bg-accent/5" 
-          : "border-transparent text-content-muted hover:text-content hover:bg-surface/50"}`}
+          ? "text-accent" 
+          : "text-text-tertiary hover:text-foreground hover:bg-glass-bg-subtle rounded-t-lg"}`}
     >
-      {icon} {children}
+      {icon}
+      {children}
+      {active && <motion.div layoutId="admin-tab-indicator" className="absolute bottom-0 left-0 right-0 h-0.5 bg-accent rounded-full shadow-[0_0_8px_var(--color-accent-glow)]" />}
     </button>
+  );
+}
+
+function AuditBadge({ action }: { action: string }) {
+  const lower = action.toLowerCase();
+  const color =
+    lower.includes("user") || lower.includes("login") || lower.includes("logout")
+      ? "text-accent bg-accent/10 border-accent/20"
+      : lower.includes("file") || lower.includes("upload") || lower.includes("download")
+      ? "text-accent-cyan bg-accent-cyan/10 border-accent-cyan/20"
+      : lower.includes("delete") || lower.includes("remove")
+      ? "text-danger bg-danger/10 border-danger/20"
+      : lower.includes("create") || lower.includes("add")
+      ? "text-success bg-success/10 border-success/20"
+      : lower.includes("system") || lower.includes("config")
+      ? "text-accent-purple bg-accent-purple/10 border-accent-purple/20"
+      : "text-text-secondary bg-glass-bg border-glass-border";
+  return (
+    <span className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold border inline-flex items-center gap-1.5 ${color}`}>
+      {action}
+    </span>
   );
 }
 
@@ -169,46 +194,58 @@ function UsersTab() {
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <select 
-                        value={u.role} 
-                        onChange={(e) => updateUser(u.id, { role: e.target.value })} 
-                        className="text-sm rounded-lg glass-input px-3 py-1.5 outline-none font-medium cursor-pointer"
-                      >
-                        <option value="admin">Admin</option>
-                        <option value="user">User</option>
-                        <option value="viewer">Viewer</option>
-                      </select>
+                      <div className="flex gap-1.5">
+                        {["admin", "user", "viewer"].map((role) => (
+                          <button
+                            key={role}
+                            onClick={() => updateUser(u.id, { role })}
+                            className={`text-xs font-medium px-2.5 py-1 rounded-lg border transition-all duration-200 ${
+                              u.role === role
+                                ? role === "admin"
+                                  ? "bg-accent-purple/10 text-accent-purple border-accent-purple/30 shadow-sm"
+                                  : role === "user"
+                                  ? "bg-accent/10 text-accent border-accent/30 shadow-sm"
+                                  : "bg-accent-teal/10 text-accent-teal border-accent-teal/30 shadow-sm"
+                                : "bg-transparent text-text-tertiary border-transparent hover:text-foreground hover:bg-glass-bg"
+                            }`}
+                          >
+                            {role.charAt(0).toUpperCase() + role.slice(1)}
+                          </button>
+                        ))}
+                      </div>
                     </td>
                     <td className="px-6 py-4">
-                      <select 
-                        value={u.status} 
-                        onChange={(e) => updateUser(u.id, { status: e.target.value })} 
-                        className={`text-sm rounded-lg border px-3 py-1.5 outline-none font-medium cursor-pointer
-                          ${u.status === 'active' ? 'bg-success/10 text-success border-success/20' : 'bg-surface-muted text-content-muted border-border'}`}
+                      <button
+                        onClick={() => updateUser(u.id, { status: u.status === "active" ? "disabled" : "active" })}
+                        className={`inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg border transition-all duration-200 ${
+                          u.status === "active"
+                            ? "bg-success/10 text-success border-success/20 hover:bg-success/20"
+                            : "bg-text-quaternary/10 text-text-quaternary border-text-quaternary/20 hover:bg-text-quaternary/20"
+                        }`}
                       >
-                        <option value="active">Active</option>
-                        <option value="disabled">Disabled</option>
-                      </select>
+                        <span className={`w-1.5 h-1.5 rounded-full ${u.status === "active" ? "bg-success animate-pulse" : "bg-text-quaternary"}`} />
+                        {u.status === "active" ? "Active" : "Disabled"}
+                      </button>
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <div className="flex items-center justify-end gap-2 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="flex items-center justify-end gap-1 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-all duration-200">
                         <button
                           onClick={() => { setResetPwUser(u); setResetPwValue(""); setResetPwConfirm(""); setResetPwError(null); }}
-                          className="p-2 rounded-lg glass-hover text-accent hover:bg-accent/10 transition-colors"
+                          className="p-2 rounded-lg glass-hover text-accent hover:bg-accent/10 hover:shadow-sm transition-all"
                           title="Reset Password"
                         >
                           <KeyRound className="h-4 w-4" />
                         </button>
                         <button 
                           onClick={() => setPermUser(u)} 
-                          className="p-2 rounded-lg glass-hover text-accent hover:bg-accent/10 transition-colors" 
+                          className="p-2 rounded-lg glass-hover text-accent hover:bg-accent/10 hover:shadow-sm transition-all" 
                           title="Manage Root Access"
                         >
                           <Shield className="h-4 w-4" />
                         </button>
                         <button 
                           onClick={() => removeUser(u)} 
-                          className="p-2 rounded-lg glass-hover text-danger hover:bg-danger/10 transition-colors" 
+                          className="p-2 rounded-lg glass-hover text-danger hover:bg-danger/10 hover:shadow-sm transition-all" 
                           title="Delete User"
                         >
                           <Trash2 className="h-4 w-4" />
@@ -410,9 +447,7 @@ function AuditTab() {
                 {items.map((a) => (
                   <tr key={a.id} className="hover:bg-surface/30 transition-colors">
                     <td className="px-6 py-4">
-                      <span className="px-2 py-1 rounded-md bg-surface border border-border/50 text-xs font-mono font-bold shadow-sm inline-block">
-                        {a.action}
-                      </span>
+                      <AuditBadge action={a.action} />
                     </td>
                     <td className="px-6 py-4">
                       <p className="font-medium text-content">{a.target}</p>
@@ -439,12 +474,15 @@ function AuditTab() {
 }
 
 function SettingsTab() {
-  const theme = useUI((s) => s.theme);
-  const setTheme = useUI((s) => s.setTheme);
   const viewMode = useUI((s) => s.viewMode);
   const setViewMode = useUI((s) => s.setViewMode);
   const pushToast = useUI((s) => s.pushToast);
   const qc = useQueryClient();
+  const [accent, setAccentLocal] = useState(() => localStorage.getItem("accent-theme") || "midnight");
+  const applyTheme = (t: string) => {
+    setAccentTheme(t);
+    setAccentLocal(t);
+  };
   const { data: ver } = useQuery({ queryKey: ["version"], queryFn: () => get<{ version: string; go: string; product: string; tagline: string }>("/version") });
   const { data: roots, isLoading: rootsLoading } = useQuery({ queryKey: ["roots-admin"], queryFn: () => get<{ roots: Root[] }>("/roots") });
   const [editRoot, setEditRoot] = useState<Root | null>(null);
@@ -456,44 +494,19 @@ function SettingsTab() {
     catch (e: any) { pushToast("error", e.message); }
   };
 
-  const themeOpts = [
-    { key: "light" as const, label: "Light", icon: <Sun className="h-4 w-4" /> },
-    { key: "dark" as const, label: "Dark", icon: <Moon className="h-4 w-4" /> },
-    { key: "system" as const, label: "System", icon: <Monitor className="h-4 w-4" /> },
-  ];
-
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-slide-up">
       
       {/* Left Column - Preferences & System */}
       <div className="space-y-6 lg:col-span-1">
-        <section className="glass-strong rounded-2xl p-6 border border-border/50 shadow-sm">
+        <section className="glass-strong rounded-2xl p-6 shadow-sm">
           <div className="flex items-center gap-2 mb-6">
             <div className="p-1.5 rounded-lg bg-accent/10 text-accent"><Sun className="h-4 w-4" /></div>
-            <h3 className="font-bold text-lg">Appearance</h3>
+            <h3 className="font-bold text-lg">Preferences</h3>
           </div>
           
-          <div className="space-y-6">
+          <div className="space-y-5">
             <div>
-              <p className="text-xs font-bold text-content-muted uppercase tracking-wider mb-3">Color Theme</p>
-              <div className="grid grid-cols-3 gap-2">
-                {themeOpts.map((o) => (
-                  <button
-                    key={o.key}
-                    onClick={() => setTheme(o.key)}
-                    className={`flex flex-col items-center justify-center gap-2 p-3 rounded-xl border transition-all duration-200
-                      ${theme === o.key 
-                        ? "bg-accent/10 border-accent/30 text-accent shadow-sm" 
-                        : "bg-surface border-border/50 text-content-muted hover:text-content hover:bg-surface-muted"}`}
-                  >
-                    {o.icon} 
-                    <span className="text-xs font-medium">{o.label}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-            
-            <div className="pt-6 border-t border-border/50">
               <p className="text-xs font-bold text-content-muted uppercase tracking-wider mb-3">Default View Mode</p>
               <div className="grid grid-cols-2 gap-2">
                 <button
@@ -514,6 +527,29 @@ function SettingsTab() {
                 >
                   <LayoutGrid className="h-4 w-4" /> <span className="text-sm font-medium">Grid View</span>
                 </button>
+              </div>
+            </div>
+
+            <div>
+              <p className="text-xs font-bold text-content-muted uppercase tracking-wider mb-3">Accent Theme</p>
+              <div className="grid grid-cols-2 gap-2">
+                {accentThemes.map((t) => (
+                  <button
+                    key={t.id}
+                    onClick={() => applyTheme(t.id)}
+                    className={`flex items-center gap-3 px-4 py-3 rounded-xl border transition-all duration-200 ${
+                      accent === t.id
+                        ? "bg-accent/10 border-accent/30 shadow-sm"
+                        : "bg-surface border-border/50 text-content-muted hover:text-content hover:bg-surface-muted"
+                    }`}
+                  >
+                    <div className="flex gap-0.5">
+                      <span className="w-3 h-3 rounded-full" style={{ backgroundColor: t.colors[0] }} />
+                      <span className="w-3 h-3 rounded-full" style={{ backgroundColor: t.colors[1] }} />
+                    </div>
+                    <span className="text-sm font-medium capitalize">{t.label}</span>
+                  </button>
+                ))}
               </div>
             </div>
           </div>

@@ -1,10 +1,15 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { ThemeProvider } from "next-themes";
 import App from "./App";
 import SharePage from "./components/SharePage";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import "./index.css";
+
+// Initialize accent theme from localStorage
+const savedAccent = localStorage.getItem("accent-theme") || "midnight";
+document.documentElement.dataset.theme = savedAccent;
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -24,9 +29,11 @@ function Root() {
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
-      <ErrorBoundary>
-        <Root />
-      </ErrorBoundary>
+      <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false} themes={["dark", "light"]}>
+        <ErrorBoundary>
+          <Root />
+        </ErrorBoundary>
+      </ThemeProvider>
     </QueryClientProvider>
   </React.StrictMode>
 );

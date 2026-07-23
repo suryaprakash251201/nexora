@@ -1,6 +1,5 @@
 import { create } from "zustand";
 
-export type Theme = "light" | "dark" | "system";
 export type ViewMode = "list" | "grid";
 
 export interface Toast {
@@ -10,15 +9,12 @@ export interface Toast {
 }
 
 interface UIState {
-  theme: Theme;
   viewMode: ViewMode;
   selection: Set<string>;
   selectMode: boolean;
   drawerPath: string | null;
   mobileNavOpen: boolean;
   toasts: Toast[];
-  setTheme: (t: Theme) => void;
-  toggleTheme: () => void;
   setViewMode: (v: ViewMode) => void;
   toggleSelect: (path: string) => void;
   clearSelection: () => void;
@@ -32,39 +28,15 @@ interface UIState {
   dismissToast: (id: number) => void;
 }
 
-function applyTheme(theme: Theme) {
-  const root = document.documentElement;
-  const dark = theme === "dark" || (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
-  root.classList.toggle("dark", dark);
-  root.style.colorScheme = dark ? "dark" : "light";
-  try { localStorage.setItem("nexora.theme", theme); } catch {}
-}
-
-function loadTheme(): Theme {
-  const t = (localStorage.getItem("nexora.theme") as Theme) || "system";
-  return t;
-}
-
 let toastSeq = 1;
 
 export const useUI = create<UIState>((set, get) => ({
-  theme: loadTheme(),
   viewMode: (localStorage.getItem("nexora.view") as ViewMode) || "list",
   selection: new Set<string>(),
   selectMode: false,
   drawerPath: null,
   mobileNavOpen: false,
   toasts: [],
-  setTheme: (t) => {
-    localStorage.setItem("nexora.theme", t);
-    applyTheme(t);
-    set({ theme: t });
-  },
-  toggleTheme: () => {
-    const cur = get().theme;
-    const next = cur === "dark" ? "light" : "dark";
-    get().setTheme(next);
-  },
   setViewMode: (v) => {
     localStorage.setItem("nexora.view", v);
     set({ viewMode: v });
@@ -92,6 +64,3 @@ export const useUI = create<UIState>((set, get) => ({
   },
   dismissToast: (id) => set({ toasts: get().toasts.filter((t) => t.id !== id) }),
 }));
-
-// Apply initial theme.
-applyTheme(loadTheme());

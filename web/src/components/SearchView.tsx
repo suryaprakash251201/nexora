@@ -79,7 +79,7 @@ export default function SearchView({
           </div>
           
           {showFilters && (
-            <div className="flex flex-wrap gap-3 animate-stagger-in">
+            <div className="flex flex-wrap gap-3">
               <select value={root} onChange={(e) => setRoot(e.target.value)} className="rounded-xl glass-input px-3 py-2 text-sm outline-none cursor-pointer">
                 <option value="">All storage roots</option>
                 {roots.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}

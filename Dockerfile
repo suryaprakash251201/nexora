@@ -5,9 +5,8 @@
 ############################
 FROM node:20-alpine AS web
 WORKDIR /web
-# Install dependencies first for better layer caching.
 COPY web/package.json web/package-lock.json* ./
-RUN npm install
+RUN npm install && npm cache clean --force
 COPY web/ ./
 RUN npm run build
 
@@ -19,7 +18,9 @@ RUN apk add --no-cache git
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
-COPY . .
+COPY cmd/ ./cmd/
+COPY internal/ ./internal/
+COPY migrations/ ./migrations/
 ARG VERSION=dev
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w -X github.com/nexora/nexora/internal/api.Version=${VERSION}" -o /out/nexora ./cmd/nexora
 
@@ -28,20 +29,14 @@ RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w -X github.com/ne
 ############################
 FROM alpine:3.20 AS runtime
 
-# Runtime essentials: CA certs for outbound TLS (e.g. SMTP, OIDC later) and
-# timezone data for correct log timestamps. ffmpeg powers on-the-fly video
-# transcoding (e.g. Matroska/.mkv -> streamable MP4) for in-browser playback.
 RUN apk add --no-cache ca-certificates tzdata wget ffmpeg && \
     addgroup -S nexora && adduser -S nexora -G nexora && \
     mkdir -p /app/data/cache/thumbnails /app/web && \
     chown -R nexora:nexora /app
 
-# Copy the static binary.
 COPY --from=gobuild /out/nexora /app/nexora
-# Copy the built web UI (index.html + assets).
 COPY --from=web /web/dist /app/web
 
-# Run as the unprivileged user.
 USER nexora
 WORKDIR /app
 
@@ -57,5 +52,4 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD wget -q -O - http://127.0.0.1:8080/healthz || exit 1
 
-# Drop Linux capabilities for a more secure default.
 ENTRYPOINT ["/app/nexora"]

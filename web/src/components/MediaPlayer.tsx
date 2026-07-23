@@ -215,6 +215,25 @@ function AudioPlayer({
   const rate = controlled ? rateV : lRate;
   const pct = duration > 0 ? (curTime / duration) * 100 : 0;
 
+  const volFillStyle = (v: number, m: boolean) => {
+    const pctW = (m ? 0 : v) * 100;
+    let bg: string;
+    if (m || v === 0) bg = '#73809A';
+    else if (v < 0.3) bg = 'linear-gradient(90deg, #F59E0B, #FB923C)';
+    else if (v < 0.7) bg = 'linear-gradient(90deg, #5B8CFF, #7A5CFF)';
+    else bg = 'linear-gradient(90deg, #22C55E, #2DD4BF)';
+    return { width: `${pctW}%`, background: bg, borderRadius: 'inherit', transition: 'all 0.1s ease-out' };
+  };
+  const volFillStyleV = (v: number, m: boolean) => {
+    const pctH = (m ? 0 : v) * 100;
+    let bg: string;
+    if (m || v === 0) bg = '#73809A';
+    else if (v < 0.3) bg = 'linear-gradient(180deg, #F59E0B, #FB923C)';
+    else if (v < 0.7) bg = 'linear-gradient(180deg, #5B8CFF, #7A5CFF)';
+    else bg = 'linear-gradient(180deg, #22C55E, #2DD4BF)';
+    return { height: `${pctH}%`, background: bg, borderRadius: 'inherit', transition: 'all 0.1s ease-out' };
+  };
+
   const openFs = () => {
     setFs(true);
     setShowControls(true);
@@ -400,7 +419,7 @@ function AudioPlayer({
           {/* Progress Bar */}
           <div className="w-full space-y-2">
             <div className="relative h-1.5 rounded-full bg-white/20 overflow-hidden cursor-pointer group">
-              <div className="absolute inset-y-0 left-0 bg-white transition-all duration-100" style={{ width: `${pct}%` }} />
+              <div className="absolute inset-y-0 left-0 progress-fill" style={{ width: `${pct}%` }} />
               <input
                 type="range"
                 min={0}
@@ -498,7 +517,7 @@ function AudioPlayer({
               {muted || volume === 0 ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
             </button>
             <div className="relative w-24 h-1.5 rounded-full bg-white/20 overflow-hidden cursor-pointer group-hover:w-28 transition-all duration-300">
-              <div className="absolute inset-y-0 left-0 bg-white" style={{ width: `${(muted ? 0 : volume) * 100}%` }} />
+              <div className="absolute inset-y-0 left-0" style={volFillStyle(volume, muted)} />
               <input
                 type="range"
                 min={0}
@@ -545,7 +564,7 @@ function AudioPlayer({
         
         <div className="w-full space-y-2">
           <div className="relative h-2 rounded-full bg-surface-muted overflow-hidden group">
-            <div className="absolute inset-y-0 left-0 bg-accent transition-all duration-100" style={{ width: `${pct}%` }} />
+            <div className="absolute inset-y-0 left-0 progress-fill" style={{ width: `${pct}%` }} />
             <input
               type="range"
               min={0}
@@ -606,7 +625,7 @@ function AudioPlayer({
             {/* Hover Volume Slider */}
             <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 h-24 w-8 glass-strong rounded-full p-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none group-hover:pointer-events-auto flex items-end">
               <div className="relative w-full h-full rounded-full bg-surface-muted overflow-hidden">
-                <div className="absolute bottom-0 inset-x-0 bg-accent" style={{ height: `${(muted ? 0 : volume) * 100}%` }} />
+                <div className="absolute bottom-0 inset-x-0" style={volFillStyleV(volume, muted)} />
                 <input
                   type="range"
                   min={0}

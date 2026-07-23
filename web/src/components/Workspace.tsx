@@ -1,4 +1,5 @@
 import { useRef, useState, useCallback, useMemo } from "react";
+import { motion, AnimatePresence } from "motion/react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { get, post, del } from "../api/client";
 import type { FileItem, Root, TrashItem, User, FavoriteItem, RecentItem, SearchResult, HomeData } from "../api/types";
@@ -354,66 +355,75 @@ const [playlistModal, setPlaylistModal] = useState(false);
 
         <input ref={fileInput} type="file" multiple className="hidden" onChange={(e) => { uploadFiles(e.target.files); e.target.value = ""; }} />
 
-        <div className="flex-1 overflow-auto flex flex-col">
-          {view === "video" && videoItem ? (
-            <VideoView
-              item={videoItem}
-              rootId={rootId!}
-              onClose={() => { setView(prevView); setVideoItem(null); }}
-              onShare={(it) => setShareItem(it)}
-            />
-          ) : view === "files" && (
-            <FileBrowser
-              items={filtered}
-              loading={files.isLoading}
-              viewMode={viewMode}
-              selection={selection}
-              selectMode={selectMode}
-              canWrite={canWrite}
-              onOpen={openItem}
-               onSelect={handleSelect}
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={view + (view === "video" && videoItem ? videoItem.path : "")}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.15, ease: [0.25, 0.1, 0.25, 1] }}
+            className="flex-1 overflow-auto flex flex-col"
+          >
+            {view === "video" && videoItem ? (
+              <VideoView
+                item={videoItem}
+                rootId={rootId!}
+                onClose={() => { setView(prevView); setVideoItem(null); }}
+                onShare={(it) => setShareItem(it)}
+              />
+            ) : view === "files" && (
+              <FileBrowser
+                items={filtered}
+                loading={files.isLoading}
+                viewMode={viewMode}
+                selection={selection}
+                selectMode={selectMode}
+                canWrite={canWrite}
+                onOpen={openItem}
+                 onSelect={handleSelect}
 
-              onContextMenu={onContextMenu}
-              onDropItem={(folder) => moveSelectionTo()}
-            />
-          )}
-          {view === "trash" && <TrashView items={trash.data?.items || []} loading={trash.isLoading} onRestore={async (id) => { await post("/trash/restore", { id }); refresh(); }} onDelete={async (id) => { await del("/trash", { id }); refresh(); }} selection={selection} selectMode={selectMode} onSelect={(id) => toggleSelect(id)} />}
-          {view === "favorites" && <SimpleList loading={favorites.isLoading} empty="No favorites yet. Star files to find them here." selection={selection} selectMode={selectMode} onSelect={(id) => toggleSelect(id)} rows={(favorites.data?.items || []).map((f) => ({ id: f.root_id + f.path, title: f.name, sub: `${f.root_name} / ${f.path}`, onClick: () => navigateTo(f.root_id, f.path, false, f.name) }))} />}
-          {view === "recents" && <SimpleList loading={recents.isLoading} empty="No recent files yet." selection={selection} selectMode={selectMode} onSelect={(id) => toggleSelect(id)} rows={(recents.data?.items || []).map((f) => ({ id: f.root_id + f.path, title: f.name, sub: `${f.root_name} / ${f.path}`, meta: formatDate(f.accessed_at), onClick: () => navigateTo(f.root_id, f.path, false, f.name) }))} />}
-          {view === "home" && (
-            <div className="h-14 glass-bar flex items-center justify-between px-4">
-              <span className="font-semibold">Home</span>
-              <ProfileMenu user={user} isAdmin={isAdmin} onLogout={logout} onAdmin={() => setView("admin")} />
-            </div>
-          )}
-          {view === "home" && (
-            <HomePanel
-              data={home.data}
-              isLoading={home.isLoading}
-              isAdmin={isAdmin}
-              onSearch={(q) => { setSearch(q); setView("search"); }}
-              onOpenRecent={(item) => navigateTo(item.root_id, item.path, false, item.name)}
-              onUpload={() => fileInput.current?.click()}
-              onNewFolder={() => setMenu({ kind: "newFolder" })}
-              onNewFile={() => setMenu({ kind: "newFile" })}
-              onNewRoot={() => isAdmin && setRootModal(true)}
-              onOpenPlaylist={() => setView("playlists")}
-            />
-          )}
-          {view === "shares" && <SharesPanel />}
-          {view === "playlists" && <PlaylistsPanel user={user} />}
-          {view === "admin" && isAdmin && <AdminPanel />}
-          {view === "search" && (
-            <SearchView
-              initialQuery={search}
-              roots={roots.data?.roots || []}
-              onOpen={(r: SearchResult) => navigateTo(r.root_id, r.path, r.is_dir, r.name)}
-              selection={selection}
-              selectMode={selectMode}
-              onSelect={(id) => toggleSelect(id)}
-            />
-          )}
-        </div>
+                onContextMenu={onContextMenu}
+                onDropItem={(folder) => moveSelectionTo()}
+              />
+            )}
+            {view === "trash" && <TrashView items={trash.data?.items || []} loading={trash.isLoading} onRestore={async (id) => { await post("/trash/restore", { id }); refresh(); }} onDelete={async (id) => { await del("/trash", { id }); refresh(); }} selection={selection} selectMode={selectMode} onSelect={(id) => toggleSelect(id)} />}
+            {view === "favorites" && <SimpleList loading={favorites.isLoading} empty="No favorites yet. Star files to find them here." selection={selection} selectMode={selectMode} onSelect={(id) => toggleSelect(id)} rows={(favorites.data?.items || []).map((f) => ({ id: f.root_id + f.path, title: f.name, sub: `${f.root_name} / ${f.path}`, onClick: () => navigateTo(f.root_id, f.path, false, f.name) }))} />}
+            {view === "recents" && <SimpleList loading={recents.isLoading} empty="No recent files yet." selection={selection} selectMode={selectMode} onSelect={(id) => toggleSelect(id)} rows={(recents.data?.items || []).map((f) => ({ id: f.root_id + f.path, title: f.name, sub: `${f.root_name} / ${f.path}`, meta: formatDate(f.accessed_at), onClick: () => navigateTo(f.root_id, f.path, false, f.name) }))} />}
+            {view === "home" && (
+              <>
+                <div className="h-14 glass-bar flex items-center justify-between px-4">
+                  <span className="font-semibold">Home</span>
+                  <ProfileMenu user={user} isAdmin={isAdmin} onLogout={logout} onAdmin={() => setView("admin")} />
+                </div>
+                <HomePanel
+                  data={home.data}
+                  isLoading={home.isLoading}
+                  isAdmin={isAdmin}
+                  onSearch={(q) => { setSearch(q); setView("search"); }}
+                  onOpenRecent={(item) => navigateTo(item.root_id, item.path, false, item.name)}
+                  onUpload={() => fileInput.current?.click()}
+                  onNewFolder={() => setMenu({ kind: "newFolder" })}
+                  onNewFile={() => setMenu({ kind: "newFile" })}
+                  onNewRoot={() => isAdmin && setRootModal(true)}
+                  onOpenPlaylist={() => setView("playlists")}
+                />
+              </>
+            )}
+            {view === "shares" && <SharesPanel />}
+            {view === "playlists" && <PlaylistsPanel user={user} />}
+            {view === "admin" && isAdmin && <AdminPanel />}
+            {view === "search" && (
+              <SearchView
+                initialQuery={search}
+                roots={roots.data?.roots || []}
+                onOpen={(r: SearchResult) => navigateTo(r.root_id, r.path, r.is_dir, r.name)}
+                selection={selection}
+                selectMode={selectMode}
+                onSelect={(id) => toggleSelect(id)}
+              />
+            )}
+          </motion.div>
+        </AnimatePresence>
 
         {view !== "video" && (
           <SelectionBar
