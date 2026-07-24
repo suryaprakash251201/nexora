@@ -6,7 +6,7 @@ const FOCUSABLE =
 // useFocusTrap traps Tab focus within the referenced element while `active`,
 // moves focus to the first focusable element on open, and restores focus to
 // the previously focused element on close. Used for accessible dialogs.
-export function useFocusTrap(ref: RefObject<HTMLElement>, active: boolean) {
+export function useFocusTrap(ref: RefObject<HTMLElement | null>, active: boolean) {
   useEffect(() => {
     if (!active || !ref.current) return;
     const container = ref.current;

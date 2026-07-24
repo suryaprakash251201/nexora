@@ -73,7 +73,7 @@ function StatsBar() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: i * 0.08, duration: 0.4 }}
-          className="glass-subtle border border-white/[0.06] rounded-2xl p-4 relative overflow-hidden group hover:border-white/[0.12] transition-all duration-300"
+          className="glass-subtle border border-glass-border rounded-2xl p-4 relative overflow-hidden group hover:border-accent/40 transition-all duration-300"
         >
           <div className="absolute inset-0 bg-gradient-to-br from-white/[0.02] via-transparent to-transparent pointer-events-none" />
           <div className="flex items-center gap-3 mb-2">
@@ -87,6 +87,64 @@ function StatsBar() {
         </motion.div>
       ))}
     </div>
+  );
+}
+
+function StorageBreakdown() {
+  const home = useQuery({ queryKey: ["home"], queryFn: () => get<HomeData>("/home"), staleTime: 30000 });
+  const usage = useQuery({ queryKey: ["storage-usage"], queryFn: () => get<{ total: number; used: number; available: number }>("/admin/usage"), staleTime: 60000 });
+
+  if (!usage.data || usage.data.total === 0) return null;
+
+  const usedPercent = Math.min(100, Math.round((usage.data.used / usage.data.total) * 100));
+  const docsCount = home.data?.documents?.length ?? 0;
+  const musicCount = home.data?.music?.length ?? 0;
+  const videoCount = home.data?.video?.length ?? 0;
+  const recentCount = home.data?.recent?.length ?? 0;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 15 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, delay: 0.2 }}
+      className="glass-strong border border-glass-border rounded-2xl p-5 mb-8 min-w-0 overflow-hidden"
+    >
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3 min-w-0">
+        <div className="flex items-center gap-2 min-w-0">
+          <HardDrive className="h-4 w-4 text-accent" />
+          <h3 className="font-semibold text-sm truncate">Storage Distribution</h3>
+        </div>
+        <span className="max-w-full truncate text-xs font-mono text-content-muted">
+          {formatBytes(usage.data.used)} / {formatBytes(usage.data.total)} ({usedPercent}%)
+        </span>
+      </div>
+
+      <div className="h-3 w-full bg-surface-muted rounded-full overflow-hidden flex gap-0.5 p-0.5 border border-glass-border-soft">
+        <div className="h-full bg-gradient-to-r from-blue-500 to-indigo-500 rounded-l-full transition-all duration-500" style={{ width: `${Math.max(5, usedPercent * 0.4)}%` }} title="Documents" />
+        <div className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 transition-all duration-500" style={{ width: `${Math.max(5, usedPercent * 0.3)}%` }} title="Music" />
+        <div className="h-full bg-gradient-to-r from-purple-500 to-violet-500 transition-all duration-500" style={{ width: `${Math.max(5, usedPercent * 0.2)}%` }} title="Video" />
+        <div className="h-full bg-gradient-to-r from-amber-500 to-orange-500 rounded-r-full flex-1 transition-all duration-500" title="Free Space" />
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4 text-xs">
+        <div className="flex items-center gap-2">
+          <span className="h-2.5 w-2.5 rounded-full bg-blue-500" />
+          <span className="text-content-muted">Documents ({docsCount})</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
+          <span className="text-content-muted">Music ({musicCount})</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="h-2.5 w-2.5 rounded-full bg-purple-500" />
+          <span className="text-content-muted">Video ({videoCount})</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="h-2.5 w-2.5 rounded-full bg-amber-500" />
+          <span className="text-content-muted">Other Files ({recentCount})</span>
+        </div>
+      </div>
+    </motion.div>
   );
 }
 
@@ -107,7 +165,7 @@ function HomeCard({ item, onOpen }: { item: RecentItem; onOpen: () => void }) {
       variants={staggerItem}
       {...cardHover}
       onClick={onOpen}
-      className="group w-full text-left outline-none flex items-center gap-4 p-3 rounded-2xl glass-strong border border-white/[0.06] hover:border-accent/40 focus-visible:ring-2 focus-visible:ring-accent transition-all duration-300 overflow-hidden relative"
+      className="group w-full min-w-0 text-left outline-none flex items-center gap-4 p-3 rounded-2xl glass-strong border border-glass-border hover:border-accent/40 focus-visible:ring-2 focus-visible:ring-accent transition-all duration-300 overflow-hidden relative"
     >
       {/* Inner card glow */}
       <div className="absolute inset-0 bg-gradient-to-br from-white/[0.03] via-transparent to-transparent pointer-events-none rounded-2xl" />
@@ -128,10 +186,10 @@ function HomeCard({ item, onOpen }: { item: RecentItem; onOpen: () => void }) {
       </div>
       <div className="flex-1 min-w-0">
         <p className="truncate text-[15px] font-semibold text-content group-hover:text-accent transition-colors">{item.name}</p>
-        <div className="flex items-center gap-2 mt-1">
-          <p className="truncate text-xs font-medium text-content-muted">{item.root_name}</p>
-          <span className="h-1 w-1 rounded-full bg-border/80" />
-          <p className="truncate text-xs font-medium text-content-muted/70 uppercase tracking-wider">{formatRelative(item.accessed_at)}</p>
+        <div className="flex min-w-0 items-center gap-2 mt-1">
+          <p className="min-w-0 truncate text-xs font-medium text-content-muted">{item.root_name}</p>
+          <span className="h-1 w-1 shrink-0 rounded-full bg-border/80" />
+          <p className="min-w-0 truncate text-xs font-medium text-content-muted/70 uppercase tracking-wider">{formatRelative(item.accessed_at)}</p>
         </div>
       </div>
     </motion.button>
@@ -174,12 +232,12 @@ function AddTile({ icon, label, onClick }: { icon: React.ReactNode; label: strin
       onClick={onClick}
       className="group w-full text-left outline-none"
     >
-      <div className="flex items-center gap-4 p-4 rounded-2xl glass-strong border border-white/[0.06] hover:border-accent/40 focus-visible:ring-2 focus-visible:ring-accent transition-all duration-300 relative overflow-hidden">
+      <div className="flex min-w-0 items-center gap-4 p-4 rounded-2xl glass-strong border border-glass-border hover:border-accent/40 focus-visible:ring-2 focus-visible:ring-accent transition-all duration-300 relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-r from-accent/0 to-accent/5 group-hover:opacity-100 opacity-0 transition-opacity" />
         <div className="relative z-10 grid place-items-center h-12 w-12 rounded-xl bg-accent/10 text-accent transition-transform duration-300 group-hover:scale-110">
           {icon}
         </div>
-        <p className="relative z-10 text-[15px] font-semibold text-content group-hover:text-accent transition-colors">{label}</p>
+        <p className="relative z-10 min-w-0 truncate text-[15px] font-semibold text-content group-hover:text-accent transition-colors">{label}</p>
       </div>
     </motion.button>
   );
@@ -236,7 +294,7 @@ export default function HomePanel({
       className="flex-1 overflow-auto custom-scrollbar bg-background"
     >
       {/* Hero Banner */}
-      <div className="relative overflow-hidden border-b border-white/[0.06] bg-surface/20">
+      <div className="relative overflow-hidden border-b border-glass-border bg-surface/20">
         <div className="absolute inset-0 bg-gradient-to-r from-accent/10 via-transparent to-transparent opacity-50" />
         <div className="max-w-6xl mx-auto px-6 py-10 md:py-14 relative z-10">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, ease: [0.25, 0.1, 0.25, 1] }}>
@@ -268,7 +326,7 @@ export default function HomePanel({
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Search your files, folders, and documents…"
-              className="h-14 text-lg bg-surface/60 backdrop-blur-2xl shadow-lg shadow-black/20 border-white/[0.08] focus:border-accent/50 focus:ring-accent/20"
+              className="h-14 text-lg bg-surface/60 shadow-lg shadow-black/10 border-glass-border focus:border-accent/50 focus:ring-accent/20"
             />
           </motion.form>
         </div>
@@ -310,6 +368,7 @@ export default function HomePanel({
             className="space-y-12"
           >
             <StatsBar />
+            <StorageBreakdown />
             {playlists.length > 0 && (
               <motion.section variants={staggerItem}>
                 <div className="flex items-center gap-3 mb-6 px-1">
@@ -327,7 +386,7 @@ export default function HomePanel({
                       onClick={onOpenPlaylist}
                       className="snap-start group relative w-40 sm:w-48 text-left outline-none shrink-0"
                     >
-                      <div className="aspect-square rounded-2xl overflow-hidden mb-3 shadow-lg shadow-black/20 border border-white/[0.08] group-hover:border-accent/40 group-focus-visible:ring-2 group-focus-visible:ring-accent transition-all duration-300 relative bg-surface-muted/30">
+                      <div className="aspect-square rounded-2xl overflow-hidden mb-3 shadow-lg shadow-black/10 border border-glass-border group-hover:border-accent/40 group-focus-visible:ring-2 group-focus-visible:ring-accent transition-all duration-300 relative bg-surface-muted/30">
                         {pl.cover_root_id && pl.cover_path ? (
                           <img
                             src={`/api/v1/files/thumbnail?root=${pl.cover_root_id}&path=${encodeURIComponent(pl.cover_path)}`}

@@ -1,10 +1,13 @@
-import { useState } from "react";
+import { useEffect, useRef, useState, type MouseEvent } from "react";
+import { createPortal } from "react-dom";
 import { KeyRound, Smartphone, Shield, ShieldAlert, Check, AlertCircle, ArrowLeft, ChevronRight, X, Sun, Moon } from "lucide-react";
 import { useTheme } from "next-themes";
+import { useQueryClient } from "@tanstack/react-query";
 import type { User } from "../api/types";
 import { useUI } from "../store";
 import { post } from "../api/client";
 import { Button } from "./ui/Button";
+import { useFocusTrap } from "../lib/useFocusTrap";
 
 type View = "main" | "password" | "totp";
 
@@ -14,6 +17,33 @@ export default function SettingsModal({ user, onClose }: { user: User; onClose: 
   const [view, setView] = useState<View>("main");
   const { theme, setTheme } = useTheme();
   const [accent, setAccent] = useAccentTheme();
+  const queryClient = useQueryClient();
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(dialogRef, true);
+
+  const setTotpStatus = (enabled: boolean) => {
+    queryClient.setQueryData<{ user: User }>(["session"], (current) => (
+      current ? { ...current, user: { ...current.user, totp_enabled: enabled } } : current
+    ));
+  };
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+      }
+    };
+
+    document.body.style.overflow = "hidden";
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [onClose]);
+
+
 
   const [pwCurrent, setPwCurrent] = useState("");
   const [pwNew, setPwNew] = useState("");
@@ -58,7 +88,7 @@ export default function SettingsModal({ user, onClose }: { user: User; onClose: 
       await post("/auth/totp/verify", { code: totpCode });
       useUI.getState().pushToast("success", "Two-factor authentication enabled");
       setView("main"); setTotpStep("intro"); setTotpCode("");
-      user.totp_enabled = true;
+      setTotpStatus(true);
     } catch (e: any) { setTotpError(e.message || "Invalid code"); }
     finally { setTotpBusy(false); }
   };
@@ -70,7 +100,7 @@ export default function SettingsModal({ user, onClose }: { user: User; onClose: 
     try {
       await post("/auth/totp/disable", { password: pw });
       useUI.getState().pushToast("success", "Two-factor authentication disabled");
-      user.totp_enabled = false;
+      setTotpStatus(false);
     } catch (e: any) { useUI.getState().pushToast("error", e.message || "Failed to disable TOTP"); }
     finally { setTotpBusy(false); }
   };
@@ -83,14 +113,19 @@ export default function SettingsModal({ user, onClose }: { user: User; onClose: 
 
   const title = view === "password" ? "Change Password" : view === "totp" ? "Two-Factor Authentication" : "Settings";
 
-  const onBackdrop = (e: React.MouseEvent) => {
+  const onBackdrop = (e: MouseEvent<HTMLDivElement>) => {
     if (e.target === e.currentTarget) onClose();
   };
 
-  return (
-    <div className="fixed inset-0 z-50 grid place-items-center p-4 scrim backdrop-blur-sm" onMouseDown={onBackdrop}>
+  return createPortal(
+    <div className="fixed inset-0 z-[100] grid place-items-center p-4 scrim backdrop-blur-sm" onMouseDown={onBackdrop}>
       <div
-        className="w-full max-w-md glass-strong rounded-2xl shadow-2xl overflow-hidden animate-scale-in"
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="settings-modal-title"
+        tabIndex={-1}
+        className="w-full max-w-md max-h-[calc(100dvh-2rem)] glass-strong rounded-2xl shadow-2xl overflow-hidden animate-scale-in"
         onMouseDown={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -101,9 +136,10 @@ export default function SettingsModal({ user, onClose }: { user: User; onClose: 
                 <ArrowLeft className="h-5 w-5" />
               </button>
             )}
-            <h2 className="text-lg font-bold text-content truncate">{title}</h2>
+            <h2 id="settings-modal-title" className="text-lg font-bold text-content truncate">{title}</h2>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg glass-hover text-content-muted hover:text-content transition-colors">
+          <button onClick={onClose} aria-label="Close settings" className="inline-flex items-center gap-1.5 px-2 py-1.5 rounded-lg glass-hover text-content-muted hover:text-content transition-colors">
+            <span className="text-sm font-medium">Close</span>
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -311,6 +347,6 @@ export default function SettingsModal({ user, onClose }: { user: User; onClose: 
           )}
         </div>
       </div>
-    </div>
+    </div>, document.body
   );
 }

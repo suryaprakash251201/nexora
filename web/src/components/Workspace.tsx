@@ -34,6 +34,7 @@ import RootModal from "./RootModal";
 import FolderPickerModal from "./FolderPickerModal";
 import ProfileMenu from "./ProfileMenu";
 import CommandPalette from "./CommandPalette";
+import KeyboardShortcutsModal from "./KeyboardShortcutsModal";
 import SelectionBar from "./SelectionBar";
 import { formatDate } from "../lib/format";
 import { SkeletonList } from "./ui/Skeleton";
@@ -89,25 +90,31 @@ export default function Workspace({ user }: { user: User }) {
   else if (pathname.startsWith("/admin")) view = "admin";
   
   const setView = useCallback((v: SidebarView, rId?: string) => {
-    if (v === "home") navigate("/");
-    else if (v === "files" && rId) navigate(`/files/${rId}`);
-    else if (v === "search") navigate("/search");
-    else if (v === "trash") navigate("/trash");
-    else if (v === "shares") navigate("/shares");
-    else if (v === "favorites") navigate("/favorites");
-    else if (v === "recents") navigate("/recents");
-    else if (v === "playlists") navigate("/playlists");
-    else if (v === "admin") navigate("/admin");
+    React.startTransition(() => {
+      if (v === "home") navigate("/");
+      else if (v === "files" && rId) navigate(`/files/${rId}`);
+      else if (v === "search") navigate("/search");
+      else if (v === "trash") navigate("/trash");
+      else if (v === "shares") navigate("/shares");
+      else if (v === "favorites") navigate("/favorites");
+      else if (v === "recents") navigate("/recents");
+      else if (v === "playlists") navigate("/playlists");
+      else if (v === "admin") navigate("/admin");
+    });
   }, [navigate]);
 
   const setRootId = useCallback((id: string | null) => {
-    if (id) navigate(`/files/${id}`);
+    React.startTransition(() => {
+      if (id) navigate(`/files/${id}`);
+    });
   }, [navigate]);
 
   const setPath = useCallback((p: string) => {
     if (rootId) {
-      if (p) navigate(`/files/${rootId}/${p}`);
-      else navigate(`/files/${rootId}`);
+      React.startTransition(() => {
+        if (p) navigate(`/files/${rootId}/${p}`);
+        else navigate(`/files/${rootId}`);
+      });
     }
   }, [rootId, navigate]);
   const [search, setSearch] = useState("");
@@ -166,12 +173,13 @@ export default function Workspace({ user }: { user: User }) {
   const { folderPicker, setFolderPicker, moveSelectionTo, openPickerFor, applyFolderPicker } = useClipboard({ rootId, selection, clearSelection, refresh, canWrite });
   const { dragProps, dragActive, dropPicker, setDropPicker, pendingDrop } = useDragAndDrop({ rootId, canWrite, uploadFiles });
   
-  const isModalOpen = modals.isModalOpen || !!folderPicker || !!dropPicker;
+  const [shortcutsModalOpen, setShortcutsModalOpen] = useState(false);
+  const isModalOpen = modals.isModalOpen || !!folderPicker || !!dropPicker || shortcutsModalOpen;
   
   useKeyboardShortcuts({
     canWrite, view, setView, selection, items, bulkDelete, setMenu,
     fileInputRef: fileInput, isModalOpen,
-    setCommandPaletteOpen
+    setCommandPaletteOpen, setShortcutsModalOpen
   });
 
   const openItem = (item: FileItem) => {
@@ -403,6 +411,7 @@ export default function Workspace({ user }: { user: User }) {
             transition={{ duration: 0.15, ease: [0.25, 0.1, 0.25, 1] }}
             className="flex-1 overflow-auto flex flex-col"
           >
+            <Suspense fallback={<div className="flex-1 grid place-items-center text-content-muted">Loading...</div>}>
             {view === "files" && (
               <FileBrowser
                 items={filtered}
@@ -454,6 +463,7 @@ export default function Workspace({ user }: { user: User }) {
                 onSelect={(id) => toggleSelect(id)}
               />
             )}
+            </Suspense>
           </motion.div>
         </AnimatePresence>
 
@@ -604,6 +614,10 @@ export default function Workspace({ user }: { user: User }) {
         setSort={setSort}
         order={order}
         setOrder={setOrder}
+      />
+      <KeyboardShortcutsModal
+        isOpen={shortcutsModalOpen}
+        onClose={() => setShortcutsModalOpen(false)}
       />
     </div>
   );

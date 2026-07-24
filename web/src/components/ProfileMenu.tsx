@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Shield, LogOut, CheckCircle2, Settings } from "lucide-react";
+import { Shield, LogOut, CheckCircle2, Settings, Moon, Sun } from "lucide-react";
+import { useTheme } from "next-themes";
 import type { User } from "../api/types";
 import SettingsModal from "./SettingsModal";
 import {
@@ -46,6 +47,8 @@ export default function ProfileMenu({
   onAdmin: () => void;
 }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const { resolvedTheme, setTheme } = useTheme();
+  const isDark = resolvedTheme !== "light";
 
   return (
     <>
@@ -87,6 +90,12 @@ export default function ProfileMenu({
             </div>
           </div>
           <div className="p-1 pt-2">
+            <DropdownMenuItem onClick={() => setTheme(isDark ? "light" : "dark")}>
+              <div className="p-1.5 rounded-lg bg-accent/10 border border-accent/20 mr-3">
+                {isDark ? <Sun className="h-4 w-4 text-accent" /> : <Moon className="h-4 w-4 text-accent" />}
+              </div>
+              <span className="font-medium">{isDark ? "Switch to light mode" : "Switch to dark mode"}</span>
+            </DropdownMenuItem>
             <DropdownMenuItem onClick={() => setSettingsOpen(true)}>
               <div className="p-1.5 rounded-lg bg-accent/10 border border-accent/20 mr-3">
                 <Settings className="h-4 w-4 text-accent" />

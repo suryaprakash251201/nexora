@@ -13,6 +13,7 @@ export function useKeyboardShortcuts({
   fileInputRef,
   isModalOpen,
   setCommandPaletteOpen,
+  setShortcutsModalOpen,
 }: {
   canWrite: boolean;
   view: string;
@@ -24,11 +25,12 @@ export function useKeyboardShortcuts({
   fileInputRef: React.RefObject<HTMLInputElement>;
   isModalOpen: boolean;
   setCommandPaletteOpen: (open: boolean) => void;
+  setShortcutsModalOpen?: (open: boolean) => void;
 }) {
   const setSelectMode = useUI((s) => s.setSelectMode);
   const setSelection = useUI((s) => s.setSelection);
+  const clearSelection = useUI((s) => s.clearSelection);
   const selectMode = useUI((s) => s.selectMode);
-  const toggleSelectMode = useUI((s) => s.toggleSelectMode);
   const viewMode = useUI((s) => s.viewMode);
   const setViewMode = useUI((s) => s.setViewMode);
 
@@ -46,6 +48,11 @@ export function useKeyboardShortcuts({
       if (mod && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         setCommandPaletteOpen(true);
+      }
+      // Keyboard shortcuts modal
+      else if (e.key === '?' && setShortcutsModalOpen) {
+        e.preventDefault();
+        setShortcutsModalOpen(true);
       }
       // Search
       else if (e.key === '/') {
@@ -76,7 +83,7 @@ export function useKeyboardShortcuts({
       // Escape to clear selection
       else if (e.key === 'Escape' && selection.size > 0) {
         e.preventDefault();
-        toggleSelectMode();
+        clearSelection();
       }
       // Toggle view mode
       else if (mod && e.key.toLowerCase() === 'v') {
@@ -94,7 +101,7 @@ export function useKeyboardShortcuts({
   }, [
     canWrite, view, setView, selection, items,
     bulkDelete, setMenu, fileInputRef, isModalOpen,
-    selectMode, setSelectMode, setSelection, toggleSelectMode,
-    viewMode, setViewMode, setCommandPaletteOpen
+    selectMode, setSelectMode, setSelection, clearSelection,
+    viewMode, setViewMode, setCommandPaletteOpen, setShortcutsModalOpen
   ]);
 }
