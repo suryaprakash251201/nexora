@@ -1,264 +1,224 @@
 # Nexora
 
-**Your private file workspace.**
+Nexora is a private, self-hosted file workspace. It combines a React interface, a Go API, SQLite metadata, and one or more local storage roots in a single deployable service.
 
-Nexora is a modern, lightweight, secure, self-hosted file-management platform — a
-fast alternative to File Browser. It runs efficiently on low-spec hardware (2
-vCPU / 1 GB RAM) and deploys as a single Docker container with a small image
-and low idle memory.
+## Features
 
-## Brand Guidelines
+- **File workspace:** browse, upload, download, create, rename, move, copy, delete, restore, and archive files.
+- **Multiple storage roots:** manage named locations from one UI; grant read or write access to individual users.
+- **Search and organization:** indexed search, tags, favorites, recents, checksums, metadata, and duplicate-file discovery.
+- **Previews and media:** images, video, audio, PDFs, Markdown, and code; video supports range streaming, subtitles, theater mode, and browser fullscreen.
+- **Sharing:** create revocable public links with optional expiry, password protection, and download limits.
+- **Audio playlists:** create and manage playlists, including public and collaborative playlists.
+- **Administration:** users, roles, root access, storage settings, audit history, and search reindexing.
+- **Responsive UX:** light/dark themes, profile settings, keyboard shortcuts, and mobile navigation.
 
-### Logo
-- **Primary logo**: [logo.svg](web/public/logo.svg) - SVG vector with gradient
-- **Favicon**: [favicon.svg](web/public/favicon.svg) - Simplified N-shape with blue gradient
+## Technical specifications
 
-### Colors
-- **Primary blue**: `#2563EB` (accessible for colorblind users)
-- **Dark mode blue**: `#3B82F6`
-- Consistent theming across light and dark modes with WCAG AA contrast ratios
-
-### Design Philosophy
-- **Glassmorphism**: Translucent layered effects with backdrop blur
-- **Accessibility**: All text meets 4.5:1 contrast ratio, keyboard navigation
-- **Performance**: Optimized animations with reduced motion support
-- **Consistency**: 12-column grid, spacing scale, unified component system
-
-## Resources
-
-### Design System
-See [docs/design-system.md](docs/design-system.md) for complete design guidelines, color palette, typography, and component specifications.
-
-### Brand Assets
-All official brand assets are in the `web/public/` directory.
-
-### Live Demo
-Deploy with Docker: `docker compose up -d --build`
-
-Visit `http://localhost:80` to see the live application.
-
----
-
-## Why Nexora
-
-- **Fast & small** — Go backend (single static binary) + a tiny React/Vite UI.
-  SQLite by default, native file APIs, no always-on services.
-- **Secure by default** — Argon2id password hashing, HTTP-only session cookies,
-  CSRF protection, security headers (CSP/HSTS-class), login rate-limiting with
-  exponential backoff, strict path validation (no traversal), and audit logging.
-- **Multi-storage** — manage several named storage roots (Files, Media,
-  Backups, Shared…) from one dashboard; users only see what they're authorized
-  for.
-- **Rich previews** — images, video (HTTP Range streaming), audio, PDF,
-  markdown, and code, plus a built-in editor for text/code files.
-- **Sharing** — expiring, optionally password-protected, optionally capped
-  share links with revocation.
-- **Docker-native** — multi-stage build, non-root user, read-only root FS,
-  dropped capabilities, `/healthz` + `/readyz`, named volume for data.
-
----
+| Area | Implementation |
+| --- | --- |
+| Frontend | React 18, TypeScript, Vite, Tailwind CSS, React Query, Zustand, Motion |
+| Backend | Go, Chi router, SQLite with embedded migrations |
+| Storage | Local filesystem provider with configurable named roots |
+| Authentication | Argon2id passwords, server-side sessions, CSRF protection, optional TOTP |
+| Media | Image thumbnails, HTTP Range streaming, optional FFmpeg thumbnails/transcoding |
+| Deployment | Multi-stage Docker build; one container serves the API and the compiled web app |
+| Persistent data | SQLite, thumbnail cache, and archive workspace in `/app/data` |
+| Health | `GET /healthz` for liveness and `GET /readyz` for database readiness |
 
 ## Architecture
 
-Nexora is a **modular monolith**. The backend is written in Go and organized
-around interfaces so storage adapters can be added later without touching the
-API layer.
-
-```
-Browser (React/Vite)  ──HTTP/JSON──▶  Go API (Chi router)
-                                      ├─ auth (Argon2id, sessions, CSRF, guard)
-                                      ├─ storage (provider abstraction + local FS)
-                                      ├─ files / search / sharing / preview / jobs
-                                      ├─ audit (append-only log)
-                                      └─ database (SQLite WAL, embedded migrations)
-```
-
-### Storage provider abstraction
-
-A single interface drives every backend:
-
-```go
-type StorageProvider interface {
-    List(path string) ([]FileInfo, error)
-    Stat(path string) (FileInfo, error)
-    Read(path string) (io.ReadCloser, error)
-    Write(path string, r io.Reader, size int64) error
-    CreateDirectory(path string) error
-    Move(source, destination string) error
-    Copy(source, destination string) error
-    Delete(path string) error
-    OpenRange(path string, start, end int64) (io.ReadCloser, int64, error)
-    Search(q SearchQuery) ([]FileInfo, error)
-    GetQuota() (Quota, error)
-}
+```text
+Browser
+  |
+  +-- React / Vite interface
+          |
+          +-- /api/v1
+                  |
+                  +-- Go API: auth, files, search, previews, shares, playlists, jobs
+                  +-- SQLite: users, metadata, settings, audit data
+                  +-- Mounted filesystem roots: files, media, backups, shared data
 ```
 
-- Implemented now: **`LocalFilesystemProvider`**.
-- Designed for later: **S3**, **SFTP**, **WebDAV**, **SMB/NFS** (host-mounted).
+## Repository layout
 
-### Repository layout
-
-```
-cmd/nexora/main.go      Entrypoint: wiring, graceful shutdown, maintenance.
-internal/
-  auth/                 Password hashing, sessions, CSRF, login guard, middleware.
-  config/               Environment-based configuration with secure defaults.
-  database/             SQLite open + WAL tuning.
-  api/                  Versioned REST API (/api/v1) + static file server.
-  middleware/           Request ID, security headers, real-IP, rate limit, CSRF.
-  storage/              Provider interface, local FS, roots service, path safety.
-  audit/                Append-only audit log store.
-  logger/               Structured JSON logger.
-  util/                 Shared helpers.
-migrations/             Embedded, ordered SQL migrations.
-web/                    React + Vite + TypeScript front end (built to web/dist).
-Dockerfile, docker-compose.yml, .env.example, Makefile, README.md, LICENSE
+```text
+cmd/nexora/          Application entry point
+internal/            Go API, auth, storage, search, previews, jobs, middleware
+migrations/          Embedded SQLite migrations
+web/                 React application
+Dockerfile           Production multi-stage image
+docker-compose.yml   Docker deployment
+.env.example         Runtime configuration template
+Makefile             Build, test, and Docker commands
 ```
 
----
+## Deploy with Docker
 
-## Quick start (Docker)
+Docker Compose is the recommended deployment path. It builds both applications and exposes Nexora on port `80`.
+
+### 1. Configure the instance
 
 ```bash
-# 1. Configure
 cp .env.example .env
-# Generate a session secret and paste it into .env:
+```
+
+For a public HTTPS deployment, set these values in `.env`:
+
+```dotenv
+# Public URL for generated share links; no trailing slash.
+NEXORA_BASE_URL=https://files.example.com
+
+# Use a stable random secret for sessions.
+NEXORA_SESSION_SECRET=replace-with-a-long-random-secret
+
+# Required when HTTPS is terminated by a reverse proxy.
+NEXORA_SECURE_COOKIES=true
+
+# Set only when a trusted proxy supplies client-IP headers.
+# NEXORA_TRUSTED_PROXIES=172.16.0.0/12
+```
+
+Generate a session secret:
+
+```bash
 openssl rand -hex 32
+```
 
-# 2. Create the host directories that will be mounted:
-mkdir -p data/files data/media data/backups data/shared
+If the session secret is blank, Nexora generates one and persists it in SQLite. Supplying a stable secret is recommended for managed deployments.
 
-# 3. Launch
+### 2. Start Nexora
+
+```bash
 docker compose up -d --build
-
-# 4. Open http://localhost:8080 and complete first-run setup.
+docker compose ps
 ```
 
-On first launch, Nexora detects there are no users and shows the **setup**
-screen to create the initial admin account. Default storage roots are created
-from `NEXORA_DEFAULT_ROOTS` and the admin is granted full access.
+Open `http://localhost` for a local installation. Complete the first-run screen to create the administrator account. Nexora creates the configured default storage roots and grants that administrator access.
 
-### Equivalent with the binary (local dev)
+The included Compose file mounts the following folders:
+
+| Host folder | Container path | Access |
+| --- | --- | --- |
+| `./data/files` | `/mnt/files` | Read/write |
+| `./data/media` | `/mnt/media` | Read-only |
+| `./data/backups` | `/mnt/backups` | Read/write |
+| `./data/shared` | `/mnt/shared` | Read/write |
+
+The named `nexora-data` volume contains SQLite, the thumbnail cache, and temporary archive workspace. Back it up alongside the mounted storage folders.
+
+### 3. Verify and operate
 
 ```bash
-make build
-mkdir -p data/files data/media data/backups data/shared
-./bin/nexora            # reads .env if present, or sensible defaults
+curl -f http://localhost/healthz
+docker compose logs -f nexora
+docker compose restart nexora
 ```
 
----
-
-## Configuration
-
-All settings are environment variables (optionally loaded from `.env`). The most
-important are summarized below; see `.env.example` for the full list.
-
-| Variable | Default | Purpose |
-|---|---|---|
-| `NEXORA_LISTEN_ADDR` | `:8080` | Listen address/port. |
-| `NEXORA_DATA_DIR` | `./data` | App data directory (DB, cache). |
-| `NEXORA_DATABASE_PATH` | `./data/nexora.db` | SQLite database file. |
-| `NEXORA_SESSION_SECRET` | auto | Signs sessions/tokens. Generate with `openssl rand -hex 32`. |
-| `NEXORA_SESSION_LIFETIME` | `168h` | Session duration. |
-| `NEXORA_MAX_UPLOAD_SIZE` | `2GB` | Max upload size (bytes or `2GB`). |
-| `NEXORA_RATE_LIMIT_PER_MIN` | `60` | Login attempts per IP per minute. |
-| `NEXORA_LOCKOUT_ATTEMPTS` / `WINDOW` | `5` / `15m` | Lockout thresholds. |
-| `NEXORA_TRUSTED_PROXIES` | `` | CIDRs allowed to set client IP headers. |
-| `NEXORA_CORS_ORIGINS` | `` | CORS origins (disabled if empty). |
-| `NEXORA_LOG_LEVEL` / `FORMAT` | `info` / `json` | Logging. |
-| `NEXORA_DEFAULT_ROOTS` | see example | Roots auto-created on first run. |
-| `NEXORA_ENABLE_PROMETHEUS` | `false` | Optional metrics endpoint. |
-
----
-
-## API (v1)
-
-Base path: `/api/v1`. Errors use a consistent envelope:
-
-```json
-{ "error": "code", "message": "human readable", "request": "<request-id>" }
-```
-
-Highlights (more added per phase):
-
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| `GET` | `/healthz` | – | Liveness. |
-| `GET` | `/readyz` | – | Readiness (DB ping). |
-| `GET` | `/version` | – | Version info. |
-| `POST` | `/auth/setup` | – | First-run admin creation. |
-| `POST` | `/auth/login` | – | Login (rate-limited). |
-| `GET` | `/auth/session` | ✓ | Current user. |
-| `POST` | `/auth/logout` | ✓ | Logout (CSRF). |
-| `POST` | `/auth/password` | ✓ | Change password (CSRF). |
-| `GET` | `/roots` | ✓ | Storage roots the user can access. |
-
-State-changing requests require a `X-CSRF-Token` header matching the
-`nexora_csrf` cookie (issued automatically). List/search/audit endpoints are
-paginated (cursor/offset) and include `X-Request-ID`.
-
----
-
-## Security model
-
-- **Passwords:** Argon2id (`m=64MiB, t=1, p=4`), per-user salt.
-- **Sessions:** random token, SHA-256 stored hash, HTTP-only + SameSite=Lax
-  cookie, server-side expiry and cleanup.
-- **CSRF:** double-submit cookie for all unsafe methods.
-- **Path safety:** every path is cleaned and resolved; traversal (`..`),
-  absolute paths, backslashes, and null bytes are rejected. Users never see or
-  traverse host paths outside their authorized roots.
-- **Rate limiting / lockout:** per-IP login limiter + per-account exponential
-  backoff after repeated failures.
-- **Headers:** CSP, `X-Content-Type-Options`, `Referrer-Policy`,
-  `X-Frame-Options: DENY`, restrictive Permissions-Policy.
-- **Audit:** logins, failed logins, uploads, deletes, moves, shares, and admin
-  actions are recorded.
-- **Container:** non-root user, read-only root filesystem, dropped capabilities
-  (`cap_drop: ALL`), `no-new-privileges`.
-
----
-
-## Reverse proxy (optional)
-
-Nexora binds plain HTTP on port `8080`. Put a TLS-terminating proxy in front.
-Examples for **Caddy** and **Nginx** are provided in `docker-compose.example.yml`
-and the `docs/` proxy snippets. Don't bind the container port publicly without a
-proxy unless you accept plain HTTP. Cloudflare Tunnel and Tailscale access are
-documented but not bundled.
-
----
-
-## Backup & restore
-
-Nexora stores everything in `NEXORA_DATA_DIR` (database + cache). To back up:
+Stop the services without deleting data:
 
 ```bash
-# Stop the container to ensure a clean SQLite state (or rely on WAL checkpoint):
-docker compose exec nexora /bin/sh -c 'cp /app/data/nexora.db /tmp/nexora.db.bak'
-docker cp nexora:/tmp/nexora.db.bak ./nexora.db.bak
-# Also back up your host bind-mount directories (data/files, data/media, ...).
+docker compose down
 ```
 
-Restore by stopping the container, replacing `nexora.db` (and the bind-mount
-contents), and starting again.
+## Deploy behind HTTPS
 
----
+Nexora serves HTTP inside its container. For an internet-facing server, place Caddy, Nginx, Traefik, Cloudflare Tunnel, or another TLS proxy in front of it.
 
-## Upgrade & rollback
+1. Configure the proxy to forward your domain to Nexora's HTTP port.
+2. Set `NEXORA_BASE_URL` to the public HTTPS URL.
+3. Set `NEXORA_SECURE_COOKIES=true`.
+4. Set `NEXORA_TRUSTED_PROXIES` only to the proxy networks that should be trusted for `X-Forwarded-For` and `X-Real-IP`.
+5. Prevent direct public access to the HTTP port when the proxy is on the same server.
+
+Do not enable `NEXORA_SECURE_COOKIES=true` for a plain `http://localhost` installation because secure cookies require HTTPS.
+
+## Local development
+
+Prerequisites: Go 1.26+, Node.js 20+, and npm. Docker Desktop is the easiest local route on Windows; source development works when storage root paths are valid for the host operating system.
+
+Create local configuration and replace the Docker-oriented default roots in `.env` with a local one:
+
+```dotenv
+NEXORA_DEFAULT_ROOTS=Files:./data/files:false
+```
+
+Run the API:
 
 ```bash
-docker compose pull        # or: docker compose up -d --build
-docker compose up -d
+go run ./cmd/nexora
 ```
 
-Because migrations are embedded and forward-only, downgrades are not automatic.
-To roll back: restore the previous image tag **and** the database backup taken
-before the upgrade.
+Run the web app in a second terminal:
 
+```bash
+cd web
+npm install
+npm run dev
+```
 
----
+The Vite development server is available at `http://localhost:5173` and proxies `/api` and `/healthz` to `http://localhost:8080`.
+
+### Validation and build commands
+
+```bash
+# Frontend type check
+cd web && npm run lint
+
+# Production frontend build
+cd web && npm run build
+
+# Backend tests
+make test
+
+# Production image
+make docker-build
+```
+
+## Configuration reference
+
+Copy `.env.example` to `.env` for the documented defaults. Key settings:
+
+| Variable | Purpose |
+| --- | --- |
+| `NEXORA_LISTEN_ADDR` | HTTP listen address; Compose sets this to `:80`. |
+| `NEXORA_BASE_URL` | Public base URL for generated share links. |
+| `NEXORA_DATA_DIR` | Database, cache, and archive-workspace directory. |
+| `NEXORA_DATABASE_PATH` | SQLite database path. |
+| `NEXORA_SESSION_SECRET` | Session-signing secret. |
+| `NEXORA_SECURE_COOKIES` | Set to `true` for HTTPS. |
+| `NEXORA_MAX_UPLOAD_SIZE` | Maximum upload size, for example `2GB`. |
+| `NEXORA_ALLOWED_MIME` | Optional comma-separated upload allowlist. |
+| `NEXORA_DEFAULT_ROOTS` | Roots created on first setup: `Name:/path:readOnly[:indexed]`. |
+| `NEXORA_TRUSTED_PROXIES` | Proxy CIDRs allowed to send client-IP headers. |
+| `NEXORA_CORS_ORIGINS` | Allowed browser origins; empty disables CORS. |
+| `NEXORA_ENABLE_FFMPEG_THUMBS` | Enables FFmpeg video thumbnail generation. |
+| `NEXORA_ENABLE_PROMETHEUS` | Enables the `/metrics` endpoint. |
+| `NEXORA_MAX_EDITABLE_SIZE` | Maximum file size for the built-in editor. |
+
+## Security and operations
+
+- Passwords use Argon2id; sessions are server-side and use HTTP-only cookies.
+- State-changing requests require CSRF validation.
+- Login attempts are rate-limited and protected by account lockouts.
+- Storage access is permission-scoped, and path validation prevents traversal outside an authorized root.
+- The Docker image runs as an unprivileged user with a read-only root filesystem, dropped capabilities, and a temporary `/tmp` filesystem.
+- Audit records cover authentication, administration, and file activity.
+
+Upgrade with:
+
+```bash
+docker compose up -d --build
+```
+
+Back up the `nexora-data` volume and every mounted storage folder before upgrades. Migrations run forward at startup; restoring the database and prior image is the safe rollback method.
+
+## API and design
+
+Application endpoints are under `/api/v1`; public health checks are `/healthz` and `/readyz`. The complete current route list is in [internal/api/server.go](internal/api/server.go).
+
+Frontend design tokens and visual guidance are in [docs/design-system.md](docs/design-system.md). Brand assets are in [web/public](web/public).
 
 ## License
 
-MIT — see [LICENSE](./LICENSE).
+[MIT](LICENSE)
