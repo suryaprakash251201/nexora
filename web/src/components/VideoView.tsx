@@ -19,7 +19,7 @@ export default function VideoView({
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape" && !e.defaultPrevented) onClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -36,24 +36,26 @@ export default function VideoView({
     : "";
 
   return (
-    <div className="h-full flex flex-col bg-black">
-      <div className="flex items-center justify-between px-4 py-3 bg-surface/95 backdrop-blur-md border-b border-border/50 shrink-0 z-10">
+    <div className="fixed inset-0 z-[80] flex h-[100dvh] min-h-0 flex-col bg-black text-white">
+      <div className="z-10 flex shrink-0 items-center justify-between border-b border-white/10 bg-black/80 px-3 py-2 backdrop-blur-md sm:px-4 sm:py-3">
         <div className="flex items-center gap-3 min-w-0">
           <button
             onClick={onClose}
-            className="p-2 rounded-lg hover:bg-surface-muted transition-colors text-content-muted hover:text-content"
-            title="Back (Esc)"
+            className="p-2 rounded-lg text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+            title="Back to files (Esc)"
+            aria-label="Close video player"
           >
             <ArrowLeft className="h-5 w-5" />
           </button>
-          <span className="font-semibold truncate">{item.name}</span>
+          <span className="min-w-0 truncate font-semibold text-white">{item.name}</span>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex shrink-0 items-center gap-1">
           {onShare && (
             <button
               onClick={() => onShare(item)}
-              className="p-2 rounded-lg hover:bg-surface-muted transition-colors text-content-muted hover:text-content"
+              className="p-2 rounded-lg text-white/70 transition-colors hover:bg-white/10 hover:text-white"
               title="Share"
+              aria-label="Share video"
             >
               <Share2 className="h-5 w-5" />
             </button>
@@ -61,22 +63,23 @@ export default function VideoView({
           <a
             href={rawUrl(rootId, item.path, true)}
             download
-            className="p-2 rounded-lg hover:bg-surface-muted transition-colors text-content-muted hover:text-content"
-            title="Download"
+            className="p-2 rounded-lg text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+            title="Download video"
+            aria-label="Download video"
           >
             <Download className="h-5 w-5" />
           </a>
         </div>
       </div>
 
-      <div className="flex-1 relative bg-black flex items-center justify-center min-h-0">
+      <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-black">
         <MediaPlayer kind="video" url={url} item={item} autoPlay />
       </div>
 
-      <div className="flex items-center gap-4 px-4 py-2 bg-surface/95 backdrop-blur-md border-t border-border/50 text-xs text-content-muted shrink-0">
+      <div className="flex shrink-0 items-center gap-3 border-t border-white/10 bg-black/80 px-3 py-2 text-xs text-white/60 backdrop-blur-md sm:px-4">
         {sizeStr && <span>{sizeStr}</span>}
         {item.modified && (
-          <span>
+          <span className="hidden sm:inline">
             {new Date(item.modified).toLocaleDateString(undefined, {
               year: "numeric",
               month: "short",
@@ -86,7 +89,7 @@ export default function VideoView({
             })}
           </span>
         )}
-        <span className="truncate ml-auto">{item.extension.toUpperCase()}</span>
+        <span className="ml-auto shrink-0 truncate font-medium text-white/80">{item.extension.toUpperCase()}</span>
       </div>
     </div>
   );

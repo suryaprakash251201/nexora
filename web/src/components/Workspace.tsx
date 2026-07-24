@@ -89,10 +89,13 @@ export default function Workspace({ user }: { user: User }) {
   else if (pathname === "/playlists") view = "playlists";
   else if (pathname.startsWith("/admin")) view = "admin";
   
+  const roots = useQuery({ queryKey: ["roots"], queryFn: () => get<{ roots: Root[] }>("/roots") });
+
   const setView = useCallback((v: SidebarView, rId?: string) => {
+    const targetRootId = rId ?? rootId ?? roots.data?.roots[0]?.id;
     React.startTransition(() => {
       if (v === "home") navigate("/");
-      else if (v === "files" && rId) navigate(`/files/${rId}`);
+      else if (v === "files" && targetRootId) navigate(`/files/${targetRootId}`);
       else if (v === "search") navigate("/search");
       else if (v === "trash") navigate("/trash");
       else if (v === "shares") navigate("/shares");
@@ -101,7 +104,7 @@ export default function Workspace({ user }: { user: User }) {
       else if (v === "playlists") navigate("/playlists");
       else if (v === "admin") navigate("/admin");
     });
-  }, [navigate]);
+  }, [navigate, rootId, roots.data?.roots]);
 
   const setRootId = useCallback((id: string | null) => {
     React.startTransition(() => {
@@ -125,7 +128,6 @@ export default function Workspace({ user }: { user: User }) {
   const { preview, setPreview, imageItem, setImageItem, videoItem, setVideoItem, setPrevView, editItem, setEditItem, shareItem, setShareItem, ctx, setCtx, ctxPlaylist, setCtxPlaylist, menu, setMenu, rootModal, setRootModal, playlistModal, setPlaylistModal, playlistName, setPlaylistName, commandPaletteOpen, setCommandPaletteOpen, tagPicker, setTagPicker } = modals;
   const fileInput = useRef<HTMLInputElement>(null);
 
-  const roots = useQuery({ queryKey: ["roots"], queryFn: () => get<{ roots: Root[] }>("/roots") });
   const activeRoot = roots.data?.roots.find((r) => r.id === rootId) || null;
   const canWrite = !!activeRoot && activeRoot.permission === "write" && !activeRoot.read_only;
 
@@ -324,10 +326,11 @@ export default function Workspace({ user }: { user: User }) {
   };
 
   const navigateTo = async (rid: string, p: string, isDir: boolean, name: string) => {
-    setRootId(rid);
     const parent = p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "";
-    setPath(isDir ? p : parent);
-    setView("files");
+    const targetPath = isDir ? p : parent;
+    React.startTransition(() => {
+      navigate(targetPath ? `/files/${rid}/${targetPath}` : `/files/${rid}`);
+    });
     clearSelection();
     if (!isDir) {
       try {
@@ -359,7 +362,7 @@ export default function Workspace({ user }: { user: User }) {
         isAdmin={isAdmin}
         collapsed={sidebarCollapsed}
         onToggleCollapse={() => setSidebarCollapsed((c) => !c)}
-        onSelectRoot={(id) => { setRootId(id); setPath(""); setView("files"); clearSelection(); }}
+        onSelectRoot={(id) => { setRootId(id); clearSelection(); }}
         onSelectView={(v) => { setView(v); clearSelection(); }}
         onNewRoot={() => isAdmin && setRootModal(true)}
         onLogout={logout}
@@ -513,8 +516,8 @@ export default function Workspace({ user }: { user: User }) {
       {ctx && <ContextMenu x={ctx.x} y={ctx.y} items={buildMenu(ctx.item, ctx.x, ctx.y)} onClose={() => setCtx(null)} />}
       {ctxPlaylist && <PlaylistPickerPopover x={ctxPlaylist.x} y={ctxPlaylist.y} items={ctxPlaylist.items} onClose={() => setCtxPlaylist(null)} />}
       <Suspense fallback={null}>
-        {videoItem && <VideoView item={videoItem} rootId={rootId!} onClose={() => setVideoItem(null)} />}
-        {imageItem && <ImageView item={imageItem} images={imageList} rootId={rootId!} onClose={() => setImageItem(null)} />}
+        {videoItem && <VideoView item={videoItem} rootId={videoItem.root_id || rootId!} onClose={() => setVideoItem(null)} />}
+        {imageItem && <ImageView item={imageItem} images={imageList} rootId={imageItem.root_id || rootId!} onClose={() => setImageItem(null)} />}
       </Suspense>
       {menu && <ActionModals menu={menu} rootId={rootId!} path={path} onClose={() => setMenu(null)} onDone={() => { refresh(); setMenu(null); }} onArchiveExtract={(src, dest) => { extractZip(rootId!, src, dest, pushToast, refresh); setMenu(null); }} />}
       

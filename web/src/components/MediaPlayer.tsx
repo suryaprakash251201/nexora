@@ -777,8 +777,8 @@ function VideoPlayer({ url, item, autoPlay }: { url?: string; item?: FileItem; a
         case "t": case "T": setTheater(t => !t); break;
         case "m": case "M": doMute(); break;
         case "Escape": 
-          if (full) exitFull(); 
-          else if (theater) setTheater(false);
+           if (full) { e.preventDefault(); exitFull(); }
+           else if (theater) { e.preventDefault(); setTheater(false); }
           break;
       }
     };
