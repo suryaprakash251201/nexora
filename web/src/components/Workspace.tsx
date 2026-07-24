@@ -405,15 +405,13 @@ export default function Workspace({ user }: { user: User }) {
 
         <input ref={fileInput} type="file" multiple className="hidden" onChange={(e) => { uploadFiles(e.target.files); e.target.value = ""; }} />
 
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={view + (videoItem ? videoItem.path : "")}
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            transition={{ duration: 0.15, ease: [0.25, 0.1, 0.25, 1] }}
-            className="flex-1 overflow-auto flex flex-col"
-          >
+        <motion.main
+          key={view === "files" ? `files:${rootId ?? ""}:${path}` : view}
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.15, ease: [0.25, 0.1, 0.25, 1] }}
+          className="flex-1 overflow-auto flex flex-col"
+        >
             <Suspense fallback={<div className="flex-1 grid place-items-center text-content-muted">Loading...</div>}>
             {view === "files" && (
               <FileBrowser
@@ -455,7 +453,16 @@ export default function Workspace({ user }: { user: User }) {
             )}
             {view === "shares" && <SharesPanel />}
             {view === "playlists" && <PlaylistsPanel user={user} />}
-            {view === "admin" && isAdmin && <AdminPanel />}
+            {view === "admin" && (
+              isAdmin ? <AdminPanel /> : (
+                <div className="flex flex-1 items-center justify-center p-8 text-center">
+                  <div>
+                    <h2 className="text-lg font-semibold">Administrator access required</h2>
+                    <p className="mt-2 text-sm text-content-muted">Your account does not have access to this area.</p>
+                  </div>
+                </div>
+              )
+            )}
             {view === "search" && (
               <SearchView
                 initialQuery={search}
@@ -467,8 +474,7 @@ export default function Workspace({ user }: { user: User }) {
               />
             )}
             </Suspense>
-          </motion.div>
-        </AnimatePresence>
+          </motion.main>
 
         {!videoItem && (
           <SelectionBar
