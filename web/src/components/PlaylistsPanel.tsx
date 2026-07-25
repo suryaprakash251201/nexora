@@ -122,7 +122,7 @@ export default function PlaylistsPanel({ user }: { user?: User }) {
 
   if (selected) {
     return (
-      <div className="flex-1 overflow-auto p-4">
+      <div className="flex-1 overflow-auto p-4 pb-24 md:pb-20">
         <button onClick={() => setSelectedId(null)} className="flex items-center gap-1.5 text-sm text-content-muted hover:text-content transition-colors mb-4">
           <ArrowLeft className="h-4 w-4" /> Playlists
         </button>
@@ -264,7 +264,7 @@ export default function PlaylistsPanel({ user }: { user?: User }) {
   }
 
   return (
-    <div className="flex-1 overflow-auto p-4">
+    <div className="flex-1 overflow-auto p-4 pb-24 md:pb-20">
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-lg font-semibold flex items-center gap-2"><ListMusic className="h-5 w-5 text-accent" /> Playlists</h2>
         {isAdmin && <button onClick={newPlaylist} className="flex items-center gap-1.5 px-4 py-2 rounded-xl accent-glass text-sm font-medium"><Plus className="h-4 w-4" /> New</button>}
@@ -288,7 +288,7 @@ export default function PlaylistsPanel({ user }: { user?: User }) {
             >
               <div className="aspect-square rounded-2xl overflow-hidden mb-2.5 shadow-md ring-1 ring-white/10 group-hover:ring-accent/40 transition-all duration-300 relative bg-surface-muted/30">
                 <PlaylistCover playlist={pl} className="group-hover:scale-105 transition-transform duration-500" />
-                <div className="absolute inset-0 bg-black/10 group-hover:bg-black/30 transition-colors duration-300" />
+                <div className="absolute inset-0 bg-black/[0.05] dark:bg-black/10 group-hover:bg-black/[0.12] dark:group-hover:bg-black/30 transition-colors duration-300" />
                 <div className="absolute inset-0 grid place-items-center opacity-0 group-hover:opacity-100 transition-all duration-300 scale-90 group-hover:scale-100">
                   <div className="h-12 w-12 rounded-full bg-accent/90 text-white grid place-items-center shadow-lg backdrop-blur-md">
                     <Play className="h-6 w-6 ml-1" />

@@ -32,10 +32,14 @@ export interface FileItem {
   tags?: Tag[];
 }
 
-export interface FileList {
+export interface FileListResponse {
   root: string;
   path: string;
   items: FileItem[];
+  total: number;
+  offset: number;
+  limit: number;
+  has_more: boolean;
 }
 
 export interface TrashItem {

@@ -45,7 +45,7 @@ export default function AdminPanel() {
       
       {/* Content Area */}
       <div className="flex-1 overflow-y-auto custom-scrollbar">
-        <div className="max-w-6xl mx-auto p-6 pb-20">
+        <div className="max-w-6xl mx-auto p-6 pb-28 md:pb-24">
           {tab === "users" ? <UsersTab /> : tab === "audit" ? <AuditTab /> : <SettingsTab />}
         </div>
       </div>

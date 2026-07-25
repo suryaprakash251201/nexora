@@ -1,9 +1,9 @@
 import { useRef, useState, useCallback, useMemo, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { get, post, del } from "../api/client";
-import type { FileItem, Root, TrashItem, User, FavoriteItem, RecentItem, SearchResult, HomeData } from "../api/types";
+import type { FileItem, Root, TrashItem, User, FavoriteItem, RecentItem, SearchResult, HomeData, FileListResponse } from "../api/types";
 import { useUI } from "../store";
 import { usePlayer } from "../store/player";
 import { usePlaylists } from "../store/playlists";
@@ -90,12 +90,26 @@ export default function Workspace({ user }: { user: User }) {
   else if (pathname.startsWith("/admin")) view = "admin";
   
   const roots = useQuery({ queryKey: ["roots"], queryFn: () => get<{ roots: Root[] }>("/roots") });
+  const pendingFilesView = useRef(false);
+
+  useEffect(() => {
+    if (pendingFilesView.current && roots.data?.roots?.[0]) {
+      pendingFilesView.current = false;
+      navigate(`/files/${roots.data.roots[0].id}`);
+    }
+  }, [roots.data]);
 
   const setView = useCallback((v: SidebarView, rId?: string) => {
     const targetRootId = rId ?? rootId ?? roots.data?.roots[0]?.id;
     React.startTransition(() => {
       if (v === "home") navigate("/");
-      else if (v === "files" && targetRootId) navigate(`/files/${targetRootId}`);
+      else if (v === "files") {
+        if (targetRootId) {
+          navigate(`/files/${targetRootId}`);
+        } else {
+          pendingFilesView.current = true;
+        }
+      }
       else if (v === "search") navigate("/search");
       else if (v === "trash") navigate("/trash");
       else if (v === "shares") navigate("/shares");
@@ -124,6 +138,15 @@ export default function Workspace({ user }: { user: User }) {
   const [filter, setFilter] = useState("all");
   const [sort, setSort] = useState("name");
   const [order, setOrder] = useState("asc");
+  const [fileOffset, setFileOffset] = useState(0);
+  const [accumulatedItems, setAccumulatedItems] = useState<FileItem[]>([]);
+  const [hasMoreFiles, setHasMoreFiles] = useState(false);
+
+  useEffect(() => {
+    setFileOffset(0);
+    setAccumulatedItems([]);
+    setHasMoreFiles(false);
+  }, [rootId, path, sort, order]);
   const modals = useModals();
   const { preview, setPreview, imageItem, setImageItem, videoItem, setVideoItem, setPrevView, editItem, setEditItem, shareItem, setShareItem, ctx, setCtx, ctxPlaylist, setCtxPlaylist, menu, setMenu, rootModal, setRootModal, playlistModal, setPlaylistModal, playlistName, setPlaylistName, commandPaletteOpen, setCommandPaletteOpen, tagPicker, setTagPicker } = modals;
   const fileInput = useRef<HTMLInputElement>(null);
@@ -132,17 +155,30 @@ export default function Workspace({ user }: { user: User }) {
   const canWrite = !!activeRoot && activeRoot.permission === "write" && !activeRoot.read_only;
 
   const files = useQuery({
-    queryKey: ["files", rootId, path, sort, order],
-    queryFn: () => get<{ items: FileItem[] }>("/files", { root: rootId!, path, sort, order }),
+    queryKey: ["files", rootId, path, sort, order, fileOffset],
+    queryFn: () => get<FileListResponse>("/files", { root: rootId!, path, sort, order, offset: String(fileOffset) }),
     enabled: view === "files" && !!rootId,
+    placeholderData: keepPreviousData,
   });
+
+  useEffect(() => {
+    if (files.data) {
+      const data = files.data;
+      setHasMoreFiles(!!data.has_more);
+      if (fileOffset === 0) {
+        setAccumulatedItems(data.items || []);
+      } else {
+        setAccumulatedItems(prev => [...prev, ...(data.items || [])]);
+      }
+    }
+  }, [files.data, fileOffset]);
+
+  const items = accumulatedItems;
   const trash = useQuery({ queryKey: ["trash"], queryFn: () => get<{ items: TrashItem[] }>("/trash"), enabled: view === "trash" });
   const favorites = useQuery({ queryKey: ["favorites"], queryFn: () => get<{ items: FavoriteItem[] }>("/favorites"), enabled: view === "favorites" });
   const recents = useQuery({ queryKey: ["recents"], queryFn: () => get<{ items: RecentItem[] }>("/recents"), enabled: view === "recents" });
   const home = useQuery({ queryKey: ["home"], queryFn: () => get<HomeData>("/home"), enabled: view === "home" });
   const favSet = useQuery({ queryKey: ["fav-set"], queryFn: () => get<{ items: FavoriteItem[] }>("/favorites") });
-
-  const items = files.data?.items || [];
   
   const [filtered, setFiltered] = useState<FileItem[]>([]);
   const workerRef = useRef<Worker | null>(null);
@@ -162,6 +198,9 @@ export default function Workspace({ user }: { user: User }) {
   const imageList = useMemo(() => filtered.filter((i) => i.mime.startsWith("image/") || ["jpg", "jpeg", "png", "gif", "webp", "bmp", "avif"].includes(i.extension.toLowerCase())), [filtered]);
 
   const refresh = useCallback(() => {
+    setFileOffset(0);
+    setAccumulatedItems([]);
+    setHasMoreFiles(false);
     qc.invalidateQueries({ queryKey: ["files", rootId, path] });
     qc.invalidateQueries({ queryKey: ["trash"] });
     qc.invalidateQueries({ queryKey: ["roots"] });
@@ -417,15 +456,21 @@ export default function Workspace({ user }: { user: User }) {
               <FileBrowser
                 items={filtered}
                 loading={files.isLoading}
+                isFetching={files.isFetching && fileOffset === 0}
                 viewMode={viewMode}
                 selection={selection}
                 selectMode={selectMode}
                 canWrite={canWrite}
                 onOpen={openItem}
-                 onSelect={handleSelect}
-
+                onSelect={handleSelect}
                 onContextMenu={onContextMenu}
                 onDropItem={(folder) => moveSelectionTo()}
+                onUpload={() => fileInput.current?.click()}
+                hasMore={hasMoreFiles}
+                onLoadMore={() => setFileOffset(prev => prev + (files.data?.limit || 500))}
+                isLoadingMore={files.isFetching && fileOffset > 0}
+                error={files.error as Error | null}
+                onRetry={() => { setFileOffset(0); setAccumulatedItems([]); files.refetch(); }}
               />
             )}
             {view === "trash" && <TrashView items={trash.data?.items || []} loading={trash.isLoading} onRestore={async (id) => { await post("/trash/restore", { id }); refresh(); }} onDelete={async (id) => { await del("/trash", { id }); refresh(); }} selection={selection} selectMode={selectMode} onSelect={(id) => toggleSelect(id)} />}
@@ -496,6 +541,7 @@ export default function Workspace({ user }: { user: User }) {
       <MobileNav 
         view={view} 
         onSelectView={(v) => { setView(v); clearSelection(); }} 
+        onSearch={() => setCommandPaletteOpen(true)}
       />
       <TransfersPanel />
 
@@ -552,13 +598,13 @@ export default function Workspace({ user }: { user: User }) {
       )}
 
       {dragActive && (
-        <div className="fixed inset-0 z-[70] grid place-items-center scrim backdrop-blur-sm pointer-events-none">
-          <div className="glass-strong rounded-2xl px-8 py-10 text-center">
-            <Upload className="h-12 w-12 mx-auto mb-3 text-accent" />
-            <p className="text-lg font-semibold">Drop to upload</p>
-            <p className="text-sm text-content-muted">{rootId && canWrite ? `Into ${activeRoot?.name} / ${path || "root"}` : "Choose a storage location"}</p>
+          <div className="fixed inset-0 z-[70] grid place-items-center bg-black/70 dark:bg-black/70 backdrop-blur-sm pointer-events-none">
+            <div className="glass-strong rounded-2xl px-8 py-10 text-center">
+              <Upload className="h-12 w-12 mx-auto mb-3 text-accent" />
+              <p className="text-lg font-semibold">Drop to upload</p>
+              <p className="text-sm text-content-muted">{rootId && canWrite ? `Into ${activeRoot?.name} / ${path || "root"}` : "Choose a storage location"}</p>
+            </div>
           </div>
-        </div>
       )}
 
       {playlistModal && (

@@ -29,7 +29,7 @@ export default function SelectionBar({
     "flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-xl glass-hover border border-border/30 transition-colors hover:bg-surface/80 text-content-muted hover:text-content disabled:opacity-40";
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-50 flex justify-center pointer-events-none pb-4 sm:pb-6">
+    <div className="fixed bottom-[60px] md:bottom-0 left-0 right-0 z-50 flex justify-center pointer-events-none pb-4 sm:pb-6">
       <div className="pointer-events-auto flex items-center gap-1.5 sm:gap-2 px-3 sm:px-5 py-2.5 glass-strong rounded-2xl border border-border/40 shadow-2xl backdrop-blur-2xl max-w-full overflow-x-auto">
         <span className="text-sm font-semibold text-content whitespace-nowrap mr-1 sm:mr-2">
           {count} selected

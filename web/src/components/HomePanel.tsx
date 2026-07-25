@@ -172,7 +172,7 @@ function HomeCard({ item, onOpen }: { item: RecentItem; onOpen: () => void }) {
       <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/8 to-transparent" />
       <div className="relative h-16 w-16 shrink-0 rounded-xl overflow-hidden shadow-sm">
         <FileThumb it={fi} fill />
-        <div className="absolute inset-0 bg-black/10 group-hover:bg-black/20 transition-colors duration-300" />
+        <div className="absolute inset-0 bg-black/[0.05] dark:bg-black/10 group-hover:bg-black/[0.1] dark:group-hover:bg-black/20 transition-colors duration-300" />
         {kind === "music" && (
           <span className="absolute bottom-1 right-1 grid place-items-center h-6 w-6 rounded-full bg-surface/90 backdrop-blur-md shadow-sm border border-border/50 text-content group-hover:text-accent transition-colors">
             <Music className="h-3 w-3" />
@@ -332,7 +332,7 @@ export default function HomePanel({
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto px-6 py-10 space-y-12 pb-20">
+      <div className="max-w-6xl mx-auto px-6 py-10 space-y-12 pb-28 md:pb-24">
         {isLoading && (
           <div className="space-y-8 animate-pulse">
             <div>
@@ -398,7 +398,7 @@ export default function HomePanel({
                             <Music className="h-8 w-8 text-white/80" />
                           </div>
                         )}
-                        <div className="absolute inset-0 bg-black/10 group-hover:bg-black/30 transition-colors duration-300" />
+                        <div className="absolute inset-0 bg-black/[0.05] dark:bg-black/10 group-hover:bg-black/[0.12] dark:group-hover:bg-black/30 transition-colors duration-300" />
                         <div className="absolute inset-0 grid place-items-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 scale-90 group-hover:scale-100">
                           <div className="h-12 w-12 rounded-full bg-accent/90 text-white grid place-items-center shadow-lg backdrop-blur-md">
                             <Play className="h-6 w-6 ml-1" />

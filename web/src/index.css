@@ -680,6 +680,20 @@ body {
   animation: n-pulse-glow 2s ease-in-out infinite;
 }
 
+/* Z-index layer system */
+:root {
+  --z-base: 0;
+  --z-content: 10;
+  --z-sidebar: 30;
+  --z-sidebar-overlay: 35;
+  --z-mobile-nav: 40;
+  --z-player-bar: 45;
+  --z-selection-bar: 50;
+  --z-dropdown: 55;
+  --z-modal: 60;
+  --z-toast: 70;
+}
+
 /* Selection bar animation */
 .selection-bar {
   animation: n-slide-up 0.2s ease-out;

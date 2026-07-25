@@ -51,7 +51,7 @@ export default function SharesPanel() {
         </div>
       </div>
 
-      <div className="max-w-4xl mx-auto p-6 pb-20">
+      <div className="max-w-4xl mx-auto p-6 pb-28 md:pb-24">
         {isLoading ? (
           <SkeletonList />
         ) : items.length === 0 ? (

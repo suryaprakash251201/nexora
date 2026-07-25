@@ -73,17 +73,17 @@ export const colorClasses: Record<string, string> = {
 };
 
 export const iconGlowClasses: Record<string, string> = {
-  blue: "shadow-[0_0_14px_rgba(59,130,246,0.12)] border-blue-500/20 hover:shadow-[0_0_20px_rgba(59,130,246,0.2)]",
-  red: "shadow-[0_0_14px_rgba(239,68,68,0.12)] border-red-500/20 hover:shadow-[0_0_20px_rgba(239,68,68,0.2)]",
-  green: "shadow-[0_0_14px_rgba(34,197,94,0.12)] border-green-500/20 hover:shadow-[0_0_20px_rgba(34,197,94,0.2)]",
-  emerald: "shadow-[0_0_14px_rgba(16,185,129,0.12)] border-emerald-500/20 hover:shadow-[0_0_20px_rgba(16,185,129,0.2)]",
-  yellow: "shadow-[0_0_14px_rgba(234,179,8,0.12)] border-yellow-500/20 hover:shadow-[0_0_20px_rgba(234,179,8,0.2)]",
-  amber: "shadow-[0_0_14px_rgba(245,158,11,0.12)] border-amber-500/20 hover:shadow-[0_0_20px_rgba(245,158,11,0.2)]",
-  purple: "shadow-[0_0_14px_rgba(168,85,247,0.12)] border-purple-500/20 hover:shadow-[0_0_20px_rgba(168,85,247,0.2)]",
-  cyan: "shadow-[0_0_14px_rgba(6,182,212,0.12)] border-cyan-500/20 hover:shadow-[0_0_20px_rgba(6,182,212,0.2)]",
-  orange: "shadow-[0_0_14px_rgba(249,115,22,0.12)] border-orange-500/20 hover:shadow-[0_0_20px_rgba(249,115,22,0.2)]",
-  gray: "shadow-[0_0_14px_rgba(100,116,139,0.08)] border-slate-500/15 hover:shadow-[0_0_20px_rgba(100,116,139,0.15)]",
-  pink: "shadow-[0_0_14px_rgba(236,72,153,0.12)] border-pink-500/20 hover:shadow-[0_0_20px_rgba(236,72,153,0.2)]",
+  blue: "shadow-[0_0_14px_rgba(59,130,246,0.08)] dark:shadow-[0_0_14px_rgba(59,130,246,0.12)] border-blue-500/15 dark:border-blue-500/20 hover:shadow-[0_0_20px_rgba(59,130,246,0.15)] dark:hover:shadow-[0_0_20px_rgba(59,130,246,0.2)]",
+  red: "shadow-[0_0_14px_rgba(239,68,68,0.08)] dark:shadow-[0_0_14px_rgba(239,68,68,0.12)] border-red-500/15 dark:border-red-500/20 hover:shadow-[0_0_20px_rgba(239,68,68,0.15)] dark:hover:shadow-[0_0_20px_rgba(239,68,68,0.2)]",
+  green: "shadow-[0_0_14px_rgba(34,197,94,0.08)] dark:shadow-[0_0_14px_rgba(34,197,94,0.12)] border-green-500/15 dark:border-green-500/20 hover:shadow-[0_0_20px_rgba(34,197,94,0.15)] dark:hover:shadow-[0_0_20px_rgba(34,197,94,0.2)]",
+  emerald: "shadow-[0_0_14px_rgba(16,185,129,0.08)] dark:shadow-[0_0_14px_rgba(16,185,129,0.12)] border-emerald-500/15 dark:border-emerald-500/20 hover:shadow-[0_0_20px_rgba(16,185,129,0.15)] dark:hover:shadow-[0_0_20px_rgba(16,185,129,0.2)]",
+  yellow: "shadow-[0_0_14px_rgba(234,179,8,0.08)] dark:shadow-[0_0_14px_rgba(234,179,8,0.12)] border-yellow-500/15 dark:border-yellow-500/20 hover:shadow-[0_0_20px_rgba(234,179,8,0.15)] dark:hover:shadow-[0_0_20px_rgba(234,179,8,0.2)]",
+  amber: "shadow-[0_0_14px_rgba(245,158,11,0.08)] dark:shadow-[0_0_14px_rgba(245,158,11,0.12)] border-amber-500/15 dark:border-amber-500/20 hover:shadow-[0_0_20px_rgba(245,158,11,0.15)] dark:hover:shadow-[0_0_20px_rgba(245,158,11,0.2)]",
+  purple: "shadow-[0_0_14px_rgba(168,85,247,0.08)] dark:shadow-[0_0_14px_rgba(168,85,247,0.12)] border-purple-500/15 dark:border-purple-500/20 hover:shadow-[0_0_20px_rgba(168,85,247,0.15)] dark:hover:shadow-[0_0_20px_rgba(168,85,247,0.2)]",
+  cyan: "shadow-[0_0_14px_rgba(6,182,212,0.08)] dark:shadow-[0_0_14px_rgba(6,182,212,0.12)] border-cyan-500/15 dark:border-cyan-500/20 hover:shadow-[0_0_20px_rgba(6,182,212,0.15)] dark:hover:shadow-[0_0_20px_rgba(6,182,212,0.2)]",
+  orange: "shadow-[0_0_14px_rgba(249,115,22,0.08)] dark:shadow-[0_0_14px_rgba(249,115,22,0.12)] border-orange-500/15 dark:border-orange-500/20 hover:shadow-[0_0_20px_rgba(249,115,22,0.15)] dark:hover:shadow-[0_0_20px_rgba(249,115,22,0.2)]",
+  gray: "shadow-[0_0_14px_rgba(100,116,139,0.05)] dark:shadow-[0_0_14px_rgba(100,116,139,0.08)] border-slate-500/10 dark:border-slate-500/15 hover:shadow-[0_0_20px_rgba(100,116,139,0.1)] dark:hover:shadow-[0_0_20px_rgba(100,116,139,0.15)]",
+  pink: "shadow-[0_0_14px_rgba(236,72,153,0.08)] dark:shadow-[0_0_14px_rgba(236,72,153,0.12)] border-pink-500/15 dark:border-pink-500/20 hover:shadow-[0_0_20px_rgba(236,72,153,0.15)] dark:hover:shadow-[0_0_20px_rgba(236,72,153,0.2)]",
 };
 
 export type IconSize = "sm" | "md" | "lg" | "xl";

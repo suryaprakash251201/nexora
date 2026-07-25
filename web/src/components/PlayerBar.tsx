@@ -106,10 +106,10 @@ export default function PlayerBar() {
             <div className="flex items-center gap-2">
               <div className={`group relative h-10 w-10 rounded-full overflow-hidden shrink-0 shadow-md transition-all duration-500 ${isPlaying ? 'animate-[spin_8s_linear_infinite]' : ''}`}>
                 <Cover item={current} />
-                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer rounded-full" onClick={openExpanded}>
+                <div className="absolute inset-0 bg-glass-bg-strong opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer rounded-full dark:bg-black/40" onClick={openExpanded}>
                   <ChevronUp className="h-4 w-4 text-white" />
                 </div>
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-2.5 h-2.5 bg-black/80 rounded-full border border-white/20 shadow-inner" />
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-2.5 h-2.5 bg-black/50 dark:bg-black/80 rounded-full border border-border/20 shadow-inner" />
               </div>
 
               <div className="min-w-0 flex-1 cursor-pointer" onClick={openExpanded}>

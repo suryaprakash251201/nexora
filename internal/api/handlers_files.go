@@ -88,17 +88,31 @@ func (s *Server) handleListFiles(w http.ResponseWriter, r *http.Request) {
 	items = filtered
 	items = sortFiles(items, queryParam(r, "sort", "name"), queryParam(r, "order", "asc"), queryParam(r, "dirs_first", "true") == "true")
 
-	// Apply cursor-free offset pagination for very large directories.
-	limit, _ := strconv.Atoi(queryParam(r, "limit", "1000"))
-	if limit <= 0 || limit > 5000 {
-		limit = 1000
-	}
-	if limit < len(items) {
-		items = items[:limit]
-	}
+	total := len(items)
 
-	out := make([]map[string]any, 0, len(items))
-	for _, it := range items {
+	// Pagination: offset + limit with cursor-like semantics.
+	offset, _ := strconv.Atoi(queryParam(r, "offset", "0"))
+	limit, _ := strconv.Atoi(queryParam(r, "limit", "500"))
+	if limit <= 0 || limit > 5000 {
+		limit = 500
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	if offset > total {
+		offset = total
+	}
+	if offset >= total {
+		offset = 0
+	}
+	end := offset + limit
+	if end > total {
+		end = total
+	}
+	paged := items[offset:end]
+
+	out := make([]map[string]any, 0, len(paged))
+	for _, it := range paged {
 		out = append(out, fileToMap(it, rootID))
 	}
 
@@ -106,10 +120,15 @@ func (s *Server) handleListFiles(w http.ResponseWriter, r *http.Request) {
 	user, _ := auth.UserFromContext(r.Context())
 	attachTags(s.DB, out, rootID, user.ID)
 
+	hasMore := end < total
 	writeJSON(w, http.StatusOK, map[string]any{
-		"root": rootID,
-		"path": rel,
-		"items": out,
+		"root":     rootID,
+		"path":     rel,
+		"items":    out,
+		"total":    total,
+		"offset":   offset,
+		"limit":    limit,
+		"has_more": hasMore,
 	})
 }
 

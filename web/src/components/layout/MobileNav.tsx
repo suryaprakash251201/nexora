@@ -4,6 +4,7 @@ import type { SidebarView } from "../Sidebar";
 interface MobileNavProps {
   view: SidebarView;
   onSelectView: (v: SidebarView) => void;
+  onSearch?: () => void;
 }
 
 const tabs: { id: SidebarView; label: string; icon: typeof Home }[] = [
@@ -17,7 +18,7 @@ const tabs: { id: SidebarView; label: string; icon: typeof Home }[] = [
   { id: "playlists", label: "Playlists", icon: ListMusic },
 ];
 
-export function MobileNav({ view, onSelectView }: MobileNavProps) {
+export function MobileNav({ view, onSelectView, onSearch }: MobileNavProps) {
   return (
     <div className="md:hidden mobile-nav fixed bottom-0 left-0 right-0 z-40 pb-safe">
       <div className="flex items-center gap-1 px-2 py-2 overflow-x-auto">
@@ -27,9 +28,16 @@ export function MobileNav({ view, onSelectView }: MobileNavProps) {
           return (
             <button
               key={tab.id}
-              onClick={() => onSelectView(tab.id)}
+              onClick={() => {
+                if (tab.id === "search" && onSearch) {
+                  onSearch();
+                } else {
+                  onSelectView(tab.id);
+                }
+              }}
               aria-label={tab.label}
-              className={`flex flex-col items-center justify-center w-16 h-12 gap-1 rounded-xl transition-all duration-200 shrink-0 ${
+              aria-current={isActive ? "page" : undefined}
+              className={`flex flex-col items-center justify-center min-w-[44px] h-12 gap-1 rounded-xl transition-all duration-200 shrink-0 ${
                 isActive ? "text-accent" : "text-content-muted hover:text-content"
               }`}
             >
@@ -39,7 +47,7 @@ export function MobileNav({ view, onSelectView }: MobileNavProps) {
                   <span className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-accent animate-scale-in" />
                 )}
               </div>
-              <span className={`text-[10px] font-medium transition-opacity duration-300 ${isActive ? "opacity-100" : "opacity-0"}`}>
+              <span className={`text-[10px] font-medium leading-none transition-opacity duration-300 ${isActive ? "opacity-100" : "opacity-0"}`}>
                 {tab.label}
               </span>
             </button>

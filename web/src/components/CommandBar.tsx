@@ -95,9 +95,21 @@ export default function CommandBar({
   const sortRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
+  const clampMenuPos = (r: DOMRect) => {
+    let top = r.bottom + 6;
+    let right = window.innerWidth - r.right;
+    const menuHeight = 280;
+    if (top + menuHeight > window.innerHeight - 16) {
+      top = Math.max(8, r.top - menuHeight - 6);
+    }
+    if (right < 8) right = 8;
+    if (right + 224 > window.innerWidth - 8) right = window.innerWidth - 224 - 8;
+    return { top, right };
+  };
+
   const toggleMenu = () => {
     const r = newBtnRef.current?.getBoundingClientRect();
-    if (r) setMenuPos({ top: r.bottom + 6, right: window.innerWidth - r.right });
+    if (r) setMenuPos(clampMenuPos(r));
     setMenuOpen((o) => !o);
     setFilterOpen(false);
     setSortOpen(false);
@@ -105,7 +117,7 @@ export default function CommandBar({
 
   const toggleFilter = () => {
     const r = filterBtnRef.current?.getBoundingClientRect();
-    if (r) setFilterPos({ top: r.bottom + 6, right: window.innerWidth - r.right });
+    if (r) setFilterPos(clampMenuPos(r));
     setFilterOpen((o) => !o);
     setMenuOpen(false);
     setSortOpen(false);
@@ -113,7 +125,7 @@ export default function CommandBar({
 
   const toggleSort = () => {
     const r = sortBtnRef.current?.getBoundingClientRect();
-    if (r) setSortPos({ top: r.bottom + 6, right: window.innerWidth - r.right });
+    if (r) setSortPos(clampMenuPos(r));
     setSortOpen((o) => !o);
     setMenuOpen(false);
     setFilterOpen(false);
@@ -312,6 +324,49 @@ export default function CommandBar({
             <ProfileMenu user={user} isAdmin={isAdmin} onLogout={onLogout} onAdmin={onAdmin} />
           </div>
         </div>
+      </div>
+
+      {/* Mobile filter & sort chips */}
+      <div className="sm:hidden flex items-center gap-1.5 mt-2 overflow-x-auto pb-1 no-scrollbar">
+        {filterOptions.map((opt) => (
+          <button
+            key={opt.value}
+            onClick={() => setFilter(opt.value)}
+            className={cn(
+              "shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 border",
+              filter === opt.value
+                ? "bg-accent/20 border-accent/30 text-accent"
+                : "glass-chip border-glass-border-soft text-text-tertiary"
+            )}
+          >
+            {opt.label}
+          </button>
+        ))}
+        <span className="w-px h-5 bg-glass-border-soft shrink-0 mx-1" />
+        {sortOptions.map((opt) => (
+          <button
+            key={opt.value}
+            onClick={() => {
+              if (sort === opt.value) {
+                setOrder(order === "asc" ? "desc" : "asc");
+              } else {
+                setSort(opt.value);
+                setOrder("asc");
+              }
+            }}
+            className={cn(
+              "shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 border",
+              sort === opt.value
+                ? "bg-accent-purple/20 border-accent-purple/30 text-accent-purple"
+                : "glass-chip border-glass-border-soft text-text-tertiary"
+            )}
+          >
+            {opt.label}
+            {sort === opt.value && (
+              <ChevronDown className={cn("inline h-3 w-3 ml-1 transition-transform", order === "desc" && "rotate-180")} />
+            )}
+          </button>
+        ))}
       </div>
 
       {/* New Menu */}

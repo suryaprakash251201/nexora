@@ -383,6 +383,14 @@ func detectMimeByExt(name string) string {
 		return "image/svg+xml"
 	case "bmp":
 		return "image/bmp"
+	case "avif":
+		return "image/avif"
+	case "heic", "heif":
+		return "image/heic"
+	case "ico":
+		return "image/x-icon"
+	case "tiff", "tif":
+		return "image/tiff"
 	case "mp4":
 		return "video/mp4"
 	case "webm":
@@ -391,6 +399,12 @@ func detectMimeByExt(name string) string {
 		return "video/quicktime"
 	case "mkv":
 		return "video/x-matroska"
+	case "avi":
+		return "video/x-msvideo"
+	case "flv":
+		return "video/x-flv"
+	case "m4v":
+		return "video/mp4"
 	case "mp3":
 		return "audio/mpeg"
 	case "ogg":
@@ -401,6 +415,12 @@ func detectMimeByExt(name string) string {
 		return "audio/flac"
 	case "m4a":
 		return "audio/mp4"
+	case "aac":
+		return "audio/aac"
+	case "opus":
+		return "audio/opus"
+	case "wma":
+		return "audio/x-ms-wma"
 	case "pdf":
 		return "application/pdf"
 	case "md", "markdown":
@@ -423,8 +443,50 @@ func detectMimeByExt(name string) string {
 		return "text/plain"
 	case "zip":
 		return "application/zip"
+	case "tar":
+		return "application/x-tar"
+	case "gz", "tgz":
+		return "application/gzip"
+	case "7z":
+		return "application/x-7z-compressed"
+	case "rar":
+		return "application/vnd.rar"
 	case "csv":
 		return "text/csv"
+	case "xml":
+		return "application/xml"
+	case "wasm":
+		return "application/wasm"
+	case "ttf":
+		return "font/ttf"
+	case "woff":
+		return "font/woff"
+	case "woff2":
+		return "font/woff2"
+	case "otf":
+		return "font/otf"
+	case "eot":
+		return "application/vnd.ms-fontobject"
+	case "doc":
+		return "application/msword"
+	case "docx":
+		return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+	case "xls":
+		return "application/vnd.ms-excel"
+	case "xlsx":
+		return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+	case "ppt":
+		return "application/vnd.ms-powerpoint"
+	case "pptx":
+		return "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+	case "eps":
+		return "application/postscript"
+	case "psd":
+		return "image/vnd.adobe.photoshop"
+	case "ai":
+		return "application/postscript"
+	case "rtf":
+		return "application/rtf"
 	default:
 		return ""
 	}

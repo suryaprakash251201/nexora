@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, memo, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useUI } from "../store";
-import { Play, MoreVertical } from "lucide-react";
+import { Play, MoreVertical, AlertTriangle, RefreshCw } from "lucide-react";
 import { FileItem } from "../api/types";
 import { formatBytes, formatDate } from "../lib/format";
 import { FileThumb } from "./FileThumb";
@@ -16,6 +16,7 @@ import { TagChip } from "./TagManager";
 interface FileBrowserProps {
   items: FileItem[];
   loading: boolean;
+  isFetching?: boolean;
   viewMode: "list" | "grid";
   selection: Set<string>;
   selectMode: boolean;
@@ -24,6 +25,12 @@ interface FileBrowserProps {
   onSelect: (item: FileItem, e: React.MouseEvent | React.ChangeEvent) => void;
   onContextMenu: (e: React.MouseEvent, item: FileItem) => void;
   onDropItem?: (targetFolder: FileItem) => void;
+  onUpload?: () => void;
+  hasMore?: boolean;
+  onLoadMore?: () => void;
+  isLoadingMore?: boolean;
+  error?: Error | null;
+  onRetry?: () => void;
 }
 
 const FileIconForItem = memo(function FileIconForItem({ item, large, fill }: { item: FileItem; large?: boolean; fill?: boolean }) {
@@ -53,6 +60,7 @@ const FileIconForItem = memo(function FileIconForItem({ item, large, fill }: { i
 export default function FileBrowser({
   items,
   loading,
+  isFetching,
   viewMode,
   selection,
   selectMode,
@@ -61,6 +69,12 @@ export default function FileBrowser({
   onSelect,
   onContextMenu,
   onDropItem,
+  onUpload,
+  hasMore,
+  onLoadMore,
+  isLoadingMore,
+  error,
+  onRetry,
 }: FileBrowserProps) {
   const [gridZoom, setGridZoom] = useState<GridZoom>(getStoredZoom);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
@@ -136,7 +150,7 @@ export default function FileBrowser({
     }
   };
 
-  if (loading) {
+  if (loading || isFetching) {
     return viewMode === "grid" ? (
       <div className="p-4 sm:p-6">
         <SkeletonGrid />
@@ -148,6 +162,28 @@ export default function FileBrowser({
     );
   }
 
+  if (error && items.length === 0) {
+    return (
+      <div className="h-full grid place-items-center p-8">
+        <div className="text-center max-w-md">
+          <div className="inline-flex p-4 rounded-2xl bg-red-500/10 text-red-400 mb-4">
+            <AlertTriangle className="h-8 w-8" />
+          </div>
+          <h3 className="text-lg font-semibold mb-2">Failed to load files</h3>
+          <p className="text-sm text-content-muted mb-4">{error.message || "An unexpected error occurred"}</p>
+          {onRetry && (
+            <button
+              onClick={onRetry}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl glass-hover border border-glass-border text-sm font-medium text-content hover:text-accent transition-all min-h-[44px]"
+            >
+              <RefreshCw className="h-4 w-4" /> Try again
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   if (items.length === 0) {
     return (
       <div ref={dropZoneRef} className="h-full grid place-items-center p-8">
@@ -155,7 +191,7 @@ export default function FileBrowser({
           variant="files"
           title="This folder is empty"
           description="Drag files here or use the Upload button to add content."
-          action={canWrite ? { label: "Upload files", onClick: () => {} } : undefined}
+          action={canWrite && onUpload ? { label: "Upload files", onClick: onUpload } : undefined}
         />
       </div>
     );
@@ -188,7 +224,7 @@ export default function FileBrowser({
             variants={staggerContainer}
             initial="initial"
             animate="animate"
-            className={cn("p-4 sm:p-6 grid gap-4 sm:gap-5 pb-32", getGridColClass(gridZoom))}
+            className={cn("p-4 sm:p-6 grid gap-4 sm:gap-5 pb-24 sm:pb-32 md:pb-36", getGridColClass(gridZoom))}
             role="grid"
             aria-label="File grid"
           >
@@ -203,7 +239,7 @@ export default function FileBrowser({
                     initial={{ opacity: 0, y: 16, scale: 0.98 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.95, y: -8 }}
-                    transition={{ duration: 0.3, ease: [0.25, 0.1, 0.25, 1], delay: index * 0.03 }}
+                    transition={{ duration: 0.3, ease: [0.25, 0.1, 0.25, 1], delay: Math.min(index * 0.03, 0.6) }}
                     tabIndex={0}
                     onClick={(e) => handleItemClick(item, e)}
                     onDoubleClick={() => onOpen(item)}
@@ -218,13 +254,13 @@ export default function FileBrowser({
                         onDropItem?.(item);
                       }
                     }}
-                    whileHover={{ y: -6, boxShadow: "0 8px 32px rgba(0,0,0,0.22), 0 0 48px rgba(91,140,255,0.10), 0 0 0 1px rgba(255,255,255,0.08)" }}
+                    whileHover={{ y: -6 }}
                     whileTap={{ scale: 0.98 }}
                     className={cn(
-                      "group relative flex flex-col items-center p-5 rounded-2xl text-center transition-all duration-200 outline-none cursor-pointer border overflow-hidden",
+                      "group relative flex flex-col items-center p-5 rounded-2xl text-center transition-all duration-200 outline-none cursor-pointer border overflow-hidden hover:shadow-glass-glow",
                       selected
                         ? "bg-accent/12 border-accent/35 shadow-lg shadow-accent/15"
-                        : "glass border-white/[0.06] hover:border-accent-purple/30",
+                        : "glass border-white/[0.06] hover:border-accent-purple/30 dark:border-white/[0.06]",
                       dropTarget === item.path ? "ring-2 ring-accent bg-accent/15 scale-105" : "",
                       dragOver ? "opacity-50" : ""
                     )}
@@ -255,7 +291,7 @@ export default function FileBrowser({
 
                       {!selectMode && (
                         <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                          <div className="flex gap-2 p-1.5 rounded-2xl bg-black/80 backdrop-blur-2xl border border-white/10 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex gap-2 p-1.5 rounded-2xl bg-glass-bg-strong backdrop-blur-2xl border border-glass-border shadow-2xl dark:border-white/10" onClick={(e) => e.stopPropagation()}>
                             <motion.button
                               whileHover={{ scale: 1.1 }}
                               whileTap={{ scale: 0.9 }}
@@ -325,10 +361,21 @@ export default function FileBrowser({
               })}
             </AnimatePresence>
           </motion.div>
+          {hasMore && onLoadMore && (
+            <div className="flex justify-center py-6 pb-40">
+              <button
+                onClick={onLoadMore}
+                disabled={isLoadingMore}
+                className="px-6 py-3 rounded-2xl glass-hover border border-glass-border text-sm font-medium text-text-secondary hover:text-foreground transition-all duration-200 disabled:opacity-50 min-h-[44px]"
+              >
+                {isLoadingMore ? "Loading..." : "Load more files"}
+              </button>
+            </div>
+          )}
         </>
       ) : (
-        <div className="p-4 pb-32 max-w-7xl mx-auto">
-          <div className="grid grid-cols-[auto_1fr_auto_auto_auto] gap-4 px-6 py-4 text-xs font-bold uppercase tracking-widest text-text-tertiary border-b border-glass-border-soft sticky top-0 z-10">
+        <div className="p-4 pb-24 sm:pb-32 md:pb-36 max-w-7xl mx-auto">
+          <div className="grid grid-cols-[auto_1fr_auto] sm:grid-cols-[auto_1fr_auto_auto] lg:grid-cols-[auto_1fr_auto_auto_auto] gap-4 px-3 sm:px-6 py-4 text-xs font-bold uppercase tracking-widest text-text-tertiary border-b border-glass-border-soft sticky top-0 z-10">
             <span className="w-6 flex justify-center items-center">
               <input
                 type="checkbox"
@@ -360,7 +407,7 @@ export default function FileBrowser({
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, x: -8 }}
-                    transition={{ duration: 0.2, delay: index * 0.02 }}
+                    transition={{ duration: 0.2, delay: Math.min(index * 0.02, 0.4) }}
                     tabIndex={0}
                     onClick={(e) => handleItemClick(item, e)}
                     onDoubleClick={() => onOpen(item)}
@@ -375,10 +422,10 @@ export default function FileBrowser({
                         onDropItem?.(item);
                       }
                     }}
-                    whileHover={{ backgroundColor: "rgba(255,255,255,0.04)" }}
+                    whileHover={{ backgroundColor: "transparent" }}
                     className={cn(
-                      "group grid grid-cols-[auto_1fr_auto_auto_auto] gap-2 sm:gap-4 px-3 sm:px-6 py-3 rounded-xl items-center cursor-pointer transition-all duration-200 outline-none border border-transparent",
-                      index % 2 === 0 ? "bg-white/[0.01]" : "",
+                      "group grid grid-cols-[auto_1fr_auto] sm:grid-cols-[auto_1fr_auto_auto] lg:grid-cols-[auto_1fr_auto_auto_auto] gap-2 sm:gap-4 px-3 sm:px-6 py-3 rounded-xl items-center cursor-pointer transition-all duration-200 outline-none border border-transparent hover:bg-glass-bg-subtle",
+                      index % 2 === 0 ? "bg-glass-bg-subtle/50" : "",
                       selected
                         ? "bg-accent/8 border-accent/15"
                         : "hover:border-glass-border-soft",
@@ -452,6 +499,17 @@ export default function FileBrowser({
               })}
             </AnimatePresence>
           </motion.div>
+          {hasMore && onLoadMore && (
+            <div className="flex justify-center py-6 pb-40">
+              <button
+                onClick={onLoadMore}
+                disabled={isLoadingMore}
+                className="px-6 py-3 rounded-2xl glass-hover border border-glass-border text-sm font-medium text-text-secondary hover:text-foreground transition-all duration-200 disabled:opacity-50 min-h-[44px]"
+              >
+                {isLoadingMore ? "Loading..." : "Load more files"}
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>
