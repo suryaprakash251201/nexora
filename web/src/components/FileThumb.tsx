@@ -57,8 +57,8 @@ export function FileThumb({ it, large, fill }: { it: FileItem; large?: boolean; 
   const isImage = it.mime.startsWith("image/") || IMAGE_EXT.includes(ext);
   const isAudio = it.mime.startsWith("audio/") || ["mp3", "flac", "wav", "ogg", "m4a"].includes(ext);
   const isVideo = it.mime.startsWith("video/") || ["mp4", "webm", "mov", "mkv", "avi"].includes(ext);
-  const dim = fill ? "h-full w-full" : large ? "h-16 w-16" : "h-9 w-9";
-
+  const dim = fill ? "h-full w-full" : large ? "h-28 w-28" : "h-9 w-9";
+  
   if (it.is_dir) {
     return <FolderTile large={large} item={it} />;
   }
@@ -79,7 +79,7 @@ export function FileThumb({ it, large, fill }: { it: FileItem; large?: boolean; 
     const { icon: Icon, color, customIcon: CustomIcon } = iconForFile(it);
     const colorClass = colorClasses[color];
     const glowClass = iconGlowClasses[color];
-    const iconDim = fill ? "h-10 w-10" : large ? "h-10 w-10" : "h-5 w-5";
+    const iconDim = fill ? "h-14 w-14" : large ? "h-14 w-14" : "h-5 w-5";
     const customSize = fill ? 64 : large ? 72 : 20;
     return (
       <div className={cn("grid place-items-center rounded-xl transition-all duration-300 group-hover:scale-105 border", colorClass, glowClass, dim)}>
@@ -123,11 +123,11 @@ export function FileThumb({ it, large, fill }: { it: FileItem; large?: boolean; 
 function AudioThumb({ it, large, fill }: { it: FileItem; large?: boolean; fill?: boolean }) {
   const [failed, setFailed] = useState(false);
   const [loaded, setLoaded] = useState(false);
-  const dim = fill ? "h-full w-full" : large ? "h-16 w-16" : "h-9 w-9";
+  const dim = fill ? "h-full w-full" : large ? "h-28 w-28" : "h-9 w-9";
 
   return (
-    <div className={cn(dim, "rounded-xl overflow-hidden relative shadow-sm group-hover:shadow-md transition-all duration-300")}>
-      {!loaded && (
+    <div className={cn(dim, "rounded-xl overflow-hidden relative transition-all duration-300")}>
+      {!loaded && !failed && (
         <div className="absolute inset-0 skeleton" />
       )}
       {!failed ? (
@@ -136,7 +136,7 @@ function AudioThumb({ it, large, fill }: { it: FileItem; large?: boolean; fill?:
             src={thumbUrl(it)}
             alt=""
             className={cn(
-              "w-full h-full object-cover transition-all duration-500 ease-out group-hover:scale-105",
+              "w-full h-full object-cover transition-all duration-500 ease-out",
               loaded ? "opacity-100 blur-0" : "opacity-0 blur-sm"
             )}
             loading="lazy"
@@ -150,8 +150,8 @@ function AudioThumb({ it, large, fill }: { it: FileItem; large?: boolean; fill?:
           )}
         </>
       ) : (
-        <div className={cn("nexora-folder nexora-folder-music grid place-items-center", dim)}>
-          <Music className={cn("nexora-folder-icon", large ? "h-8 w-8" : "h-5 w-5", "text-[rgba(236,72,153,0.95)]")} />
+        <div className={cn("w-full h-full grid place-items-center bg-rose-500/10 rounded-xl", dim)}>
+          <Music className={cn("text-rose-400/80", large ? "h-14 w-14" : "h-5 w-5")} />
         </div>
       )}
     </div>

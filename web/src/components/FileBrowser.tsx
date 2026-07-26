@@ -37,9 +37,10 @@ interface FileBrowserProps {
 
 const FileIconForItem = memo(function FileIconForItem({ item, large, fill, className }: { item: FileItem; large?: boolean; fill?: boolean; className?: string }) {
   const isImage = item.mime.startsWith("image/") || ["jpg", "jpeg", "png", "gif", "webp", "bmp", "avif"].includes((item.extension || "").toLowerCase());
+  const isAudio = item.mime.startsWith("audio/") || ["mp3", "flac", "wav", "ogg", "m4a"].includes((item.extension || "").toLowerCase());
   const dim = large ? (fill ? "h-full w-full" : "h-16 w-16") : "h-9 w-9";
 
-  if (isImage || item.is_dir) {
+  if (isImage || item.is_dir || isAudio) {
     return <FileThumb it={item} large={large} fill={fill} />;
   }
 
@@ -214,14 +215,14 @@ export default function FileBrowser({
       spacious: "p-4",
     },
     gridIcon: {
-      compact: "h-6 w-6",
-      comfortable: "h-10 w-10",
-      spacious: "h-14 w-14",
+      compact: "h-28 w-28",
+      comfortable: "h-32 w-32",
+      spacious: "h-36 w-36",
     },
     gridIconInner: {
-      compact: "h-3 w-3",
-      comfortable: "h-5 w-5",
-      spacious: "h-7 w-7",
+      compact: "h-20 w-20",
+      comfortable: "h-24 w-24",
+      spacious: "h-28 w-28",
     },
     gridName: {
       compact: "text-[11px]",
@@ -363,7 +364,7 @@ export default function FileBrowser({
                       dragOver ? "opacity-50" : ""
                     )}
                   >
-                    <div className="w-full flex justify-center mb-0 transition-transform duration-300 relative">
+                    <div className="w-full h-36 flex items-center justify-center mb-0 transition-transform duration-300 relative">
                       <FileIconForItem item={item} large className={dc.gridIcon[d]} />
 
                       {!selectMode && (
