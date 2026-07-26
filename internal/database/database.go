@@ -1,6 +1,5 @@
-// Package database wires up the SQLite connection, enables WAL mode, and runs
-// embedded migrations. PostgreSQL is supported through a build-time swap of the
-// driver, but SQLite is the default for a zero-dependency deployment.
+// Package database wires up the SQLite or PostgreSQL connection, and runs
+// embedded migrations. PostgreSQL is enabled via NEXORA_DATABASE_TYPE=postgres.
 package database
 
 import (
@@ -13,9 +12,23 @@ import (
 	"github.com/nexora/nexora/migrations"
 )
 
-// Open opens the SQLite database at dbPath, applies tuning pragmas and runs
-// migrations. The caller is responsible for calling Close.
-func Open(dbPath string) (*sql.DB, error) {
+// Open opens the database based on type. Supported: "sqlite" (default), "postgres".
+func Open(dbType, dbPath, dbURL string) (*sql.DB, error) {
+	switch dbType {
+	case "postgres":
+		if dbURL == "" {
+			return nil, fmt.Errorf("NEXORA_DATABASE_URL is required for postgres")
+		}
+		return OpenPostgres(dbURL)
+	case "sqlite":
+		return openSQLite(dbPath)
+	default:
+		return nil, fmt.Errorf("unsupported database type: %s (use 'sqlite' or 'postgres')", dbType)
+	}
+}
+
+// openSQLite opens a SQLite database with performance tuning.
+func openSQLite(dbPath string) (*sql.DB, error) {
 	dsn := fmt.Sprintf("file:%s?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)&_pragma=synchronous(NORMAL)&_pragma=cache_size(-16000)", dbPath)
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {

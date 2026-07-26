@@ -5,6 +5,7 @@ import { useUI } from "../store";
 import { codeLanguage } from "../lib/preview";
 import type { FileItem } from "../api/types";
 import { Button } from "./ui/Button";
+import { useFocusTrap } from "../lib/useFocusTrap";
 
 interface ContentResponse {
   content: string;
@@ -24,6 +25,7 @@ export default function Editor({ item, rootId, onClose }: { item: FileItem; root
   const [error, setError] = useState<string | null>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
   const gutterRef = useRef<HTMLDivElement>(null);
+  const focusTrapRef = useFocusTrap(true);
 
   const dirty = content !== original;
 
@@ -71,7 +73,7 @@ export default function Editor({ item, rootId, onClose }: { item: FileItem; root
     saveRef.current = save;
     tryCloseRef.current = tryClose;
   });
-  
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
@@ -115,10 +117,9 @@ export default function Editor({ item, rootId, onClose }: { item: FileItem; root
       const start = ta.selectionStart;
       const end = ta.selectionEnd;
       const val = ta.value;
-      
+
       setContent(val.substring(0, start) + "  " + val.substring(end));
-      
-      // Put cursor right after the inserted tab
+
       setTimeout(() => {
         ta.selectionStart = ta.selectionEnd = start + 2;
       }, 0);
@@ -126,7 +127,15 @@ export default function Editor({ item, rootId, onClose }: { item: FileItem; root
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 md:p-6 bg-black/60 backdrop-blur-sm animate-fade-in" onMouseDown={tryClose}>
+    <div
+      ref={focusTrapRef}
+      className="fixed inset-0 z-50 flex items-center justify-center p-2 md:p-6 bg-black/60 backdrop-blur-sm animate-fade-in"
+      onMouseDown={tryClose}
+      tabIndex={-1}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Edit file"
+    >
       <div className="w-full h-full max-w-7xl max-h-[90vh] flex flex-col bg-[#0d1117] rounded-2xl shadow-2xl overflow-hidden border border-[#30363d] animate-scale-in" onMouseDown={(e) => e.stopPropagation()}>
         
         {/* Editor Header */}
@@ -137,7 +146,11 @@ export default function Editor({ item, rootId, onClose }: { item: FileItem; root
             <span className="text-[10px] uppercase font-bold tracking-wider text-[#8b949e] px-2 py-0.5 rounded-md bg-[#21262d] border border-[#30363d] hidden sm:block">
               {codeLanguage(item.extension)}
             </span>
-            {dirty && <span className="text-xs font-medium text-[#D29922] bg-[#D29922]/10 px-2 py-0.5 rounded-md flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-[#D29922] animate-pulse" /> Unsaved</span>}
+            {dirty && (
+              <span className="text-xs font-medium text-[#D29922] bg-[#D29922]/10 px-2 py-0.5 rounded-md flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#D29922] animate-pulse" /> Unsaved
+              </span>
+            )}
           </div>
           
           <div className="flex items-center gap-2 shrink-0 pl-4">
@@ -173,9 +186,9 @@ export default function Editor({ item, rootId, onClose }: { item: FileItem; root
         ) : (
           <div className="flex-1 flex overflow-hidden font-mono text-[13px] leading-relaxed relative bg-[#0d1117]">
             {/* Line Numbers Gutter */}
-            <div 
-              ref={gutterRef} 
-              className="overflow-hidden select-none text-right py-4 px-3 text-[#6e7681] bg-[#0d1117] border-r border-[#30363d] shrink-0" 
+            <div
+              ref={gutterRef}
+              className="overflow-hidden select-none text-right py-4 px-3 text-[#6e7681] bg-[#0d1117] border-r border-[#30363d] shrink-0"
               style={{ minWidth: "3.5rem" }}
             >
               {Array.from({ length: Math.max(1, lineCount) }, (_, i) => (

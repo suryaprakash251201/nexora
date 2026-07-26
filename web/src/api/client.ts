@@ -1,4 +1,4 @@
-import type { ApiError } from "./types";
+import type { ApiError, SavedSearch, SavedSearchInput, SearchResult, FileVersion, StorageStats } from "./types";
 
 const CSRF_COOKIE = "nexora_csrf";
 
@@ -88,3 +88,27 @@ export const put = <T>(p: string, body?: any) => api<T>(p, { method: "PUT", body
 export const patch = <T>(p: string, body?: any) => api<T>(p, { method: "PATCH", body });
 export const del = <T>(p: string, q?: RequestOptions["query"]) => api<T>(p, { method: "DELETE", query: q });
 export const upload = <T>(p: string, form: FormData) => api<T>(p, { method: "POST", body: form, isForm: true });
+
+// Saved Searches API.
+export const savedSearchesApi = {
+  list: () => get<{ items: SavedSearch[] }>("/saved-searches"),
+  create: (input: SavedSearchInput) => post<{ saved_search: SavedSearch }>("/saved-searches", input),
+  update: (id: string, input: SavedSearchInput) => put<{ saved_search: SavedSearch }>(`/saved-searches/${id}`, input),
+  delete: (id: string) => del<{ ok: boolean }>(`/saved-searches/${id}`),
+  execute: (id: string, q?: { limit?: number; offset?: number; root?: string }) =>
+    get<{ saved_search: SavedSearch; results: SearchResult[]; limit: number; offset: number; total: number }>(`/saved-searches/${id}/execute`, q),
+};
+
+// File Versions API.
+export const versionsApi = {
+  list: (root: string, path: string) => get<{ versions: FileVersion[] }>("/files/versions", { root, path }),
+  create: (root: string, path: string, note?: string) => post<{ version: FileVersion }>("/files/versions", { root, path, note }),
+  restore: (id: string) => post<{ ok: boolean }>(`/files/versions/${id}/restore`),
+  delete: (id: string) => del<{ ok: boolean }>(`/files/versions/${id}`),
+};
+
+// Storage Stats API.
+export const statsApi = {
+  get: (root: string) => get<StorageStats>("/stats", { root }),
+  duplicates: (root: string) => get<{ duplicates: Array<{ name: string; path: string; size: number; root_id: string }[]> }>("/files/duplicates", { root }),
+};

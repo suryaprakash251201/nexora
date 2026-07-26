@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useId, useRef } from "react";
+import { type ReactNode, useEffect, useId } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { X } from "lucide-react";
 import { useFocusTrap } from "../lib/useFocusTrap";
@@ -11,9 +11,8 @@ export function Modal({ title, description, icon, onClose, children, footer }: {
   children: ReactNode;
   footer?: ReactNode;
 }) {
-  const panelRef = useRef<HTMLDivElement>(null);
+  const panelRef = useFocusTrap(true);
   const titleId = useId();
-  useFocusTrap(panelRef, true);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

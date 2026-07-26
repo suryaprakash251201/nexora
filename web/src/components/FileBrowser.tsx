@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import { staggerContainer, staggerItem } from "@/lib/animations";
 import { ZoomSlider, getGridColClass, getStoredZoom, type GridZoom } from "./ui/ZoomSlider";
 import { TagChip } from "./TagManager";
+import type { DensityMode } from "../store";
 
 interface FileBrowserProps {
   items: FileItem[];
@@ -31,9 +32,10 @@ interface FileBrowserProps {
   isLoadingMore?: boolean;
   error?: Error | null;
   onRetry?: () => void;
+  density?: DensityMode;
 }
 
-const FileIconForItem = memo(function FileIconForItem({ item, large, fill }: { item: FileItem; large?: boolean; fill?: boolean }) {
+const FileIconForItem = memo(function FileIconForItem({ item, large, fill, className }: { item: FileItem; large?: boolean; fill?: boolean; className?: string }) {
   const isImage = item.mime.startsWith("image/") || ["jpg", "jpeg", "png", "gif", "webp", "bmp", "avif"].includes((item.extension || "").toLowerCase());
   const dim = large ? (fill ? "h-full w-full" : "h-16 w-16") : "h-9 w-9";
 
@@ -47,7 +49,7 @@ const FileIconForItem = memo(function FileIconForItem({ item, large, fill }: { i
   const customSize = large ? 36 : 20;
 
   return (
-    <div className={cn("grid place-items-center rounded-xl transition-all duration-300 group-hover:scale-105", bg || "bg-surface-muted", "border", iconGlowClasses[color] || "border-glass-border-soft shadow-sm", dim)}>
+    <div className={cn("grid place-items-center rounded-xl transition-all duration-300 group-hover:scale-105", bg || "bg-surface-muted", "border", iconGlowClasses[color] || "border-glass-border-soft shadow-sm", dim, className)}>
       {CustomIcon ? (
         <CustomIcon size={customSize} className="drop-shadow-md" />
       ) : (
@@ -75,7 +77,9 @@ export default function FileBrowser({
   isLoadingMore,
   error,
   onRetry,
+  density = "comfortable",
 }: FileBrowserProps) {
+  const visibleColumns = useUI((s) => s.visibleColumns);
   const [gridZoom, setGridZoom] = useState<GridZoom>(getStoredZoom);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -197,6 +201,102 @@ export default function FileBrowser({
     );
   }
 
+  // Density-based class helpers
+  const dc = {
+    grid: {
+      compact: "p-2 gap-2",
+      comfortable: "p-3 sm:p-6 gap-3 sm:gap-5",
+      spacious: "p-4 sm:p-8 gap-4 sm:gap-6",
+    },
+    gridItem: {
+      compact: "p-3",
+      comfortable: "p-5",
+      spacious: "p-6",
+    },
+    gridIcon: {
+      compact: "h-8 w-8",
+      comfortable: "h-16 w-16",
+      spacious: "h-20 w-20",
+    },
+    gridIconInner: {
+      compact: "h-4 w-4",
+      comfortable: "h-8 w-8",
+      spacious: "h-10 w-10",
+    },
+    gridName: {
+      compact: "text-xs",
+      comfortable: "text-sm",
+      spacious: "text-base",
+    },
+    gridMeta: {
+      compact: "text-[10px]",
+      comfortable: "text-[11px]",
+      spacious: "text-xs",
+    },
+    listContainer: {
+      compact: "p-2",
+      comfortable: "p-3",
+      spacious: "p-4",
+    },
+    listHeader: {
+      compact: "px-2 py-2 text-[10px]",
+      comfortable: "px-3 sm:px-6 py-4 text-xs",
+      spacious: "px-4 sm:px-8 py-5 text-sm",
+    },
+    listRow: {
+      compact: "gap-1 sm:gap-2 px-2 sm:px-4 py-1.5",
+      comfortable: "gap-2 sm:gap-4 px-3 sm:px-6 py-3",
+      spacious: "gap-3 sm:gap-5 px-4 sm:px-8 py-4",
+    },
+    listIcon: {
+      compact: "w-5 h-5",
+      comfortable: "w-6 h-6",
+      spacious: "w-7 h-7",
+    },
+    listIconInner: {
+      compact: "w-3 h-3",
+      comfortable: "w-4 h-4",
+      spacious: "w-5 h-5",
+    },
+    listName: {
+      compact: "text-xs",
+      comfortable: "text-sm",
+      spacious: "text-base",
+    },
+    listMeta: {
+      compact: "text-[10px]",
+      comfortable: "text-xs",
+      spacious: "text-sm",
+    },
+    listKindWidth: {
+      compact: "w-24",
+      comfortable: "w-32",
+      spacious: "w-36",
+    },
+    listSizeWidth: {
+      compact: "w-16",
+      comfortable: "w-24",
+      spacious: "w-28",
+    },
+    listDateWidth: {
+      compact: "w-28",
+      comfortable: "w-40",
+      spacious: "w-44",
+    },
+    checkbox: {
+      compact: "w-3.5 h-3.5",
+      comfortable: "w-4 h-4",
+      spacious: "w-5 h-5",
+    },
+    headerCheckbox: {
+      compact: "w-3.5 h-3.5",
+      comfortable: "w-4 h-4",
+      spacious: "w-5 h-5",
+    },
+  };
+
+  const d = density;
+
   return (
     <div ref={dropZoneRef} className="flex-1 overflow-auto">
       {viewMode === "grid" ? (
@@ -208,23 +308,21 @@ export default function FileBrowser({
                   type="checkbox"
                   checked={allSelected}
                   onChange={toggleSelectAll}
-                  className="w-4 h-4 rounded border-2 border-glass-border bg-glass-bg text-accent focus:ring-accent cursor-pointer transition-all"
+                  className={cn("rounded border-2 border-glass-border bg-glass-bg text-accent focus:ring-accent cursor-pointer transition-all", dc.checkbox[d])}
                 />
                 <span className="font-medium text-text-secondary">{allSelected ? "Deselect all" : "Select all"}</span>
               </label>
               <span className="text-xs text-text-tertiary">{selection.size} of {items.length} selected</span>
             </div>
           )}
-          {viewMode === "grid" && (
-            <div className="flex justify-end px-2 mb-3 mt-2">
-              <ZoomSlider value={gridZoom} onChange={setGridZoom} />
-            </div>
-          )}
+          <div className="flex justify-end px-2 mb-3 mt-2">
+            <ZoomSlider value={gridZoom} onChange={setGridZoom} />
+          </div>
           <motion.div
             variants={staggerContainer}
             initial="initial"
             animate="animate"
-            className={cn("p-3 sm:p-6 grid gap-3 sm:gap-5 pb-16 sm:pb-32 md:pb-36", getGridColClass(gridZoom))}
+            className={cn(dc.grid[d], "grid", getGridColClass(gridZoom))}
             role="grid"
             aria-label="File grid"
           >
@@ -257,7 +355,8 @@ export default function FileBrowser({
                     whileHover={{ y: -6 }}
                     whileTap={{ scale: 0.98 }}
                     className={cn(
-                      "group relative flex flex-col items-center p-5 rounded-2xl text-center transition-all duration-200 outline-none cursor-pointer border overflow-hidden hover:shadow-glass-glow",
+                      "group relative flex flex-col items-center rounded-2xl text-center transition-all duration-200 outline-none cursor-pointer border overflow-hidden hover:shadow-glass-glow",
+                      dc.gridItem[d],
                       selected
                         ? "bg-accent/12 border-accent/35 shadow-lg shadow-accent/15"
                         : "glass border-white/[0.06] hover:border-accent-purple/30 dark:border-white/[0.06]",
@@ -318,7 +417,7 @@ export default function FileBrowser({
                     )} />
                     <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
                     <div className="w-full flex justify-center mb-4 transition-transform duration-300 relative">
-                      <FileIconForItem item={item} large />
+                      <FileIconForItem item={item} large className={dc.gridIcon[d]} />
 
                       {!selectMode && (
                         <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200">
@@ -362,7 +461,7 @@ export default function FileBrowser({
                           <label className="cursor-pointer">
                             <input
                               type="checkbox"
-                              className="w-5 h-5 rounded-md border-2 border-glass-border bg-glass-bg text-accent focus:ring-accent cursor-pointer shadow-sm"
+                              className={cn("rounded-md border-2 border-glass-border bg-glass-bg text-accent focus:ring-accent cursor-pointer shadow-sm", dc.checkbox[d])}
                               checked={selected}
                               onChange={(e) => onSelect(item, e)}
                               title="Select"
@@ -372,7 +471,7 @@ export default function FileBrowser({
                       )}
 
                       <div className="w-full min-w-0">
-                        <p className="truncate text-sm font-semibold text-foreground leading-tight group-hover:text-accent-purple transition-colors" title={item.name}>
+                        <p className={cn("truncate font-semibold leading-tight group-hover:text-accent-purple transition-colors", dc.gridName[d])} title={item.name}>
                           {item.name}
                         </p>
                         {item.tags && item.tags.length > 0 && (
@@ -380,7 +479,7 @@ export default function FileBrowser({
                             {item.tags.map(t => <TagChip key={t.id} tag={t} small />)}
                           </div>
                         )}
-                        <p className="truncate text-[11px] font-medium text-text-tertiary flex items-center justify-center gap-1.5 w-full mt-0.5">
+                        <p className={cn("truncate font-medium flex items-center justify-center gap-1.5 w-full mt-0.5", dc.gridMeta[d])}>
                           <span className="truncate">{item.is_dir ? "Folder" : formatBytes(item.size)}</span>
                           <span className="w-1 h-1 rounded-full bg-glass-border hidden sm:inline-block" />
                           <span className="truncate opacity-75">{formatDate(item.modified).split(" ")[0]}</span>
@@ -405,20 +504,30 @@ export default function FileBrowser({
           )}
         </>
       ) : (
-        <div className="p-3 pb-16 sm:pb-32 md:pb-36 max-w-7xl mx-auto">
-          <div className="grid grid-cols-[auto_1fr_auto] sm:grid-cols-[auto_1fr_auto_auto] lg:grid-cols-[auto_1fr_auto_auto_auto] gap-4 px-3 sm:px-6 py-4 text-xs font-bold uppercase tracking-widest text-text-tertiary border-b border-glass-border-soft sticky top-0 z-10">
-            <span className="w-6 flex justify-center items-center">
+        <div className={cn(dc.listContainer[d], "pb-16 sm:pb-32 md:pb-36 max-w-7xl mx-auto")}>
+          <div className={cn(
+            "grid grid-cols-[auto_1fr_auto] sm:grid-cols-[auto_1fr_auto_auto] lg:grid-cols-[auto_1fr_auto_auto_auto]",
+            "border-b border-glass-border-soft sticky top-0 z-10",
+            dc.listHeader[d]
+          )}>
+            <span className="flex justify-center items-center">
               <input
                 type="checkbox"
                 checked={allSelected}
                 onChange={toggleSelectAll}
-                className="w-4 h-4 rounded border-2 border-glass-border bg-glass-bg text-accent focus:ring-accent cursor-pointer transition-all"
+                className={cn("rounded border-2 border-glass-border bg-glass-bg text-accent focus:ring-accent cursor-pointer transition-all", dc.headerCheckbox[d])}
               />
             </span>
-            <span>Name</span>
-            <span className="w-32 text-right hidden lg:block">Kind</span>
-            <span className="w-24 text-right">Size</span>
-            <span className="w-40 text-right hidden sm:block">Modified</span>
+            <span className="truncate">Name</span>
+            {visibleColumns.kind && (
+              <span className={cn("text-right hidden lg:block truncate", dc.listKindWidth[d])}>Kind</span>
+            )}
+            {visibleColumns.size && (
+              <span className={cn("text-right truncate", dc.listSizeWidth[d])}>Size</span>
+            )}
+            {visibleColumns.modified && (
+              <span className={cn("text-right hidden sm:block truncate", dc.listDateWidth[d])}>Modified</span>
+            )}
           </div>
 
           <motion.div
@@ -455,7 +564,8 @@ export default function FileBrowser({
                     }}
                     whileHover={{ backgroundColor: "transparent" }}
                     className={cn(
-                      "group grid grid-cols-[auto_1fr_auto] sm:grid-cols-[auto_1fr_auto_auto] lg:grid-cols-[auto_1fr_auto_auto_auto] gap-2 sm:gap-4 px-3 sm:px-6 py-3 rounded-xl items-center cursor-pointer transition-all duration-200 outline-none border border-transparent hover:bg-glass-bg-subtle",
+                      "group grid items-center cursor-pointer transition-all duration-200 outline-none border border-transparent hover:bg-glass-bg-subtle",
+                      dc.listRow[d],
                       index % 2 === 0 ? "bg-glass-bg-subtle/50" : "",
                       selected
                         ? "bg-accent/8 border-accent/15"
@@ -464,24 +574,24 @@ export default function FileBrowser({
                     )}
                   >
                     <div className={cn(
-                      "w-6 flex justify-center items-center shrink-0 transition-all duration-200",
+                      "flex justify-center items-center shrink-0 transition-all duration-200",
                       selectMode || selected ? "opacity-100 scale-100" : "opacity-0 scale-75 group-hover:opacity-100 group-hover:scale-100"
                     )}>
                       <input
                         type="checkbox"
-                        className="w-4 h-4 rounded border-glass-border bg-glass-bg text-accent focus:ring-accent cursor-pointer transition-colors"
+                        className={cn("rounded border-glass-border bg-glass-bg text-accent focus:ring-accent cursor-pointer transition-colors", dc.checkbox[d])}
                         checked={selected}
                         onChange={(e) => onSelect(item, e)}
                         onClick={(e) => e.stopPropagation()}
                       />
                     </div>
 
-                    <div className="flex items-center gap-4 min-w-0">
-                      <div className="shrink-0 transition-transform duration-200 group-hover:scale-110">
-                        <FileIconForItem item={item} />
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className={cn("shrink-0 transition-transform duration-200 group-hover:scale-110", dc.listIcon[d])}>
+                        <FileIconForItem item={item} className={dc.listIconInner[d]} />
                       </div>
                       <div className="min-w-0 flex-1 flex items-center gap-3">
-                        <span className="truncate font-medium text-sm text-foreground group-hover:text-accent-purple transition-colors" title={item.name}>
+                        <span className={cn("truncate font-medium transition-colors group-hover:text-accent-purple", dc.listName[d])} title={item.name}>
                           {item.name}
                         </span>
 
@@ -515,15 +625,21 @@ export default function FileBrowser({
                         )}
                       </div>
 
-                      <span className="w-32 text-right text-xs font-medium text-text-tertiary hidden lg:block capitalize">
-                        {item.is_dir ? "Folder" : (item.extension ? item.extension.replace(/^\./, "").toUpperCase() : "File")}
-                      </span>
-                      <span className="w-24 text-right text-xs font-medium text-text-tertiary">
-                        {item.is_dir ? "—" : formatBytes(item.size)}
-                      </span>
-                      <span className="w-40 text-right text-xs font-medium text-text-tertiary hidden sm:block">
-                        {formatDate(item.modified)}
-                      </span>
+                      {visibleColumns.kind && (
+                        <span className={cn("text-right font-medium text-text-tertiary hidden lg:block capitalize truncate", dc.listKindWidth[d], dc.listMeta[d])}>
+                          {item.is_dir ? "Folder" : (item.extension ? item.extension.replace(/^\./, "").toUpperCase() : "File")}
+                        </span>
+                      )}
+                      {visibleColumns.size && (
+                        <span className={cn("text-right font-medium text-text-tertiary truncate", dc.listSizeWidth[d], dc.listMeta[d])}>
+                          {item.is_dir ? "—" : formatBytes(item.size)}
+                        </span>
+                      )}
+                      {visibleColumns.modified && (
+                        <span className={cn("text-right font-medium text-text-tertiary hidden sm:block truncate", dc.listDateWidth[d], dc.listMeta[d])}>
+                          {formatDate(item.modified)}
+                        </span>
+                      )}
                     </div>
                   </motion.div>
                 );

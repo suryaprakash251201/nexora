@@ -43,9 +43,9 @@ func main() {
 	log := logger.New(cfg.LogLevel, "nexora")
 	log.Info("starting nexora", "version", api.Version, "listen", cfg.ListenAddr)
 
-	db, err := database.Open(cfg.DatabasePath)
+	db, err := database.Open(cfg.DatabaseType, cfg.DatabasePath, cfg.DatabaseURL)
 	if err != nil {
-		log.Error("failed to open database", "error", err)
+		log.Error("failed to open database", "error", err, "type", cfg.DatabaseType)
 		os.Exit(1)
 	}
 	defer db.Close()

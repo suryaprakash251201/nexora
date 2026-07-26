@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { Search, Keyboard, Command, X, FolderOpen, File, Download, Upload, Share2, Star, Trash2, Pencil, Move, Copy, Archive, Settings, HelpCircle, RefreshCw, ChevronRight, Clock, Music, Archive as ArchiveIcon, FolderPlus, FilePlus, LayoutGrid, List, CheckSquare } from "lucide-react";
 import type { FileItem, Root, User } from "../api/types";
 import type { SidebarView } from "./Sidebar";
+import { formatBytes } from "../lib/format";
 
 interface Command {
   id: string;
@@ -10,7 +11,7 @@ interface Command {
   description: string;
   icon: React.ReactNode;
   shortcut?: string;
-  category: "navigation" | "file" | "view" | "settings" | "help";
+  category: "navigation" | "file" | "view" | "settings" | "help" | "files";
   action: () => void;
   keywords: string[];
   disabled?: boolean;
@@ -136,13 +137,35 @@ export default function CommandPalette({
   const filteredCommands = useMemo(() => {
     if (!query) return commands;
     const q = query.toLowerCase();
-    return commands.filter(cmd => 
+    const cmdResults = commands.filter(cmd => 
       cmd.label.toLowerCase().includes(q) ||
       cmd.description.toLowerCase().includes(q) ||
       cmd.keywords.some(k => k.toLowerCase().includes(q)) ||
       (cmd.shortcut && cmd.shortcut.toLowerCase().includes(q))
     );
-  }, [commands, query]);
+    
+    // Add file search results
+    const fileResults = items.filter(item =>
+      item.name.toLowerCase().includes(q)
+    ).map(item => ({
+      id: `file-${item.path}`,
+      label: item.name,
+      description: item.is_dir ? `Folder • ${activeRoot?.name || "root"}` : `${formatBytes(item.size)} • ${item.extension || "file"}`,
+      icon: item.is_dir ? <FolderOpen className="h-4 w-4" /> : <File className="h-4 w-4" />,
+      category: "files" as const,
+      action: () => {
+        // Navigate to file
+        if (item.is_dir) {
+          // Navigate into folder - would need navigation logic
+        }
+        onClose();
+      },
+      keywords: [item.name.toLowerCase()],
+      disabled: false,
+    }));
+    
+    return [...fileResults, ...cmdResults];
+  }, [commands, query, items, activeRoot, onClose]);
 
   // Handle keyboard navigation
   useEffect(() => {
@@ -203,6 +226,7 @@ export default function CommandPalette({
     view: "View Options",
     settings: "Settings",
     help: "Help",
+    files: "Files",
   };
 
   // Collect all unique shortcuts from commands

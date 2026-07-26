@@ -26,6 +26,8 @@ type Config struct {
 	ListenAddr       string
 	DataDir          string
 	DatabasePath     string
+	DatabaseType     string // "sqlite" or "postgres"
+	DatabaseURL      string // PostgreSQL connection URL
 	BaseURL          string
 	SessionSecret    string
 	SessionLifetime  time.Duration
@@ -83,6 +85,8 @@ func Load() (*Config, error) {
 		PlaylistCoverPath:   env("NEXORA_PLAYLIST_COVER_PATH", ""),
 	}
 	c.DatabasePath = env("NEXORA_DATABASE_PATH", c.DataDir+"/nexora.db")
+	c.DatabaseType = env("NEXORA_DATABASE_TYPE", "sqlite")
+	c.DatabaseURL = env("NEXORA_DATABASE_URL", "")
 	c.ThumbnailCacheDir = env("NEXORA_THUMBNAIL_CACHE_DIR", c.DataDir+"/cache/thumbnails")
 
 	if err := os.MkdirAll(c.DataDir, 0o755); err != nil {

@@ -1274,3 +1274,63 @@ body {
 .progress-ring circle {
   transition: stroke-dashoffset 0.8s ease-in-out;
 }
+
+/* ============================================================
+   Density Utilities
+   ============================================================ */
+
+/* List View Density */
+.density-compact .list-row { padding: 0.25rem 0.75rem; }
+.density-compact .list-row .file-name { font-size: 0.8125rem; }
+.density-compact .list-row .file-meta { font-size: 0.6875rem; }
+.density-compact .list-row .file-icon { width: 1.5rem; height: 1.5rem; }
+.density-compact .list-row .file-icon svg { width: 1rem; height: 1rem; }
+.density-compact .list-header { padding: 0.25rem 0.75rem; font-size: 0.625rem; }
+.density-compact .list-checkbox { width: 1rem; height: 1rem; }
+
+.density-comfortable .list-row { padding: 0.5rem 1rem; }
+.density-comfortable .list-row .file-name { font-size: 0.875rem; }
+.density-comfortable .list-row .file-meta { font-size: 0.75rem; }
+.density-comfortable .list-row .file-icon { width: 2rem; height: 2rem; }
+.density-comfortable .list-row .file-icon svg { width: 1.25rem; height: 1.25rem; }
+.density-comfortable .list-header { padding: 0.5rem 1rem; font-size: 0.6875rem; }
+.density-comfortable .list-checkbox { width: 1rem; height: 1rem; }
+
+.density-spacious .list-row { padding: 0.75rem 1.25rem; }
+.density-spacious .list-row .file-name { font-size: 1rem; }
+.density-spacious .list-row .file-meta { font-size: 0.8125rem; }
+.density-spacious .list-row .file-icon { width: 2.5rem; height: 2.5rem; }
+.density-spacious .list-row .file-icon svg { width: 1.5rem; height: 1.5rem; }
+.density-spacious .list-header { padding: 0.75rem 1.25rem; font-size: 0.75rem; }
+.density-spacious .list-checkbox { width: 1.25rem; height: 1.25rem; }
+
+/* Grid View Density */
+.density-compact .grid-item { padding: 0.5rem; }
+.density-compact .grid-item .file-icon { width: 2.5rem; height: 2.5rem; }
+.density-compact .grid-item .file-icon svg { width: 1.5rem; height: 1.5rem; }
+.density-compact .grid-item .file-name { font-size: 0.75rem; }
+.density-compact .grid-item .file-meta { font-size: 0.625rem; }
+
+.density-comfortable .grid-item { padding: 1rem; }
+.density-comfortable .grid-item .file-icon { width: 4rem; height: 4rem; }
+.density-comfortable .grid-item .file-icon svg { width: 2.5rem; height: 2.5rem; }
+.density-comfortable .grid-item .file-name { font-size: 0.875rem; }
+.density-comfortable .grid-item .file-meta { font-size: 0.75rem; }
+
+.density-spacious .grid-item { padding: 1.5rem; }
+.density-spacious .grid-item .file-icon { width: 5rem; height: 5rem; }
+.density-spacious .grid-item .file-icon svg { width: 3rem; height: 3rem; }
+.density-spacious .grid-item .file-name { font-size: 1rem; }
+.density-spacious .grid-item .file-meta { font-size: 0.8125rem; }
+
+/* Apply density to root */
+:root[data-density="compact"] .file-browser,
+:root[data-density="comfortable"] .file-browser,
+:root[data-density="spacious"] .file-browser {
+  /* density applied via class on container */
+}
+
+/* Utility to apply density via class on a wrapper */
+.density-compact { --density: compact; }
+.density-comfortable { --density: comfortable; }
+.density-spacious { --density: spacious; }

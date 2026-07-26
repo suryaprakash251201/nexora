@@ -25,6 +25,8 @@ const SharesPanel = React.lazy(() => import("./SharesPanel"));
 const PlaylistsPanel = React.lazy(() => import("./PlaylistsPanel"));
 const VideoView = React.lazy(() => import("./VideoView"));
 const ImageView = React.lazy(() => import("./ImageView"));
+const SavedSearchesPanel = React.lazy(() => import("./SavedSearchesPanel"));
+const StorageAnalyticsPanel = React.lazy(() => import("./StorageAnalyticsPanel").then(m => ({ default: m.default })));
 import { TagPicker } from "./TagManager";
 import { MobileNav } from "./layout/MobileNav";
 import { PlaylistPickerPopover } from "./PlaylistAdder";
@@ -65,6 +67,7 @@ export default function Workspace({ user }: { user: User }) {
   const pushToast = useUI((s) => s.pushToast);
   const viewMode = useUI((s) => s.viewMode);
   const setViewMode = useUI((s) => s.setViewMode);
+  const density = useUI((s) => s.density);
 
   const isAdmin = user.role === "admin";
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -87,6 +90,8 @@ export default function Workspace({ user }: { user: User }) {
   else if (pathname === "/favorites") view = "favorites";
   else if (pathname === "/recents") view = "recents";
   else if (pathname === "/playlists") view = "playlists";
+  else if (pathname === "/saved-searches") view = "saved-searches";
+  else if (pathname === "/analytics") view = "analytics";
   else if (pathname.startsWith("/admin")) view = "admin";
   
   const roots = useQuery({ queryKey: ["roots"], queryFn: () => get<{ roots: Root[] }>("/roots") });
@@ -110,6 +115,8 @@ export default function Workspace({ user }: { user: User }) {
           pendingFilesView.current = true;
         }
       }
+      else if (v === "saved-searches") navigate("/saved-searches");
+      else if (v === "analytics") navigate("/analytics");
       else if (v === "search") navigate("/search");
       else if (v === "trash") navigate("/trash");
       else if (v === "shares") navigate("/shares");
@@ -476,6 +483,7 @@ export default function Workspace({ user }: { user: User }) {
                 isLoadingMore={files.isFetching && fileOffset > 0}
                 error={files.error as Error | null}
                 onRetry={() => { setFileOffset(0); setAccumulatedItems([]); files.refetch(); }}
+                density={density}
               />
             )}
             {view === "trash" && <TrashView items={trash.data?.items || []} loading={trash.isLoading} onRestore={async (id) => { await post("/trash/restore", { id }); refresh(); }} onDelete={async (id) => { await del("/trash", { id }); refresh(); }} selection={selection} selectMode={selectMode} onSelect={(id) => toggleSelect(id)} />}
@@ -512,6 +520,19 @@ export default function Workspace({ user }: { user: User }) {
                   </div>
                 </div>
               )
+            )}
+            {view === "saved-searches" && (
+              <Suspense fallback={<div className="flex-1 grid place-items-center text-content-muted">Loading...</div>}>
+                <SavedSearchesPanel roots={roots.data?.roots || []} />
+              </Suspense>
+            )}
+            {view === "analytics" && (
+              <Suspense fallback={<div className="flex-1 grid place-items-center text-content-muted">Loading...</div>}>
+                <StorageAnalyticsPanel
+                  roots={roots.data?.roots || []}
+                  onNavigateToFile={(rid, p) => navigateTo(rid, p, false, "")}
+                />
+              </Suspense>
             )}
             {view === "search" && (
               <SearchView

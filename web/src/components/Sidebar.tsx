@@ -1,4 +1,4 @@
-import { Trash2, Plus, Share2, Clock, Star, Search, Shield, ListMusic, Home, PanelLeftClose, PanelLeftOpen, LogOut } from "lucide-react";
+import { Trash2, Plus, Share2, Clock, Star, Search, Shield, ListMusic, Home, PanelLeftClose, PanelLeftOpen, LogOut, Filter } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import type { Root } from "../api/types";
 import { rootIcon } from "../lib/rootIcons";
@@ -7,7 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { formatBytes } from "../lib/format";
 
-export type SidebarView = "home" | "files" | "trash" | "favorites" | "recents" | "shares" | "playlists" | "search" | "admin" | "video" | "image";
+export type SidebarView = "home" | "files" | "trash" | "favorites" | "recents" | "shares" | "playlists" | "search" | "admin" | "video" | "image" | "saved-searches" | "analytics";
 
 const viewColors: Record<string, string> = {
   home: "#5B8CFF",
@@ -124,6 +124,8 @@ export default function Sidebar({
         <nav aria-label="Main navigation" className={cn("flex-1 overflow-y-auto space-y-0.5", collapsed ? "px-2 w-full" : "px-2 w-full")}>
           <NavItem v="home" icon={<Home className="w-[18px] h-[18px]" />} label="Home" isActive={view === "home"} collapsed={collapsed} onSelectView={onSelectView} />
           <NavItem v="search" icon={<Search className="w-[18px] h-[18px]" />} label="Search" isActive={view === "search"} collapsed={collapsed} onSelectView={onSelectView} />
+          <NavItem v="saved-searches" icon={<Filter className="w-[18px] h-[18px]" />} label="Smart Folders" isActive={view === "saved-searches"} collapsed={collapsed} onSelectView={onSelectView} />
+          <NavItem v="analytics" icon={<svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18" /></svg>} label="Analytics" isActive={view === "analytics"} collapsed={collapsed} onSelectView={onSelectView} />
           <div className="my-1.5 mx-3 h-px bg-white/[0.06]" />
         
           <NavItem v="recents" icon={<Clock className="w-[18px] h-[18px]" />} label="Recent" isActive={view === "recents"} collapsed={collapsed} onSelectView={onSelectView} />

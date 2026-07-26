@@ -15,12 +15,19 @@ import {
   X,
   Filter,
   Command,
+  Maximize2,
+  Minimize2,
+  Columns,
+  FileType2,
+  Database,
+  Calendar,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import Breadcrumbs from "./Breadcrumbs";
 import ProfileMenu from "./ProfileMenu";
 import type { User } from "../api/types";
 import { useUI } from "../store";
+import type { DensityMode, ColumnKey } from "../store";
 import { Button } from "./ui/Button";
 import { useClickOutside } from "./hooks/useClickOutside";
 import { cn } from "@/lib/utils";
@@ -80,19 +87,28 @@ export default function CommandBar({
 }: CommandBarProps) {
   const viewMode = useUI((s) => s.viewMode);
   const setViewMode = useUI((s) => s.setViewMode);
+  const density = useUI((s) => s.density);
+  const setDensity = useUI((s) => s.setDensity);
+  const visibleColumns = useUI((s) => s.visibleColumns);
+  const toggleColumn = useUI((s) => s.toggleColumn);
+
   const [menuOpen, setMenuOpen] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
   const [sortOpen, setSortOpen] = useState(false);
+  const [columnsOpen, setColumnsOpen] = useState(false);
   const [searchFocused, setSearchFocused] = useState(false);
   const [menuPos, setMenuPos] = useState<{ top: number; right: number }>({ top: 0, right: 0 });
   const [filterPos, setFilterPos] = useState<{ top: number; right: number }>({ top: 0, right: 0 });
   const [sortPos, setSortPos] = useState<{ top: number; right: number }>({ top: 0, right: 0 });
+  const [columnsPos, setColumnsPos] = useState<{ top: number; right: number }>({ top: 0, right: 0 });
   const newBtnRef = useRef<HTMLButtonElement>(null);
   const filterBtnRef = useRef<HTMLButtonElement>(null);
   const sortBtnRef = useRef<HTMLButtonElement>(null);
+  const columnsBtnRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const filterRef = useRef<HTMLDivElement>(null);
   const sortRef = useRef<HTMLDivElement>(null);
+  const columnsRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
   const clampMenuPos = (r: DOMRect) => {
@@ -113,6 +129,7 @@ export default function CommandBar({
     setMenuOpen((o) => !o);
     setFilterOpen(false);
     setSortOpen(false);
+    setColumnsOpen(false);
   };
 
   const toggleFilter = () => {
@@ -121,6 +138,7 @@ export default function CommandBar({
     setFilterOpen((o) => !o);
     setMenuOpen(false);
     setSortOpen(false);
+    setColumnsOpen(false);
   };
 
   const toggleSort = () => {
@@ -129,18 +147,29 @@ export default function CommandBar({
     setSortOpen((o) => !o);
     setMenuOpen(false);
     setFilterOpen(false);
+    setColumnsOpen(false);
+  };
+
+  const toggleColumnsMenu = () => {
+    const r = columnsBtnRef.current?.getBoundingClientRect();
+    if (r) setColumnsPos(clampMenuPos(r));
+    setColumnsOpen((o) => !o);
+    setMenuOpen(false);
+    setFilterOpen(false);
+    setSortOpen(false);
   };
 
   const closeAllMenus = () => {
     setMenuOpen(false);
     setFilterOpen(false);
     setSortOpen(false);
+    setColumnsOpen(false);
   };
 
   useClickOutside(
-    [menuRef, newBtnRef, filterRef, filterBtnRef, sortRef, sortBtnRef],
+    [menuRef, newBtnRef, filterRef, filterBtnRef, sortRef, sortBtnRef, columnsRef, columnsBtnRef],
     closeAllMenus,
-    menuOpen || filterOpen || sortOpen,
+    menuOpen || filterOpen || sortOpen || columnsOpen,
   );
 
   const inSelectionMode = selectionCount > 0;
@@ -165,7 +194,7 @@ export default function CommandBar({
   return (
     <div className="relative z-30 mx-3 mt-3 mb-0 sm:mx-4 sm:mt-4">
       <div className="glass rounded-2xl flex items-center gap-1.5 sm:gap-3 px-2.5 sm:px-5 h-13 sm:h-16">
-        {/* Left: Breadcrumbs */}
+        {/* Left: Breadcrumbs + Search */}
         <div className="min-w-0 flex-1 flex items-center gap-2 sm:gap-3">
           <Breadcrumbs rootName={rootName} path={path} onNavigate={onNavigate} />
 
@@ -277,51 +306,90 @@ export default function CommandBar({
               <LayoutGrid className="h-4 w-4" />
             </button>
           </div>
-        </div>
 
-        {/* Separator + Actions */}
-        <div className="flex items-center gap-1.5 border-l border-glass-border pl-3 ml-1">
-          {canWrite && !inSelectionMode && (
-            <>
-              <Button
-                ref={newBtnRef}
-                variant="primary"
-                onClick={toggleMenu}
-                size="sm"
-                className="hidden sm:inline-flex"
+          {/* Density Selector */}
+          <div className="flex rounded-xl overflow-hidden bg-glass-bg-subtle p-0.5 border border-glass-border-soft ml-1.5">
+            {([
+              { value: "compact", label: "Compact", icon: Minimize2 },
+              { value: "comfortable", label: "Comfortable", icon: Maximize2 },
+              { value: "spacious", label: "Spacious", icon: Maximize2 },
+            ] as const).map((d) => (
+              <button
+                key={d.value}
+                onClick={() => setDensity(d.value as DensityMode)}
+                className={cn(
+                  "p-1.5 rounded-lg transition-all duration-200 min-w-[32px] min-h-[32px] relative",
+                  density === d.value
+                    ? "bg-glass-bg-strong text-foreground shadow-sm"
+                    : "text-text-tertiary hover:text-foreground"
+                )}
+                title={d.label}
+                aria-label={d.label}
+                aria-pressed={density === d.value}
               >
-                <FolderPlus className="h-4 w-4 mr-1" /> New
-                <ChevronDown className="h-4 w-4 ml-1" />
-              </Button>
-              <Button
-                variant="secondary"
-                onClick={onUpload}
-                size="sm"
-                className="hidden sm:inline-flex"
-                icon={<Upload className="h-4 w-4" />}
-              >
-                Upload
-              </Button>
-            </>
-          )}
+                <d.icon className={cn("h-4 w-4", density === d.value && "text-accent")} />
+              </button>
+            ))}
+          </div>
 
-          {inSelectionMode && (
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs font-medium text-foreground mr-1">
-                {selectionCount}
-              </span>
-              <div className="flex rounded-xl overflow-hidden bg-glass-bg-subtle p-0.5">
-                <Button variant="ghost" size="xs" icon={<Download className="h-3.5 w-3.5" />} onClick={() => onSelectionAction("download")}>DL</Button>
-                <Button variant="ghost" size="xs" icon={<Share2 className="h-3.5 w-3.5" />} onClick={() => onSelectionAction("share")}>Share</Button>
-                <Button variant="ghost" size="xs" onClick={() => onSelectionAction("tag")}>Tags...</Button>
-                <Button variant="ghost" size="xs" icon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => onSelectionAction("delete")} className="text-danger">Del</Button>
-                <Button variant="ghost" size="xs" onClick={onExitSelection}><X className="h-3.5 w-3.5" /></Button>
+          {/* Column Picker */}
+          <div className="flex items-center gap-1.5 ml-1.5">
+            <button
+              ref={columnsBtnRef}
+              onClick={toggleColumnsMenu}
+              className={`p-2 rounded-xl glass-hover transition-colors hidden sm:block min-w-[36px] min-h-[36px] ${visibleColumns.kind || visibleColumns.size || visibleColumns.modified ? "text-accent-tertiary" : "text-text-secondary hover:text-foreground"}`}
+              title="Visible columns"
+              aria-label="Visible columns"
+              aria-expanded={columnsOpen}
+            >
+              <Columns className="h-4 w-4" />
+            </button>
+          </div>
+
+          {/* Separator + Actions */}
+          <div className="flex items-center gap-1.5 border-l border-glass-border pl-3 ml-1">
+            {canWrite && !inSelectionMode && (
+              <>
+                <Button
+                  ref={newBtnRef}
+                  variant="primary"
+                  onClick={toggleMenu}
+                  size="sm"
+                  className="hidden sm:inline-flex"
+                >
+                  <FolderPlus className="h-4 w-4 mr-1" /> New
+                  <ChevronDown className="h-4 w-4 ml-1" />
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={onUpload}
+                  size="sm"
+                  className="hidden sm:inline-flex"
+                  icon={<Upload className="h-4 w-4" />}
+                >
+                  Upload
+                </Button>
+              </>
+            )}
+
+            {inSelectionMode && (
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-medium text-foreground mr-1">
+                  {selectionCount}
+                </span>
+                <div className="flex rounded-xl overflow-hidden bg-glass-bg-subtle p-0.5">
+                  <Button variant="ghost" size="xs" icon={<Download className="h-3.5 w-3.5" />} onClick={() => onSelectionAction("download")}>DL</Button>
+                  <Button variant="ghost" size="xs" icon={<Share2 className="h-3.5 w-3.5" />} onClick={() => onSelectionAction("share")}>Share</Button>
+                  <Button variant="ghost" size="xs" onClick={() => onSelectionAction("tag")}>Tags...</Button>
+                  <Button variant="ghost" size="xs" icon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => onSelectionAction("delete")} className="text-danger">Del</Button>
+                  <Button variant="ghost" size="xs" onClick={onExitSelection}><X className="h-3.5 w-3.5" /></Button>
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
-          <div className="pl-1">
-            <ProfileMenu user={user} isAdmin={isAdmin} onLogout={onLogout} onAdmin={onAdmin} />
+            <div className="pl-1">
+              <ProfileMenu user={user} isAdmin={isAdmin} onLogout={onLogout} onAdmin={onAdmin} />
+            </div>
           </div>
         </div>
       </div>
@@ -407,6 +475,7 @@ export default function CommandBar({
         document.body,
       )}
 
+      {/* Filter Menu */}
       {filterOpen && createPortal(
         <motion.div
           ref={filterRef}
@@ -435,6 +504,7 @@ export default function CommandBar({
         document.body,
       )}
 
+      {/* Sort Menu */}
       {sortOpen && createPortal(
         <motion.div
           ref={sortRef}
@@ -458,6 +528,42 @@ export default function CommandBar({
               {opt.label}
               {sort === opt.value && <ChevronDown className="h-4 w-4 ml-auto text-accent-purple" />}
             </button>
+          ))}
+        </motion.div>,
+        document.body,
+      )}
+
+      {/* Column Picker Menu */}
+      {columnsOpen && createPortal(
+        <motion.div
+          ref={columnsRef}
+          initial={{ opacity: 0, scale: 0.95, y: -4 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          transition={{ duration: 0.15 }}
+          style={{ top: columnsPos.top, right: columnsPos.right }}
+          className="fixed z-50 w-56 menu-surface rounded-xl p-1.5 shadow-2xl"
+          role="menu"
+        >
+          <div className="px-3 py-2 text-xs font-semibold uppercase tracking-widest text-text-tertiary">Visible Columns</div>
+          <div className="h-px w-full bg-glass-border-soft my-1" />
+          {[
+            { key: "kind", label: "Kind", icon: FileType2 },
+            { key: "size", label: "Size", icon: Database },
+            { key: "modified", label: "Modified", icon: Calendar },
+          ].map((col) => (
+            <label
+              key={col.key}
+              className="w-full flex items-center gap-3 px-3 py-2 text-sm rounded-lg cursor-pointer transition-colors hover:bg-glass-bg-subtle"
+            >
+              <input
+                type="checkbox"
+                checked={visibleColumns[col.key as keyof typeof visibleColumns]}
+                onChange={() => toggleColumn(col.key as ColumnKey)}
+                className="w-4 h-4 rounded border-glass-border bg-glass-bg text-accent focus:ring-accent cursor-pointer"
+              />
+              <col.icon className="h-4 w-4 text-text-tertiary shrink-0" />
+              <span>{col.label}</span>
+            </label>
           ))}
         </motion.div>,
         document.body,

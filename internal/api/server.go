@@ -10,6 +10,7 @@ import (
 	"github.com/nexora/nexora/internal/audit"
 	"github.com/nexora/nexora/internal/auth"
 	"github.com/nexora/nexora/internal/config"
+	"github.com/nexora/nexora/internal/events"
 	"github.com/nexora/nexora/internal/jobs"
 	"github.com/nexora/nexora/internal/logger"
 	"github.com/nexora/nexora/internal/metrics"
@@ -38,6 +39,7 @@ type Server struct {
 	Jobs         *jobs.Manager
 	Preview      *preview.Service
 	Metrics      *metrics.Registry
+	Events       *events.Bus
 	WebRoot      string
 }
 
@@ -157,6 +159,12 @@ func (s *Server) Routes() http.Handler {
 	authed.Get("/files/content", s.handleGetContent)
 	authed.Post("/files/save", s.handleSaveContent)
 
+	// File versioning.
+	authed.Get("/files/versions", s.handleListVersions)
+	authed.Post("/files/versions", s.handleCreateVersion)
+	authed.Post("/files/versions/{id}/restore", s.handleRestoreVersion)
+	authed.Delete("/files/versions/{id}", s.handleDeleteVersion)
+
 	// Search.
 	authed.Get("/search", s.handleSearch)
 
@@ -195,6 +203,17 @@ func (s *Server) Routes() http.Handler {
 	authed.Delete("/files/tag", s.handleUntagFile)
 
 	// Share links (authenticated management).
+
+	authed.Get("/saved-searches", s.handleListSavedSearches)
+	authed.Post("/saved-searches", s.handleCreateSavedSearch)
+	authed.Put("/saved-searches/{id}", s.handleUpdateSavedSearch)
+	authed.Delete("/saved-searches/{id}", s.handleDeleteSavedSearch)
+
+	// Webhooks
+	authed.Get("/webhooks", s.handleListWebhooks)
+	authed.Post("/webhooks", s.handleCreateWebhook)
+	authed.Delete("/webhooks/{id}", s.handleDeleteWebhook)
+	authed.Get("/saved-searches/{id}/execute", s.handleExecuteSavedSearch)
 	authed.Get("/shares", s.handleListShares)
 	authed.Post("/shares", s.handleCreateShare)
 	authed.Delete("/shares/{id}", s.handleRevokeShare)

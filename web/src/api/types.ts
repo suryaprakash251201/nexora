@@ -194,3 +194,57 @@ export interface FileTag {
   path: string;
 }
 
+export interface SavedSearch {
+  id: string;
+  name: string;
+  query: string;
+  filters: string;
+  sort: string;
+  sort_order: string;
+  root_id?: string;
+  icon?: string;
+  color?: string;
+  is_pinned: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SavedSearchInput {
+  name: string;
+  query: string;
+  filters?: string;
+  sort?: string;
+  sort_order?: string;
+  root_id?: string;
+  icon?: string;
+  color?: string;
+  is_pinned?: boolean;
+}
+
+export interface FileVersion {
+  id: string;
+  root_id: string;
+  path: string;
+  version: number;
+  size: number;
+  checksum: string;
+  note: string;
+  created_at: string;
+}
+
+export interface StorageStats {
+  total_files: number;
+  total_size: number;
+  breakdown: Record<string, { count: number; size: number }>;
+  largest: Array<{ name: string; path: string; size: number; root_id: string }>;
+}
+
+export interface DuplicateGroup {
+  groups: Array<{
+    name: string;
+    path: string;
+    size: number;
+    root_id: string;
+  }>[];
+}
+

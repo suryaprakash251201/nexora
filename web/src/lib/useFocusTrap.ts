@@ -1,4 +1,4 @@
-import { useEffect, type RefObject } from "react";
+import { useEffect, useRef } from "react";
 
 const FOCUSABLE =
   'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -6,7 +6,9 @@ const FOCUSABLE =
 // useFocusTrap traps Tab focus within the referenced element while `active`,
 // moves focus to the first focusable element on open, and restores focus to
 // the previously focused element on close. Used for accessible dialogs.
-export function useFocusTrap(ref: RefObject<HTMLElement | null>, active: boolean) {
+export function useFocusTrap(active = true) {
+  const ref = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     if (!active || !ref.current) return;
     const container = ref.current;
@@ -44,5 +46,7 @@ export function useFocusTrap(ref: RefObject<HTMLElement | null>, active: boolean
       container.removeEventListener("keydown", onKey);
       previouslyFocused?.focus?.();
     };
-  }, [ref, active]);
+  }, [active]);
+
+  return ref;
 }

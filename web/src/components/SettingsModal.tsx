@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type MouseEvent } from "react";
+import { useEffect, useState, type MouseEvent } from "react";
 import { createPortal } from "react-dom";
 import { KeyRound, Smartphone, Shield, ShieldAlert, Check, AlertCircle, ArrowLeft, ChevronRight, X, Sun, Moon } from "lucide-react";
 import { useTheme } from "next-themes";
@@ -18,8 +18,7 @@ export default function SettingsModal({ user, onClose }: { user: User; onClose: 
   const { theme, setTheme } = useTheme();
   const [accent, setAccent] = useAccentTheme();
   const queryClient = useQueryClient();
-  const dialogRef = useRef<HTMLDivElement>(null);
-  useFocusTrap(dialogRef, true);
+  const dialogRef = useFocusTrap(true);
 
   const setTotpStatus = (enabled: boolean) => {
     queryClient.setQueryData<{ user: User }>(["session"], (current) => (

@@ -1,0 +1,44 @@
+# Docker Compose override for PostgreSQL deployment.
+# Usage: docker compose -f docker-compose.yml -f docker-compose.postgres.yml up -d
+#
+# This config adds a PostgreSQL 16 container and configures Nexora to use it.
+# The SQLite database is retained as a backup; PostgreSQL becomes the primary.
+
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: nexora-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: nexora
+      POSTGRES_PASSWORD: ${NEXORA_POSTGRES_PASSWORD:-nexora_secret_change_me}
+      POSTGRES_DB: nexora
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nexora -d nexora"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - nexora-net
+
+  nexora:
+    environment:
+      NEXORA_DATABASE_TYPE: postgres
+      NEXORA_DATABASE_URL: "postgres://nexora:${NEXORA_POSTGRES_PASSWORD:-nexora_secret_change_me}@postgres:5432/nexora?sslmode=disable"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+
+networks:
+  nexora-net:
+    driver: bridge

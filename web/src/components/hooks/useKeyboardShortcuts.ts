@@ -49,10 +49,10 @@ export function useKeyboardShortcuts({
         e.preventDefault();
         setCommandPaletteOpen(true);
       }
-      // Keyboard shortcuts modal
-      else if (e.key === '?' && setShortcutsModalOpen) {
+      // Keyboard shortcuts modal (Cmd+/ or Shift+/ for ?)
+      else if ((mod && e.key === '/') || e.key === '?') {
         e.preventDefault();
-        setShortcutsModalOpen(true);
+        if (setShortcutsModalOpen) setShortcutsModalOpen(true);
       }
       // Search
       else if (e.key === '/') {
