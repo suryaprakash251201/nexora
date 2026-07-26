@@ -37,14 +37,13 @@ import FolderPickerModal from "./FolderPickerModal";
 import ProfileMenu from "./ProfileMenu";
 import CommandPalette from "./CommandPalette";
 import KeyboardShortcutsModal from "./KeyboardShortcutsModal";
-import SelectionBar from "./SelectionBar";
 import { formatDate } from "../lib/format";
 import { SkeletonList } from "./ui/Skeleton";
 import { isEditable } from "../lib/preview";
 import {
   Download, Trash2, Pencil, Copy, Eye, FolderOpen, RotateCcw,
   Star, Share2, Archive, FolderInput, FileEdit, ListMusic, HardDrive, Upload,
-  Move, Info, Tag as TagIcon
+  Move, Info, Tag as TagIcon, CheckSquare, X
 } from "lucide-react";
 
 // Hooks
@@ -361,7 +360,10 @@ export default function Workspace({ user }: { user: User }) {
         { label: "Delete", icon: <Trash2 className="h-4 w-4" />, danger: true, onClick: () => doDelete(item.path) },
       );
     }
-    menuItems.push({ label: "Properties", icon: <Info className="h-4 w-4" />, onClick: () => openDrawer(item.path) });
+    menuItems.push(
+      { label: "Select", icon: <CheckSquare className="h-4 w-4" />, onClick: () => { toggleSelect(item.path); useUI.getState().setSelectMode(true); } },
+      { label: "Properties", icon: <Info className="h-4 w-4" />, onClick: () => openDrawer(item.path) },
+    );
     return menuItems;
   };
 
@@ -456,6 +458,35 @@ export default function Workspace({ user }: { user: User }) {
 
         <input ref={fileInput} type="file" multiple className="hidden" onChange={(e) => { uploadFiles(e.target.files); e.target.value = ""; }} />
 
+        {selectMode && selection.size > 0 && (
+          <div className="flex items-center gap-2 px-4 sm:px-6 py-2 border-b border-glass-border-soft bg-glass-bg-subtle backdrop-blur-sm">
+            <span className="text-sm font-semibold text-content whitespace-nowrap shrink-0">{selection.size} selected</span>
+            <div className="w-px h-5 bg-border/40 shrink-0" />
+            <div className="flex items-center gap-1.5 overflow-x-auto">
+              <button onClick={() => handleSelectionAction("download")} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-xl glass-hover border border-border/30 transition-all hover:bg-surface/80 text-content-muted hover:text-content whitespace-nowrap">
+                <Download className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Download</span>
+              </button>
+              <button onClick={() => handleSelectionAction("move")} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-xl glass-hover border border-border/30 transition-all hover:bg-surface/80 text-content-muted hover:text-content whitespace-nowrap">
+                <Move className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Move</span>
+              </button>
+              <button onClick={() => handleSelectionAction("copy")} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-xl glass-hover border border-border/30 transition-all hover:bg-surface/80 text-content-muted hover:text-content whitespace-nowrap">
+                <Copy className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Copy</span>
+              </button>
+              <button onClick={() => handleSelectionAction("share")} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-xl glass-hover border border-border/30 transition-all hover:bg-surface/80 text-content-muted hover:text-content whitespace-nowrap">
+                <Share2 className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Share</span>
+              </button>
+              <button onClick={() => handleSelectionAction("delete")} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-xl glass-hover border border-red-500/20 transition-all hover:bg-red-500/10 text-red-400 hover:text-red-300 whitespace-nowrap">
+                <Trash2 className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Delete</span>
+              </button>
+            </div>
+            <div className="ml-auto flex items-center gap-1.5 shrink-0">
+              <button onClick={() => { clearSelection(); useUI.getState().setSelectMode(false); }} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-xl glass-hover border border-border/30 transition-all hover:bg-surface/80 text-content-muted hover:text-content whitespace-nowrap">
+                <X className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Clear</span>
+              </button>
+            </div>
+          </div>
+        )}
+
         <motion.main
           key={view === "files" ? `files:${rootId ?? ""}:${path}` : view}
           initial={{ opacity: 0, y: 8 }}
@@ -547,19 +578,7 @@ export default function Workspace({ user }: { user: User }) {
             </Suspense>
           </motion.main>
 
-        {!videoItem && (
-          <SelectionBar
-            count={selection.size}
-            onDownload={() => handleSelectionAction("download")}
-            onMove={() => handleSelectionAction("move")}
-            onCopy={() => handleSelectionAction("copy")}
-            onDelete={() => handleSelectionAction("delete")}
-            onShare={() => handleSelectionAction("share")}
-            onArchive={() => handleSelectionAction("archive")}
-            onFavorite={() => handleSelectionAction("favorite")}
-            onClear={clearSelection}
-          />
-        )}
+        {!videoItem && null}
 
         <PlayerBar />
       </div>

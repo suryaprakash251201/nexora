@@ -10,7 +10,6 @@ import { EmptyState } from "./ui/EmptyState";
 import { SkeletonGrid, SkeletonList } from "./ui/Skeleton";
 import { cn } from "@/lib/utils";
 import { staggerContainer, staggerItem } from "@/lib/animations";
-import { ZoomSlider, getGridColClass, getStoredZoom, type GridZoom } from "./ui/ZoomSlider";
 import { TagChip } from "./TagManager";
 import type { DensityMode } from "../store";
 
@@ -81,7 +80,6 @@ export default function FileBrowser({
   density = "comfortable",
 }: FileBrowserProps) {
   const visibleColumns = useUI((s) => s.visibleColumns);
-  const [gridZoom, setGridZoom] = useState<GridZoom>(getStoredZoom);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const dropZoneRef = useRef<HTMLDivElement>(null);
@@ -316,14 +314,11 @@ export default function FileBrowser({
               <span className="text-xs text-text-tertiary">{selection.size} of {items.length} selected</span>
             </div>
           )}
-          <div className="flex justify-end px-2 mb-3 mt-2">
-            <ZoomSlider value={gridZoom} onChange={setGridZoom} />
-          </div>
           <motion.div
             variants={staggerContainer}
             initial="initial"
             animate="animate"
-            className={cn(dc.grid[d], "grid", getGridColClass(gridZoom))} style={{ gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))" }}
+            className={cn(dc.grid[d], "grid")} style={{ gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))" }}
             role="grid"
             aria-label="File grid"
           >
@@ -382,7 +377,10 @@ export default function FileBrowser({
                             <motion.button
                               whileHover={{ scale: 1.1 }}
                               whileTap={{ scale: 0.9 }}
-                              onClick={(e) => { e.stopPropagation(); onContextMenu(e, item); }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onContextMenu(e, item);
+                              }}
                               className="p-2 rounded-xl text-text-secondary hover:bg-glass-bg hover:text-foreground transition-colors"
                               title="More actions"
                             >

@@ -42,7 +42,7 @@ export function ZoomSlider({ value, onChange }: { value: GridZoom; onChange: (v:
   const idx = zoomLevels.findIndex((z) => z.value === value);
 
   return (
-    <div className="flex items-center gap-1 p-1 rounded-xl glass-subtle border border-white/[0.06]">
+    <div className="flex items-center gap-1">
       {zoomLevels.map((z, i) => {
         const Icon = z.icon;
         const active = i === idx;
