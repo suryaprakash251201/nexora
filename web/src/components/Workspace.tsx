@@ -209,15 +209,12 @@ export default function Workspace({ user }: { user: User }) {
   const imageList = useMemo(() => filtered.filter((i) => (i.mime || "").startsWith("image/") || ["jpg", "jpeg", "png", "gif", "webp", "bmp", "avif"].includes((i.extension || "").toLowerCase())), [filtered]);
 
   const refresh = useCallback(() => {
-    setFileOffset(0);
-    setAccumulatedItems([]);
-    setHasMoreFiles(false);
-    qc.invalidateQueries({ queryKey: ["files", rootId, path] });
+    qc.invalidateQueries({ queryKey: ["files", rootId, path, sort, order, fileOffset] });
     qc.invalidateQueries({ queryKey: ["trash"] });
     qc.invalidateQueries({ queryKey: ["roots"] });
     qc.invalidateQueries({ queryKey: ["favorites"] });
     qc.invalidateQueries({ queryKey: ["fav-set"] });
-  }, [qc, rootId, path]);
+  }, [qc, rootId, path, sort, order, fileOffset]);
 
   // Use custom hooks
   const { uploadFiles, downloadItem } = useTransfers(rootId, path, refresh);
