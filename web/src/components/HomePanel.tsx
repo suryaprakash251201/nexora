@@ -296,14 +296,14 @@ export default function HomePanel({
       {/* Hero Banner */}
       <div className="relative overflow-hidden border-b border-glass-border bg-surface/20">
         <div className="absolute inset-0 bg-gradient-to-r from-accent/10 via-transparent to-transparent opacity-50" />
-        <div className="max-w-6xl mx-auto px-6 py-10 md:py-14 relative z-10">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-10 md:py-14 relative z-10">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, ease: [0.25, 0.1, 0.25, 1] }}>
             <div className="flex items-center gap-4 mb-2">
               <div className="p-3 rounded-2xl bg-accent/10 text-accent">
                 {greetingIcon}
               </div>
               <div>
-                <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-text-primary via-accent to-accent-secondary">
+                <h1 className="text-2xl sm:text-3xl md:text-4xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-text-primary via-accent to-accent-secondary">
                   {greeting}
                 </h1>
                 <p className="text-content-muted text-base md:text-lg max-w-2xl">
@@ -332,7 +332,7 @@ export default function HomePanel({
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto px-6 py-10 space-y-12 pb-28 md:pb-24">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-10 space-y-8 sm:space-y-12 pb-28 md:pb-24">
         {isLoading && (
           <div className="space-y-8 animate-pulse">
             <div>

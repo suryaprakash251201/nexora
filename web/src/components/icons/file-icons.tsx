@@ -282,6 +282,68 @@ export function ShellIcon({ size, ...p }: IconProps) {
   );
 }
 
+/* ── Env ─────────────────────────────────────── */
+export function EnvIcon({ size, ...p }: IconProps) {
+  return (
+    <svg {...d(size)} {...p}>
+      <rect x="2" y="2" width="20" height="20" rx="3" fill="#A855F7" />
+      <path d="M6 8h3l1.5 5.5L12 8h3M6 14h3" stroke="#fff" strokeWidth="1.2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+/* ── Lock ────────────────────────────────────── */
+export function LockFileIcon({ size, ...p }: IconProps) {
+  return (
+    <svg {...d(size)} {...p}>
+      <rect x="2" y="2" width="20" height="20" rx="3" fill="#6B7280" />
+      <rect x="8" y="9" width="8" height="7" rx="1" fill="#4B5563" stroke="#D1D5DB" strokeWidth="0.5" />
+      <path d="M9 9V7.5a2.5 2.5 0 0 1 2.5-2.5h1a2.5 2.5 0 0 1 2.5 2.5V9" stroke="#D1D5DB" strokeWidth="1.2" fill="none" strokeLinecap="round" />
+      <circle cx="12" cy="13" r="0.8" fill="#D1D5DB" />
+    </svg>
+  );
+}
+
+/* ── Kotlin ────────────────────────────────────── */
+export function KotlinIcon({ size, ...p }: IconProps) {
+  return (
+    <svg {...d(size)} {...p}>
+      <rect x="2" y="2" width="20" height="20" rx="3" fill="#7F52FF" />
+      <text x="12" y="16" textAnchor="middle" fill="#fff" fontSize="11" fontWeight="800" fontFamily="monospace">Kt</text>
+    </svg>
+  );
+}
+
+/* ── Swift ────────────────────────────────────── */
+export function SwiftIcon({ size, ...p }: IconProps) {
+  return (
+    <svg {...d(size)} {...p}>
+      <rect x="2" y="2" width="20" height="20" rx="3" fill="#F05138" />
+      <text x="12" y="16" textAnchor="middle" fill="#fff" fontSize="10" fontWeight="800" fontFamily="monospace">Swift</text>
+    </svg>
+  );
+}
+
+/* ── Lua ───────────────────────────────────────── */
+export function LuaIcon({ size, ...p }: IconProps) {
+  return (
+    <svg {...d(size)} {...p}>
+      <rect x="2" y="2" width="20" height="20" rx="3" fill="#000080" />
+      <text x="12" y="16" textAnchor="middle" fill="#fff" fontSize="10" fontWeight="800" fontFamily="monospace">Lua</text>
+    </svg>
+  );
+}
+
+/* ── R ─────────────────────────────────────────── */
+export function RIcon({ size, ...p }: IconProps) {
+  return (
+    <svg {...d(size)} {...p}>
+      <rect x="2" y="2" width="20" height="20" rx="3" fill="#276DC3" />
+      <text x="12" y="16" textAnchor="middle" fill="#fff" fontSize="10" fontWeight="800" fontFamily="monospace">R</text>
+    </svg>
+  );
+}
+
 /* ── YAML / TOML ──────────────────────────────── */
 export function ConfigIcon({ size, ...p }: IconProps) {
   return (
@@ -314,7 +376,7 @@ export const customIconMap: Record<string, React.FC<IconProps>> = {
   pdf: PdfIcon,
   doc: DocxIcon, docx: DocxIcon, odt: DocxIcon, pages: DocxIcon,
   xls: XlsxIcon, xlsx: XlsxIcon, ods: XlsxIcon, numbers: XlsxIcon, csv: XlsxIcon,
-  ppt: PptxIcon, pptx: PptxIcon, odp: PptxIcon, key: PptxIcon,
+  ppt: PptxIcon, pptx: PptxIcon, odp: PptxIcon, key: PptxIcon, pps: PptxIcon, ppsx: PptxIcon,
 
   // Code
   js: JsIcon, mjs: JsIcon, cjs: JsIcon,
@@ -326,9 +388,11 @@ export const customIconMap: Record<string, React.FC<IconProps>> = {
   html: HtmlIcon, htm: HtmlIcon,
   css: CssIcon, scss: CssIcon, less: CssIcon, sass: CssIcon,
   json: JsonIcon, jsonc: JsonIcon,
-  yaml: ConfigIcon, yml: ConfigIcon, toml: ConfigIcon, ini: ConfigIcon,
+  yaml: ConfigIcon, yml: ConfigIcon, toml: ConfigIcon, ini: ConfigIcon, cfg: ConfigIcon, conf: ConfigIcon,
   sh: ShellIcon, bash: ShellIcon, zsh: ShellIcon, fish: ShellIcon,
   md: MarkdownIcon, markdown: MarkdownIcon, mdx: MarkdownIcon,
+  swift: SwiftIcon, kt: KotlinIcon, kts: KotlinIcon,
+  lua: LuaIcon, r: RIcon,
 
   // Archives
   zip: ZipIcon, "7z": ZipIcon, rar: ZipIcon, tar: ZipIcon, gz: ZipIcon, bz2: ZipIcon, xz: ZipIcon,
@@ -344,4 +408,8 @@ export const customIconMap: Record<string, React.FC<IconProps>> = {
   // DevOps & Tools
   dockerfile: DockerIcon, "docker-compose": DockerIcon,
   gitignore: GitIcon, gitmodules: GitIcon, gitattributes: GitIcon,
+  env: EnvIcon, "env.local": EnvIcon, "env.development": EnvIcon, "env.production": EnvIcon, "env.example": EnvIcon,
+  lock: LockFileIcon, lockb: LockFileIcon,
+  editorconfig: ConfigIcon, prettierrc: ConfigIcon, eslintrc: ConfigIcon, babelrc: ConfigIcon,
+  nvmrc: ConfigIcon, "node-version": ConfigIcon,
 };

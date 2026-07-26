@@ -43,10 +43,6 @@ func (p *LocalFilesystemProvider) List(rel string) ([]FileInfo, error) {
 	}
 	out := make([]FileInfo, 0, len(entries))
 	for _, e := range entries {
-		// Hide the per-root trash directory so it doesn't clutter user listings.
-		if e.Name() == SystemTrashDir {
-			continue
-		}
 		fi, err := e.Info()
 		if err != nil {
 			continue
@@ -391,6 +387,8 @@ func detectMimeByExt(name string) string {
 		return "image/x-icon"
 	case "tiff", "tif":
 		return "image/tiff"
+	case "psd":
+		return "image/vnd.adobe.photoshop"
 	case "mp4":
 		return "video/mp4"
 	case "webm":
@@ -405,6 +403,8 @@ func detectMimeByExt(name string) string {
 		return "video/x-flv"
 	case "m4v":
 		return "video/mp4"
+	case "wmv":
+		return "video/x-ms-wmv"
 	case "mp3":
 		return "audio/mpeg"
 	case "ogg":
@@ -421,6 +421,10 @@ func detectMimeByExt(name string) string {
 		return "audio/opus"
 	case "wma":
 		return "audio/x-ms-wma"
+	case "aiff":
+		return "audio/aiff"
+	case "alac":
+		return "audio/alac"
 	case "pdf":
 		return "application/pdf"
 	case "md", "markdown":
@@ -429,17 +433,37 @@ func detectMimeByExt(name string) string {
 		return "text/plain"
 	case "json":
 		return "application/json"
+	case "jsonc":
+		return "application/jsonc"
 	case "yaml", "yml":
 		return "text/yaml"
 	case "toml":
 		return "application/toml"
 	case "ini":
 		return "text/plain"
+	case "cfg", "conf":
+		return "text/plain"
+	case "env":
+		return "text/plain"
 	case "html", "htm":
 		return "text/html"
 	case "css":
 		return "text/css"
-	case "js", "ts", "jsx", "tsx", "go", "py", "sh", "bash", "rs", "java", "c", "cpp", "h":
+	case "scss":
+		return "text/x-scss"
+	case "sass":
+		return "text/x-sass"
+	case "less":
+		return "text/less"
+	case "js", "mjs", "cjs":
+		return "application/javascript"
+	case "ts", "mts", "cts":
+		return "application/typescript"
+	case "jsx":
+		return "text/jsx"
+	case "tsx":
+		return "text/tsx"
+	case "go", "py", "sh", "bash", "zsh", "fish", "rs", "java", "c", "cpp", "h", "rb", "php", "swift", "kt", "lua", "r":
 		return "text/plain"
 	case "zip":
 		return "application/zip"
@@ -451,6 +475,10 @@ func detectMimeByExt(name string) string {
 		return "application/x-7z-compressed"
 	case "rar":
 		return "application/vnd.rar"
+	case "bz2":
+		return "application/x-bzip2"
+	case "xz":
+		return "application/x-xz"
 	case "csv":
 		return "text/csv"
 	case "xml":
@@ -479,14 +507,28 @@ func detectMimeByExt(name string) string {
 		return "application/vnd.ms-powerpoint"
 	case "pptx":
 		return "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+	case "odt":
+		return "application/vnd.oasis.opendocument.text"
+	case "ods":
+		return "application/vnd.oasis.opendocument.spreadsheet"
+	case "odp":
+		return "application/vnd.oasis.opendocument.presentation"
 	case "eps":
 		return "application/postscript"
-	case "psd":
-		return "image/vnd.adobe.photoshop"
 	case "ai":
 		return "application/postscript"
 	case "rtf":
 		return "application/rtf"
+	case "epub":
+		return "application/epub+zip"
+	case "mobi":
+		return "application/x-mobipocket-ebook"
+	case "webmanifest":
+		return "application/manifest+json"
+	case "lock":
+		return "text/plain"
+	case "editorconfig":
+		return "text/plain"
 	default:
 		return ""
 	}

@@ -45,6 +45,7 @@ services:
       - ./data/backups:/mnt/backups
       - ./data/shared:/mnt/shared
       - /data:/mnt/data
+      - /home/suryaprakash/Docker/nexora:/mnt/project:ro
     # Read-only root filesystem with tmpfs for scratch space.
     read_only: true
     tmpfs:

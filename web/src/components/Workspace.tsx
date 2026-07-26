@@ -78,7 +78,7 @@ export default function Workspace({ user }: { user: User }) {
   const pathname = location.pathname;
   if (pathname.startsWith("/files/")) {
     view = "files";
-    const parts = pathname.split("/").filter(Boolean);
+    const parts = pathname.split("/").filter(Boolean).map(decodeURIComponent);
     if (parts.length > 1) rootId = parts[1];
     if (parts.length > 2) path = parts.slice(2).join("/");
   } else if (pathname === "/search") view = "search";
@@ -146,6 +146,8 @@ export default function Workspace({ user }: { user: User }) {
     setFileOffset(0);
     setAccumulatedItems([]);
     setHasMoreFiles(false);
+    files.refetch();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rootId, path, sort, order]);
   const modals = useModals();
   const { preview, setPreview, imageItem, setImageItem, videoItem, setVideoItem, setPrevView, editItem, setEditItem, shareItem, setShareItem, ctx, setCtx, ctxPlaylist, setCtxPlaylist, menu, setMenu, rootModal, setRootModal, playlistModal, setPlaylistModal, playlistName, setPlaylistName, commandPaletteOpen, setCommandPaletteOpen, tagPicker, setTagPicker } = modals;
@@ -180,22 +182,25 @@ export default function Workspace({ user }: { user: User }) {
   const home = useQuery({ queryKey: ["home"], queryFn: () => get<HomeData>("/home"), enabled: view === "home" });
   const favSet = useQuery({ queryKey: ["fav-set"], queryFn: () => get<{ items: FavoriteItem[] }>("/favorites") });
   
-  const [filtered, setFiltered] = useState<FileItem[]>([]);
-  const workerRef = useRef<Worker | null>(null);
-
-  useEffect(() => {
-    workerRef.current = new Worker(new URL('../workers/filter.worker.ts', import.meta.url), { type: 'module' });
-    workerRef.current.onmessage = (e) => setFiltered(e.data);
-    return () => workerRef.current?.terminate();
-  }, []);
-
-  useEffect(() => {
-    if (workerRef.current) {
-      workerRef.current.postMessage({ items, filter, search });
+  const filtered = useMemo(() => {
+    let f = items;
+    if (filter !== "all") {
+      if (filter === "folders") f = f.filter((i) => i.is_dir);
+      else if (filter === "documents") f = f.filter((i) => !i.is_dir && (i.mime.startsWith("text/") || ["pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "odt", "ods", "odp", "pages", "numbers", "key", "md", "txt", "rtf"].includes((i.extension || "").toLowerCase())));
+      else if (filter === "images") f = f.filter((i) => i.mime.startsWith("image/"));
+      else if (filter === "videos") f = f.filter((i) => i.mime.startsWith("video/"));
+      else if (filter === "audio") f = f.filter((i) => i.mime.startsWith("audio/"));
+      else if (filter === "archives") f = f.filter((i) => ["zip", "tar", "gz", "7z", "rar", "iso"].includes((i.extension || "").toLowerCase()));
     }
+    
+    if (search) {
+      const s = search.toLowerCase();
+      f = f.filter((i) => (i.name || "").toLowerCase().includes(s));
+    }
+    return f;
   }, [items, filter, search]);
   
-  const imageList = useMemo(() => filtered.filter((i) => i.mime.startsWith("image/") || ["jpg", "jpeg", "png", "gif", "webp", "bmp", "avif"].includes(i.extension.toLowerCase())), [filtered]);
+  const imageList = useMemo(() => filtered.filter((i) => (i.mime || "").startsWith("image/") || ["jpg", "jpeg", "png", "gif", "webp", "bmp", "avif"].includes((i.extension || "").toLowerCase())), [filtered]);
 
   const refresh = useCallback(() => {
     setFileOffset(0);
@@ -233,7 +238,7 @@ export default function Workspace({ user }: { user: User }) {
       const audio = items.filter((i) => i.mime.startsWith("audio/"));
       const idx = audio.findIndex((i) => i.path === item.path);
       usePlayer.getState().play(audio, idx >= 0 ? idx : 0);
-    } else if (item.mime.startsWith("image/") || ["jpg", "jpeg", "png", "gif", "webp", "bmp", "avif"].includes(item.extension.toLowerCase())) {
+    } else if (item.mime.startsWith("image/") || ["jpg", "jpeg", "png", "gif", "webp", "bmp", "avif"].includes((item.extension || "").toLowerCase())) {
       setImageItem(item);
     } else if (item.mime.startsWith("video/")) {
       setPrevView("files");
@@ -407,7 +412,7 @@ export default function Workspace({ user }: { user: User }) {
         onLogout={logout}
       />
 
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 pb-24 md:pb-0">
         {showCommandBar && (
           <CommandBar
             rootName={activeRoot!.name}
@@ -539,9 +544,17 @@ export default function Workspace({ user }: { user: User }) {
       </div>
 
       <MobileNav 
-        view={view} 
-        onSelectView={(v) => { setView(v); clearSelection(); }} 
+        view={view}
+        roots={roots.data?.roots || []}
+        activeRoot={rootId}
+        canWrite={canWrite}
+        isAdmin={isAdmin}
+        onSelectView={(v) => { setView(v); clearSelection(); }}
+        onSelectRoot={(id) => { setRootId(id); clearSelection(); }}
         onSearch={() => setCommandPaletteOpen(true)}
+        onUpload={() => fileInput.current?.click()}
+        onNewFolder={() => setMenu({ kind: "newFolder" })}
+        onLogout={logout}
       />
       <TransfersPanel />
 

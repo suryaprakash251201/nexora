@@ -39,16 +39,16 @@ export function iconForFile(item: { is_dir: boolean; mime: string; extension: st
   if (m === "application/pdf" || ext === "pdf") return { icon: FileText, color: "red", customIcon: custom };
   if (m.includes("zip") || m.includes("tar") || ["zip", "tar", "gz", "7z", "rar", "iso"].includes(ext)) return { icon: Archive, color: "amber", customIcon: custom };
   if (["json", "yaml", "yml", "toml", "ini", "xml", "webmanifest", "env"].includes(ext)) return { icon: FileJson, color: "yellow", customIcon: custom };
-  if (["js", "ts", "jsx", "tsx", "go", "py", "sh", "bash", "rs", "java", "c", "cpp", "h", "rb", "php"].includes(ext)) return { icon: FileCode, color: "orange", customIcon: custom };
-  if (["html", "css", "scss", "less"].includes(ext)) return { icon: FileCode, color: "orange", customIcon: custom };
+  if (["js", "mjs", "cjs", "ts", "mts", "cts", "jsx", "tsx", "go", "py", "pyw", "sh", "bash", "zsh", "fish", "rs", "java", "c", "cpp", "h", "rb", "php", "swift", "kt", "lua", "r"].includes(ext)) return { icon: FileCode, color: "orange", customIcon: custom };
+  if (["html", "htm", "css", "scss", "sass", "less"].includes(ext)) return { icon: FileCode, color: "orange", customIcon: custom };
   if (["sql", "db", "sqlite", "mdb"].includes(ext)) return { icon: Database, color: "gray", customIcon: custom };
   if (["exe", "app", "dmg", "deb", "rpm", "apk"].includes(ext)) return { icon: Package, color: "green", customIcon: custom };
   if (["bat", "cmd", "ps1"].includes(ext)) return { icon: Terminal, color: "gray", customIcon: custom };
-  if (["env", "config", "cfg", "conf"].includes(ext)) return { icon: Settings, color: "gray", customIcon: custom };
+  if (["env", "config", "cfg", "conf", "editorconfig", "properties"].includes(ext)) return { icon: Settings, color: "gray", customIcon: custom };
   if (["dll", "so", "sys", "bin"].includes(ext)) return { icon: Cpu, color: "gray", customIcon: custom };
-  if (["fig", "sketch", "ai", "psd"].includes(ext)) return { icon: Figma, color: "pink", customIcon: custom };
+  if (["fig", "sketch", "ai", "psd", "xd"].includes(ext)) return { icon: Figma, color: "pink", customIcon: custom };
   
-  if (["md", "markdown", "txt", "log", "rtf"].includes(ext)) return { icon: FileText, color: "gray", customIcon: custom };
+  if (["md", "markdown", "mdx", "txt", "log", "rtf"].includes(ext)) return { icon: FileText, color: "gray", customIcon: custom };
   
   // Office documents
   if (["doc", "docx", "odt", "pages"].includes(ext)) return { icon: FileType, color: "blue", customIcon: custom };
@@ -68,7 +68,7 @@ export const colorClasses: Record<string, string> = {
   purple: "text-purple-400 bg-purple-500/15",
   cyan: "text-cyan-400 bg-cyan-500/15",
   orange: "text-orange-400 bg-orange-500/15",
-  gray: "text-slate-400 bg-slate-500/10",
+  gray: "text-slate-400 bg-slate-500/15",
   pink: "text-pink-400 bg-pink-500/15",
 };
 

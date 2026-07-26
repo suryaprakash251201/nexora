@@ -63,7 +63,7 @@ export default function Breadcrumbs({
               onDragOver={(e) => handleDragOver(e, p)}
               onDragLeave={handleDragLeave}
               onDrop={(e) => handleDrop(e, p)}
-              className={`truncate max-w-[8rem] sm:max-w-[12rem] px-2 py-1 rounded-lg transition-colors duration-200 ${
+              className={`truncate max-w-[5rem] sm:max-w-[12rem] px-2 py-1 rounded-lg transition-colors duration-200 ${
                 dragTarget === p 
                   ? "bg-accent/20 text-accent outline-dashed outline-1 outline-accent" 
                   : isLast 

@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sort"
 
 	"github.com/nexora/nexora/internal/auth"
 	"github.com/nexora/nexora/internal/middleware"
@@ -99,11 +100,17 @@ func (s *Server) handleListFiles(w http.ResponseWriter, r *http.Request) {
 	if offset < 0 {
 		offset = 0
 	}
-	if offset > total {
-		offset = total
-	}
 	if offset >= total {
-		offset = 0
+		writeJSON(w, http.StatusOK, map[string]any{
+			"root":     rootID,
+			"path":     rel,
+			"items":    []map[string]any{},
+			"total":    total,
+			"offset":   offset,
+			"limit":    limit,
+			"has_more": false,
+		})
+		return
 	}
 	end := offset + limit
 	if end > total {
@@ -170,7 +177,7 @@ func attachTags(db *sql.DB, files []map[string]any, rootID, userID string) {
 	}
 }
 
-func sortFiles(items []storage.FileInfo, sort, order string, dirsFirst bool) []storage.FileInfo {
+func sortFiles(items []storage.FileInfo, sortBy, order string, dirsFirst bool) []storage.FileInfo {
 	desc := order == "desc"
 	// Folder-first pass.
 	if dirsFirst {
@@ -182,18 +189,18 @@ func sortFiles(items []storage.FileInfo, sort, order string, dirsFirst bool) []s
 				files = append(files, it)
 			}
 		}
-		sortSlice(dirs, sort, desc)
-		sortSlice(files, sort, desc)
+		sortSlice(dirs, sortBy, desc)
+		sortSlice(files, sortBy, desc)
 		return append(dirs, files...)
 	}
-	sortSlice(items, sort, desc)
+	sortSlice(items, sortBy, desc)
 	return items
 }
 
-func sortSlice(items []storage.FileInfo, sort string, desc bool) {
+func sortSlice(items []storage.FileInfo, sortBy string, desc bool) {
 	less := func(i, j int) bool {
 		a, b := items[i], items[j]
-		switch sort {
+		switch sortBy {
 		case "modified":
 			if a.Modified.Equal(b.Modified) {
 				return a.Name < b.Name
@@ -213,12 +220,9 @@ func sortSlice(items []storage.FileInfo, sort string, desc bool) {
 			return strings.ToLower(a.Name) < strings.ToLower(b.Name)
 		}
 	}
-	// Simple insertion sort (small N, allocations cheap).
-	for i := 1; i < len(items); i++ {
-		for j := i; j > 0 && less(j, j-1); j-- {
-			items[j], items[j-1] = items[j-1], items[j]
-		}
-	}
+	sort.Slice(items, func(i, j int) bool {
+		return less(i, j)
+	})
 	if desc {
 		for i, j := 0, len(items)-1; i < j; i, j = i+1, j-1 {
 			items[i], items[j] = items[j], items[i]
@@ -673,6 +677,9 @@ func (s *Server) writeProviderError(w http.ResponseWriter, r *http.Request, err 
 	rid := middleware.GetRequestID(r.Context())
 	switch err {
 	case storage.ErrNotFound:
+		rootID := queryParam(r, "root", "")
+		rel := queryParam(r, "path", "")
+		s.Log.Error("file not found", "error", err, "root", rootID, "path", rel, "request_id", rid)
 		writeError(w, http.StatusNotFound, "not_found", "File or directory not found", rid)
 	case storage.ErrPermission:
 		writeError(w, http.StatusForbidden, "forbidden", "Operation not permitted (read-only or no access)", rid)

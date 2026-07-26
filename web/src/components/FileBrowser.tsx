@@ -4,7 +4,7 @@ import { useUI } from "../store";
 import { Play, MoreVertical, AlertTriangle, RefreshCw } from "lucide-react";
 import { FileItem } from "../api/types";
 import { formatBytes, formatDate } from "../lib/format";
-import { FileThumb } from "./FileThumb";
+import { FileThumb, detectFolderVariant } from "./FileThumb";
 import { iconForFile, colorClasses, iconGlowClasses } from "./FileIcon";
 import { EmptyState } from "./ui/EmptyState";
 import { SkeletonGrid, SkeletonList } from "./ui/Skeleton";
@@ -34,7 +34,7 @@ interface FileBrowserProps {
 }
 
 const FileIconForItem = memo(function FileIconForItem({ item, large, fill }: { item: FileItem; large?: boolean; fill?: boolean }) {
-  const isImage = item.mime.startsWith("image/") || ["jpg", "jpeg", "png", "gif", "webp", "bmp", "avif"].includes(item.extension.toLowerCase());
+  const isImage = item.mime.startsWith("image/") || ["jpg", "jpeg", "png", "gif", "webp", "bmp", "avif"].includes((item.extension || "").toLowerCase());
   const dim = large ? (fill ? "h-full w-full" : "h-16 w-16") : "h-9 w-9";
 
   if (isImage || item.is_dir) {
@@ -150,7 +150,7 @@ export default function FileBrowser({
     }
   };
 
-  if (loading || isFetching) {
+  if ((loading && items.length === 0) || (isFetching && items.length === 0)) {
     return viewMode === "grid" ? (
       <div className="p-4 sm:p-6">
         <SkeletonGrid />
@@ -224,7 +224,7 @@ export default function FileBrowser({
             variants={staggerContainer}
             initial="initial"
             animate="animate"
-            className={cn("p-4 sm:p-6 grid gap-4 sm:gap-5 pb-24 sm:pb-32 md:pb-36", getGridColClass(gridZoom))}
+            className={cn("p-3 sm:p-6 grid gap-3 sm:gap-5 pb-16 sm:pb-32 md:pb-36", getGridColClass(gridZoom))}
             role="grid"
             aria-label="File grid"
           >
@@ -267,6 +267,20 @@ export default function FileBrowser({
                   >
                     {/* Accent color stripe */}
                     <div className={cn("absolute top-0 left-0 right-0 h-[2px] rounded-t-2xl opacity-60", (() => {
+                      if (item.is_dir) {
+                        const variant = detectFolderVariant(item.name);
+                        const folderStripeColors: Record<string, string> = {
+                          default: "bg-gradient-to-r from-blue-500 to-indigo-500",
+                          music: "bg-gradient-to-r from-pink-500 to-rose-500",
+                          video: "bg-gradient-to-r from-purple-500 to-violet-500",
+                          image: "bg-gradient-to-r from-emerald-500 to-teal-500",
+                          archive: "bg-gradient-to-r from-amber-500 to-orange-500",
+                          documents: "bg-gradient-to-r from-yellow-500 to-amber-500",
+                          code: "bg-gradient-to-r from-cyan-500 to-sky-500",
+                          design: "bg-gradient-to-r from-pink-500 to-rose-500",
+                        };
+                        return folderStripeColors[variant] || folderStripeColors.default;
+                      }
                       const { color } = iconForFile(item);
                       const stripeColors: Record<string, string> = {
                         blue: "bg-gradient-to-r from-blue-500 to-indigo-500",
@@ -283,8 +297,25 @@ export default function FileBrowser({
                       };
                       return stripeColors[color] || stripeColors.gray;
                     })())} />
+
                     {/* Inner glow highlight */}
-                    <div className="absolute inset-0 bg-gradient-to-br from-white/[0.03] via-transparent to-transparent pointer-events-none rounded-2xl" />
+                    <div className={cn(
+                      "absolute inset-0 pointer-events-none rounded-2xl",
+                      item.is_dir ? (() => {
+                        const variant = detectFolderVariant(item.name);
+                        const glowColors: Record<string, string> = {
+                          default: "bg-gradient-to-br from-blue-500/5 via-transparent to-transparent",
+                          music: "bg-gradient-to-br from-pink-500/5 via-transparent to-transparent",
+                          video: "bg-gradient-to-br from-purple-500/5 via-transparent to-transparent",
+                          image: "bg-gradient-to-br from-emerald-500/5 via-transparent to-transparent",
+                          archive: "bg-gradient-to-br from-amber-500/5 via-transparent to-transparent",
+                          documents: "bg-gradient-to-br from-yellow-500/5 via-transparent to-transparent",
+                          code: "bg-gradient-to-br from-cyan-500/5 via-transparent to-transparent",
+                          design: "bg-gradient-to-br from-pink-500/5 via-transparent to-transparent",
+                        };
+                        return glowColors[variant] || glowColors.default;
+                      })() : "bg-gradient-to-br from-white/[0.03] via-transparent to-transparent"
+                    )} />
                     <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
                     <div className="w-full flex justify-center mb-4 transition-transform duration-300 relative">
                       <FileIconForItem item={item} large />
@@ -374,7 +405,7 @@ export default function FileBrowser({
           )}
         </>
       ) : (
-        <div className="p-4 pb-24 sm:pb-32 md:pb-36 max-w-7xl mx-auto">
+        <div className="p-3 pb-16 sm:pb-32 md:pb-36 max-w-7xl mx-auto">
           <div className="grid grid-cols-[auto_1fr_auto] sm:grid-cols-[auto_1fr_auto_auto] lg:grid-cols-[auto_1fr_auto_auto_auto] gap-4 px-3 sm:px-6 py-4 text-xs font-bold uppercase tracking-widest text-text-tertiary border-b border-glass-border-soft sticky top-0 z-10">
             <span className="w-6 flex justify-center items-center">
               <input

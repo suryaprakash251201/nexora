@@ -47,7 +47,7 @@ export default function PreviewModal({
   const galleryItems = useMemo(() => {
     if (!playlist) return [];
     return playlist.filter(
-      (f) => f.mime.startsWith("image/") || ["jpg", "jpeg", "png", "gif", "webp", "bmp", "avif"].includes(f.extension.toLowerCase())
+      (f) => f.mime.startsWith("image/") || ["jpg", "jpeg", "png", "gif", "webp", "bmp", "avif"].includes((f.extension || "").toLowerCase())
     );
   }, [playlist]);
   

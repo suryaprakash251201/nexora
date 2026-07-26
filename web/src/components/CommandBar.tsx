@@ -164,14 +164,14 @@ export default function CommandBar({
 
   return (
     <div className="relative z-30 mx-3 mt-3 mb-0 sm:mx-4 sm:mt-4">
-      <div className="glass rounded-2xl flex items-center gap-2 sm:gap-3 px-3 sm:px-5 h-14 sm:h-16">
+      <div className="glass rounded-2xl flex items-center gap-1.5 sm:gap-3 px-2.5 sm:px-5 h-13 sm:h-16">
         {/* Left: Breadcrumbs */}
-        <div className="min-w-0 flex-1 flex items-center gap-3">
+        <div className="min-w-0 flex-1 flex items-center gap-2 sm:gap-3">
           <Breadcrumbs rootName={rootName} path={path} onNavigate={onNavigate} />
 
           {/* Spotlight Search */}
           <motion.div
-            className="relative flex-1 sm:flex-none sm:w-80 sm:max-w-sm max-sm:max-w-[180px]"
+            className="relative flex-1 sm:flex-none sm:w-80 sm:max-w-sm max-sm:max-w-full"
             animate={searchFocused ? { scale: 1.02 } : { scale: 1 }}
             transition={{ duration: 0.2 }}
           >

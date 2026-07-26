@@ -34,7 +34,7 @@ export function FolderTile({ large, item, variant = "default", iconSize }: { lar
   );
 }
 
-function detectFolderVariant(name: string): FolderVariant {
+export function detectFolderVariant(name: string): FolderVariant {
   const lower = name.toLowerCase();
   if (/music|audio|songs?|playlists?|albums?|tracks?/i.test(lower)) return "music";
   if (/videos?|movies?|films?|clips?|recordings?/i.test(lower)) return "video";
@@ -49,7 +49,7 @@ function detectFolderVariant(name: string): FolderVariant {
 export function FileThumb({ it, large, fill }: { it: FileItem; large?: boolean; fill?: boolean }) {
   const [failed, setFailed] = useState(false);
   const [loaded, setLoaded] = useState(false);
-  const ext = it.extension.toLowerCase();
+  const ext = (it.extension || "").toLowerCase();
 
   const isImage = it.mime.startsWith("image/") || IMAGE_EXT.includes(ext);
   const isAudio = it.mime.startsWith("audio/") || ["mp3", "flac", "wav", "ogg", "m4a"].includes(ext);

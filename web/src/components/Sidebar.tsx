@@ -1,4 +1,4 @@
-import { Trash2, Plus, Share2, Clock, Star, Search, Shield, ListMusic, Home, PanelLeftClose, PanelLeftOpen, LogOut, X } from "lucide-react";
+import { Trash2, Plus, Share2, Clock, Star, Search, Shield, ListMusic, Home, PanelLeftClose, PanelLeftOpen, LogOut } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import type { Root } from "../api/types";
 import { rootIcon } from "../lib/rootIcons";
@@ -98,11 +98,10 @@ export default function Sidebar({
 
   return (
     <>
-      {!collapsed && <div className="fixed inset-0 z-40 bg-black/70 backdrop-blur-md md:hidden sidebar-overlay" onClick={onToggleCollapse} />}
       <motion.aside
         animate={{ width: collapsed ? 72 : 256 }}
         transition={{ duration: 0.25, ease: [0.25, 0.1, 0.25, 1] }}
-        className={cn("shrink-0 glass-strong flex flex-col h-full z-50 overflow-hidden border-r border-white/[0.06] relative", "fixed inset-y-0 left-0 md:relative", collapsed ? "items-center" : "")}
+        className={cn("shrink-0 glass-strong flex-col h-full z-50 overflow-hidden border-r border-white/[0.06] relative hidden md:flex", collapsed ? "items-center" : "")}
       >
         <div className="absolute inset-0 bg-gradient-to-b from-white/[0.02] via-transparent to-transparent pointer-events-none" />
         <div className={cn("flex items-center gap-3 mb-4 mt-3", collapsed ? "justify-center px-0" : "px-4 w-full")}>
@@ -117,8 +116,7 @@ export default function Sidebar({
               </motion.div>
             )}
           </AnimatePresence>
-          {!collapsed && <button onClick={onToggleCollapse} className="ml-auto p-1.5 rounded-lg hover:bg-glass-bg hidden md:block transition-colors" aria-label="Collapse sidebar"><PanelLeftClose className="h-4 w-4 text-text-tertiary" /></button>}
-          {!collapsed && <button onClick={onToggleCollapse} className="ml-auto p-1.5 rounded-lg hover:bg-glass-bg md:hidden transition-colors" aria-label="Close sidebar"><X className="h-4 w-4 text-text-tertiary" /></button>}
+          {!collapsed && <button onClick={onToggleCollapse} className="ml-auto p-1.5 rounded-lg hover:bg-glass-bg transition-colors" aria-label="Collapse sidebar"><PanelLeftClose className="h-4 w-4 text-text-tertiary" /></button>}
         </div>
 
         {collapsed && <button onClick={onToggleCollapse} title="Expand sidebar" aria-label="Expand sidebar" className="mb-4 p-2.5 rounded-xl hover:bg-glass-bg transition-colors min-h-[44px] min-w-[44px]"><PanelLeftOpen className="h-4 w-4 text-text-tertiary mx-auto" /></button>}
