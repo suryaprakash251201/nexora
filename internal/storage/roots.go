@@ -2,6 +2,7 @@ package storage
 
 import (
 	"database/sql"
+	"encoding/json"
 	"sync"
 
 	"github.com/nexora/nexora/internal/util"
@@ -21,6 +22,8 @@ type Root struct {
 	Name      string
 	Path      string
 	Icon      string
+	Type      string // "local" or "s3"
+	Config    string // JSON config (S3 credentials, etc.)
 	ReadOnly  bool
 	Enabled   bool
 	Indexed   bool
@@ -42,7 +45,7 @@ func NewRootService(db *sql.DB) *RootService {
 
 // List returns all roots ordered by name.
 func (s *RootService) List() ([]Root, error) {
-	rows, err := s.db.Query(`SELECT id,name,path,icon,read_only,enabled,indexed,created_at,updated_at FROM storage_roots ORDER BY name ASC`)
+	rows, err := s.db.Query(`SELECT id,name,path,icon,type,config,read_only,enabled,indexed,created_at,updated_at FROM storage_roots ORDER BY name ASC`)
 	if err != nil {
 		return nil, err
 	}
@@ -51,10 +54,16 @@ func (s *RootService) List() ([]Root, error) {
 	for rows.Next() {
 		var r Root
 		var ro, en, idx int
-		if err := rows.Scan(&r.ID, &r.Name, &r.Path, &r.Icon, &ro, &en, &idx, &r.CreatedAt, &r.UpdatedAt); err != nil {
+		if err := rows.Scan(&r.ID, &r.Name, &r.Path, &r.Icon, &r.Type, &r.Config, &ro, &en, &idx, &r.CreatedAt, &r.UpdatedAt); err != nil {
 			return nil, err
 		}
 		r.ReadOnly, r.Enabled, r.Indexed = ro == 1, en == 1, idx == 1
+		if r.Type == "" {
+			r.Type = "local"
+		}
+		if r.Config == "" {
+			r.Config = "{}"
+		}
 		out = append(out, r)
 	}
 	return out, rows.Err()
@@ -64,8 +73,8 @@ func (s *RootService) List() ([]Root, error) {
 func (s *RootService) Get(id string) (Root, bool, error) {
 	var r Root
 	var ro, en, idx int
-	err := s.db.QueryRow(`SELECT id,name,path,icon,read_only,enabled,indexed,created_at,updated_at FROM storage_roots WHERE id=?`, id).
-		Scan(&r.ID, &r.Name, &r.Path, &r.Icon, &ro, &en, &idx, &r.CreatedAt, &r.UpdatedAt)
+	err := s.db.QueryRow(`SELECT id,name,path,icon,type,config,read_only,enabled,indexed,created_at,updated_at FROM storage_roots WHERE id=?`, id).
+		Scan(&r.ID, &r.Name, &r.Path, &r.Icon, &r.Type, &r.Config, &ro, &en, &idx, &r.CreatedAt, &r.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return Root{}, false, nil
 	}
@@ -73,6 +82,12 @@ func (s *RootService) Get(id string) (Root, bool, error) {
 		return Root{}, false, err
 	}
 	r.ReadOnly, r.Enabled, r.Indexed = ro == 1, en == 1, idx == 1
+	if r.Type == "" {
+		r.Type = "local"
+	}
+	if r.Config == "" {
+		r.Config = "{}"
+	}
 	return r, true, nil
 }
 
@@ -83,19 +98,25 @@ func (s *RootService) Create(r Root) (Root, error) {
 	}
 	now := util.NowUTC()
 	r.CreatedAt, r.UpdatedAt = now, now
+	if r.Type == "" {
+		r.Type = "local"
+	}
+	if r.Config == "" {
+		r.Config = "{}"
+	}
 	_, err := s.db.Exec(
-		`INSERT INTO storage_roots(id,name,path,icon,read_only,enabled,indexed,created_at,updated_at)
-		 VALUES(?,?,?,?,?,?,?,?,?)`,
-		r.ID, r.Name, r.Path, r.Icon, boolToInt(r.ReadOnly), boolToInt(r.Enabled), boolToInt(r.Indexed), now, now)
+		`INSERT INTO storage_roots(id,name,path,icon,type,config,read_only,enabled,indexed,created_at,updated_at)
+		 VALUES(?,?,?,?,?,?,?,?,?,?,?)`,
+		r.ID, r.Name, r.Path, r.Icon, r.Type, r.Config, boolToInt(r.ReadOnly), boolToInt(r.Enabled), boolToInt(r.Indexed), now, now)
 	s.invalidate(r.ID)
 	return r, err
 }
 
 // Update modifies an existing root's mutable fields.
-func (s *RootService) Update(id string, name, path, icon string, readOnly, enabled, indexed bool) error {
+func (s *RootService) Update(id string, name, path, icon, typ, config string, readOnly, enabled, indexed bool) error {
 	_, err := s.db.Exec(
-		`UPDATE storage_roots SET name=?, path=?, icon=?, read_only=?, enabled=?, indexed=?, updated_at=? WHERE id=?`,
-		name, path, icon, boolToInt(readOnly), boolToInt(enabled), boolToInt(indexed), util.NowUTC(), id)
+		`UPDATE storage_roots SET name=?, path=?, icon=?, type=?, config=?, read_only=?, enabled=?, indexed=?, updated_at=? WHERE id=?`,
+		name, path, icon, typ, config, boolToInt(readOnly), boolToInt(enabled), boolToInt(indexed), util.NowUTC(), id)
 	s.invalidate(id)
 	return err
 }
@@ -134,7 +155,15 @@ func (s *RootService) ProviderFor(r Root) StorageProvider {
 	if p, ok := s.cache[r.ID]; ok {
 		return p
 	}
-	p := NewLocalFilesystemProvider(r.Path, r.ReadOnly)
+
+	var p StorageProvider
+	switch r.Type {
+	case "s3":
+		p = newS3ProviderFromConfig(r.Config, r.ReadOnly)
+	default:
+		p = NewLocalFilesystemProvider(r.Path, r.ReadOnly)
+	}
+
 	s.cache[r.ID] = p
 	return p
 }
@@ -181,8 +210,8 @@ func (s *RootService) EnsureDefaultRoots(roots []Root, adminID string) error {
 func (s *RootService) GetByName(name string) (Root, bool, error) {
 	var r Root
 	var ro, en, idx int
-	err := s.db.QueryRow(`SELECT id,name,path,read_only,enabled,indexed,created_at,updated_at FROM storage_roots WHERE name=?`, name).
-		Scan(&r.ID, &r.Name, &r.Path, &ro, &en, &idx, &r.CreatedAt, &r.UpdatedAt)
+	err := s.db.QueryRow(`SELECT id,name,path,icon,type,config,read_only,enabled,indexed,created_at,updated_at FROM storage_roots WHERE name=?`, name).
+		Scan(&r.ID, &r.Name, &r.Path, &r.Icon, &r.Type, &r.Config, &ro, &en, &idx, &r.CreatedAt, &r.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return Root{}, false, nil
 	}
@@ -190,6 +219,12 @@ func (s *RootService) GetByName(name string) (Root, bool, error) {
 		return Root{}, false, err
 	}
 	r.ReadOnly, r.Enabled, r.Indexed = ro == 1, en == 1, idx == 1
+	if r.Type == "" {
+		r.Type = "local"
+	}
+	if r.Config == "" {
+		r.Config = "{}"
+	}
 	return r, true, nil
 }
 
@@ -266,4 +301,33 @@ func boolToInt(b bool) int {
 		return 1
 	}
 	return 0
+}
+
+// newS3ProviderFromConfig parses JSON config and creates an S3 provider.
+func newS3ProviderFromConfig(configJSON string, readOnly bool) *S3Provider {
+	var cfg struct {
+		Endpoint        string `json:"endpoint"`
+		Region          string `json:"region"`
+		Bucket          string `json:"bucket"`
+		AccessKeyID     string `json:"access_key_id"`
+		SecretAccessKey string `json:"secret_access_key"`
+		UsePathStyle    bool   `json:"use_path_style"`
+		Prefix          string `json:"prefix"`
+	}
+	if configJSON != "" {
+		json.Unmarshal([]byte(configJSON), &cfg)
+	}
+
+	s3Cfg := S3Config{
+		Endpoint:        cfg.Endpoint,
+		Region:          cfg.Region,
+		Bucket:          cfg.Bucket,
+		AccessKeyID:     cfg.AccessKeyID,
+		SecretAccessKey: cfg.SecretAccessKey,
+		UsePathStyle:    cfg.UsePathStyle,
+		Prefix:          cfg.Prefix,
+	}
+
+	_ = readOnly // S3 provider handles read-only at the root level
+	return NewS3Provider(s3Cfg)
 }

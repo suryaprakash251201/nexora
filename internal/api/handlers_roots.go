@@ -21,11 +21,16 @@ func (s *Server) handleListRoots(w http.ResponseWriter, r *http.Request) {
 	out := make([]map[string]any, 0, len(roots))
 	for _, r := range roots {
 		perm, _, _ := s.StorageRoots.UserPermission(user.ID, user.Role == "admin", r.ID)
+		rootType := r.Type
+		if rootType == "" {
+			rootType = "local"
+		}
 		out = append(out, map[string]any{
 			"id":         r.ID,
 			"name":       r.Name,
 			"icon":       r.Icon,
 			"path":       r.Path,
+			"type":       rootType,
 			"read_only":  r.ReadOnly,
 			"enabled":    r.Enabled,
 			"permission": string(perm),

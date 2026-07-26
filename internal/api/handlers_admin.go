@@ -27,11 +27,21 @@ func (s *Server) handleAdminListRoots(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]map[string]any, 0, len(roots))
 	for _, root := range roots {
+		rootType := root.Type
+		if rootType == "" {
+			rootType = "local"
+		}
+		rootConfig := root.Config
+		if rootConfig == "" {
+			rootConfig = "{}"
+		}
 		out = append(out, map[string]any{
 			"id":         root.ID,
 			"name":       root.Name,
 			"path":       root.Path,
 			"icon":       root.Icon,
+			"type":       rootType,
+			"config":     rootConfig,
 			"read_only":  root.ReadOnly,
 			"enabled":    root.Enabled,
 			"indexed":    root.Indexed,
@@ -46,6 +56,8 @@ func (s *Server) handleAdminCreateRoot(w http.ResponseWriter, r *http.Request) {
 		Name     string `json:"name"`
 		Path     string `json:"path"`
 		Icon     string `json:"icon"`
+		Type     string `json:"type"`
+		Config   string `json:"config"`
 		ReadOnly bool   `json:"read_only"`
 		Indexed  bool   `json:"indexed"`
 	}
@@ -57,10 +69,18 @@ func (s *Server) handleAdminCreateRoot(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "validation_error", "name and path are required", middleware.GetRequestID(r.Context()))
 		return
 	}
+	if req.Type == "" {
+		req.Type = "local"
+	}
+	if req.Config == "" {
+		req.Config = "{}"
+	}
 	root, err := s.StorageRoots.Create(storage.Root{
 		Name:      req.Name,
 		Path:      req.Path,
 		Icon:      req.Icon,
+		Type:      req.Type,
+		Config:    req.Config,
 		ReadOnly:  req.ReadOnly,
 		Enabled:   true,
 		Indexed:   req.Indexed,
@@ -82,6 +102,8 @@ func (s *Server) handleAdminUpdateRoot(w http.ResponseWriter, r *http.Request) {
 		Name     string `json:"name"`
 		Path     string `json:"path"`
 		Icon     string `json:"icon"`
+		Type     string `json:"type"`
+		Config   string `json:"config"`
 		ReadOnly bool   `json:"read_only"`
 		Enabled  bool   `json:"enabled"`
 		Indexed  bool   `json:"indexed"`
@@ -90,7 +112,13 @@ func (s *Server) handleAdminUpdateRoot(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_body", err.Error(), middleware.GetRequestID(r.Context()))
 		return
 	}
-	if err := s.StorageRoots.Update(id, req.Name, req.Path, req.Icon, req.ReadOnly, req.Enabled, req.Indexed); err != nil {
+	if req.Type == "" {
+		req.Type = "local"
+	}
+	if req.Config == "" {
+		req.Config = "{}"
+	}
+	if err := s.StorageRoots.Update(id, req.Name, req.Path, req.Icon, req.Type, req.Config, req.ReadOnly, req.Enabled, req.Indexed); err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error", "could not update root", middleware.GetRequestID(r.Context()))
 		return
 	}

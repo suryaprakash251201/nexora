@@ -15,6 +15,8 @@ export interface Root {
   name: string;
   icon?: string;
   path?: string;
+  type: "local" | "s3";
+  config?: string;
   read_only: boolean;
   enabled: boolean;
   permission: "read" | "write";
