@@ -95,12 +95,14 @@ export default function PlayerBar() {
   };
 
   const showMini = !primaryOpen || expanded;
+  // Only show mini player when music is actually playing or recently active
+  const hasActivePlayer = current && (isPlaying || currentTime > 0);
 
   return (
     <>
       <audio ref={audioRef} preload="none" />
 
-      {current && showMini && !expanded && (
+      {hasActivePlayer && showMini && !expanded && (
         <div className="fixed bottom-24 md:bottom-6 left-1/2 -translate-x-1/2 z-[60] w-[calc(100%-2rem)] max-w-lg pointer-events-none">
           <div className="pointer-events-auto glass-strong rounded-2xl px-3 py-2.5 shadow-2xl transition-all duration-500 ease-out">
             <div className="flex items-center gap-2">
@@ -213,7 +215,7 @@ export default function PlayerBar() {
         </div>
       )}
 
-      {current && expanded && (
+      {hasActivePlayer && expanded && (
         <div className="pointer-events-auto relative z-[100]">
           <MediaPlayer
             kind="audio"

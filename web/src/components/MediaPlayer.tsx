@@ -383,12 +383,12 @@ function AudioPlayer({
         </button>
       </div>
 
-      <div className="relative z-10 flex-1 flex flex-col items-center justify-center w-full max-w-2xl mx-auto px-6 h-full pb-8" style={{ paddingBottom: "max(2rem, env(safe-area-inset-bottom))" }}>
+      <div className="relative z-10 flex-1 flex flex-col items-center justify-center w-full max-w-2xl mx-auto px-4 sm:px-6 pt-4 sm:pt-0 pb-20 sm:pb-8" style={{ paddingBottom: "max(5rem, env(safe-area-inset-bottom))" }}>
         {/* Album Art — spinning vinyl when playing */}
-        <div className="relative mb-10">
+        <div className="relative mb-4 sm:mb-10 flex-shrink-0">
           <div
             onClick={(e) => { e.stopPropagation(); toggle(); }}
-            className={`audio-disc ${playing ? "" : "paused"} relative w-[58vw] max-w-[300px] sm:w-[340px] sm:max-w-[340px] aspect-square rounded-full overflow-hidden shadow-2xl shadow-black/60 ring-1 ring-white/10 transition-transform duration-500 ${playing ? "scale-100" : "scale-95"} cursor-pointer`}
+            className={`audio-disc ${playing ? "" : "paused"} relative w-[45vw] max-w-[220px] sm:w-[280px] sm:max-w-[300px] md:w-[340px] md:max-w-[340px] aspect-square rounded-full overflow-hidden shadow-2xl shadow-black/60 ring-1 ring-white/10 transition-transform duration-500 ${playing ? "scale-100" : "scale-95"} cursor-pointer`}
           >
             {cur ? (
               <CoverArt item={cur} className="rounded-full" />
@@ -403,8 +403,8 @@ function AudioPlayer({
         </div>
 
         {/* Track Info */}
-        <div className="w-full text-center mb-7">
-          <h2 className="text-white font-bold text-2xl sm:text-3xl truncate drop-shadow-md">{cur?.name?.replace(/\.[^.]+$/, '')}</h2>
+        <div className="w-full text-center mb-4 sm:mb-7">
+          <h2 className="text-white font-bold text-lg sm:text-2xl md:text-3xl truncate drop-shadow-md">{cur?.name?.replace(/\.[^.]+$/, '')}</h2>
           {cur && getAudioQuality(cur).label && (
             <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${getAudioQuality(cur).color} bg-white/10 mt-2`}>
               {getAudioQuality(cur).label}
@@ -438,35 +438,35 @@ function AudioPlayer({
           </div>
 
         {/* Primary Controls */}
-        <div className={`flex items-center justify-center gap-5 sm:gap-7 w-full mt-9 transition-opacity duration-500 ${showControls ? "opacity-100" : "opacity-0 pointer-events-none"}`}>
+        <div className={`flex items-center justify-center gap-3 sm:gap-5 md:gap-7 w-full mt-6 sm:mt-9 transition-opacity duration-500 ${showControls ? "opacity-100" : "opacity-0 pointer-events-none"}`}>
           {controlled && (
             <button
               onClick={() => player.setShuffle(!player.shuffle)}
-              className={`p-3 rounded-full transition-colors ${player.shuffle ? "text-accent bg-accent/15" : "text-white/70 hover:text-white glass-hover"}`}
+              className={`p-2 sm:p-3 rounded-full transition-colors ${player.shuffle ? "text-accent bg-accent/15" : "text-white/70 hover:text-white glass-hover"}`}
               title="Shuffle"
             >
-              <Shuffle className="h-6 w-6" />
+              <Shuffle className="h-5 w-5 sm:h-6 sm:w-6" />
             </button>
           )}
 
-          <div className="flex items-center gap-5">
+          <div className="flex items-center gap-3 sm:gap-5">
             {multi && (
-              <button onClick={() => step(-1)} className="p-3 rounded-full glass-hover text-white transition-transform hover:scale-110" title="Previous">
-                <SkipBack className="h-7 w-7" />
+              <button onClick={() => step(-1)} className="p-2 sm:p-3 rounded-full glass-hover text-white transition-transform hover:scale-110" title="Previous">
+                <SkipBack className="h-5 w-5 sm:h-7 sm:w-7" />
               </button>
             )}
 
             <button
               onClick={toggle}
-              className="h-20 w-20 rounded-full bg-white text-black grid place-items-center transition-transform hover:scale-105 shadow-xl shadow-white/10 active:scale-95"
+              className="h-16 w-16 sm:h-20 sm:w-20 rounded-full bg-white text-black grid place-items-center transition-transform hover:scale-105 shadow-xl shadow-white/10 active:scale-95"
               title={playing ? "Pause (Space)" : "Play (Space)"}
             >
-              {playing ? <Pause className="h-9 w-9 fill-current" /> : <Play className="h-9 w-9 translate-x-1 fill-current" />}
+              {playing ? <Pause className="h-7 w-7 sm:h-9 sm:w-9 fill-current" /> : <Play className="h-7 w-7 sm:h-9 sm:w-9 translate-x-1 fill-current" />}
             </button>
 
             {multi && (
-              <button onClick={() => step(1)} className="p-3 rounded-full glass-hover text-white transition-transform hover:scale-110" title="Next">
-                <SkipForward className="h-7 w-7" />
+              <button onClick={() => step(1)} className="p-2 sm:p-3 rounded-full glass-hover text-white transition-transform hover:scale-110" title="Next">
+                <SkipForward className="h-5 w-5 sm:h-7 sm:w-7" />
               </button>
             )}
           </div>
@@ -474,10 +474,10 @@ function AudioPlayer({
           {controlled && (
             <button
               onClick={() => player.cycleRepeat()}
-              className={`p-3 rounded-full transition-colors ${player.repeat !== "off" ? "text-accent bg-accent/15" : "text-white/70 hover:text-white glass-hover"}`}
+              className={`p-2 sm:p-3 rounded-full transition-colors ${player.repeat !== "off" ? "text-accent bg-accent/15" : "text-white/70 hover:text-white glass-hover"}`}
               title={`Repeat: ${player.repeat}`}
             >
-              {player.repeat === "one" ? <Repeat1 className="h-6 w-6" /> : <Repeat className="h-6 w-6" />}
+              {player.repeat === "one" ? <Repeat1 className="h-5 w-5 sm:h-6 sm:w-6" /> : <Repeat className="h-5 w-5 sm:h-6 sm:w-6" />}
             </button>
           )}
         </div>

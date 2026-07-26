@@ -18,7 +18,7 @@ export function getStoredZoom(): GridZoom {
     const v = localStorage.getItem(STORAGE_KEY);
     if (v && zoomLevels.some((z) => z.value === v)) return v as GridZoom;
   } catch {}
-  return "default";
+  return "compact";
 }
 
 export function storeZoom(zoom: GridZoom) {

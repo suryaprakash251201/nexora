@@ -204,34 +204,34 @@ export default function FileBrowser({
   // Density-based class helpers
   const dc = {
     grid: {
-      compact: "p-2 gap-2",
-      comfortable: "p-3 sm:p-6 gap-3 sm:gap-5",
-      spacious: "p-4 sm:p-8 gap-4 sm:gap-6",
+      compact: "p-1.5 gap-1.5",
+      comfortable: "p-2 sm:p-3 gap-2 sm:gap-3",
+      spacious: "p-3 sm:p-4 gap-3 sm:gap-4",
     },
     gridItem: {
-      compact: "p-3",
-      comfortable: "p-5",
-      spacious: "p-6",
+      compact: "p-2",
+      comfortable: "p-3",
+      spacious: "p-4",
     },
     gridIcon: {
-      compact: "h-8 w-8",
-      comfortable: "h-16 w-16",
-      spacious: "h-20 w-20",
+      compact: "h-6 w-6",
+      comfortable: "h-10 w-10",
+      spacious: "h-14 w-14",
     },
     gridIconInner: {
-      compact: "h-4 w-4",
-      comfortable: "h-8 w-8",
-      spacious: "h-10 w-10",
+      compact: "h-3 w-3",
+      comfortable: "h-5 w-5",
+      spacious: "h-7 w-7",
     },
     gridName: {
-      compact: "text-xs",
-      comfortable: "text-sm",
-      spacious: "text-base",
+      compact: "text-[11px]",
+      comfortable: "text-xs",
+      spacious: "text-sm",
     },
     gridMeta: {
-      compact: "text-[10px]",
-      comfortable: "text-[11px]",
-      spacious: "text-xs",
+      compact: "text-[9px]",
+      comfortable: "text-[10px]",
+      spacious: "text-[11px]",
     },
     listContainer: {
       compact: "p-2",

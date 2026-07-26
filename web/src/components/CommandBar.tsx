@@ -14,20 +14,12 @@ import {
   Trash2,
   X,
   Filter,
-  Command,
-  Maximize2,
-  Minimize2,
-  Columns,
-  FileType2,
-  Database,
-  Calendar,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import Breadcrumbs from "./Breadcrumbs";
 import ProfileMenu from "./ProfileMenu";
 import type { User } from "../api/types";
 import { useUI } from "../store";
-import type { DensityMode, ColumnKey } from "../store";
 import { Button } from "./ui/Button";
 import { useClickOutside } from "./hooks/useClickOutside";
 import { cn } from "@/lib/utils";
@@ -87,28 +79,21 @@ export default function CommandBar({
 }: CommandBarProps) {
   const viewMode = useUI((s) => s.viewMode);
   const setViewMode = useUI((s) => s.setViewMode);
-  const density = useUI((s) => s.density);
-  const setDensity = useUI((s) => s.setDensity);
-  const visibleColumns = useUI((s) => s.visibleColumns);
-  const toggleColumn = useUI((s) => s.toggleColumn);
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
   const [sortOpen, setSortOpen] = useState(false);
-  const [columnsOpen, setColumnsOpen] = useState(false);
+  const [searchExpanded, setSearchExpanded] = useState(false);
   const [searchFocused, setSearchFocused] = useState(false);
   const [menuPos, setMenuPos] = useState<{ top: number; right: number }>({ top: 0, right: 0 });
   const [filterPos, setFilterPos] = useState<{ top: number; right: number }>({ top: 0, right: 0 });
   const [sortPos, setSortPos] = useState<{ top: number; right: number }>({ top: 0, right: 0 });
-  const [columnsPos, setColumnsPos] = useState<{ top: number; right: number }>({ top: 0, right: 0 });
   const newBtnRef = useRef<HTMLButtonElement>(null);
   const filterBtnRef = useRef<HTMLButtonElement>(null);
   const sortBtnRef = useRef<HTMLButtonElement>(null);
-  const columnsBtnRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const filterRef = useRef<HTMLDivElement>(null);
   const sortRef = useRef<HTMLDivElement>(null);
-  const columnsRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
   const clampMenuPos = (r: DOMRect) => {
@@ -129,7 +114,6 @@ export default function CommandBar({
     setMenuOpen((o) => !o);
     setFilterOpen(false);
     setSortOpen(false);
-    setColumnsOpen(false);
   };
 
   const toggleFilter = () => {
@@ -138,7 +122,6 @@ export default function CommandBar({
     setFilterOpen((o) => !o);
     setMenuOpen(false);
     setSortOpen(false);
-    setColumnsOpen(false);
   };
 
   const toggleSort = () => {
@@ -147,29 +130,19 @@ export default function CommandBar({
     setSortOpen((o) => !o);
     setMenuOpen(false);
     setFilterOpen(false);
-    setColumnsOpen(false);
   };
 
-  const toggleColumnsMenu = () => {
-    const r = columnsBtnRef.current?.getBoundingClientRect();
-    if (r) setColumnsPos(clampMenuPos(r));
-    setColumnsOpen((o) => !o);
-    setMenuOpen(false);
-    setFilterOpen(false);
-    setSortOpen(false);
-  };
 
   const closeAllMenus = () => {
     setMenuOpen(false);
     setFilterOpen(false);
     setSortOpen(false);
-    setColumnsOpen(false);
   };
 
   useClickOutside(
-    [menuRef, newBtnRef, filterRef, filterBtnRef, sortRef, sortBtnRef, columnsRef, columnsBtnRef],
+    [menuRef, newBtnRef, filterRef, filterBtnRef, sortRef, sortBtnRef],
     closeAllMenus,
-    menuOpen || filterOpen || sortOpen || columnsOpen,
+    menuOpen || filterOpen || sortOpen,
   );
 
   const inSelectionMode = selectionCount > 0;
@@ -198,45 +171,61 @@ export default function CommandBar({
         <div className="min-w-0 flex-1 flex items-center gap-2 sm:gap-3">
           <Breadcrumbs rootName={rootName} path={path} onNavigate={onNavigate} />
 
-          {/* Spotlight Search */}
-          <motion.div
-            className="relative flex-1 sm:flex-none sm:w-80 sm:max-w-sm max-sm:max-w-full"
-            animate={searchFocused ? { scale: 1.02 } : { scale: 1 }}
-            transition={{ duration: 0.2 }}
-          >
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-text-tertiary pointer-events-none" />
-              <input
-                ref={searchRef}
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                onFocus={() => setSearchFocused(true)}
-                onBlur={() => setSearchFocused(false)}
-                placeholder="Search files…"
-                className={cn(
-                  "w-full glass-input rounded-xl pl-9 pr-20 py-2 text-sm transition-all duration-200",
-                  searchFocused && "ring-2 ring-accent/30 border-accent/50"
-                )}
-              />
-              <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
-                <kbd className="hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-mono text-text-tertiary bg-glass-bg rounded border border-glass-border-soft">
-                  <Command className="h-2.5 w-2.5" />K
-                </kbd>
-              </div>
-            </div>
-            {/* Animated focus glow */}
-            <AnimatePresence>
-              {searchFocused && (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.95 }}
+          {/* Search — icon-only when collapsed, expands on click */}
+          <div className="relative">
+            <AnimatePresence mode="wait">
+              {!searchExpanded && !search ? (
+                <motion.button
+                  key="search-icon"
+                  initial={{ opacity: 0, scale: 0.8 }}
                   animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.95 }}
-                  className="absolute -inset-0.5 rounded-xl bg-gradient-to-r from-accent/10 via-transparent to-accent-secondary/10 -z-10 blur-sm"
-                />
+                  exit={{ opacity: 0, scale: 0.8 }}
+                  onClick={() => { setSearchExpanded(true); setTimeout(() => searchRef.current?.focus(), 100); }}
+                  className="p-2 rounded-xl glass-hover text-text-secondary hover:text-foreground transition-colors"
+                  title="Search"
+                  aria-label="Open search"
+                >
+                  <Search className="h-4 w-4" />
+                </motion.button>
+              ) : (
+                <motion.div
+                  key="search-input"
+                  initial={{ width: 40, opacity: 0 }}
+                  animate={{ width: "auto", opacity: 1 }}
+                  exit={{ width: 40, opacity: 0 }}
+                  transition={{ duration: 0.25, ease: "easeInOut" }}
+                  className="relative sm:w-72"
+                >
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-text-tertiary pointer-events-none" />
+                  <input
+                    ref={searchRef}
+                    type="text"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    onFocus={() => setSearchFocused(true)}
+                    onBlur={(e) => {
+                      setSearchFocused(false);
+                      if (!search && !e.relatedTarget?.closest?.('.search-close-btn')) {
+                        setSearchExpanded(false);
+                      }
+                    }}
+                    placeholder="Search files…"
+                    className={cn(
+                      "w-full glass-input rounded-xl pl-9 pr-8 py-2 text-sm transition-all duration-200",
+                      searchFocused && "ring-2 ring-accent/30 border-accent/50"
+                    )}
+                  />
+                  <button
+                    className="search-close-btn absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded text-text-tertiary hover:text-foreground"
+                    onClick={() => { setSearch(""); setSearchExpanded(false); }}
+                    title="Close search"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </motion.div>
               )}
             </AnimatePresence>
-          </motion.div>
+          </div>
         </div>
 
         {/* Right: Actions */}
@@ -304,45 +293,6 @@ export default function CommandBar({
               aria-pressed={viewMode === "grid"}
             >
               <LayoutGrid className="h-4 w-4" />
-            </button>
-          </div>
-
-          {/* Density Selector */}
-          <div className="flex rounded-xl overflow-hidden bg-glass-bg-subtle p-0.5 border border-glass-border-soft ml-1.5">
-            {([
-              { value: "compact", label: "Compact", icon: Minimize2 },
-              { value: "comfortable", label: "Comfortable", icon: Maximize2 },
-              { value: "spacious", label: "Spacious", icon: Maximize2 },
-            ] as const).map((d) => (
-              <button
-                key={d.value}
-                onClick={() => setDensity(d.value as DensityMode)}
-                className={cn(
-                  "p-1.5 rounded-lg transition-all duration-200 min-w-[32px] min-h-[32px] relative",
-                  density === d.value
-                    ? "bg-glass-bg-strong text-foreground shadow-sm"
-                    : "text-text-tertiary hover:text-foreground"
-                )}
-                title={d.label}
-                aria-label={d.label}
-                aria-pressed={density === d.value}
-              >
-                <d.icon className={cn("h-4 w-4", density === d.value && "text-accent")} />
-              </button>
-            ))}
-          </div>
-
-          {/* Column Picker */}
-          <div className="flex items-center gap-1.5 ml-1.5">
-            <button
-              ref={columnsBtnRef}
-              onClick={toggleColumnsMenu}
-              className={`p-2 rounded-xl glass-hover transition-colors hidden sm:block min-w-[36px] min-h-[36px] ${visibleColumns.kind || visibleColumns.size || visibleColumns.modified ? "text-accent-tertiary" : "text-text-secondary hover:text-foreground"}`}
-              title="Visible columns"
-              aria-label="Visible columns"
-              aria-expanded={columnsOpen}
-            >
-              <Columns className="h-4 w-4" />
             </button>
           </div>
 
@@ -533,41 +483,7 @@ export default function CommandBar({
         document.body,
       )}
 
-      {/* Column Picker Menu */}
-      {columnsOpen && createPortal(
-        <motion.div
-          ref={columnsRef}
-          initial={{ opacity: 0, scale: 0.95, y: -4 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          transition={{ duration: 0.15 }}
-          style={{ top: columnsPos.top, right: columnsPos.right }}
-          className="fixed z-50 w-56 menu-surface rounded-xl p-1.5 shadow-2xl"
-          role="menu"
-        >
-          <div className="px-3 py-2 text-xs font-semibold uppercase tracking-widest text-text-tertiary">Visible Columns</div>
-          <div className="h-px w-full bg-glass-border-soft my-1" />
-          {[
-            { key: "kind", label: "Kind", icon: FileType2 },
-            { key: "size", label: "Size", icon: Database },
-            { key: "modified", label: "Modified", icon: Calendar },
-          ].map((col) => (
-            <label
-              key={col.key}
-              className="w-full flex items-center gap-3 px-3 py-2 text-sm rounded-lg cursor-pointer transition-colors hover:bg-glass-bg-subtle"
-            >
-              <input
-                type="checkbox"
-                checked={visibleColumns[col.key as keyof typeof visibleColumns]}
-                onChange={() => toggleColumn(col.key as ColumnKey)}
-                className="w-4 h-4 rounded border-glass-border bg-glass-bg text-accent focus:ring-accent cursor-pointer"
-              />
-              <col.icon className="h-4 w-4 text-text-tertiary shrink-0" />
-              <span>{col.label}</span>
-            </label>
-          ))}
-        </motion.div>,
-        document.body,
-      )}
+
     </div>
   );
 }
