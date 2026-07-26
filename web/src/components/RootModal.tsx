@@ -28,34 +28,19 @@ export default function RootModal({
   // Local filesystem fields
   const [localPath, setLocalPath] = useState(type === "local" ? root?.path || "" : "");
 
-  // S3 fields
+  // S3 fields — parse config from existing root inline (component unmounts on close, so this runs fresh)
+  const initialS3Config = root && root.type === "s3" && root.config ? (() => {
+    try { return JSON.parse(root.config); } catch { return {}; }
+  })() : {};
   const [s3Path, setS3Path] = useState(type === "s3" ? root?.path || "" : "");
-  const [endpoint, setEndpoint] = useState("");
-  const [region, setRegion] = useState("");
-  const [bucket, setBucket] = useState("");
-  const [accessKeyId, setAccessKeyId] = useState("");
-  const [secretAccessKey, setSecretAccessKey] = useState("");
-  const [prefix, setPrefix] = useState("");
-  const [usePathStyle, setUsePathStyle] = useState(false);
+  const [endpoint, setEndpoint] = useState(initialS3Config.endpoint || "");
+  const [region, setRegion] = useState(initialS3Config.region || "");
+  const [bucket, setBucket] = useState(initialS3Config.bucket || "");
+  const [accessKeyId, setAccessKeyId] = useState(initialS3Config.access_key_id || "");
+  const [secretAccessKey, setSecretAccessKey] = useState(initialS3Config.secret_access_key || "");
+  const [prefix, setPrefix] = useState(initialS3Config.prefix || "");
+  const [usePathStyle, setUsePathStyle] = useState(initialS3Config.use_path_style || false);
   const [showSecret, setShowSecret] = useState(false);
-
-  // Parse existing config when editing
-  const [configLoaded, setConfigLoaded] = useState(false);
-  if (root && !configLoaded) {
-    const config = root.config ? JSON.parse(root.config) : {};
-    setEndpoint(config.endpoint || "");
-    setRegion(config.region || "");
-    setBucket(config.bucket || "");
-    setAccessKeyId(config.access_key_id || "");
-    setSecretAccessKey(config.secret_access_key || "");
-    setPrefix(config.prefix || "");
-    setUsePathStyle(config.use_path_style || false);
-    setConfigLoaded(true);
-
-    if (type === "s3" && root.path) {
-      setS3Path(root.path);
-    }
-  }
 
   // Provider-specific help text
   const providerHint = (() => {

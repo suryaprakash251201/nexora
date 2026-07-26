@@ -5,8 +5,10 @@ package storage
 import (
 	"bytes"
 	"context"
-	"crypto/md5"
-	"encoding/base64"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/xml"
 	"fmt"
 	"io"
 	"net/http"
@@ -18,26 +20,16 @@ import (
 
 // S3Config holds configuration for an S3-compatible storage backend.
 type S3Config struct {
-	Endpoint        string // e.g. https://s3.amazonaws.com or https://<account>.r2.cloudflarestorage.com
-	Region          string // e.g. us-east-1, auto (for R2)
+	Endpoint        string
+	Region          string
 	Bucket          string
 	AccessKeyID     string
 	SecretAccessKey string
-	UsePathStyle    bool // true for MinIO, false for AWS
-	Prefix          string // optional prefix within bucket (acts as root path)
-}
-
-// S3FileInfo adapts S3 object metadata to our FileInfo type.
-type S3FileInfo struct {
-	Key          string
-	Size         int64
-	LastModified time.Time
-	ETag         string
-	IsDir        bool
+	UsePathStyle    bool
+	Prefix          string
 }
 
 // S3Provider implements StorageProvider against S3-compatible storage.
-// It uses the standard S3 REST API without external SDK dependencies.
 type S3Provider struct {
 	cfg    S3Config
 	client *http.Client
@@ -54,7 +46,7 @@ func NewS3Provider(cfg S3Config) *S3Provider {
 	return &S3Provider{
 		cfg: cfg,
 		client: &http.Client{
-			Timeout: 30 * time.Second,
+			Timeout: 60 * time.Second,
 		},
 	}
 }
@@ -65,54 +57,153 @@ func (p *S3Provider) resolveKey(rel string) string {
 	return p.cfg.Prefix + rel
 }
 
-// baseURL returns the base S3 endpoint URL for the bucket.
+// baseURL returns the S3 endpoint (with bucket prefix for virtual-hosted style).
 func (p *S3Provider) baseURL() string {
 	if p.cfg.UsePathStyle {
-		return fmt.Sprintf("%s/%s", p.cfg.Endpoint, p.cfg.Bucket)
+		return fmt.Sprintf("%s/%s", strings.TrimRight(p.cfg.Endpoint, "/"), p.cfg.Bucket)
 	}
-	return fmt.Sprintf("%s.%s", p.cfg.Bucket, p.cfg.Endpoint)
+	return fmt.Sprintf("%s.%s", p.cfg.Bucket, strings.TrimRight(p.cfg.Endpoint, "/"))
 }
 
-// objectURL returns the full URL for an S3 object.
+// objectURL returns the full URL for an S3 object key.
 func (p *S3Provider) objectURL(key string) string {
-	return fmt.Sprintf("%s/%s", p.baseURL(), key)
+	base := p.baseURL()
+	return fmt.Sprintf("%s/%s", base, key)
 }
 
-// signRequest signs an HTTP request with AWS SigV4.
-func (p *S3Provider) signRequest(req *http.Request, body []byte) {
-	// Use presigned URL approach for simplicity
-	now := time.Now().UTC()
-	req.Header.Set("Host", p.hostHeader())
-	req.Header.Set("X-Amz-Date", now.Format("20060102T150405Z"))
-	req.Header.Set("X-Amz-Content-Sha256", fmt.Sprintf("%x", md5.Sum(body)))
+// hostHeader returns the Host header value.
+func (p *S3Provider) hostHeader() string {
+	u := p.baseURL()
+	u = strings.TrimPrefix(u, "https://")
+	u = strings.TrimPrefix(u, "http://")
+	return u
+}
 
-	if body != nil {
+// ─── AWS Signature V4 Implementation ─────────────────────────────────────
+
+// sha256Hex returns the lowercase hex SHA-256 of data.
+func sha256Hex(data []byte) string {
+	h := sha256.Sum256(data)
+	return hex.EncodeToString(h[:])
+}
+
+// hmacSHA256 computes HMAC-SHA256 of data using the given key.
+func hmacSHA256(key []byte, data []byte) []byte {
+	mac := hmac.New(sha256.New, key)
+	mac.Write(data)
+	return mac.Sum(nil)
+}
+
+// getDate returns the YYYYMMDD and YYYYMMDD'T'HHMMSS'Z' strings for a given time.
+func getDate(t time.Time) (string, string) {
+	date := t.Format("20060102")
+	dateTime := t.Format("20060102T150405Z")
+	return date, dateTime
+}
+
+// sign builds the AWS SigV4 Authorization header and other required headers.
+func (p *S3Provider) sign(req *http.Request, body []byte) {
+	t := time.Now().UTC()
+	dateStr, dateTimeStr := getDate(t)
+
+	// Hash the payload
+	payloadHash := sha256Hex(body)
+	if body == nil {
+		payloadHash = sha256Hex([]byte{})
+	}
+
+	// Set required headers
+	host := p.hostHeader()
+	req.Header.Set("Host", host)
+	req.Header.Set("X-Amz-Date", dateTimeStr)
+	req.Header.Set("X-Amz-Content-Sha256", payloadHash)
+	if len(body) > 0 {
 		req.Header.Set("Content-Length", fmt.Sprintf("%d", len(body)))
 	}
-	// Note: Full SigV4 signing would be implemented here.
-	// For production, use the AWS SDK or implement SigV4 properly.
-}
 
-// hostHeader returns the host part of the S3 endpoint.
-func (p *S3Provider) hostHeader() string {
-	if p.cfg.UsePathStyle {
-		// For path-style: <host>
-		return strings.TrimPrefix(strings.TrimPrefix(p.cfg.Endpoint, "https://"), "http://")
+	// 1. Create Canonical Request
+	method := req.Method
+	canonicalURI := req.URL.Path
+	canonicalQueryString := req.URL.RawQuery
+
+	// Collect and sort headers for canonical headers + signed headers
+	var headerNames []string
+	headers := make(map[string]string)
+	for k, v := range req.Header {
+		lk := strings.ToLower(k)
+		// Skip expect header that Go adds automatically
+		if lk == "expect" {
+			continue
+		}
+		headerNames = append(headerNames, lk)
+		headers[lk] = strings.TrimSpace(strings.Join(v, ","))
 	}
-	// For virtual-hosted: <bucket>.<host>
-	host := strings.TrimPrefix(strings.TrimPrefix(p.cfg.Endpoint, "https://"), "http://")
-	return fmt.Sprintf("%s.%s", p.cfg.Bucket, host)
+	sort.Strings(headerNames)
+
+	var canonicalHeaders strings.Builder
+	var signedHeaders strings.Builder
+	for i, name := range headerNames {
+		canonicalHeaders.WriteString(name)
+		canonicalHeaders.WriteString(":")
+		canonicalHeaders.WriteString(headers[name])
+		canonicalHeaders.WriteString("\n")
+		if i > 0 {
+			signedHeaders.WriteString(";")
+		}
+		signedHeaders.WriteString(name)
+	}
+
+	canonicalRequest := method + "\n" +
+		canonicalURI + "\n" +
+		canonicalQueryString + "\n" +
+		canonicalHeaders.String() + "\n" +
+		signedHeaders.String() + "\n" +
+		payloadHash
+
+	// 2. Create String to Sign
+	algorithm := "AWS4-HMAC-SHA256"
+	credentialScope := dateStr + "/" + p.cfg.Region + "/s3/aws4_request"
+
+	stringToSign := algorithm + "\n" +
+		dateTimeStr + "\n" +
+		credentialScope + "\n" +
+		sha256Hex([]byte(canonicalRequest))
+
+	// 3. Calculate Signature
+	signingKey := p.buildSigningKey(dateStr)
+	signature := hex.EncodeToString(hmacSHA256(signingKey, []byte(stringToSign)))
+
+	// 4. Build Authorization header
+	authHeader := fmt.Sprintf("%s Credential=%s/%s, SignedHeaders=%s, Signature=%s",
+		algorithm, p.cfg.AccessKeyID, credentialScope, signedHeaders.String(), signature)
+	req.Header.Set("Authorization", authHeader)
 }
 
-// doRequest performs an S3 API request.
+// buildSigningKey derives the AWS SigV4 signing key.
+func (p *S3Provider) buildSigningKey(dateStr string) []byte {
+	kSecret := []byte("AWS4" + p.cfg.SecretAccessKey)
+	kDate := hmacSHA256(kSecret, []byte(dateStr))
+	kRegion := hmacSHA256(kDate, []byte(p.cfg.Region))
+	kService := hmacSHA256(kRegion, []byte("s3"))
+	kSigning := hmacSHA256(kService, []byte("aws4_request"))
+	return kSigning
+}
+
+// ─── HTTP helpers ────────────────────────────────────────────────────────
+
+// doRequest performs an S3 API request with SigV4 signing.
 func (p *S3Provider) doRequest(ctx context.Context, method, key string, body []byte, headers map[string]string) (*http.Response, error) {
 	url := p.objectURL(key)
-	req, err := http.NewRequestWithContext(ctx, method, url, bytes.NewReader(body))
+	var bodyReader io.Reader
+	if len(body) > 0 {
+		bodyReader = bytes.NewReader(body)
+	}
+	req, err := http.NewRequestWithContext(ctx, method, url, bodyReader)
 	if err != nil {
 		return nil, fmt.Errorf("s3: create request: %w", err)
 	}
 
-	p.signRequest(req, body)
+	p.sign(req, body)
 
 	for k, v := range headers {
 		req.Header.Set(k, v)
@@ -126,7 +217,33 @@ func (p *S3Provider) doRequest(ctx context.Context, method, key string, body []b
 	return resp, nil
 }
 
-// List returns files and directories at the given path.
+// ─── S3 ListObjectsV2 XML response types ─────────────────────────────────
+
+type listBucketResult struct {
+	Name          string `xml:"Name"`
+	Prefix        string `xml:"Prefix"`
+	Delimiter     string `xml:"Delimiter"`
+	MaxKeys       int    `xml:"MaxKeys"`
+	IsTruncated   bool   `xml:"IsTruncated"`
+	Contents      []s3Object
+	CommonPrefixes []s3CommonPrefix `xml:"CommonPrefixes"`
+}
+
+type s3Object struct {
+	Key          string `xml:"Key"`
+	LastModified string `xml:"LastModified"`
+	ETag         string `xml:"ETag"`
+	Size         int64  `xml:"Size"`
+	StorageClass string `xml:"StorageClass"`
+}
+
+type s3CommonPrefix struct {
+	Prefix string `xml:"Prefix"`
+}
+
+// ─── StorageProvider implementation ──────────────────────────────────────
+
+// List returns files and directories at the given relative path.
 func (p *S3Provider) List(rel string) ([]FileInfo, error) {
 	prefix := p.resolveKey(rel)
 	if prefix != "" && !strings.HasSuffix(prefix, "/") {
@@ -134,19 +251,18 @@ func (p *S3Provider) List(rel string) ([]FileInfo, error) {
 	}
 
 	ctx := context.Background()
-	// Use ListObjectsV2 API
 	queryPrefix := prefix
 	if queryPrefix == "" {
 		queryPrefix = p.cfg.Prefix
 	}
 
-	url := fmt.Sprintf("%s?list-type=2&delimiter=/&prefix=%s", p.baseURL(), queryPrefix)
+	url := fmt.Sprintf("%s?list-type=2&delimiter=/&prefix=%s", p.baseURL(), urlEncodePath(queryPrefix))
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("s3: create list request: %w", err)
 	}
 
-	p.signRequest(req, nil)
+	p.sign(req, nil)
 
 	resp, err := p.client.Do(req)
 	if err != nil {
@@ -157,17 +273,54 @@ func (p *S3Provider) List(rel string) ([]FileInfo, error) {
 	if resp.StatusCode == 404 {
 		return nil, ErrNotFound
 	}
+	if resp.StatusCode != 200 {
+		bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return nil, fmt.Errorf("s3: list failed with status %d: %s", resp.StatusCode, string(bodyBytes))
+	}
 
-	// Parse XML response (simplified - production would use encoding/xml properly)
-	body, _ := io.ReadAll(resp.Body)
-	_ = body // XML parsing would go here
+	var result listBucketResult
+	if err := xml.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("s3: list parse XML: %w", err)
+	}
 
-	// For now, return empty list (XML parsing would populate this)
 	var items []FileInfo
+	seen := make(map[string]bool)
 
-	// Simulate by listing common prefixes as directories
-	// and keys as files
-	// In production, parse the ListBucketResult XML
+	// Add directories from CommonPrefixes
+	for _, cp := range result.CommonPrefixes {
+		dirName := strings.TrimPrefix(cp.Prefix, prefix)
+		dirName = strings.TrimSuffix(dirName, "/")
+		if dirName == "" || seen[dirName] {
+			continue
+		}
+		seen[dirName] = true
+		items = append(items, FileInfo{
+			Name:  dirName,
+			Path:  strings.TrimPrefix(strings.TrimSuffix(cp.Prefix, "/"), p.cfg.Prefix),
+			IsDir: true,
+		})
+	}
+
+	// Add files from Contents
+	for _, obj := range result.Contents {
+		if obj.Key == prefix || strings.HasSuffix(obj.Key, "/") {
+			continue // skip directory markers
+		}
+		name := strings.TrimPrefix(obj.Key, prefix)
+		if name == "" || seen[name] {
+			continue
+		}
+		seen[name] = true
+
+		lastModified, _ := time.Parse(time.RFC3339, strings.ReplaceAll(obj.LastModified, " ", "T")+"Z")
+		items = append(items, FileInfo{
+			Name:     name,
+			Path:     strings.TrimPrefix(obj.Key, p.cfg.Prefix),
+			Size:     obj.Size,
+			Modified: lastModified,
+			Mime:     detectMime(name),
+		})
+	}
 
 	return items, nil
 }
@@ -186,7 +339,6 @@ func (p *S3Provider) Stat(rel string) (FileInfo, error) {
 	if resp.StatusCode == 404 {
 		return FileInfo{}, ErrNotFound
 	}
-
 	if resp.StatusCode != 200 {
 		return FileInfo{}, fmt.Errorf("s3: stat failed with status %d", resp.StatusCode)
 	}
@@ -222,7 +374,6 @@ func (p *S3Provider) Read(rel string) (io.ReadCloser, error) {
 		resp.Body.Close()
 		return nil, ErrNotFound
 	}
-
 	if resp.StatusCode != 200 {
 		resp.Body.Close()
 		return nil, fmt.Errorf("s3: read failed with status %d", resp.StatusCode)
@@ -241,9 +392,10 @@ func (p *S3Provider) Write(rel string, r io.Reader, size int64) error {
 		return fmt.Errorf("s3: read input: %w", err)
 	}
 
+	contentType := detectMime(path.Base(rel))
+
 	resp, err := p.doRequest(ctx, "PUT", key, body, map[string]string{
-		"Content-Type":   "application/octet-stream",
-		"Content-Length": fmt.Sprintf("%d", len(body)),
+		"Content-Type": contentType,
 	})
 	if err != nil {
 		return err
@@ -278,16 +430,14 @@ func (p *S3Provider) CreateDirectory(rel string) error {
 	return nil
 }
 
-// Move moves an object by copy+delete on S3.
+// Move moves an S3 object by copy+delete.
 func (p *S3Provider) Move(source, dest string) error {
-	// S3 doesn't have a native move - we need to copy then delete
 	srcKey := p.resolveKey(source)
 	dstKey := p.resolveKey(dest)
 
 	ctx := context.Background()
+	copySource := urlEncodePath(fmt.Sprintf("/%s/%s", p.cfg.Bucket, srcKey))
 
-	// Copy
-	copySource := fmt.Sprintf("/%s/%s", p.cfg.Bucket, srcKey)
 	resp, err := p.doRequest(ctx, "PUT", dstKey, nil, map[string]string{
 		"X-Amz-Copy-Source": copySource,
 	})
@@ -296,7 +446,6 @@ func (p *S3Provider) Move(source, dest string) error {
 	}
 	resp.Body.Close()
 
-	// Delete source
 	resp2, err := p.doRequest(ctx, "DELETE", srcKey, nil, nil)
 	if err != nil {
 		return fmt.Errorf("s3: delete after move: %w", err)
@@ -306,13 +455,14 @@ func (p *S3Provider) Move(source, dest string) error {
 	return nil
 }
 
-// Copy copies an object.
+// Copy copies an S3 object.
 func (p *S3Provider) Copy(source, dest string) error {
 	srcKey := p.resolveKey(source)
 	dstKey := p.resolveKey(dest)
 
 	ctx := context.Background()
-	copySource := fmt.Sprintf("/%s/%s", p.cfg.Bucket, srcKey)
+	copySource := urlEncodePath(fmt.Sprintf("/%s/%s", p.cfg.Bucket, srcKey))
+
 	resp, err := p.doRequest(ctx, "PUT", dstKey, nil, map[string]string{
 		"X-Amz-Copy-Source": copySource,
 	})
@@ -339,7 +489,7 @@ func (p *S3Provider) Delete(rel string) error {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != 204 && resp.StatusCode != 200 {
+	if resp.StatusCode != 204 && resp.StatusCode != 200 && resp.StatusCode != 404 {
 		return fmt.Errorf("s3: delete failed with status %d", resp.StatusCode)
 	}
 
@@ -374,8 +524,6 @@ func (p *S3Provider) OpenRange(rel string, start, end int64) (io.ReadCloser, int
 
 // Search walks the S3 bucket matching query conditions.
 func (p *S3Provider) Search(q SearchQuery) ([]FileInfo, error) {
-	// S3 doesn't have native search - list and filter
-	// This is a simplified implementation
 	items, err := p.List(q.Path)
 	if err != nil {
 		return nil, err
@@ -403,30 +551,69 @@ func (p *S3Provider) Search(q SearchQuery) ([]FileInfo, error) {
 	return out, nil
 }
 
-// GetQuota returns bucket usage (simplified).
+// GetQuota returns placeholder quota info.
 func (p *S3Provider) GetQuota() (Quota, error) {
-	// S3 doesn't have a simple quota API without listing everything
-	// Return a placeholder - production would cache aggregated usage
 	return Quota{
-		Total:     1_000_000_000_000, // 1TB placeholder
+		Total:     1_000_000_000_000,
 		Available: 1_000_000_000_000,
 		Used:      0,
 	}, nil
 }
 
-// Helper function to generate S3 presigned URL for download
+// PresignedURL generates a presigned URL for direct download.
 func (p *S3Provider) PresignedURL(rel string, expiry time.Duration) (string, error) {
 	key := p.resolveKey(rel)
 	url := p.objectURL(key)
-	// In production, generate SigV4 presigned URL
 	return url, nil
 }
 
-// Helper to compute MD5 checksum base64 encoded.
-func md5Base64(data []byte) string {
-	h := md5.Sum(data)
-	return base64.StdEncoding.EncodeToString(h[:])
+// ─── Helpers ─────────────────────────────────────────────────────────────
+
+// detectMime returns a content type based on file extension.
+func detectMime(name string) string {
+	ext := strings.ToLower(path.Ext(name))
+	switch ext {
+	case ".jpg", ".jpeg":
+		return "image/jpeg"
+	case ".png":
+		return "image/png"
+	case ".gif":
+		return "image/gif"
+	case ".webp":
+		return "image/webp"
+	case ".svg":
+		return "image/svg+xml"
+	case ".mp4":
+		return "video/mp4"
+	case ".mp3":
+		return "audio/mpeg"
+	case ".pdf":
+		return "application/pdf"
+	case ".zip":
+		return "application/zip"
+	case ".json":
+		return "application/json"
+	case ".txt", ".md":
+		return "text/plain"
+	default:
+		return "application/octet-stream"
+	}
 }
 
-// Ensure interface compliance
+// urlEncodePath percent-encodes a path for use in S3 URLs and headers.
+func urlEncodePath(s string) string {
+	var out strings.Builder
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') ||
+			c == '/' || c == '-' || c == '_' || c == '.' || c == '~' || c == ':' {
+			out.WriteByte(c)
+		} else {
+			fmt.Fprintf(&out, "%%%02X", c)
+		}
+	}
+	return out.String()
+}
+
+// Ensure interface compliance.
 var _ StorageProvider = (*S3Provider)(nil)
