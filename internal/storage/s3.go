@@ -147,7 +147,9 @@ func (p *S3Provider) baseURL() string {
 // objectURL returns the full URL for an S3 object key.
 func (p *S3Provider) objectURL(key string) string {
 	base := p.baseURL()
-	return fmt.Sprintf("%s/%s", base, key)
+	// URL-encode each path segment but keep / separators
+	encodedKey := urlEncodePath(key)
+	return fmt.Sprintf("%s/%s", base, encodedKey)
 }
 
 // hostHeader returns the Host header value for SigV4 signing.
@@ -218,7 +220,7 @@ func (p *S3Provider) sign(req *http.Request, body []byte) {
 
 	// 1. Create Canonical Request
 	method := req.Method
-	canonicalURI := req.URL.Path
+	canonicalURI := req.URL.EscapedPath()  // encoded form (keeps %20), not decoded Path
 	canonicalQueryString := sortQueryString(req.URL.RawQuery)
 
 	// Collect and sort headers for canonical headers + signed headers
