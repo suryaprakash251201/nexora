@@ -125,7 +125,6 @@ export default function TransfersPanel() {
       ${isExpanded 
         ? "bottom-4 right-4 max-w-[calc(100vw-2rem)] sm:w-96 max-h-[80vh] flex flex-col" 
         : "bottom-4 right-4 max-w-[calc(100vw-2rem)] sm:w-80"}`}
-      style={{ left: 'env(safe-area-inset-left, 0.5rem)', right: 'env(safe-area-inset-right, 0.5rem)' }}
     >
       {/* Header */}
       <div 
