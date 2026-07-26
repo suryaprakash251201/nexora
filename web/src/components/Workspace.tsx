@@ -321,10 +321,6 @@ export default function Workspace({ user }: { user: User }) {
     }
   }, [selection, items, openPickerFor, bulkDelete, downloadItem, setShareItem, archivePaths, toggleFavorite, rootId, setTagPicker]);
 
-  const handleExitSelection = useCallback(() => {
-    clearSelection();
-  }, [clearSelection]);
-
   const buildMenu = (item: FileItem, x: number, y: number): MenuItem[] => {
     const menuItems: MenuItem[] = [
       { label: item.is_dir ? "Open" : "Preview", icon: item.is_dir ? <FolderOpen className="h-4 w-4" /> : <Eye className="h-4 w-4" />, onClick: () => openItem(item) },
@@ -436,13 +432,10 @@ export default function Workspace({ user }: { user: User }) {
             order={order}
             setOrder={setOrder}
             canWrite={canWrite}
-            selectionCount={selection.size}
             onNewFolder={() => setMenu({ kind: "newFolder" })}
             onNewFile={() => setMenu({ kind: "newFile" })}
             onUpload={() => fileInput.current?.click()}
             onRefresh={refresh}
-            onSelectionAction={handleSelectionAction}
-            onExitSelection={handleExitSelection}
             user={user}
             isAdmin={isAdmin}
             onLogout={logout}

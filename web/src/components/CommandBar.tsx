@@ -9,9 +9,6 @@ import {
   FolderPlus,
   FilePlus,
   Upload,
-  Download,
-  Share2,
-  Trash2,
   X,
   Filter,
 } from "lucide-react";
@@ -37,13 +34,10 @@ interface CommandBarProps {
   order: string;
   setOrder: (s: string) => void;
   canWrite: boolean;
-  selectionCount: number;
   onNewFolder: () => void;
   onNewFile: () => void;
   onUpload: () => void;
   onRefresh: () => void;
-  onSelectionAction: (action: "move" | "copy" | "delete" | "download" | "share" | "archive" | "favorite" | "tag") => void;
-  onExitSelection: () => void;
   user: User;
   isAdmin: boolean;
   onLogout: () => void;
@@ -64,13 +58,10 @@ export default function CommandBar({
   order,
   setOrder,
   canWrite,
-  selectionCount,
   onNewFolder,
   onNewFile,
   onUpload,
   onRefresh,
-  onSelectionAction,
-  onExitSelection,
   user,
   isAdmin,
   onLogout,
@@ -145,7 +136,6 @@ export default function CommandBar({
     menuOpen || filterOpen || sortOpen,
   );
 
-  const inSelectionMode = selectionCount > 0;
 
   const sortOptions = [
     { value: "name", label: "Name" },
@@ -298,7 +288,7 @@ export default function CommandBar({
 
           {/* Separator + Actions */}
           <div className="flex items-center gap-1.5 border-l border-glass-border pl-3 ml-1">
-            {canWrite && !inSelectionMode && (
+            {canWrite && (
               <>
                 <Button
                   ref={newBtnRef}
@@ -320,21 +310,6 @@ export default function CommandBar({
                   Upload
                 </Button>
               </>
-            )}
-
-            {inSelectionMode && (
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs font-medium text-foreground mr-1">
-                  {selectionCount}
-                </span>
-                <div className="flex rounded-xl overflow-hidden bg-glass-bg-subtle p-0.5">
-                  <Button variant="ghost" size="xs" icon={<Download className="h-3.5 w-3.5" />} onClick={() => onSelectionAction("download")}>DL</Button>
-                  <Button variant="ghost" size="xs" icon={<Share2 className="h-3.5 w-3.5" />} onClick={() => onSelectionAction("share")}>Share</Button>
-                  <Button variant="ghost" size="xs" onClick={() => onSelectionAction("tag")}>Tags...</Button>
-                  <Button variant="ghost" size="xs" icon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => onSelectionAction("delete")} className="text-danger">Del</Button>
-                  <Button variant="ghost" size="xs" onClick={onExitSelection}><X className="h-3.5 w-3.5" /></Button>
-                </div>
-              </div>
             )}
 
             <div className="pl-1">
