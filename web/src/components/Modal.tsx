@@ -42,7 +42,7 @@ export function Modal({ title, description, icon, onClose, children, footer }: {
           aria-modal="true"
           aria-labelledby={titleId}
           tabIndex={-1}
-          className="w-full max-w-md glass-strong rounded-2xl outline-none shadow-2xl shadow-black/30 overflow-hidden"
+          className="w-full max-w-md glass-strong rounded-2xl outline-none shadow-2xl shadow-black/30 flex flex-col max-h-[85vh]"
           onMouseDown={(e) => e.stopPropagation()}
         >
           <div className="flex items-start justify-between px-6 py-4 border-b border-white/[0.06] bg-gradient-to-r from-white/[0.02] via-transparent to-transparent">
@@ -61,7 +61,7 @@ export function Modal({ title, description, icon, onClose, children, footer }: {
               <X className="h-4 w-4" />
             </button>
           </div>
-          <div className="p-6">{children}</div>
+          <div className="p-6 overflow-y-auto">{children}</div>
           {footer && <div className="px-6 py-4 border-t border-white/[0.06] bg-white/[0.02] flex justify-end gap-3">{footer}</div>}
         </motion.div>
       </motion.div>
