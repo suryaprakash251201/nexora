@@ -39,10 +39,18 @@ type S3Provider struct {
 
 // NewS3Provider creates an S3-compatible storage provider.
 func NewS3Provider(cfg S3Config) *S3Provider {
-	// Auto-detect region from endpoint if empty
-	if cfg.Region == "" {
-		cfg.Region = extractRegion(cfg.Endpoint)
+	// Auto-detect region from endpoint if empty or clearly wrong
+	if cfg.Region == "" || strings.ToUpper(cfg.Region) == cfg.Region && len(cfg.Region) > 5 {
+		autoRegion := extractRegion(cfg.Endpoint)
+		if cfg.Region == "" || strings.ToUpper(cfg.Region) != cfg.Region {
+			cfg.Region = autoRegion
+		} else {
+			log.Printf("S3: region '%s' looks uppercase, auto-detected '%s' from endpoint, using auto-detected", cfg.Region, autoRegion)
+			cfg.Region = autoRegion
+		}
 	}
+	// Normalize region to lowercase
+	cfg.Region = strings.ToLower(cfg.Region)
 	if cfg.Prefix != "" {
 		cfg.Prefix = strings.Trim(cfg.Prefix, "/") + "/"
 	}
@@ -60,23 +68,35 @@ func extractRegion(endpoint string) string {
 	// Strip scheme
 	host := strings.TrimPrefix(endpoint, "https://")
 	host = strings.TrimPrefix(host, "http://")
-	// Strip port if present
+	// Strip trailing slash and port
+	host = strings.TrimRight(host, "/")
 	if idx := strings.Index(host, ":"); idx >= 0 {
 		host = host[:idx]
 	}
 	parts := strings.Split(host, ".")
-	// Look for region patterns: s3.<region>.<rest> or <region>.amazonaws.com
+	log.Printf("S3 extractRegion: host=%s parts=%v", host, parts)
+	// Look for region patterns: s3.<region>.<rest> or s3-<region>.amazonaws.com
 	for i, p := range parts {
 		if strings.HasPrefix(p, "s3-") {
-			return strings.TrimPrefix(p, "s3-")
+			region := strings.TrimPrefix(p, "s3-")
+			log.Printf("S3 extractRegion: found via s3- prefix: %s", region)
+			return region
 		}
-		if i == 1 && p == "s3" && len(parts) > 2 {
-			continue // skip "s3" in s3.region.amazonaws
+		// Skip the "s3" subdomain prefix (s3.<region>.amazonaws.com)
+		if i == 0 && p == "s3" && len(parts) > 2 {
+			// If the next part looks like a region, use it
+			if isRegionPart(parts[1]) {
+				log.Printf("S3 extractRegion: found region after s3: %s", parts[1])
+				return parts[1]
+			}
+			continue
 		}
 		if isRegionPart(p) {
+			log.Printf("S3 extractRegion: found via isRegionPart: %s", p)
 			return p
 		}
 	}
+	log.Printf("S3 extractRegion: no region found, using default us-east-1")
 	return "us-east-1"
 }
 
@@ -87,6 +107,17 @@ func isRegionPart(s string) bool {
 		return false
 	}
 	return strings.ContainsAny(s, "-") && !strings.Contains(s, "://")
+}
+
+// sortQueryString sorts query parameters alphabetically for SigV4 canonical request.
+func sortQueryString(rawQuery string) string {
+	if rawQuery == "" {
+		return ""
+	}
+	// Split by &, sort, rejoin
+	pairs := strings.Split(rawQuery, "&")
+	sort.Strings(pairs)
+	return strings.Join(pairs, "&")
 }
 
 // resolveKey converts a relative path to an S3 object key.
@@ -172,6 +203,7 @@ func (p *S3Provider) sign(req *http.Request, body []byte) {
 
 	// Set required headers
 	host := p.hostHeader()
+	req.Host = host
 	req.Header.Set("Host", host)
 	req.Header.Set("X-Amz-Date", dateTimeStr)
 	req.Header.Set("X-Amz-Content-Sha256", payloadHash)
@@ -182,7 +214,7 @@ func (p *S3Provider) sign(req *http.Request, body []byte) {
 	// 1. Create Canonical Request
 	method := req.Method
 	canonicalURI := req.URL.Path
-	canonicalQueryString := req.URL.RawQuery
+	canonicalQueryString := sortQueryString(req.URL.RawQuery)
 
 	// Collect and sort headers for canonical headers + signed headers
 	var headerNames []string
@@ -236,8 +268,10 @@ func (p *S3Provider) sign(req *http.Request, body []byte) {
 		algorithm, p.cfg.AccessKeyID, credentialScope, signedHeaders.String(), signature)
 	req.Header.Set("Authorization", authHeader)
 
-	log.Printf("S3 SigV4: method=%s path=%s host=%s credential=%s/%s region=%s",
-		method, canonicalURI, host, p.cfg.AccessKeyID, credentialScope, p.cfg.Region)
+	log.Printf("S3 SigV4: method=%s path=%s query=%s host=%s credential=%s/%s region=%s algo=%s",
+		method, canonicalURI, canonicalQueryString, host, p.cfg.AccessKeyID, credentialScope, p.cfg.Region, algorithm)
+	log.Printf("S3 SigV4 canonical-request-hash=%s string-to-sign-hash=%s",
+		sha256Hex([]byte(canonicalRequest)), sha256Hex([]byte(stringToSign)))
 }
 
 // buildSigningKey derives the AWS SigV4 signing key.
@@ -319,13 +353,23 @@ func (p *S3Provider) List(rel string) ([]FileInfo, error) {
 
 	// Use V1 if forced, otherwise try V2 first
 	if p.cfg.ForceListV1 {
-		return p.listV1(ctx, queryPrefix, prefix)
+		items, err := p.listV1(ctx, queryPrefix, prefix)
+		if err != nil && strings.Contains(err.Error(), "status 500") {
+			log.Printf("S3 List: V1 with delimiter failed (forced), trying without delimiter")
+			return p.listNoDelimiter(ctx, queryPrefix, prefix)
+		}
+		return items, err
 	}
-	// Try ListObjectsV2 first, fall back to V1 if unsupported
+	// Try ListObjectsV2 first with delimiter, fall back as needed
 	items, err := p.listV2(ctx, queryPrefix, prefix)
 	if err != nil && (strings.Contains(err.Error(), "status 500") || strings.Contains(err.Error(), "status 501")) {
 		log.Printf("S3 List V2 failed, trying V1: %v", err)
-		return p.listV1(ctx, queryPrefix, prefix)
+		items, err = p.listV1(ctx, queryPrefix, prefix)
+	}
+	// If delimiter causes 500, retry without delimiter and group manually
+	if err != nil && strings.Contains(err.Error(), "status 500") {
+		log.Printf("S3 List with delimiter failed, trying without delimiter: %v", err)
+		return p.listNoDelimiter(ctx, queryPrefix, prefix)
 	}
 	return items, err
 }
@@ -417,6 +461,87 @@ func (p *S3Provider) doListRequest(ctx context.Context, url, prefix string) ([]F
 		})
 	}
 
+	return items, nil
+}
+
+// listNoDelimiter lists all objects with a prefix and simulates directory grouping.
+// Used for S3-compatible providers that crash on the delimiter= parameter.
+func (p *S3Provider) listNoDelimiter(ctx context.Context, queryPrefix, prefix string) ([]FileInfo, error) {
+	// List ALL objects with the prefix (no delimiter)
+	url := fmt.Sprintf("%s?prefix=%s&max-keys=1000", p.baseURL(), urlEncodePath(queryPrefix))
+	log.Printf("S3 List (no-delimiter): url=%s", url)
+
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("s3: create list request: %w", err)
+	}
+
+	p.sign(req, nil)
+
+	resp, err := p.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("s3: list failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	log.Printf("S3 List (no-delimiter) response: %d", resp.StatusCode)
+
+	if resp.StatusCode != 200 {
+		bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return nil, fmt.Errorf("s3: list failed with status %d: %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	var result listBucketResult
+	if err := xml.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("s3: list parse XML: %w", err)
+	}
+
+	// Manually group into directories using the next / after the prefix
+	dirs := make(map[string]bool)
+	var files []FileInfo
+
+	for _, obj := range result.Contents {
+		if obj.Key == prefix || strings.HasSuffix(obj.Key, "/") {
+			continue
+		}
+
+		// Get the part of the key after the prefix
+		rest := strings.TrimPrefix(obj.Key, prefix)
+		if rest == "" {
+			continue
+		}
+
+		// If rest contains a /, the first segment is a directory
+		if idx := strings.Index(rest, "/"); idx >= 0 {
+			dirName := rest[:idx]
+			if dirName != "" {
+				dirs[dirName] = true
+			}
+		} else {
+			// No / means this is a direct file in the current folder
+			lastModified, _ := time.Parse(time.RFC3339, strings.ReplaceAll(obj.LastModified, " ", "T")+"Z")
+			files = append(files, FileInfo{
+				Name:     rest,
+				Path:     strings.TrimPrefix(obj.Key, p.cfg.Prefix),
+				Size:     obj.Size,
+				Modified: lastModified,
+				Mime:     detectMime(rest),
+			})
+		}
+	}
+
+	// Build result: directories first, then files
+	var items []FileInfo
+	for d := range dirs {
+		items = append(items, FileInfo{
+			Name:  d,
+			Path:  strings.TrimPrefix(prefix+d+"/", p.cfg.Prefix),
+			IsDir: true,
+		})
+	}
+	items = append(items, files...)
+
+	log.Printf("S3 List (no-delimiter): %d dirs, %d files", len(dirs), len(files))
 	return items, nil
 }
 
