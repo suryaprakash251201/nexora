@@ -11,6 +11,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"path"
 	"sort"
@@ -59,10 +60,20 @@ func (p *S3Provider) resolveKey(rel string) string {
 
 // baseURL returns the S3 endpoint (with bucket prefix for virtual-hosted style).
 func (p *S3Provider) baseURL() string {
-	if p.cfg.UsePathStyle {
-		return fmt.Sprintf("%s/%s", strings.TrimRight(p.cfg.Endpoint, "/"), p.cfg.Bucket)
+	// Ensure endpoint has scheme
+	endpoint := p.cfg.Endpoint
+	if !strings.HasPrefix(endpoint, "https://") && !strings.HasPrefix(endpoint, "http://") {
+		endpoint = "https://" + endpoint
 	}
-	return fmt.Sprintf("%s.%s", p.cfg.Bucket, strings.TrimRight(p.cfg.Endpoint, "/"))
+	endpoint = strings.TrimRight(endpoint, "/")
+
+	if p.cfg.UsePathStyle {
+		return fmt.Sprintf("%s/%s", endpoint, p.cfg.Bucket)
+	}
+	// Virtual-hosted: https://bucket.endpoint
+	endpointNoScheme := strings.TrimPrefix(endpoint, "https://")
+	endpointNoScheme = strings.TrimPrefix(endpointNoScheme, "http://")
+	return fmt.Sprintf("https://%s.%s", p.cfg.Bucket, endpointNoScheme)
 }
 
 // objectURL returns the full URL for an S3 object key.
@@ -71,12 +82,22 @@ func (p *S3Provider) objectURL(key string) string {
 	return fmt.Sprintf("%s/%s", base, key)
 }
 
-// hostHeader returns the Host header value.
+// hostHeader returns the Host header value for SigV4 signing.
+// For path-style: just the endpoint host (e.g., s3.amazonaws.com)
+// For virtual-hosted style: bucket.endpoint
 func (p *S3Provider) hostHeader() string {
-	u := p.baseURL()
-	u = strings.TrimPrefix(u, "https://")
-	u = strings.TrimPrefix(u, "http://")
-	return u
+	if p.cfg.UsePathStyle {
+		// Path-style: host is just the endpoint without scheme
+		host := strings.TrimPrefix(p.cfg.Endpoint, "https://")
+		host = strings.TrimPrefix(host, "http://")
+		host = strings.TrimRight(host, "/")
+		return host
+	}
+	// Virtual-hosted style: bucket.endpoint
+	host := strings.TrimPrefix(p.cfg.Endpoint, "https://")
+	host = strings.TrimPrefix(host, "http://")
+	host = strings.TrimRight(host, "/")
+	return fmt.Sprintf("%s.%s", p.cfg.Bucket, host)
 }
 
 // ─── AWS Signature V4 Implementation ─────────────────────────────────────
@@ -177,6 +198,9 @@ func (p *S3Provider) sign(req *http.Request, body []byte) {
 	authHeader := fmt.Sprintf("%s Credential=%s/%s, SignedHeaders=%s, Signature=%s",
 		algorithm, p.cfg.AccessKeyID, credentialScope, signedHeaders.String(), signature)
 	req.Header.Set("Authorization", authHeader)
+
+	log.Printf("S3 SigV4: method=%s path=%s host=%s credential=%s/%s region=%s",
+		method, canonicalURI, host, p.cfg.AccessKeyID, credentialScope, p.cfg.Region)
 }
 
 // buildSigningKey derives the AWS SigV4 signing key.
@@ -257,6 +281,7 @@ func (p *S3Provider) List(rel string) ([]FileInfo, error) {
 	}
 
 	url := fmt.Sprintf("%s?list-type=2&delimiter=/&prefix=%s", p.baseURL(), urlEncodePath(queryPrefix))
+	log.Printf("S3 List: url=%s", url)
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("s3: create list request: %w", err)
@@ -266,22 +291,29 @@ func (p *S3Provider) List(rel string) ([]FileInfo, error) {
 
 	resp, err := p.client.Do(req)
 	if err != nil {
+		log.Printf("S3 List error: %v", err)
 		return nil, fmt.Errorf("s3: list failed: %w", err)
 	}
 	defer resp.Body.Close()
+
+	log.Printf("S3 List response status: %d", resp.StatusCode)
 
 	if resp.StatusCode == 404 {
 		return nil, ErrNotFound
 	}
 	if resp.StatusCode != 200 {
 		bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		log.Printf("S3 List error body: %s", string(bodyBytes))
 		return nil, fmt.Errorf("s3: list failed with status %d: %s", resp.StatusCode, string(bodyBytes))
 	}
 
 	var result listBucketResult
 	if err := xml.NewDecoder(resp.Body).Decode(&result); err != nil {
+		log.Printf("S3 List XML parse error: %v", err)
 		return nil, fmt.Errorf("s3: list parse XML: %w", err)
 	}
+
+	log.Printf("S3 List parsed: Contents=%d, CommonPrefixes=%d", len(result.Contents), len(result.CommonPrefixes))
 
 	var items []FileInfo
 	seen := make(map[string]bool)

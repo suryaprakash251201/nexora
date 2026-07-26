@@ -679,7 +679,7 @@ func (s *Server) writeProviderError(w http.ResponseWriter, r *http.Request, err 
 	case storage.ErrNotFound:
 		rootID := queryParam(r, "root", "")
 		rel := queryParam(r, "path", "")
-		s.Log.Error("file not found", "error", err, "root", rootID, "path", rel, "request_id", rid)
+		s.Log.Error("file not found", "error", err.Error(), "root", rootID, "path", rel, "request_id", rid)
 		writeError(w, http.StatusNotFound, "not_found", "File or directory not found", rid)
 	case storage.ErrPermission:
 		writeError(w, http.StatusForbidden, "forbidden", "Operation not permitted (read-only or no access)", rid)
@@ -690,7 +690,7 @@ func (s *Server) writeProviderError(w http.ResponseWriter, r *http.Request, err 
 	case storage.ErrExists:
 		writeError(w, http.StatusConflict, "exists", "Target already exists", rid)
 	default:
-		s.Log.Error("storage error", "error", err)
+		s.Log.Error("storage error", "error", err.Error(), "error_type", fmt.Sprintf("%T", err))
 		writeError(w, http.StatusInternalServerError, "storage_error", "Storage operation failed", rid)
 	}
 }
