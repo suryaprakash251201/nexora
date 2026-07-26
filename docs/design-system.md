@@ -179,3 +179,4 @@ Component styles are built using utility classes following Tailwind CSS conventi
 - **v1.4**: Initial design system
 - **v1.4.1**: Improved colorblind accessibility
 - **v1.5**: Enhanced documentation
+- **v1.6**: Phase 3 features (PostgreSQL, S3, WebDAV, webhooks, analytics, versioning, smart folders)

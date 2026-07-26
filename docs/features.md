@@ -37,7 +37,7 @@ docker compose up -d --build
 
 # 3. Verify health
 curl -f http://localhost/healthz
-# Response: {"service":"nexora","status":"ok","version":"1.4"}
+# Response: {"service":"nexora","status":"ok","version":"1.6.0"}
 
 # 4. Open browser
 open http://localhost
@@ -703,4 +703,4 @@ go build -tags postgres ./cmd/nexora
 
 ---
 
-*Document version: 2.0 — Last updated: 2026-07-26*
+*Document version: 2.1 — Last updated: 2026-07-26*
