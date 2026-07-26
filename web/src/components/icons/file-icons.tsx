@@ -10,19 +10,9 @@ type IconProps = SVGProps<SVGSVGElement> & { size?: number };
 const d = (size = 24) => ({ width: size, height: size, viewBox: "0 0 24 24", fill: "none", xmlns: "http://www.w3.org/2000/svg" });
 
 /* ── PDF ──────────────────────────────────────── */
-export function PdfIcon({ size, ...p }: IconProps) {
-  return (
-    <svg {...d(size)} {...p}>
-      <rect x="3" y="1" width="18" height="22" rx="2" fill="#DC2626" />
-      <rect x="3" y="1" width="18" height="22" rx="2" fill="url(#pdf-g)" fillOpacity="0.4" />
-      <path d="M7 7h3.5c1.1 0 2 .9 2 2s-.9 2-2 2H7V7z" stroke="#fff" strokeWidth="1.2" fill="none" />
-      <path d="M7 7v7" stroke="#fff" strokeWidth="1.2" />
-      <path d="M14 7h3.5c1.1 0 2 .9 2 2s-.9 2-2 2H14V7zm0 4v3" stroke="#fff" strokeWidth="1.2" fill="none" />
-      <rect x="5" y="16" width="14" height="5" rx="1" fill="#B91C1C" />
-      <text x="12" y="20" textAnchor="middle" fill="white" fontSize="4" fontWeight="700" fontFamily="system-ui">PDF</text>
-      <defs><linearGradient id="pdf-g" x1="12" y1="1" x2="12" y2="23"><stop stopColor="#fff" stopOpacity="0.3" /><stop offset="1" stopColor="#fff" stopOpacity="0" /></linearGradient></defs>
-    </svg>
-  );
+export function PdfIcon({ size, className }: IconProps) {
+  const s = size || 24;
+  return <img src="/pdf.svg" alt="PDF" width={s} height={s} className={className} />;
 }
 
 /* ── Word / DOCX ──────────────────────────────── */

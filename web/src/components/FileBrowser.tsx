@@ -4,7 +4,7 @@ import { useUI } from "../store";
 import { Play, MoreVertical, AlertTriangle, RefreshCw } from "lucide-react";
 import { FileItem } from "../api/types";
 import { formatBytes, formatDate } from "../lib/format";
-import { FileThumb, detectFolderVariant } from "./FileThumb";
+import { FileThumb } from "./FileThumb";
 import { iconForFile, colorClasses, iconGlowClasses } from "./FileIcon";
 import { EmptyState } from "./ui/EmptyState";
 import { SkeletonGrid, SkeletonList } from "./ui/Skeleton";
@@ -46,7 +46,7 @@ const FileIconForItem = memo(function FileIconForItem({ item, large, fill, class
   const { icon: Icon, color, customIcon: CustomIcon } = iconForFile(item);
   const c = colorClasses[color] || "text-gray-500 bg-gray-500/10";
   const [, bg] = c.split(" ");
-  const customSize = large ? 36 : 20;
+  const customSize = large ? 72 : 20;
 
   return (
     <div className={cn("grid place-items-center rounded-xl transition-all duration-300 group-hover:scale-105", bg || "bg-surface-muted", "border", iconGlowClasses[color] || "border-glass-border-soft shadow-sm", dim, className)}>
@@ -244,19 +244,19 @@ export default function FileBrowser({
       spacious: "px-4 sm:px-8 py-5 text-sm",
     },
     listRow: {
-      compact: "gap-1 sm:gap-2 px-2 sm:px-4 py-1.5",
-      comfortable: "gap-2 sm:gap-4 px-3 sm:px-6 py-3",
-      spacious: "gap-3 sm:gap-5 px-4 sm:px-8 py-4",
+      compact: "gap-2 px-3 py-2",
+      comfortable: "gap-3 px-4 sm:px-6 py-3",
+      spacious: "gap-4 px-5 sm:px-8 py-4",
     },
     listIcon: {
+      compact: "w-8 h-8",
+      comfortable: "w-10 h-10",
+      spacious: "w-12 h-12",
+    },
+    listIconInner: {
       compact: "w-5 h-5",
       comfortable: "w-6 h-6",
       spacious: "w-7 h-7",
-    },
-    listIconInner: {
-      compact: "w-3 h-3",
-      comfortable: "w-4 h-4",
-      spacious: "w-5 h-5",
     },
     listName: {
       compact: "text-xs",
@@ -264,33 +264,33 @@ export default function FileBrowser({
       spacious: "text-base",
     },
     listMeta: {
-      compact: "text-[10px]",
+      compact: "text-[11px]",
       comfortable: "text-xs",
       spacious: "text-sm",
     },
     listKindWidth: {
-      compact: "w-24",
-      comfortable: "w-32",
-      spacious: "w-36",
+      compact: "w-20",
+      comfortable: "w-28",
+      spacious: "w-32",
     },
     listSizeWidth: {
       compact: "w-16",
-      comfortable: "w-24",
-      spacious: "w-28",
+      comfortable: "w-20",
+      spacious: "w-24",
     },
     listDateWidth: {
       compact: "w-28",
-      comfortable: "w-40",
-      spacious: "w-44",
+      comfortable: "w-36",
+      spacious: "w-40",
     },
     checkbox: {
-      compact: "w-3.5 h-3.5",
-      comfortable: "w-4 h-4",
+      compact: "w-4 h-4",
+      comfortable: "w-4.5 h-4.5",
       spacious: "w-5 h-5",
     },
     headerCheckbox: {
-      compact: "w-3.5 h-3.5",
-      comfortable: "w-4 h-4",
+      compact: "w-4 h-4",
+      comfortable: "w-4.5 h-4.5",
       spacious: "w-5 h-5",
     },
   };
@@ -322,7 +322,7 @@ export default function FileBrowser({
             variants={staggerContainer}
             initial="initial"
             animate="animate"
-            className={cn(dc.grid[d], "grid", getGridColClass(gridZoom))}
+            className={cn(dc.grid[d], "grid", getGridColClass(gridZoom))} style={{ gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))" }}
             role="grid"
             aria-label="File grid"
           >
@@ -355,68 +355,15 @@ export default function FileBrowser({
                     whileHover={{ y: -6 }}
                     whileTap={{ scale: 0.98 }}
                     className={cn(
-                      "group relative flex flex-col items-center rounded-2xl text-center transition-all duration-200 outline-none cursor-pointer border overflow-hidden hover:shadow-glass-glow",
-                      dc.gridItem[d],
+                      "group relative flex flex-col items-center text-center transition-all duration-200 outline-none cursor-pointer",
                       selected
-                        ? "bg-accent/12 border-accent/35 shadow-lg shadow-accent/15"
-                        : "glass border-white/[0.06] hover:border-accent-purple/30 dark:border-white/[0.06]",
-                      dropTarget === item.path ? "ring-2 ring-accent bg-accent/15 scale-105" : "",
+                        ? "opacity-80"
+                        : "opacity-100 hover:opacity-90",
+                      dropTarget === item.path ? "ring-2 ring-accent scale-105" : "",
                       dragOver ? "opacity-50" : ""
                     )}
                   >
-                    {/* Accent color stripe */}
-                    <div className={cn("absolute top-0 left-0 right-0 h-[2px] rounded-t-2xl opacity-60", (() => {
-                      if (item.is_dir) {
-                        const variant = detectFolderVariant(item.name);
-                        const folderStripeColors: Record<string, string> = {
-                          default: "bg-gradient-to-r from-blue-500 to-indigo-500",
-                          music: "bg-gradient-to-r from-pink-500 to-rose-500",
-                          video: "bg-gradient-to-r from-purple-500 to-violet-500",
-                          image: "bg-gradient-to-r from-emerald-500 to-teal-500",
-                          archive: "bg-gradient-to-r from-amber-500 to-orange-500",
-                          documents: "bg-gradient-to-r from-yellow-500 to-amber-500",
-                          code: "bg-gradient-to-r from-cyan-500 to-sky-500",
-                          design: "bg-gradient-to-r from-pink-500 to-rose-500",
-                        };
-                        return folderStripeColors[variant] || folderStripeColors.default;
-                      }
-                      const { color } = iconForFile(item);
-                      const stripeColors: Record<string, string> = {
-                        blue: "bg-gradient-to-r from-blue-500 to-indigo-500",
-                        red: "bg-gradient-to-r from-red-500 to-rose-500",
-                        green: "bg-gradient-to-r from-green-500 to-emerald-500",
-                        emerald: "bg-gradient-to-r from-emerald-500 to-teal-500",
-                        yellow: "bg-gradient-to-r from-yellow-500 to-amber-500",
-                        amber: "bg-gradient-to-r from-amber-500 to-orange-500",
-                        purple: "bg-gradient-to-r from-purple-500 to-violet-500",
-                        cyan: "bg-gradient-to-r from-cyan-500 to-sky-500",
-                        orange: "bg-gradient-to-r from-orange-500 to-amber-500",
-                        gray: "bg-gradient-to-r from-slate-500 to-gray-500",
-                        pink: "bg-gradient-to-r from-pink-500 to-rose-500",
-                      };
-                      return stripeColors[color] || stripeColors.gray;
-                    })())} />
-
-                    {/* Inner glow highlight */}
-                    <div className={cn(
-                      "absolute inset-0 pointer-events-none rounded-2xl",
-                      item.is_dir ? (() => {
-                        const variant = detectFolderVariant(item.name);
-                        const glowColors: Record<string, string> = {
-                          default: "bg-gradient-to-br from-blue-500/5 via-transparent to-transparent",
-                          music: "bg-gradient-to-br from-pink-500/5 via-transparent to-transparent",
-                          video: "bg-gradient-to-br from-purple-500/5 via-transparent to-transparent",
-                          image: "bg-gradient-to-br from-emerald-500/5 via-transparent to-transparent",
-                          archive: "bg-gradient-to-br from-amber-500/5 via-transparent to-transparent",
-                          documents: "bg-gradient-to-br from-yellow-500/5 via-transparent to-transparent",
-                          code: "bg-gradient-to-br from-cyan-500/5 via-transparent to-transparent",
-                          design: "bg-gradient-to-br from-pink-500/5 via-transparent to-transparent",
-                        };
-                        return glowColors[variant] || glowColors.default;
-                      })() : "bg-gradient-to-br from-white/[0.03] via-transparent to-transparent"
-                    )} />
-                    <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
-                    <div className="w-full flex justify-center mb-4 transition-transform duration-300 relative">
+                    <div className="w-full flex justify-center mb-0 transition-transform duration-300 relative">
                       <FileIconForItem item={item} large className={dc.gridIcon[d]} />
 
                       {!selectMode && (
@@ -471,7 +418,7 @@ export default function FileBrowser({
                       )}
 
                       <div className="w-full min-w-0">
-                        <p className={cn("truncate font-semibold leading-tight group-hover:text-accent-purple transition-colors", dc.gridName[d])} title={item.name}>
+                        <p className={cn("truncate font-medium leading-tight group-hover:text-accent-purple transition-colors", dc.gridName[d])} title={item.name}>
                           {item.name}
                         </p>
                         {item.tags && item.tags.length > 0 && (
@@ -479,11 +426,13 @@ export default function FileBrowser({
                             {item.tags.map(t => <TagChip key={t.id} tag={t} small />)}
                           </div>
                         )}
-                        <p className={cn("truncate font-medium flex items-center justify-center gap-1.5 w-full mt-0.5", dc.gridMeta[d])}>
-                          <span className="truncate">{item.is_dir ? "Folder" : formatBytes(item.size)}</span>
-                          <span className="w-1 h-1 rounded-full bg-glass-border hidden sm:inline-block" />
-                          <span className="truncate opacity-75">{formatDate(item.modified).split(" ")[0]}</span>
-                        </p>
+                        {!item.is_dir && (
+                          <p className={cn("truncate font-medium flex items-center justify-center gap-1.5 w-full mt-0.5", dc.gridMeta[d])}>
+                            <span className="truncate">{formatBytes(item.size)}</span>
+                            <span className="w-1 h-1 rounded-full bg-glass-border hidden sm:inline-block" />
+                            <span className="truncate opacity-75">{formatDate(item.modified).split(" ")[0]}</span>
+                          </p>
+                        )}
                       </div>
                     </div>
                   </motion.div>
@@ -506,8 +455,7 @@ export default function FileBrowser({
       ) : (
         <div className={cn(dc.listContainer[d], "pb-16 sm:pb-32 md:pb-36 max-w-7xl mx-auto")}>
           <div className={cn(
-            "grid grid-cols-[auto_1fr_auto] sm:grid-cols-[auto_1fr_auto_auto] lg:grid-cols-[auto_1fr_auto_auto_auto]",
-            "border-b border-glass-border-soft sticky top-0 z-10",
+            "grid grid-cols-[auto_1fr_auto_auto] items-center border-b border-glass-border-soft sticky top-0 z-10",
             dc.listHeader[d]
           )}>
             <span className="flex justify-center items-center">
@@ -518,15 +466,12 @@ export default function FileBrowser({
                 className={cn("rounded border-2 border-glass-border bg-glass-bg text-accent focus:ring-accent cursor-pointer transition-all", dc.headerCheckbox[d])}
               />
             </span>
-            <span className="truncate">Name</span>
-            {visibleColumns.kind && (
-              <span className={cn("text-right hidden lg:block truncate", dc.listKindWidth[d])}>Kind</span>
-            )}
+            <span className="truncate font-semibold text-text-secondary">Name</span>
             {visibleColumns.size && (
-              <span className={cn("text-right truncate", dc.listSizeWidth[d])}>Size</span>
+              <span className={cn("text-right truncate text-text-tertiary", dc.listSizeWidth[d])}>Size</span>
             )}
             {visibleColumns.modified && (
-              <span className={cn("text-right hidden sm:block truncate", dc.listDateWidth[d])}>Modified</span>
+              <span className={cn("text-right truncate text-text-tertiary", dc.listDateWidth[d])}>Modified</span>
             )}
           </div>
 
@@ -534,7 +479,7 @@ export default function FileBrowser({
             variants={staggerContainer}
             initial="initial"
             animate="animate"
-            className="mt-2 space-y-1"
+            className="mt-1"
           >
             <AnimatePresence mode="popLayout">
               {items.map((item, index) => {
@@ -562,85 +507,88 @@ export default function FileBrowser({
                         onDropItem?.(item);
                       }
                     }}
-                    whileHover={{ backgroundColor: "transparent" }}
                     className={cn(
-                      "group grid items-center cursor-pointer transition-all duration-200 outline-none border border-transparent hover:bg-glass-bg-subtle",
+                      "group grid grid-cols-[auto_1fr_auto_auto] items-center cursor-pointer transition-all duration-150 border border-transparent",
                       dc.listRow[d],
-                      index % 2 === 0 ? "bg-glass-bg-subtle/50" : "",
+                      index % 2 === 0 ? "bg-glass-bg-subtle/30" : "",
                       selected
-                        ? "bg-accent/8 border-accent/15"
-                        : "hover:border-glass-border-soft",
+                        ? "bg-accent/10 border-accent/30"
+                        : "hover:bg-accent/5",
                       dropTarget === item.path ? "ring-2 ring-accent bg-accent/12" : ""
                     )}
                   >
-                    <div className={cn(
-                      "flex justify-center items-center shrink-0 transition-all duration-200",
-                      selectMode || selected ? "opacity-100 scale-100" : "opacity-0 scale-75 group-hover:opacity-100 group-hover:scale-100"
-                    )}>
+                    {/* Checkbox */}
+                    <div className="flex justify-center items-center">
                       <input
                         type="checkbox"
-                        className={cn("rounded border-glass-border bg-glass-bg text-accent focus:ring-accent cursor-pointer transition-colors", dc.checkbox[d])}
+                        className={cn(
+                          "rounded border-2 border-glass-border bg-glass-bg text-accent focus:ring-2 focus:ring-accent/50 cursor-pointer transition-all",
+                          selected ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+                          dc.checkbox[d]
+                        )}
                         checked={selected}
                         onChange={(e) => onSelect(item, e)}
                         onClick={(e) => e.stopPropagation()}
                       />
                     </div>
 
+                    {/* Icon + Name + Tags + Actions */}
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className={cn("shrink-0 transition-transform duration-200 group-hover:scale-110", dc.listIcon[d])}>
+                      <div className={cn("shrink-0 flex items-center justify-center", dc.listIcon[d])}>
                         <FileIconForItem item={item} className={dc.listIconInner[d]} />
                       </div>
-                      <div className="min-w-0 flex-1 flex items-center gap-3">
-                        <span className={cn("truncate font-medium transition-colors group-hover:text-accent-purple", dc.listName[d])} title={item.name}>
-                          {item.name}
-                        </span>
+                      <span className={cn("truncate font-medium transition-colors", dc.listName[d], selected ? "text-foreground" : "text-text-primary group-hover:text-accent-purple")} title={item.name}>
+                        {item.name}
+                      </span>
 
-                        {item.tags && item.tags.length > 0 && (
-                          <div className="flex items-center gap-1 overflow-hidden shrink-0">
-                            {item.tags.map(t => <TagChip key={t.id} tag={t} small />)}
-                          </div>
-                        )}
-
-                        {!selectMode && (
-                          <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                            <motion.button
-                              whileHover={{ scale: 1.1 }}
-                              whileTap={{ scale: 0.9 }}
-                              onClick={(e) => { e.stopPropagation(); onOpen(item); }}
-                              className="p-1.5 rounded-lg text-text-tertiary hover:bg-accent/10 hover:text-accent transition-colors"
-                              title="Open"
-                            >
-                              <Play className="h-3.5 w-3.5" />
-                            </motion.button>
-                            <motion.button
-                              whileHover={{ scale: 1.1 }}
-                              whileTap={{ scale: 0.9 }}
-                              onClick={(e) => { e.stopPropagation(); onContextMenu(e, item); }}
-                              className="p-1.5 rounded-lg text-text-tertiary hover:bg-glass-bg hover:text-foreground transition-colors"
-                              title="More actions"
-                            >
-                              <MoreVertical className="h-3.5 w-3.5" />
-                            </motion.button>
-                          </div>
-                        )}
-                      </div>
+                      {item.tags && item.tags.length > 0 && (
+                        <div className="flex items-center gap-1 overflow-hidden shrink-0">
+                          {item.tags.map(t => <TagChip key={t.id} tag={t} small />)}
+                        </div>
+                      )}
 
                       {visibleColumns.kind && (
-                        <span className={cn("text-right font-medium text-text-tertiary hidden lg:block capitalize truncate", dc.listKindWidth[d], dc.listMeta[d])}>
+                        <span className="text-[10px] font-medium text-text-tertiary hidden lg:inline capitalize px-1.5 py-0.5 rounded bg-glass-bg-subtle">
                           {item.is_dir ? "Folder" : (item.extension ? item.extension.replace(/^\./, "").toUpperCase() : "File")}
                         </span>
                       )}
-                      {visibleColumns.size && (
-                        <span className={cn("text-right font-medium text-text-tertiary truncate", dc.listSizeWidth[d], dc.listMeta[d])}>
-                          {item.is_dir ? "—" : formatBytes(item.size)}
-                        </span>
-                      )}
-                      {visibleColumns.modified && (
-                        <span className={cn("text-right font-medium text-text-tertiary hidden sm:block truncate", dc.listDateWidth[d], dc.listMeta[d])}>
-                          {formatDate(item.modified)}
-                        </span>
+
+                      {/* Hover action buttons */}
+                      {!selectMode && (
+                        <div className="ml-auto flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-150" onClick={(e) => e.stopPropagation()}>
+                          <motion.button
+                            whileTap={{ scale: 0.9 }}
+                            onClick={(e) => { e.stopPropagation(); onOpen(item); }}
+                            className="p-1.5 rounded-lg text-text-tertiary hover:text-accent hover:bg-accent/10 transition-colors"
+                            title="Open"
+                          >
+                            <Play className="h-3.5 w-3.5" />
+                          </motion.button>
+                          <motion.button
+                            whileTap={{ scale: 0.9 }}
+                            onClick={(e) => { e.stopPropagation(); onContextMenu(e, item); }}
+                            className="p-1.5 rounded-lg text-text-tertiary hover:text-foreground hover:bg-glass-bg transition-colors"
+                            title="More actions"
+                          >
+                            <MoreVertical className="h-3.5 w-3.5" />
+                          </motion.button>
+                        </div>
                       )}
                     </div>
+
+                    {/* Size */}
+                    {visibleColumns.size && (
+                      <span className={cn("text-right font-medium text-text-tertiary truncate", dc.listMeta[d], dc.listSizeWidth[d])}>
+                        {item.is_dir ? "—" : formatBytes(item.size)}
+                      </span>
+                    )}
+
+                    {/* Modified */}
+                    {visibleColumns.modified && (
+                      <span className={cn("text-right font-medium text-text-tertiary truncate", dc.listMeta[d], dc.listDateWidth[d])}>
+                        {formatDate(item.modified)}
+                      </span>
+                    )}
                   </motion.div>
                 );
               })}
