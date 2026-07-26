@@ -62,11 +62,7 @@ export function FileThumb({ it, large, fill }: { it: FileItem; large?: boolean; 
   }
 
   if (isAudio && !isImage) {
-    return (
-      <div className={cn("nexora-folder nexora-folder-music", dim)}>
-        <Music className={cn("nexora-folder-icon", large ? "h-8 w-8" : "h-5 w-5", "text-[rgba(236,72,153,0.95)]")} />
-      </div>
-    );
+    return <AudioThumb it={it} large={large} fill={fill} />;
   }
 
   if (isVideo && !isImage) {
@@ -114,6 +110,46 @@ export function FileThumb({ it, large, fill }: { it: FileItem; large?: boolean; 
       {loaded && !fill && (
         <div className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded-md text-[9px] font-bold uppercase bg-black/60 text-white/80 backdrop-blur-sm">
           {it.extension.toUpperCase()}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// AudioThumb attempts to show embedded album art for audio files,
+// falling back to a music icon if no cover is available.
+function AudioThumb({ it, large, fill }: { it: FileItem; large?: boolean; fill?: boolean }) {
+  const [failed, setFailed] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const dim = fill ? "h-full w-full" : large ? "h-16 w-16" : "h-9 w-9";
+
+  return (
+    <div className={cn(dim, "rounded-xl overflow-hidden relative shadow-sm group-hover:shadow-md transition-all duration-300")}>
+      {!loaded && (
+        <div className="absolute inset-0 skeleton" />
+      )}
+      {!failed ? (
+        <>
+          <img
+            src={thumbUrl(it)}
+            alt=""
+            className={cn(
+              "w-full h-full object-cover transition-all duration-500 ease-out group-hover:scale-105",
+              loaded ? "opacity-100 blur-0" : "opacity-0 blur-sm"
+            )}
+            loading="lazy"
+            onLoad={() => setLoaded(true)}
+            onError={() => setFailed(true)}
+          />
+          {loaded && !fill && (
+            <div className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded-md text-[9px] font-bold uppercase bg-black/60 text-white/80 backdrop-blur-sm">
+              {it.extension.toUpperCase()}
+            </div>
+          )}
+        </>
+      ) : (
+        <div className={cn("nexora-folder nexora-folder-music grid place-items-center", dim)}>
+          <Music className={cn("nexora-folder-icon", large ? "h-8 w-8" : "h-5 w-5", "text-[rgba(236,72,153,0.95)]")} />
         </div>
       )}
     </div>

@@ -64,6 +64,11 @@ export default function PlayerBar() {
   const openExpanded = () => {
     setExpanded(true);
     usePlayer.getState().setPrimaryOpen(true);
+    // Auto-fullscreen the player
+    try {
+      const el = document.documentElement;
+      if (el.requestFullscreen) el.requestFullscreen().catch(() => {});
+    } catch {}
   };
 
   useEffect(() => {
