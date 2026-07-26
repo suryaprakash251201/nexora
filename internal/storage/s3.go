@@ -196,9 +196,12 @@ func (p *S3Provider) sign(req *http.Request, body []byte) {
 	dateStr, dateTimeStr := getDate(t)
 
 	// Hash the payload
-	payloadHash := sha256Hex(body)
+	var payloadHash string
 	if body == nil {
-		payloadHash = sha256Hex([]byte{})
+		// For requests without a body (GET, HEAD, DELETE), use the empty-string hash
+		payloadHash = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+	} else {
+		payloadHash = sha256Hex(body)
 	}
 
 	// Set required headers
@@ -207,7 +210,9 @@ func (p *S3Provider) sign(req *http.Request, body []byte) {
 	req.Header.Set("Host", host)
 	req.Header.Set("X-Amz-Date", dateTimeStr)
 	req.Header.Set("X-Amz-Content-Sha256", payloadHash)
-	if len(body) > 0 {
+
+	// Always set Content-Length for requests with a body (including empty body for PUT)
+	if body != nil {
 		req.Header.Set("Content-Length", fmt.Sprintf("%d", len(body)))
 	}
 
@@ -298,11 +303,12 @@ func (p *S3Provider) doRequest(ctx context.Context, method, key string, body []b
 		return nil, fmt.Errorf("s3: create request: %w", err)
 	}
 
-	p.sign(req, body)
-
+	// Set extra headers BEFORE signing so they're included in canonical headers
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
+
+	p.sign(req, body)
 
 	resp, err := p.client.Do(req)
 	if err != nil {
@@ -623,7 +629,8 @@ func (p *S3Provider) Write(rel string, r io.Reader, size int64) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		return fmt.Errorf("s3: write failed with status %d", resp.StatusCode)
+		bodyErr, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return fmt.Errorf("s3: write failed with status %d: %s", resp.StatusCode, string(bodyErr))
 	}
 
 	return nil
@@ -637,14 +644,18 @@ func (p *S3Provider) CreateDirectory(rel string) error {
 	}
 
 	ctx := context.Background()
-	resp, err := p.doRequest(ctx, "PUT", dirKey, []byte{}, nil)
+	emptyBody := []byte{}
+	resp, err := p.doRequest(ctx, "PUT", dirKey, emptyBody, map[string]string{
+		"Content-Type": "application/x-directory",
+	})
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != 200 {
-		return fmt.Errorf("s3: create directory failed with status %d", resp.StatusCode)
+	if resp.StatusCode != 200 && resp.StatusCode != 201 {
+		bodyErr, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return fmt.Errorf("s3: create directory failed with status %d: %s", resp.StatusCode, string(bodyErr))
 	}
 
 	return nil
@@ -658,19 +669,30 @@ func (p *S3Provider) Move(source, dest string) error {
 	ctx := context.Background()
 	copySource := urlEncodePath(fmt.Sprintf("/%s/%s", p.cfg.Bucket, srcKey))
 
-	resp, err := p.doRequest(ctx, "PUT", dstKey, nil, map[string]string{
+	resp, err := p.doRequest(ctx, "PUT", dstKey, []byte{}, map[string]string{
 		"X-Amz-Copy-Source": copySource,
 	})
 	if err != nil {
 		return fmt.Errorf("s3: copy for move: %w", err)
 	}
+	if resp.StatusCode >= 300 {
+		bodyErr, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		resp.Body.Close()
+		return fmt.Errorf("s3: copy for move failed with status %d: %s", resp.StatusCode, string(bodyErr))
+	}
 	resp.Body.Close()
 
+	// Delete source
 	resp2, err := p.doRequest(ctx, "DELETE", srcKey, nil, nil)
 	if err != nil {
 		return fmt.Errorf("s3: delete after move: %w", err)
 	}
-	resp2.Body.Close()
+	defer resp2.Body.Close()
+
+	if resp2.StatusCode >= 300 && resp2.StatusCode != 404 {
+		bodyErr, _ := io.ReadAll(io.LimitReader(resp2.Body, 4096))
+		return fmt.Errorf("s3: delete after move failed with status %d: %s", resp2.StatusCode, string(bodyErr))
+	}
 
 	return nil
 }
@@ -683,7 +705,7 @@ func (p *S3Provider) Copy(source, dest string) error {
 	ctx := context.Background()
 	copySource := urlEncodePath(fmt.Sprintf("/%s/%s", p.cfg.Bucket, srcKey))
 
-	resp, err := p.doRequest(ctx, "PUT", dstKey, nil, map[string]string{
+	resp, err := p.doRequest(ctx, "PUT", dstKey, []byte{}, map[string]string{
 		"X-Amz-Copy-Source": copySource,
 	})
 	if err != nil {
@@ -691,8 +713,9 @@ func (p *S3Provider) Copy(source, dest string) error {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != 200 {
-		return fmt.Errorf("s3: copy failed with status %d", resp.StatusCode)
+	if resp.StatusCode >= 300 {
+		bodyErr, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return fmt.Errorf("s3: copy failed with status %d: %s", resp.StatusCode, string(bodyErr))
 	}
 
 	return nil
@@ -803,18 +826,42 @@ func detectMime(name string) string {
 		return "image/webp"
 	case ".svg":
 		return "image/svg+xml"
-	case ".mp4":
+	case ".mp4", ".mkv", ".avi", ".mov":
 		return "video/mp4"
+	case ".webm":
+		return "video/webm"
 	case ".mp3":
 		return "audio/mpeg"
+	case ".flac":
+		return "audio/flac"
+	case ".wav":
+		return "audio/wav"
+	case ".ogg", ".opus":
+		return "audio/ogg"
 	case ".pdf":
 		return "application/pdf"
 	case ".zip":
 		return "application/zip"
+	case ".gz", ".tar":
+		return "application/gzip"
+	case ".exe", ".dll":
+		return "application/vnd.microsoft.portable-executable"
+	case ".iso":
+		return "application/x-iso9660-image"
 	case ".json":
 		return "application/json"
-	case ".txt", ".md":
+	case ".xml":
+		return "application/xml"
+	case ".html", ".htm":
+		return "text/html"
+	case ".css":
+		return "text/css"
+	case ".js", ".ts", ".tsx", ".jsx":
+		return "application/javascript"
+	case ".txt", ".md", ".log":
 		return "text/plain"
+	case ".csv":
+		return "text/csv"
 	default:
 		return "application/octet-stream"
 	}
