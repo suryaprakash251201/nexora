@@ -40,6 +40,7 @@ export default function RootModal({
   const [secretAccessKey, setSecretAccessKey] = useState(initialS3Config.secret_access_key || "");
   const [prefix, setPrefix] = useState(initialS3Config.prefix || "");
   const [usePathStyle, setUsePathStyle] = useState(initialS3Config.use_path_style || false);
+  const [forceListV1, setForceListV1] = useState(initialS3Config.force_list_v1 || false);
   const [showSecret, setShowSecret] = useState(false);
 
   // Provider-specific help text
@@ -61,6 +62,7 @@ export default function RootModal({
         secret_access_key: secretAccessKey,
         prefix,
         use_path_style: usePathStyle,
+        force_list_v1: forceListV1,
       });
     }
     return "{}";
@@ -326,6 +328,20 @@ export default function RootModal({
             />
             <span className="text-content-muted">Use path-style URLs (required for MinIO)</span>
           </label>
+          <label className="flex items-center gap-2 text-sm pt-1">
+            <input
+              type="checkbox"
+              checked={forceListV1}
+              onChange={(e) => setForceListV1(e.target.checked)}
+              className="rounded"
+            />
+            <span className="text-content-muted">Use ListObjects V1 (for older/compatible providers)</span>
+          </label>
+          {forceListV1 && (
+            <p className="text-[10px] text-amber-400/80 ml-6">
+              Enabled: Uses legacy ListObjects API. Disable if V2 works.
+            </p>
+          )}
         </div>
       )}
 

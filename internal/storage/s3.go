@@ -28,6 +28,7 @@ type S3Config struct {
 	SecretAccessKey string
 	UsePathStyle    bool
 	Prefix          string
+	ForceListV1     bool // use ListObjectsV1 instead of V2
 }
 
 // S3Provider implements StorageProvider against S3-compatible storage.
@@ -38,8 +39,9 @@ type S3Provider struct {
 
 // NewS3Provider creates an S3-compatible storage provider.
 func NewS3Provider(cfg S3Config) *S3Provider {
+	// Auto-detect region from endpoint if empty
 	if cfg.Region == "" {
-		cfg.Region = "us-east-1"
+		cfg.Region = extractRegion(cfg.Endpoint)
 	}
 	if cfg.Prefix != "" {
 		cfg.Prefix = strings.Trim(cfg.Prefix, "/") + "/"
@@ -50,6 +52,41 @@ func NewS3Provider(cfg S3Config) *S3Provider {
 			Timeout: 60 * time.Second,
 		},
 	}
+}
+
+// extractRegion tries to extract a region from an S3 endpoint.
+// e.g., s3.in-west3.purestore.io -> in-west3, s3.us-east-1.amazonaws.com -> us-east-1
+func extractRegion(endpoint string) string {
+	// Strip scheme
+	host := strings.TrimPrefix(endpoint, "https://")
+	host = strings.TrimPrefix(host, "http://")
+	// Strip port if present
+	if idx := strings.Index(host, ":"); idx >= 0 {
+		host = host[:idx]
+	}
+	parts := strings.Split(host, ".")
+	// Look for region patterns: s3.<region>.<rest> or <region>.amazonaws.com
+	for i, p := range parts {
+		if strings.HasPrefix(p, "s3-") {
+			return strings.TrimPrefix(p, "s3-")
+		}
+		if i == 1 && p == "s3" && len(parts) > 2 {
+			continue // skip "s3" in s3.region.amazonaws
+		}
+		if isRegionPart(p) {
+			return p
+		}
+	}
+	return "us-east-1"
+}
+
+// isRegionPart checks if a string looks like an AWS region component.
+func isRegionPart(s string) bool {
+	// Matches patterns like: us-east-1, eu-west-2, in-west3, ap-northeast-1
+	if len(s) < 3 || len(s) > 20 {
+		return false
+	}
+	return strings.ContainsAny(s, "-") && !strings.Contains(s, "://")
 }
 
 // resolveKey converts a relative path to an S3 object key.
@@ -280,7 +317,33 @@ func (p *S3Provider) List(rel string) ([]FileInfo, error) {
 		queryPrefix = p.cfg.Prefix
 	}
 
+	// Use V1 if forced, otherwise try V2 first
+	if p.cfg.ForceListV1 {
+		return p.listV1(ctx, queryPrefix, prefix)
+	}
+	// Try ListObjectsV2 first, fall back to V1 if unsupported
+	items, err := p.listV2(ctx, queryPrefix, prefix)
+	if err != nil && (strings.Contains(err.Error(), "status 500") || strings.Contains(err.Error(), "status 501")) {
+		log.Printf("S3 List V2 failed, trying V1: %v", err)
+		return p.listV1(ctx, queryPrefix, prefix)
+	}
+	return items, err
+}
+
+// listV2 uses ListObjectsV2 API
+func (p *S3Provider) listV2(ctx context.Context, queryPrefix, prefix string) ([]FileInfo, error) {
 	url := fmt.Sprintf("%s?list-type=2&delimiter=/&prefix=%s", p.baseURL(), urlEncodePath(queryPrefix))
+	return p.doListRequest(ctx, url, prefix)
+}
+
+// listV1 uses ListObjectsV1 API (without list-type=2)
+func (p *S3Provider) listV1(ctx context.Context, queryPrefix, prefix string) ([]FileInfo, error) {
+	url := fmt.Sprintf("%s?delimiter=/&prefix=%s&max-keys=1000", p.baseURL(), urlEncodePath(queryPrefix))
+	return p.doListRequest(ctx, url, prefix)
+}
+
+// doListRequest sends the request and parses the XML response.
+func (p *S3Provider) doListRequest(ctx context.Context, url, prefix string) ([]FileInfo, error) {
 	log.Printf("S3 List: url=%s", url)
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
@@ -291,7 +354,7 @@ func (p *S3Provider) List(rel string) ([]FileInfo, error) {
 
 	resp, err := p.client.Do(req)
 	if err != nil {
-		log.Printf("S3 List error: %v", err)
+		log.Printf("S3 List network error: %v", err)
 		return nil, fmt.Errorf("s3: list failed: %w", err)
 	}
 	defer resp.Body.Close()
@@ -336,7 +399,7 @@ func (p *S3Provider) List(rel string) ([]FileInfo, error) {
 	// Add files from Contents
 	for _, obj := range result.Contents {
 		if obj.Key == prefix || strings.HasSuffix(obj.Key, "/") {
-			continue // skip directory markers
+			continue
 		}
 		name := strings.TrimPrefix(obj.Key, prefix)
 		if name == "" || seen[name] {

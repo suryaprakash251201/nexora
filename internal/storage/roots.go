@@ -313,6 +313,7 @@ func newS3ProviderFromConfig(configJSON string, readOnly bool) *S3Provider {
 		SecretAccessKey string `json:"secret_access_key"`
 		UsePathStyle    bool   `json:"use_path_style"`
 		Prefix          string `json:"prefix"`
+		ForceListV1     bool   `json:"force_list_v1"`
 	}
 	if configJSON != "" {
 		json.Unmarshal([]byte(configJSON), &cfg)
@@ -326,6 +327,7 @@ func newS3ProviderFromConfig(configJSON string, readOnly bool) *S3Provider {
 		SecretAccessKey: cfg.SecretAccessKey,
 		UsePathStyle:    cfg.UsePathStyle,
 		Prefix:          cfg.Prefix,
+		ForceListV1:     cfg.ForceListV1,
 	}
 
 	_ = readOnly // S3 provider handles read-only at the root level
