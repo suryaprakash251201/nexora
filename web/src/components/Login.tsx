@@ -42,9 +42,7 @@ export default function Login({ onSuccess }: { onSuccess: () => void }) {
             transition={{ delay: 0.1, duration: 0.3 }}
             className="flex flex-col items-center mb-8"
           >
-            <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-accent via-accent-secondary to-accent-tertiary grid place-items-center text-white font-bold text-xl shadow-lg shadow-accent-glow mb-4">
-              N
-            </div>
+            <img src="/logo.png" alt="Nexora" className="h-16 w-16 mb-3" />
             <h1 className="text-2xl font-bold text-foreground tracking-tight">
               Welcome to <span className="text-transparent bg-clip-text bg-gradient-to-r from-accent to-accent-secondary">Nexora</span>
             </h1>

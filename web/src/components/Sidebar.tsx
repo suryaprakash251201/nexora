@@ -105,10 +105,7 @@ export default function Sidebar({
       >
         <div className="absolute inset-0 bg-gradient-to-b from-white/[0.02] via-transparent to-transparent pointer-events-none" />
         <div className={cn("flex items-center gap-3 mb-4 mt-3", collapsed ? "justify-center px-0" : "px-4 w-full")}>
-          <motion.div whileHover={{ scale: 1.05 }}
-            className="h-9 w-9 rounded-xl bg-gradient-to-br from-accent via-accent-secondary to-accent-tertiary grid place-items-center text-white font-bold shadow-lg shadow-accent-glow shrink-0">
-            N
-          </motion.div>
+          <img src="/logo.png" alt="Nexora" className="h-9 w-9 shrink-0" />
           <AnimatePresence>
             {!collapsed && (
               <motion.div initial={{ opacity: 0, width: 0 }} animate={{ opacity: 1, width: "auto" }} exit={{ opacity: 0, width: 0 }} transition={{ duration: 0.15 }} className="flex items-center gap-1 overflow-hidden">
