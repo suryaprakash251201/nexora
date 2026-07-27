@@ -8,6 +8,21 @@
   "productName": "Nexora",
   "version": "1.0.0",
   "identifier": "com.nexora.desktop",
+  "app": {
+    "windows": [
+      {
+        "title": "Nexora",
+        "width": 1024,
+        "height": 768,
+        "resizable": true,
+        "fullscreen": false,
+        "center": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
   "bundle": {
     "active": true,
     "targets": ["deb", "rpm", "appimage", "nsis", "msi"],
