@@ -15,7 +15,7 @@ Nexora is a private, self-hosted file workspace. It combines a React interface, 
 
 ## Screenshots
 
-<p align="center">Scroll horizontally or swipe to browse screenshots.</p>
+<p align="center">click to open screenshots.</p>
 
 <div align="center">
 <table>
