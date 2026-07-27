@@ -135,9 +135,6 @@ function AudioPlayer({
   const [showRates, setShowRates] = useState(false);
   const fsWrapRef = useRef<HTMLDivElement>(null);
 
-  const [showControls, setShowControls] = useState(true);
-  const controlsTimeout = useRef<number>();
-
   useEffect(() => {
     if (controlled) return;
     const a = ref.current;
@@ -224,19 +221,8 @@ function AudioPlayer({
     else bg = 'linear-gradient(90deg, #22C55E, #2DD4BF)';
     return { width: `${pctW}%`, background: bg, borderRadius: 'inherit', transition: 'all 0.1s ease-out' };
   };
-  const volFillStyleV = (v: number, m: boolean) => {
-    const pctH = (m ? 0 : v) * 100;
-    let bg: string;
-    if (m || v === 0) bg = '#73809A';
-    else if (v < 0.3) bg = 'linear-gradient(180deg, #F59E0B, #FB923C)';
-    else if (v < 0.7) bg = 'linear-gradient(180deg, #5B8CFF, #7A5CFF)';
-    else bg = 'linear-gradient(180deg, #22C55E, #2DD4BF)';
-    return { height: `${pctH}%`, background: bg, borderRadius: 'inherit', transition: 'all 0.1s ease-out' };
-  };
-
   const openFs = () => {
     setFs(true);
-    setShowControls(true);
     // Request real browser fullscreen inside the user gesture so it isn't blocked.
     requestAnimationFrame(() => fsWrapRef.current?.requestFullscreen?.().catch(() => {}));
   };
@@ -318,32 +304,10 @@ function AudioPlayer({
     return () => window.removeEventListener("keydown", onKey);
   }, [fs, curTime, duration, volume, muted, controlled, toggle, seek, changeVol, closeFs]);
 
-  const handleMouseMove = () => {
-    if (!fs) return;
-    setShowControls(true);
-    window.clearTimeout(controlsTimeout.current);
-    if (playing) {
-      controlsTimeout.current = window.setTimeout(() => setShowControls(false), 2500);
-    }
-  };
-
-  useEffect(() => {
-    if (!fs) return;
-    if (!playing) {
-      setShowControls(true);
-      window.clearTimeout(controlsTimeout.current);
-    } else {
-      controlsTimeout.current = window.setTimeout(() => setShowControls(false), 2500);
-    }
-    return () => window.clearTimeout(controlsTimeout.current);
-  }, [playing, fs]);
-
   const fullscreen = (
     <div
       ref={fsWrapRef}
-      className={`fixed inset-0 z-[100] flex flex-col animate-fade-in bg-black/95 select-none ${showControls ? "" : "cursor-none"}`}
-      onMouseMove={handleMouseMove}
-      onClick={handleMouseMove}
+      className="fixed inset-0 z-[100] flex flex-col animate-fade-in bg-black/95 select-none"
     >
       {/* Blurred cover-art backdrop (Apple-style glass effect) */}
       {cur && !bgFailed && (
@@ -363,7 +327,7 @@ function AudioPlayer({
       <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-black/50 to-black/90" />
 
       {/* Top bar */}
-      <div className={`absolute top-0 inset-x-0 z-30 flex items-center justify-between p-5 sm:p-7 transition-opacity duration-500 ${showControls ? "opacity-100" : "opacity-0 pointer-events-none"}`}>
+      <div className="absolute top-0 inset-x-0 z-30 flex items-center justify-between p-5 sm:p-7">
         <button
           onClick={(e) => { e.stopPropagation(); closeFs(); }}
           className="p-3 rounded-full glass-hover text-white transition-transform hover:scale-110"
@@ -384,8 +348,108 @@ function AudioPlayer({
       </div>
 
       <div className="relative z-10 flex-1 flex flex-col items-center justify-center w-full max-w-2xl mx-auto px-4 sm:px-6 pt-4 sm:pt-0 pb-20 sm:pb-8" style={{ paddingBottom: "max(5rem, env(safe-area-inset-bottom))" }}>
-        {/* Album Art — spinning vinyl when playing */}
+        {/* Album Art — spinning vinyl with tonearm */}
         <div className="relative mb-4 sm:mb-10 flex-shrink-0">
+          {/* Tonearm — high-detail turntable arm, pivots from bottom-right */}
+          <div
+            className={`absolute -top-3 -right-3 sm:-top-5 sm:-right-5 z-20 w-24 sm:w-32 h-32 sm:h-40 origin-bottom-right transition-all duration-1000 ease-in-out ${
+              playing ? 'rotate-0 translate-x-0 translate-y-0' : 'rotate-[22deg] translate-x-3 -translate-y-3'
+            }`}
+          >
+            <svg viewBox="0 0 70 80" className="w-full h-full drop-shadow-2xl" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <linearGradient id="tubeGrad" x1="0%" y1="0%" x2="100%" y2="80%">
+                  <stop offset="0%" stopColor="#E5E7EB"/>
+                  <stop offset="25%" stopColor="#F3F4F6"/>
+                  <stop offset="50%" stopColor="#9CA3AF"/>
+                  <stop offset="75%" stopColor="#D1D5DB"/>
+                  <stop offset="100%" stopColor="#6B7280"/>
+                </linearGradient>
+                <linearGradient id="baseGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#6B7280"/>
+                  <stop offset="50%" stopColor="#4B5563"/>
+                  <stop offset="100%" stopColor="#374151"/>
+                </linearGradient>
+                <radialGradient id="cwGrad" cx="40%" cy="35%" r="60%">
+                  <stop offset="0%" stopColor="#9CA3AF"/>
+                  <stop offset="100%" stopColor="#4B5563"/>
+                </radialGradient>
+                <linearGradient id="headGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#D1D5DB"/>
+                  <stop offset="50%" stopColor="#9CA3AF"/>
+                  <stop offset="100%" stopColor="#6B7280"/>
+                </linearGradient>
+                <linearGradient id="cartGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                  <stop offset="0%" stopColor="#374151"/>
+                  <stop offset="100%" stopColor="#111827"/>
+                </linearGradient>
+                <filter id="needleGlow">
+                  <feGaussianBlur stdDeviation="1" result="blur"/>
+                  <feMerge>
+                    <feMergeNode in="blur"/>
+                    <feMergeNode in="SourceGraphic"/>
+                  </feMerge>
+                </filter>
+              </defs>
+
+              
+              <rect x="53" y="62" width="16" height="18" rx="4" fill="url(#baseGrad)"/>
+              <rect x="55" y="60" width="12" height="4" rx="2" fill="#4B5563"/>
+              
+              <ellipse cx="61" cy="78" rx="10" ry="3" fill="#1F2937" opacity="0.6"/>
+
+              
+              <rect x="50" y="52" width="18" height="12" rx="6" fill="#374151"/>
+              <circle cx="59" cy="58" r="3" fill="#1F2937" stroke="#6B7280" strokeWidth="1"/>
+              <circle cx="59" cy="58" r="1" fill="#9CA3AF"/>
+
+              
+              <line x1="66" y1="52" x2="68" y2="64" stroke="#9CA3AF" strokeWidth="0.8"/>
+              <circle cx="68" cy="66" r="2" fill="#6B7280"/>
+
+              
+              <path d="M56 56 Q56 40 44 38 L40 38 Q30 36 24 44 Q18 52 14 48 L12 46 Q10 44 14 40 Q20 32 30 32 L36 32 Q48 34 52 42 L56 54 Z" fill="url(#tubeGrad)" stroke="#6B7280" strokeWidth="0.5"/>
+              
+              <path d="M54 52 Q52 38 42 36 L38 36 Q30 34 24 42 Q20 48 16 46" fill="none" stroke="rgba(255,255,255,0.35)" strokeWidth="1.5"/>
+              
+              <path d="M50 46 Q46 36 38 34 L34 34 Q28 33 22 40" fill="none" stroke="rgba(0,0,0,0.25)" strokeWidth="2"/>
+
+              
+              <rect x="6" y="42" width="14" height="10" rx="3" fill="url(#headGrad)" transform="rotate(-10 13 47)"/>
+              
+              <rect x="7" y="42" width="12" height="2" rx="1" fill="#1F2937" opacity="0.6" transform="rotate(-10 13 47)"/>
+              
+              <rect x="10" y="38" width="6" height="5" rx="2" fill="#4B5563" transform="rotate(-10 13 47)"/>
+              
+              <circle cx="9" cy="46" r="1" fill="#D1D5DB"/>
+              <circle cx="17" cy="46" r="1" fill="#D1D5DB"/>
+
+              
+              <rect x="8" y="50" width="12" height="8" rx="1.5" fill="url(#cartGrad)" transform="rotate(-10 14 54)"/>
+              
+              <rect x="8" y="56" width="8" height="3" rx="1" fill="#374151" opacity="0.5" transform="rotate(-10 14 54)"/>
+              
+              <line x1="14" y1="57" x2="12" y2="64" stroke="#D1D5DB" strokeWidth="1.2" strokeLinecap="round" transform="rotate(-10 14 54)"/>
+              
+              <line x1="12" y1="64" x2="10.5" y2="69" stroke="#F3F4F6" strokeWidth="1" strokeLinecap="round" filter="url(#needleGlow)"/>
+              
+              <polygon points="10.5,69 9.5,71 11.5,71" fill="#93C5FD" filter="url(#needleGlow)"/>
+
+              
+              <circle cx="57" cy="46" r="7" fill="url(#cwGrad)" stroke="#374151" strokeWidth="0.8"/>
+              
+              <line x1="54" y1="44" x2="60" y2="44" stroke="#6B7280" strokeWidth="0.5"/>
+              
+              <line x1="55" y1="42" x2="55" y2="43" stroke="#9CA3AF" strokeWidth="0.5"/>
+              <line x1="57" y1="41" x2="57" y2="42" stroke="#9CA3AF" strokeWidth="0.5"/>
+              <line x1="59" y1="42" x2="59" y2="43" stroke="#9CA3AF" strokeWidth="0.5"/>
+
+              
+              <path d="M56 58 Q64 56 66 48 Q68 40 62 36" fill="none" stroke="#9CA3AF" strokeWidth="0.6" opacity="0.5"/>
+            </svg>
+          </div>
+
+          {/* Vinyl disc with realistic grooves */}
           <div
             onClick={(e) => { e.stopPropagation(); toggle(); }}
             className={`audio-disc ${playing ? "" : "paused"} relative w-[45vw] max-w-[220px] sm:w-[280px] sm:max-w-[300px] md:w-[340px] md:max-w-[340px] aspect-square rounded-full overflow-hidden shadow-2xl shadow-black/60 ring-1 ring-white/10 transition-transform duration-500 ${playing ? "scale-100" : "scale-95"} cursor-pointer`}
@@ -415,21 +479,32 @@ function AudioPlayer({
           </p>
         </div>
 
-        <div className={`w-full space-y-2 transition-opacity duration-500 ${showControls ? "opacity-100" : "opacity-0 pointer-events-none"}`} onClick={(e) => e.stopPropagation()}>
-          {/* Progress Bar */}
+        <div className="w-full space-y-2" onClick={(e) => e.stopPropagation()}>
+          {/* Progress Bar with touch swipe/tap support */}
           <div className="w-full space-y-2">
-            <div className="relative h-1.5 rounded-full bg-white/20 overflow-hidden cursor-pointer group">
+            <div
+              className="relative h-2 sm:h-2.5 rounded-full bg-white/20 overflow-hidden cursor-pointer group"
+              onTouchStart={(e) => {
+                const rect = e.currentTarget.getBoundingClientRect();
+                const x = (e.touches[0].clientX - rect.left) / rect.width;
+                seek(Math.max(0, Math.min(duration || 0, x * (duration || 0))));
+              }}
+              onTouchMove={(e) => {
+                e.preventDefault();
+                const rect = e.currentTarget.getBoundingClientRect();
+                const x = (e.touches[0].clientX - rect.left) / rect.width;
+                seek(Math.max(0, Math.min(duration || 0, x * (duration || 0))));
+              }}
+              onClick={(e) => {
+                const rect = e.currentTarget.getBoundingClientRect();
+                const x = (e.clientX - rect.left) / rect.width;
+                seek(Math.max(0, Math.min(duration || 0, x * (duration || 0))));
+              }}
+            >
               <div className="absolute inset-y-0 left-0 progress-fill" style={{ width: `${pct}%` }} />
-              <input
-                type="range"
-                min={0}
-                max={duration || 0}
-                step={0.1}
-                value={curTime}
-                onChange={(e) => seek(Number(e.target.value))}
-                className="absolute inset-0 w-full opacity-0 cursor-pointer"
-                aria-label="Seek"
-              />
+              <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="h-3 w-3 sm:h-4 sm:w-4 rounded-full bg-white shadow-lg" style={{ marginLeft: `${pct}%`, transform: 'translateX(-50%)' }} />
+              </div>
             </div>
             <div className="flex justify-between text-xs font-medium text-white/55 font-mono tabular-nums">
               <span>{fmt(curTime)}</span>
@@ -438,7 +513,7 @@ function AudioPlayer({
           </div>
 
         {/* Primary Controls */}
-        <div className={`flex items-center justify-center gap-3 sm:gap-5 md:gap-7 w-full mt-6 sm:mt-9 transition-opacity duration-500 ${showControls ? "opacity-100" : "opacity-0 pointer-events-none"}`}>
+        <div className="flex items-center justify-center gap-3 sm:gap-5 md:gap-7 w-full mt-6 sm:mt-9">
           {controlled && (
             <button
               onClick={() => player.setShuffle(!player.shuffle)}
@@ -483,7 +558,7 @@ function AudioPlayer({
         </div>
 
         {/* Secondary row: rate + volume + add to playlist */}
-        <div className={`flex items-center justify-center gap-5 sm:gap-6 mt-8 text-white/70 transition-opacity duration-500 ${showControls ? "opacity-100" : "opacity-0 pointer-events-none"}`}>
+        <div className="flex items-center justify-center gap-5 sm:gap-6 mt-8 text-white/70">
           <div className="relative">
             <button
               onClick={() => setShowRates(!showRates)}
@@ -507,8 +582,8 @@ function AudioPlayer({
             )}
           </div>
 
-          {/* Volume */}
-          <div className="flex items-center gap-2 group">
+        {/* Volume — touch-friendly slider */}
+          <div className="flex items-center gap-2">
             <button
               onClick={() => (controlled ? player.toggleMute() : setLMuted(!muted))}
               className="p-2 rounded-full glass-hover transition-transform hover:scale-110"
@@ -516,18 +591,23 @@ function AudioPlayer({
             >
               {muted || volume === 0 ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
             </button>
-            <div className="relative w-24 h-1.5 rounded-full bg-white/20 overflow-hidden cursor-pointer group-hover:w-28 transition-all duration-300">
-              <div className="absolute inset-y-0 left-0" style={volFillStyle(volume, muted)} />
-              <input
-                type="range"
-                min={0}
-                max={1}
-                step={0.01}
-                value={muted ? 0 : volume}
-                onChange={(e) => changeVol(Number(e.target.value))}
-                className="absolute inset-0 w-full opacity-0 cursor-pointer"
-                aria-label="Volume"
-              />
+            <div
+              className="relative w-28 h-8 flex items-center cursor-pointer touch-action-none"
+              onClick={(e) => {
+                const rect = e.currentTarget.getBoundingClientRect();
+                const x = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+                changeVol(x);
+              }}
+              onTouchMove={(e) => {
+                e.preventDefault();
+                const rect = e.currentTarget.getBoundingClientRect();
+                const x = Math.max(0, Math.min(1, (e.touches[0].clientX - rect.left) / rect.width));
+                changeVol(x);
+              }}
+            >
+              <div className="absolute inset-y-3 left-0 right-0 h-1.5 rounded-full bg-white/20 overflow-hidden pointer-events-none">
+                <div className="absolute inset-y-0 left-0" style={volFillStyle(volume, muted)} />
+              </div>
             </div>
           </div>
 
@@ -618,25 +698,26 @@ function AudioPlayer({
             )}
           </div>
           
-          <div className="group relative flex items-center">
+          <div className="flex items-center gap-2">
             <button onClick={() => { const m = !muted; if (controlled) player.toggleMute(); else setLMuted(m); }} className="p-2 rounded-full glass-hover" title="Mute">
               {muted || volume === 0 ? <VolumeX className="h-5 w-5 text-content-muted" /> : <Volume2 className="h-5 w-5 text-content-muted hover:text-content" />}
             </button>
-            {/* Hover Volume Slider */}
-            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 h-24 w-8 glass-strong rounded-full p-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none group-hover:pointer-events-auto flex items-end">
-              <div className="relative w-full h-full rounded-full bg-surface-muted overflow-hidden">
-                <div className="absolute bottom-0 inset-x-0" style={volFillStyleV(volume, muted)} />
-                <input
-                  type="range"
-                  min={0}
-                  max={1}
-                  step={0.01}
-                  value={muted ? 0 : volume}
-                  onChange={(e) => changeVol(Number(e.target.value))}
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer appearance-none"
-                  style={{ writingMode: 'bt-lr', WebkitAppearance: 'slider-vertical' } as any}
-                  aria-label="Volume"
-                />
+            <div
+              className="relative w-20 h-8 flex items-center cursor-pointer touch-action-none"
+              onClick={(e) => {
+                const rect = e.currentTarget.getBoundingClientRect();
+                const x = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+                changeVol(x);
+              }}
+              onTouchMove={(e) => {
+                e.preventDefault();
+                const rect = e.currentTarget.getBoundingClientRect();
+                const x = Math.max(0, Math.min(1, (e.touches[0].clientX - rect.left) / rect.width));
+                changeVol(x);
+              }}
+            >
+              <div className="absolute inset-y-3 left-0 right-0 h-1.5 rounded-full bg-surface-muted overflow-hidden pointer-events-none">
+                <div className="absolute inset-y-0 left-0" style={volFillStyle(volume, muted)} />
               </div>
             </div>
           </div>
@@ -644,7 +725,7 @@ function AudioPlayer({
       </div>
 
       {fs && fullscreen}
-      {!controlled && <audio ref={ref} src={url} preload="metadata" />}
+      {!controlled && <audio ref={ref} src={url} preload="metadata" playsInline webkit-playsinline="true" />}
     </div>
   );
 }

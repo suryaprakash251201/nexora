@@ -465,6 +465,18 @@ body {
 .audio-disc.paused { animation-play-state: paused; }
 
 /* ============================================================
+   Vinyl tone arm animation
+   ============================================================ */
+@keyframes n-arm-lower {
+  from { transform: rotate(12deg); }
+  to { transform: rotate(0deg); }
+}
+@keyframes n-arm-raise {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(12deg); }
+}
+
+/* ============================================================
    Utility Classes
    ============================================================ */
 

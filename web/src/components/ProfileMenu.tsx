@@ -91,39 +91,39 @@ export default function ProfileMenu({
           </div>
           <div className="p-1 pt-2">
             <DropdownMenuItem onClick={() => setTheme(isDark ? "light" : "dark")}>
-              <div className="p-1.5 rounded-lg bg-accent/10 border border-accent/20 mr-3 group-data-[highlighted]/dropdown-menu-item:bg-white/20 group-data-[highlighted]/dropdown-menu-item:border-white/30">
-                {isDark ? <Sun className="h-4 w-4 text-accent group-data-[highlighted]/dropdown-menu-item:text-white" /> : <Moon className="h-4 w-4 text-accent group-data-[highlighted]/dropdown-menu-item:text-white" />}
+              <div className="p-1.5 rounded-lg bg-accent/10 border border-accent/20 mr-3">
+                {isDark ? <Sun className="h-4 w-4 text-accent" /> : <Moon className="h-4 w-4 text-accent" />}
               </div>
-              <span className="font-medium group-data-[highlighted]/dropdown-menu-item:text-white">{isDark ? "Switch to light mode" : "Switch to dark mode"}</span>
+              <span className="font-medium">{isDark ? "Switch to light mode" : "Switch to dark mode"}</span>
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => setSettingsOpen(true)}>
-              <div className="p-1.5 rounded-lg bg-accent/10 border border-accent/20 mr-3 group-data-[highlighted]/dropdown-menu-item:bg-white/20 group-data-[highlighted]/dropdown-menu-item:border-white/30">
-                <Settings className="h-4 w-4 text-accent group-data-[highlighted]/dropdown-menu-item:text-white" />
+              <div className="p-1.5 rounded-lg bg-accent/10 border border-accent/20 mr-3">
+                <Settings className="h-4 w-4 text-accent" />
               </div>
-              <span className="font-medium group-data-[highlighted]/dropdown-menu-item:text-white">Settings</span>
+              <span className="font-medium">Settings</span>
               {user.totp_enabled && (
-                <span className="ml-auto flex items-center gap-1 text-xs font-bold text-success bg-success/10 px-2 py-0.5 rounded-full group-data-[highlighted]/dropdown-menu-item:bg-white/20 group-data-[highlighted]/dropdown-menu-item:text-white">
-                  <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse group-data-[highlighted]/dropdown-menu-item:bg-white" />
+                <span className="ml-auto flex items-center gap-1 text-xs font-bold text-success bg-success/10 px-2 py-0.5 rounded-full">
+                  <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
                   2FA
                 </span>
               )}
             </DropdownMenuItem>
             {isAdmin && (
               <DropdownMenuItem onClick={() => { onAdmin(); }}>
-                <div className="p-1.5 rounded-lg bg-accent/10 border border-accent/20 mr-3 group-data-[highlighted]/dropdown-menu-item:bg-white/20 group-data-[highlighted]/dropdown-menu-item:border-white/30">
-                  <Shield className="h-4 w-4 text-accent group-data-[highlighted]/dropdown-menu-item:text-white" />
+                <div className="p-1.5 rounded-lg bg-accent/10 border border-accent/20 mr-3">
+                  <Shield className="h-4 w-4 text-accent" />
                 </div>
-                <span className="font-medium group-data-[highlighted]/dropdown-menu-item:text-white">Administration</span>
+                <span className="font-medium">Administration</span>
               </DropdownMenuItem>
             )}
           </div>
           <DropdownMenuSeparator />
           <div className="p-1">
             <DropdownMenuItem onClick={() => { onLogout(); }} className="text-danger focus:text-danger focus:bg-danger/10">
-              <div className="p-1.5 rounded-lg bg-danger/10 border border-danger/20 mr-3 group-data-[highlighted]/dropdown-menu-item:bg-white/20 group-data-[highlighted]/dropdown-menu-item:border-white/30">
-                <LogOut className="h-4 w-4 text-danger group-data-[highlighted]/dropdown-menu-item:text-white" />
+              <div className="p-1.5 rounded-lg bg-danger/10 border border-danger/20 mr-3">
+                <LogOut className="h-4 w-4 text-danger" />
               </div>
-              <span className="font-medium group-data-[highlighted]/dropdown-menu-item:text-white">Sign Out</span>
+              <span className="font-medium">Sign Out</span>
             </DropdownMenuItem>
           </div>
         </DropdownMenuContent>

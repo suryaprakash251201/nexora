@@ -297,7 +297,7 @@ export default function FileBrowser({
   const d = density;
 
   return (
-    <div ref={dropZoneRef} className="flex-1 overflow-auto">
+    <div ref={dropZoneRef} className="flex-1 overflow-auto hide-scrollbar">
       {viewMode === "grid" ? (
         <>
           {selectMode && items.length > 0 && (

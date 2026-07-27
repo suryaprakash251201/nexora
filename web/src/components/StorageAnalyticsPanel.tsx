@@ -168,7 +168,7 @@ export default function StorageAnalyticsPanel({ roots, onClose, onNavigateToFile
           </div>
 
           {/* Largest Files */}
-          {stats.largest.length > 0 && (
+          {stats.largest && stats.largest.length > 0 && (
             <div>
               <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
                 <FolderSearch className="h-4 w-4 text-accent" />

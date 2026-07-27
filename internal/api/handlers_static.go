@@ -34,12 +34,19 @@ func (s *Server) handleStatic(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+		// Cache static assets with content hashes forever, but always revalidate index.html
+		if strings.HasSuffix(candidate, "index.html") {
+			w.Header().Set("Cache-Control", "no-cache, must-revalidate")
+		} else if strings.Contains(candidate, "/assets/") {
+			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		}
 		http.ServeFile(w, r, candidate)
 		return
 	}
 	// SPA fallback to index.html for client-side routes.
 	index := filepath.Join(root, "index.html")
 	if _, err := os.Stat(index); err == nil {
+		w.Header().Set("Cache-Control", "no-cache, must-revalidate")
 		http.ServeFile(w, r, index)
 		return
 	}

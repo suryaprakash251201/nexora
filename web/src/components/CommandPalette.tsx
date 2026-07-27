@@ -167,6 +167,16 @@ export default function CommandPalette({
     return [...fileResults, ...cmdResults];
   }, [commands, query, items, activeRoot, onClose]);
 
+  // Group commands by category (moved before early return to keep hook order stable)
+  const groupedCommands = useMemo(() => {
+    const groups: Record<string, Command[]> = {};
+    filteredCommands.forEach(cmd => {
+      if (!groups[cmd.category]) groups[cmd.category] = [];
+      groups[cmd.category].push(cmd);
+    });
+    return groups;
+  }, [filteredCommands]);
+
   // Handle keyboard navigation
   useEffect(() => {
     if (!isOpen) return;
@@ -210,15 +220,6 @@ export default function CommandPalette({
   }, [query]);
 
   if (!isOpen) return null;
-
-  const groupedCommands = useMemo(() => {
-    const groups: Record<string, Command[]> = {};
-    filteredCommands.forEach(cmd => {
-      if (!groups[cmd.category]) groups[cmd.category] = [];
-      groups[cmd.category].push(cmd);
-    });
-    return groups;
-  }, [filteredCommands]);
 
   const categoryLabels: Record<string, string> = {
     navigation: "Navigation",

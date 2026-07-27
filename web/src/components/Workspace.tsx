@@ -381,6 +381,13 @@ export default function Workspace({ user }: { user: User }) {
     if (!isDir) {
       try {
         const info = await get<FileItem>("/files/stat", { root: rid, path: p });
+        // If stat reveals it's a directory, navigate into it
+        if (info.is_dir) {
+          React.startTransition(() => {
+            navigate(p ? `/files/${rid}/${p}` : `/files/${rid}`);
+          });
+          return;
+        }
         if (info.mime?.startsWith("image/") || ["jpg", "jpeg", "png", "gif", "webp", "bmp", "avif"].includes((info.extension || "").toLowerCase())) {
           setImageItem(info);
         } else if (info.mime?.startsWith("video/")) {
@@ -482,7 +489,7 @@ export default function Workspace({ user }: { user: User }) {
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.15, ease: [0.25, 0.1, 0.25, 1] }}
-          className="flex-1 overflow-auto flex flex-col"
+          className="flex-1 overflow-auto flex flex-col hide-scrollbar"
         >
             <Suspense fallback={<div className="flex-1 grid place-items-center text-content-muted">Loading...</div>}>
             {view === "files" && (

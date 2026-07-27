@@ -105,10 +105,10 @@ export default function PlayerBar() {
 
   return (
     <>
-      <audio ref={audioRef} preload="none" />
+      <audio ref={audioRef} preload="none" playsInline webkit-playsinline="true" />
 
       {hasActivePlayer && showMini && !expanded && (
-        <div className="fixed bottom-24 md:bottom-6 left-1/2 -translate-x-1/2 z-[60] w-[calc(100%-2rem)] max-w-lg pointer-events-none">
+        <div className="fixed bottom-32 md:bottom-6 left-1/2 -translate-x-1/2 z-[60] w-[calc(100%-2rem)] max-w-lg pointer-events-none">
           <div className="pointer-events-auto glass-strong rounded-2xl px-3 py-2.5 shadow-2xl transition-all duration-500 ease-out">
             <div className="flex items-center gap-2">
               <div className={`group relative h-10 w-10 rounded-full overflow-hidden shrink-0 shadow-md transition-all duration-500 ${isPlaying ? 'animate-[spin_8s_linear_infinite]' : ''}`}>
