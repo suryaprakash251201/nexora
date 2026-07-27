@@ -81,13 +81,6 @@ func (s *Server) Routes() http.Handler {
 	r.Use(middleware.CSRF(csrfExempt, s.Cfg.SecureCookies))
 	r.Use(auth.SessionAuth(s.Sessions, s.Users))
 
-	// Health endpoints (no auth).
-	r.Get("/healthz", s.handleHealthz)
-	r.Get("/readyz", s.handleReadyz)
-	if s.Cfg.EnablePrometheus && s.Metrics != nil {
-		r.Get("/metrics", s.Metrics.Handler())
-	}
-
 	// Optional CORS (disabled by default).
 	if len(s.Cfg.CORSOrigins) > 0 {
 		r.Use(cors.Handler(cors.Options{
@@ -97,6 +90,13 @@ func (s *Server) Routes() http.Handler {
 			AllowCredentials: true,
 			MaxAge:           300,
 		}))
+	}
+
+	// Health endpoints (no auth).
+	r.Get("/healthz", s.handleHealthz)
+	r.Get("/readyz", s.handleReadyz)
+	if s.Cfg.EnablePrometheus && s.Metrics != nil {
+		r.Get("/metrics", s.Metrics.Handler())
 	}
 
 	// Versioned API.
