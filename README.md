@@ -15,55 +15,31 @@ Nexora is a private, self-hosted file workspace. It combines a React interface, 
 
 ## Screenshots
 
-<div style="display: flex; gap: 16px; overflow-x: auto; padding: 16px 0; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; scrollbar-width: thin;">
-  <div style="flex: 0 0 auto; scroll-snap-align: start; text-align: center; min-width: 280px; max-width: 400px;">
-    <p style="margin: 0 0 6px 0; font-weight: 600; font-size: 14px; color: #555;">2026-07-27 10:27:38</p>
-    <img src="web/public/screenshots/Screenshot%20From%202026-07-27%2010-27-38.png" alt="Screenshot 2026-07-27 10:27:38" style="width: 100%; border-radius: 8px; box-shadow: 0 2px 12px rgba(0,0,0,0.15);" loading="lazy" />
-  </div>
-  <div style="flex: 0 0 auto; scroll-snap-align: start; text-align: center; min-width: 280px; max-width: 400px;">
-    <p style="margin: 0 0 6px 0; font-weight: 600; font-size: 14px; color: #555;">2026-07-27 10:27:55</p>
-    <img src="web/public/screenshots/Screenshot%20From%202026-07-27%2010-27-55.png" alt="Screenshot 2026-07-27 10:27:55" style="width: 100%; border-radius: 8px; box-shadow: 0 2px 12px rgba(0,0,0,0.15);" loading="lazy" />
-  </div>
-  <div style="flex: 0 0 auto; scroll-snap-align: start; text-align: center; min-width: 280px; max-width: 400px;">
-    <p style="margin: 0 0 6px 0; font-weight: 600; font-size: 14px; color: #555;">2026-07-27 10:28:03</p>
-    <img src="web/public/screenshots/Screenshot%20From%202026-07-27%2010-28-03.png" alt="Screenshot 2026-07-27 10:28:03" style="width: 100%; border-radius: 8px; box-shadow: 0 2px 12px rgba(0,0,0,0.15);" loading="lazy" />
-  </div>
-  <div style="flex: 0 0 auto; scroll-snap-align: start; text-align: center; min-width: 280px; max-width: 400px;">
-    <p style="margin: 0 0 6px 0; font-weight: 600; font-size: 14px; color: #555;">2026-07-27 10:28:20</p>
-    <img src="web/public/screenshots/Screenshot%20From%202026-07-27%2010-28-20.png" alt="Screenshot 2026-07-27 10:28:20" style="width: 100%; border-radius: 8px; box-shadow: 0 2px 12px rgba(0,0,0,0.15);" loading="lazy" />
-  </div>
-  <div style="flex: 0 0 auto; scroll-snap-align: start; text-align: center; min-width: 280px; max-width: 400px;">
-    <p style="margin: 0 0 6px 0; font-weight: 600; font-size: 14px; color: #555;">2026-07-27 10:28:27</p>
-    <img src="web/public/screenshots/Screenshot%20From%202026-07-27%2010-28-27.png" alt="Screenshot 2026-07-27 10:28:27" style="width: 100%; border-radius: 8px; box-shadow: 0 2px 12px rgba(0,0,0,0.15);" loading="lazy" />
-  </div>
-  <div style="flex: 0 0 auto; scroll-snap-align: start; text-align: center; min-width: 280px; max-width: 400px;">
-    <p style="margin: 0 0 6px 0; font-weight: 600; font-size: 14px; color: #555;">2026-07-27 10:28:50</p>
-    <img src="web/public/screenshots/Screenshot%20From%202026-07-27%2010-28-50.png" alt="Screenshot 2026-07-27 10:28:50" style="width: 100%; border-radius: 8px; box-shadow: 0 2px 12px rgba(0,0,0,0.15);" loading="lazy" />
-  </div>
-  <div style="flex: 0 0 auto; scroll-snap-align: start; text-align: center; min-width: 280px; max-width: 400px;">
-    <p style="margin: 0 0 6px 0; font-weight: 600; font-size: 14px; color: #555;">2026-07-27 10:29:05</p>
-    <img src="web/public/screenshots/Screenshot%20From%202026-07-27%2010-29-05.png" alt="Screenshot 2026-07-27 10:29:05" style="width: 100%; border-radius: 8px; box-shadow: 0 2px 12px rgba(0,0,0,0.15);" loading="lazy" />
-  </div>
-  <div style="flex: 0 0 auto; scroll-snap-align: start; text-align: center; min-width: 280px; max-width: 400px;">
-    <p style="margin: 0 0 6px 0; font-weight: 600; font-size: 14px; color: #555;">2026-07-27 10:29:24</p>
-    <img src="web/public/screenshots/Screenshot%20From%202026-07-27%2010-29-24.png" alt="Screenshot 2026-07-27 10:29:24" style="width: 100%; border-radius: 8px; box-shadow: 0 2px 12px rgba(0,0,0,0.15);" loading="lazy" />
-  </div>
-  <div style="flex: 0 0 auto; scroll-snap-align: start; text-align: center; min-width: 280px; max-width: 400px;">
-    <p style="margin: 0 0 6px 0; font-weight: 600; font-size: 14px; color: #555;">2026-07-27 10:29:37</p>
-    <img src="web/public/screenshots/Screenshot%20From%202026-07-27%2010-29-37.png" alt="Screenshot 2026-07-27 10:29:37" style="width: 100%; border-radius: 8px; box-shadow: 0 2px 12px rgba(0,0,0,0.15);" loading="lazy" />
-  </div>
-  <div style="flex: 0 0 auto; scroll-snap-align: start; text-align: center; min-width: 280px; max-width: 400px;">
-    <p style="margin: 0 0 6px 0; font-weight: 600; font-size: 14px; color: #555;">2026-07-27 10:30:17</p>
-    <img src="web/public/screenshots/Screenshot%20From%202026-07-27%2010-30-17.png" alt="Screenshot 2026-07-27 10:30:17" style="width: 100%; border-radius: 8px; box-shadow: 0 2px 12px rgba(0,0,0,0.15);" loading="lazy" />
-  </div>
-  <div style="flex: 0 0 auto; scroll-snap-align: start; text-align: center; min-width: 280px; max-width: 400px;">
-    <p style="margin: 0 0 6px 0; font-weight: 600; font-size: 14px; color: #555;">2026-07-27 10:30:36</p>
-    <img src="web/public/screenshots/Screenshot%20From%202026-07-27%2010-30-36.png" alt="Screenshot 2026-07-27 10:30:36" style="width: 100%; border-radius: 8px; box-shadow: 0 2px 12px rgba(0,0,0,0.15);" loading="lazy" />
-  </div>
-  <div style="flex: 0 0 auto; scroll-snap-align: start; text-align: center; min-width: 280px; max-width: 400px;">
-    <p style="margin: 0 0 6px 0; font-weight: 600; font-size: 14px; color: #555;">2026-07-27 10:30:49</p>
-    <img src="web/public/screenshots/Screenshot%20From%202026-07-27%2010-30-49.png" alt="Screenshot 2026-07-27 10:30:49" style="width: 100%; border-radius: 8px; box-shadow: 0 2px 12px rgba(0,0,0,0.15);" loading="lazy" />
-  </div>
+<p align="center">Scroll horizontally or swipe to browse screenshots.</p>
+
+<div align="center">
+<table>
+<tr>
+<td width="33%" align="center"><strong>2026-07-27 10:27:38</strong><br><a href="web/public/screenshots/Screenshot%20From%202026-07-27%2010-27-38.png"><img src="web/public/screenshots/Screenshot%20From%202026-07-27%2010-27-38.png" width="100%" loading="lazy"></a></td>
+<td width="33%" align="center"><strong>2026-07-27 10:27:55</strong><br><a href="web/public/screenshots/Screenshot%20From%202026-07-27%2010-27-55.png"><img src="web/public/screenshots/Screenshot%20From%202026-07-27%2010-27-55.png" width="100%" loading="lazy"></a></td>
+<td width="33%" align="center"><strong>2026-07-27 10:28:03</strong><br><a href="web/public/screenshots/Screenshot%20From%202026-07-27%2010-28-03.png"><img src="web/public/screenshots/Screenshot%20From%202026-07-27%2010-28-03.png" width="100%" loading="lazy"></a></td>
+</tr>
+<tr>
+<td width="33%" align="center"><strong>2026-07-27 10:28:20</strong><br><a href="web/public/screenshots/Screenshot%20From%202026-07-27%2010-28-20.png"><img src="web/public/screenshots/Screenshot%20From%202026-07-27%2010-28-20.png" width="100%" loading="lazy"></a></td>
+<td width="33%" align="center"><strong>2026-07-27 10:28:27</strong><br><a href="web/public/screenshots/Screenshot%20From%202026-07-27%2010-28-27.png"><img src="web/public/screenshots/Screenshot%20From%202026-07-27%2010-28-27.png" width="100%" loading="lazy"></a></td>
+<td width="33%" align="center"><strong>2026-07-27 10:28:50</strong><br><a href="web/public/screenshots/Screenshot%20From%202026-07-27%2010-28-50.png"><img src="web/public/screenshots/Screenshot%20From%202026-07-27%2010-28-50.png" width="100%" loading="lazy"></a></td>
+</tr>
+<tr>
+<td width="33%" align="center"><strong>2026-07-27 10:29:05</strong><br><a href="web/public/screenshots/Screenshot%20From%202026-07-27%2010-29-05.png"><img src="web/public/screenshots/Screenshot%20From%202026-07-27%2010-29-05.png" width="100%" loading="lazy"></a></td>
+<td width="33%" align="center"><strong>2026-07-27 10:29:24</strong><br><a href="web/public/screenshots/Screenshot%20From%202026-07-27%2010-29-24.png"><img src="web/public/screenshots/Screenshot%20From%202026-07-27%2010-29-24.png" width="100%" loading="lazy"></a></td>
+<td width="33%" align="center"><strong>2026-07-27 10:29:37</strong><br><a href="web/public/screenshots/Screenshot%20From%202026-07-27%2010-29-37.png"><img src="web/public/screenshots/Screenshot%20From%202026-07-27%2010-29-37.png" width="100%" loading="lazy"></a></td>
+</tr>
+<tr>
+<td width="33%" align="center"><strong>2026-07-27 10:30:17</strong><br><a href="web/public/screenshots/Screenshot%20From%202026-07-27%2010-30-17.png"><img src="web/public/screenshots/Screenshot%20From%202026-07-27%2010-30-17.png" width="100%" loading="lazy"></a></td>
+<td width="33%" align="center"><strong>2026-07-27 10:30:36</strong><br><a href="web/public/screenshots/Screenshot%20From%202026-07-27%2010-30-36.png"><img src="web/public/screenshots/Screenshot%20From%202026-07-27%2010-30-36.png" width="100%" loading="lazy"></a></td>
+<td width="33%" align="center"><strong>2026-07-27 10:30:49</strong><br><a href="web/public/screenshots/Screenshot%20From%202026-07-27%2010-30-49.png"><img src="web/public/screenshots/Screenshot%20From%202026-07-27%2010-30-49.png" width="100%" loading="lazy"></a></td>
+</tr>
+</table>
 </div>
 
 ## Technical specifications
