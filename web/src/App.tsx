@@ -70,6 +70,29 @@ function AppInner() {
     return <div className="min-h-screen grid place-items-center text-content-muted">Loading…</div>;
   }
 
+  if (needsSetup.isError || session.isError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background text-foreground">
+        <div className="max-w-md w-full p-6 bg-card border rounded-lg shadow-lg text-center">
+          <h2 className="text-xl font-semibold mb-2 text-destructive">Connection Error</h2>
+          <p className="text-content-muted text-sm mb-4">
+            Could not connect to the backend server. If using Tauri, ensure the URL is correct and the server allows CORS.
+          </p>
+          <button
+            className="px-4 py-2 bg-primary text-primary-foreground rounded hover:bg-primary/90"
+            onClick={() => {
+              localStorage.removeItem("nexora-api-url");
+              setApiUrl("");
+              qc.clear();
+            }}
+          >
+            Reset URL
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (!needsSetup.data?.configured) {
     return <Setup onSuccess={() => { qc.invalidateQueries(); }} />;
   }
