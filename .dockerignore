@@ -6,6 +6,6 @@ web/node_modules
 web/dist
 .env
 .env.*
-data/
+./data/
 **/__pycache__
 **/.DS_Store
