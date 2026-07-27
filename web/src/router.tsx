@@ -1,4 +1,4 @@
-import { createBrowserRouter, useParams } from "react-router-dom";
+import { createBrowserRouter, createHashRouter, useParams } from "react-router-dom";
 import App from "./App";
 import SharePage from "./components/SharePage";
 
@@ -7,8 +7,7 @@ function SharePageRoute() {
   return token ? <SharePage token={token} /> : null;
 }
 
-// We'll lazy load the main app layout so the public share page loads instantly
-export const router = createBrowserRouter([
+const routes = [
   {
     path: "/s/:token",
     element: <SharePageRoute />,
@@ -17,4 +16,8 @@ export const router = createBrowserRouter([
     path: "/*",
     element: <App />,
   }
-]);
+];
+
+// If running in Tauri Desktop, use HashRouter. Otherwise, use BrowserRouter for Web.
+const isTauri = "__TAURI_INTERNALS__" in window;
+export const router = isTauri ? createHashRouter(routes) : createBrowserRouter(routes);
