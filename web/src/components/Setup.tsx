@@ -26,7 +26,10 @@ export default function Setup({ onSuccess }: { onSuccess: () => void }) {
     }
     setBusy(true);
     try {
-      await post("/auth/setup", { username, email, password, display_name: displayName });
+      const res = await post<{ token?: string }>("/auth/setup", { username, email, password, display_name: displayName });
+      if (res && res.token) {
+        localStorage.setItem("nexora-token", res.token);
+      }
       pushToast("success", "Admin account created successfully");
       onSuccess();
     } catch (err: any) {

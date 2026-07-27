@@ -58,6 +58,11 @@ export async function api<T>(path: string, opts: RequestOptions = {}): Promise<T
   const storedUrl = localStorage.getItem("nexora-api-url") || "";
   const baseUrl = (isTauri && storedUrl) ? storedUrl.replace(/\/$/, "") : "";
 
+  const storedToken = localStorage.getItem("nexora-token");
+  if (storedToken && isTauri) {
+    headers["Authorization"] = "Bearer " + storedToken;
+  }
+
   const res = await fetch(baseUrl + "/api/v1" + path + buildQuery(opts.query), {
     method,
     headers,

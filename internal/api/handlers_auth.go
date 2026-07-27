@@ -95,9 +95,9 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 		s.Log.Error("failed to provision default roots", "error", err)
 	}
 
-	s.startSession(w, r, created.ID)
+	token := s.startSession(w, r, created.ID)
 	_ = s.Audit.Record(created.ID, "setup", "system", "initial admin created", clientIP(r))
-	writeJSON(w, http.StatusCreated, map[string]any{"user": toUserDTO(created)})
+	writeJSON(w, http.StatusCreated, map[string]any{"user": toUserDTO(created), "token": token})
 }
 
 type loginRequest struct {
@@ -154,9 +154,9 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.startSession(w, r, user.ID)
+	token := s.startSession(w, r, user.ID)
 	_ = s.Audit.Record(user.ID, "login", user.Username, "successful login", ip)
-	writeJSON(w, http.StatusOK, map[string]any{"user": toUserDTO(user)})
+	writeJSON(w, http.StatusOK, map[string]any{"user": toUserDTO(user), "token": token})
 }
 
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
@@ -304,8 +304,8 @@ func (s *Server) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 	// Revoke other sessions for safety.
 	_ = s.Sessions.DeleteAllForUser(user.ID)
 	_ = s.Audit.Record(user.ID, "password_change", user.Username, "", clientIP(r))
-	s.startSession(w, r, user.ID)
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+	token := s.startSession(w, r, user.ID)
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "token": token})
 }
 
 // TOTP handlers ------------------------------------------------------------
@@ -431,17 +431,17 @@ func (s *Server) handleTOTPVerifyLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.startSession(w, r, user.ID)
+	token := s.startSession(w, r, user.ID)
 	_ = s.Audit.Record(user.ID, "login", user.Username, "successful login (2FA)", ip)
-	writeJSON(w, http.StatusOK, map[string]any{"user": toUserDTO(user)})
+	writeJSON(w, http.StatusOK, map[string]any{"user": toUserDTO(user), "token": token})
 }
 
 // startSession creates a session and sets the cookie.
-func (s *Server) startSession(w http.ResponseWriter, r *http.Request, userID string) {
+func (s *Server) startSession(w http.ResponseWriter, r *http.Request, userID string) string {
 	sess, err := s.Sessions.Create(userID, clientIP(r), r.UserAgent())
 	if err != nil {
 		s.Log.Error("failed to create session", "error", err)
-		return
+		return ""
 	}
 	http.SetCookie(w, &http.Cookie{
 		Name:     auth.SessionCookieName,
@@ -452,6 +452,7 @@ func (s *Server) startSession(w http.ResponseWriter, r *http.Request, userID str
 		Secure:   s.Cfg.SecureCookies,
 		MaxAge:   int(s.Cfg.SessionLifetime.Seconds()),
 	})
+	return sess.Token
 }
 
 func configRootsToStorage(in []config.RootConfig) []storage.Root {

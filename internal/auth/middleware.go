@@ -14,9 +14,15 @@ const SessionCookieName = "nexora_session"
 func SessionAuth(store *SessionStore, users *UserStore) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			cookie, err := r.Cookie(SessionCookieName)
-			if err == nil && cookie.Value != "" {
-				if sess, ok := store.Lookup(cookie.Value); ok {
+			var token string
+			if cookie, err := r.Cookie(SessionCookieName); err == nil && cookie.Value != "" {
+				token = cookie.Value
+			} else if authHeader := r.Header.Get("Authorization"); strings.HasPrefix(authHeader, "Bearer ") {
+				token = strings.TrimSpace(strings.TrimPrefix(authHeader, "Bearer "))
+			}
+
+			if token != "" {
+				if sess, ok := store.Lookup(token); ok {
 					if u, ok, _ := users.GetByID(sess.UserID); ok && u.IsAuthorized() {
 						r = r.WithContext(withUser(r.Context(), u))
 					}

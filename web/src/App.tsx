@@ -105,6 +105,8 @@ function AppInner() {
 }
 
 // Re-export for potential external use.
-export async function logout() {
+export async function handleLogout() {
   await post("/auth/logout");
+  localStorage.removeItem("nexora-token");
+  window.location.reload();
 }

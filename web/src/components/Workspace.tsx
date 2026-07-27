@@ -367,8 +367,8 @@ export default function Workspace({ user }: { user: User }) {
 
   const logout = async () => {
     try { await post("/auth/logout"); } catch { /* ignore */ }
-    qc.setQueryData(["session"], { user: null });
-    qc.removeQueries({ queryKey: ["session"] });
+    localStorage.removeItem("nexora-token");
+    window.location.reload();
   };
 
   const navigateTo = async (rid: string, p: string, isDir: boolean, name: string) => {

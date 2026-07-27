@@ -18,7 +18,10 @@ export default function Login({ onSuccess }: { onSuccess: () => void }) {
     if (!username || !password) { setError("Please fill in all fields"); return; }
     setBusy(true);
     try {
-      await post("/auth/login", { login: username, password });
+      const res = await post<{ token?: string }>("/auth/login", { login: username, password });
+      if (res && res.token) {
+        localStorage.setItem("nexora-token", res.token);
+      }
       onSuccess();
     } catch (err: any) {
       setError(err.message || "Invalid credentials");
