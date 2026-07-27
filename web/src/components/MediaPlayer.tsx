@@ -750,6 +750,7 @@ function VideoPlayer({ url, item, autoPlay }: { url?: string; item?: FileItem; a
   const fileRef = useRef<HTMLInputElement>(null);
   const [showControls, setShowControls] = useState(true);
   const controlsTimeout = useRef<number>();
+  const [fallbackTriggered, setFallbackTriggered] = useState(false);
 
   const ext = item?.extension?.toLowerCase() || "";
   const isMkv = ext === "mkv";
@@ -771,13 +772,28 @@ function VideoPlayer({ url, item, autoPlay }: { url?: string; item?: FileItem; a
       setSrc(url);
       setLive(false);
     }
+    setFallbackTriggered(false);
     return () => { cancelled = true; };
   }, [url, item]);
 
   useEffect(() => {
     const v = ref.current;
     if (!v) return;
-    const onTime = () => setCur(v.currentTime);
+    const onTime = () => {
+      setCur(v.currentTime);
+      if (!live && !fallbackTriggered && v.readyState >= 2 && v.videoWidth === 0 && item) {
+        setFallbackTriggered(true);
+        serverSupportsTranscode().then((ok) => {
+          if (ok) {
+            setSrc(transcodeUrl(item.root_id, item.path));
+            setLive(true);
+          } else {
+            setErrored(true);
+            setErroredMsg("The video codec is unsupported and server transcoding is unavailable.");
+          }
+        });
+      }
+    };
     const onMeta = () => { setDur(v.duration); setErrored(false); };
     const onPlay = () => setPlaying(true);
     const onPause = () => setPlaying(false);
@@ -804,7 +820,7 @@ function VideoPlayer({ url, item, autoPlay }: { url?: string; item?: FileItem; a
       v.removeEventListener("pause", onPause);
       v.removeEventListener("error", onErr);
     };
-  }, [isMkv, live]);
+  }, [isMkv, live, fallbackTriggered, item]);
 
   useEffect(() => {
     const v = ref.current;
