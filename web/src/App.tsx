@@ -16,10 +16,55 @@ export default function App() {
   );
 }
 
+import { useState } from "react";
+
 function AppInner() {
   const qc = useQueryClient();
-  const needsSetup = useQuery({ queryKey: ["needs-setup"], queryFn: () => get<{ configured: boolean }>("/auth/needs-setup") });
-  const session = useQuery({ queryKey: ["session"], queryFn: () => get<{ user: User }>("/auth/session") });
+  const [apiUrl, setApiUrl] = useState(localStorage.getItem("nexora-api-url") || "");
+  const [inputUrl, setInputUrl] = useState(apiUrl);
+  
+  const isTauri = "__TAURI_INTERNALS__" in window;
+
+  const needsSetup = useQuery({ 
+    queryKey: ["needs-setup"], 
+    queryFn: () => get<{ configured: boolean }>("/auth/needs-setup"),
+    enabled: !isTauri || !!apiUrl
+  });
+  
+  const session = useQuery({ 
+    queryKey: ["session"], 
+    queryFn: () => get<{ user: User }>("/auth/session"),
+    enabled: !isTauri || !!apiUrl
+  });
+
+  if (isTauri && !apiUrl) {
+    return (
+      <div className="min-h-screen grid place-items-center bg-background">
+        <div className="w-full max-w-sm p-6 bg-surface border rounded-xl shadow-lg space-y-4">
+          <h2 className="text-xl font-bold">Connect to Nexora</h2>
+          <p className="text-sm text-content-muted">Enter your Nexora server URL to continue.</p>
+          <input 
+            type="url" 
+            className="w-full px-3 py-2 bg-background border rounded-lg focus:ring-2 focus:ring-primary focus:outline-none" 
+            placeholder="http://localhost:8080"
+            value={inputUrl}
+            onChange={(e) => setInputUrl(e.target.value)}
+          />
+          <button 
+            className="w-full py-2 bg-primary text-primary-foreground font-medium rounded-lg hover:bg-primary/90 transition"
+            onClick={() => {
+              if (inputUrl) {
+                localStorage.setItem("nexora-api-url", inputUrl);
+                setApiUrl(inputUrl);
+              }
+            }}
+          >
+            Connect
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (needsSetup.isLoading || session.isLoading) {
     return <div className="min-h-screen grid place-items-center text-content-muted">Loading…</div>;

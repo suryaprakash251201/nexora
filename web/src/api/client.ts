@@ -54,7 +54,11 @@ export async function api<T>(path: string, opts: RequestOptions = {}): Promise<T
     headers["X-CSRF-Token"] = getCsrfToken();
   }
 
-  const res = await fetch("/api/v1" + path + buildQuery(opts.query), {
+  const isTauri = "__TAURI_INTERNALS__" in window;
+  const storedUrl = localStorage.getItem("nexora-api-url") || "";
+  const baseUrl = (isTauri && storedUrl) ? storedUrl.replace(/\/$/, "") : "";
+
+  const res = await fetch(baseUrl + "/api/v1" + path + buildQuery(opts.query), {
     method,
     headers,
     body,
