@@ -22,7 +22,7 @@ import {
   Download,
 } from "lucide-react";
 import type { FileItem } from "../api/types";
-import { thumbUrl, needsTranscode, transcodeUrl, serverSupportsTranscode, getAudioQuality } from "../lib/preview";
+import { thumbUrl, needsTranscode, transcodeUrl, serverSupportsTranscode, getAudioQuality, rawUrl } from "../lib/preview";
 import { usePlayer } from "../store/player";
 import { AddToPlaylistMenu } from "./PlaylistAdder";
 import { Button } from "./ui/Button";
@@ -929,7 +929,7 @@ function VideoPlayer({ url, item, autoPlay }: { url?: string; item?: FileItem; a
   };
 
   const pct = dur > 0 ? (cur / dur) * 100 : 0;
-  const dlUrl = item ? `/api/v1/files/raw?root=${encodeURIComponent(item.root_id)}&path=${encodeURIComponent(item.path)}&download=1` : (url || "#");
+  const dlUrl = item ? rawUrl(item.root_id, item.path, true) : (url || "#");
 
   const wrapClasses = full
     ? "fixed inset-0 z-[100] bg-black"

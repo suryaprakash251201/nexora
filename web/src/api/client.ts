@@ -37,6 +37,27 @@ function buildQuery(query?: Record<string, string | number | undefined>): string
   return s ? "?" + s : "";
 }
 
+export function getMediaUrl(path: string, query?: Record<string, string | number | undefined | boolean>): string {
+  const isTauri = "__TAURI_INTERNALS__" in window;
+  const storedUrl = localStorage.getItem("nexora-api-url") || "";
+  const baseUrl = (isTauri && storedUrl) ? storedUrl.replace(/\/$/, "") : "";
+
+  const params = new URLSearchParams();
+  if (query) {
+    for (const [k, v] of Object.entries(query)) {
+      if (v !== undefined && v !== false && v !== "") params.set(k, String(v));
+    }
+  }
+
+  const storedToken = localStorage.getItem("nexora-token");
+  if (storedToken && isTauri) {
+    params.set("token", storedToken);
+  }
+
+  const s = params.toString();
+  return baseUrl + "/api/v1" + path + (s ? "?" + s : "");
+}
+
 export async function api<T>(path: string, opts: RequestOptions = {}): Promise<T> {
   const method = opts.method || "GET";
   const headers: Record<string, string> = {};

@@ -1,5 +1,5 @@
 import type { FileItem } from "../api/types";
-import { get } from "../api/client";
+import { get, getMediaUrl } from "../api/client";
 
 export type PreviewKind = "image" | "video" | "audio" | "pdf" | "markdown" | "text" | "none";
 
@@ -49,11 +49,11 @@ export function codeLanguage(ext: string): string {
 }
 
 export function rawUrl(rootId: string, path: string, download = false): string {
-  return `/api/v1/files/raw?root=${encodeURIComponent(rootId)}&path=${encodeURIComponent(path)}${download ? "&download=1" : ""}`;
+  return getMediaUrl("/files/raw", { root: rootId, path, download: download ? 1 : undefined });
 }
 
 export function thumbUrl(item: FileItem, size = 256): string {
-  return `/api/v1/files/thumbnail?root=${encodeURIComponent(item.root_id)}&path=${encodeURIComponent(item.path)}&size=${size}`;
+  return getMediaUrl("/files/thumbnail", { root: item.root_id, path: item.path, size });
 }
 
 export function hasThumbnail(item: { extension: string }): boolean {
@@ -71,7 +71,7 @@ export function needsTranscode(item: { extension: string }): boolean {
 }
 
 export function transcodeUrl(rootId: string, path: string): string {
-  return `/api/v1/files/transcode?root=${encodeURIComponent(rootId)}&path=${encodeURIComponent(path)}`;
+  return getMediaUrl("/files/transcode", { root: rootId, path });
 }
 
 let transcodeSupported: boolean | null = null;

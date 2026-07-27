@@ -19,6 +19,8 @@ func SessionAuth(store *SessionStore, users *UserStore) func(http.Handler) http.
 				token = cookie.Value
 			} else if authHeader := r.Header.Get("Authorization"); strings.HasPrefix(authHeader, "Bearer ") {
 				token = strings.TrimSpace(strings.TrimPrefix(authHeader, "Bearer "))
+			} else if qToken := r.URL.Query().Get("token"); qToken != "" {
+				token = qToken
 			}
 
 			if token != "" {

@@ -9,7 +9,7 @@ import { EmptyState } from "./ui/EmptyState";
 import { staggerContainer, staggerItem, cardHover, slideUp } from "@/lib/animations";
 import { cn } from "@/lib/utils";
 import { formatBytes } from "../lib/format";
-import { get } from "../api/client";
+import { get, getMediaUrl } from "../api/client";
 import { useQuery } from "@tanstack/react-query";
 
 function extOf(name: string): string {
@@ -389,7 +389,7 @@ export default function HomePanel({
                       <div className="aspect-square rounded-2xl overflow-hidden mb-3 shadow-lg shadow-black/10 border border-glass-border group-hover:border-accent/40 group-focus-visible:ring-2 group-focus-visible:ring-accent transition-all duration-300 relative bg-surface-muted/30">
                         {pl.cover_root_id && pl.cover_path ? (
                           <img
-                            src={`/api/v1/files/thumbnail?root=${pl.cover_root_id}&path=${encodeURIComponent(pl.cover_path)}`}
+                            src={getMediaUrl("/files/thumbnail", { root: pl.cover_root_id, path: pl.cover_path })}
                             alt={pl.name}
                             className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-500"
                           />
