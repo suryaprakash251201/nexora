@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    nexora_desktop_lib::run()
+    nexora_desktop::run()
 }
