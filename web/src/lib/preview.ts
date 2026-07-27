@@ -63,11 +63,17 @@ export function hasThumbnail(item: { extension: string }): boolean {
 // TRANSCODE_EXT lists video containers that browsers cannot play natively and
 // therefore need server-side transcoding to a streamable MP4.
 const TRANSCODE_EXT = new Set([
-  "avi", "wmv", "flv", "asf", "3gp", "vob", "mts", "m2ts", "ts", "rm", "divx", "mkv",
+  "avi", "wmv", "flv", "asf", "3gp", "vob", "mts", "m2ts", "ts", "rm", "divx",
 ]);
 
 export function needsTranscode(item: { extension: string }): boolean {
-  return TRANSCODE_EXT.has((item.extension || "").toLowerCase());
+  const ext = (item.extension || "").toLowerCase();
+  
+  // In Tauri (or if specifically requested), we can attempt to play mkv natively 
+  // bypassing the server transcode, since some webviews support h264 inside mkv.
+  // We removed "mkv" from TRANSCODE_EXT entirely to allow native playback attempts.
+  
+  return TRANSCODE_EXT.has(ext);
 }
 
 export function transcodeUrl(rootId: string, path: string): string {
