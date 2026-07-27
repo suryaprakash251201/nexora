@@ -42,7 +42,25 @@ export default function Login({ onSuccess }: { onSuccess: () => void }) {
             transition={{ delay: 0.1, duration: 0.3 }}
             className="flex flex-col items-center mb-8"
           >
-            <img src="/logo.png" alt="Nexora" className="h-16 w-16 mb-3" />
+            <svg viewBox="0 0 36 36" width="80" height="80" xmlns="http://www.w3.org/2000/svg" className="mb-4 drop-shadow-[0_4px_12px_rgba(139,92,246,0.5)]">
+              <defs>
+                <linearGradient id="lg" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#3B82F6"/>
+                  <stop offset="25%" stopColor="#6366F1"/>
+                  <stop offset="50%" stopColor="#8B5CF6"/>
+                  <stop offset="75%" stopColor="#D946EF"/>
+                  <stop offset="100%" stopColor="#EC4899"/>
+                </linearGradient>
+                <linearGradient id="ls" x1="50%" y1="0%" x2="50%" y2="100%">
+                  <stop offset="0%" stopColor="white" stopOpacity="0.5"/>
+                  <stop offset="40%" stopColor="white" stopOpacity="0.15"/>
+                  <stop offset="100%" stopColor="white" stopOpacity="0"/>
+                </linearGradient>
+              </defs>
+              <path d="M18 2 L32 8 L32 20 C32 29 26 34 18 36 C10 34 4 29 4 20 L4 8 Z" fill="url(#lg)"/>
+              <path d="M18 2 L32 8 L32 20 C32 29 26 34 18 36 C10 34 4 29 4 20 L4 8 Z" fill="url(#ls)"/>
+              <text x="18" y="25" textAnchor="middle" fill="white" fontSize="22" fontWeight="900" fontFamily="-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif" letterSpacing="-0.05em">N</text>
+            </svg>
             <h1 className="text-2xl font-bold text-foreground tracking-tight">
               Welcome to <span className="text-transparent bg-clip-text bg-gradient-to-r from-accent to-accent-secondary">Nexora</span>
             </h1>

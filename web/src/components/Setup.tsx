@@ -44,10 +44,25 @@ export default function Setup({ onSuccess }: { onSuccess: () => void }) {
 
       <div className="w-full max-w-md animate-scale-in relative z-10">
         <div className="mb-8 text-center">
-          <div className="mx-auto h-16 w-16 rounded-2xl bg-gradient-to-br from-accent to-purple-500 grid place-items-center text-white font-bold text-3xl shadow-xl shadow-accent/20 mb-6 relative">
-            <span className="relative z-10">N</span>
-            <div className="absolute inset-0 bg-white/20 rounded-2xl" />
-          </div>
+          <svg viewBox="0 0 36 36" width="80" height="80" xmlns="http://www.w3.org/2000/svg" className="mx-auto mb-6 drop-shadow-[0_4px_12px_rgba(139,92,246,0.5)]">
+            <defs>
+              <linearGradient id="mg" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="#3B82F6"/>
+                <stop offset="25%" stopColor="#6366F1"/>
+                <stop offset="50%" stopColor="#8B5CF6"/>
+                <stop offset="75%" stopColor="#D946EF"/>
+                <stop offset="100%" stopColor="#EC4899"/>
+              </linearGradient>
+              <linearGradient id="ms" x1="50%" y1="0%" x2="50%" y2="100%">
+                <stop offset="0%" stopColor="white" stopOpacity="0.5"/>
+                <stop offset="40%" stopColor="white" stopOpacity="0.15"/>
+                <stop offset="100%" stopColor="white" stopOpacity="0"/>
+              </linearGradient>
+            </defs>
+            <path d="M18 2 L32 8 L32 20 C32 29 26 34 18 36 C10 34 4 29 4 20 L4 8 Z" fill="url(#mg)"/>
+            <path d="M18 2 L32 8 L32 20 C32 29 26 34 18 36 C10 34 4 29 4 20 L4 8 Z" fill="url(#ms)"/>
+            <text x="18" y="25" textAnchor="middle" fill="white" fontSize="22" fontWeight="900" fontFamily="-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif" letterSpacing="-0.05em">N</text>
+          </svg>
           <h1 className="text-3xl font-extrabold tracking-tight mb-2">Welcome to Nexora</h1>
           <p className="text-content-muted text-base">Let's set up your administrator account.</p>
         </div>

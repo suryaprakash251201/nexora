@@ -105,7 +105,26 @@ export default function Sidebar({
       >
         <div className="absolute inset-0 bg-gradient-to-b from-white/[0.02] via-transparent to-transparent pointer-events-none" />
         <div className={cn("flex items-center gap-3 mb-4 mt-3", collapsed ? "justify-center px-0" : "px-4 w-full")}>
-          <img src="/logo.png" alt="Nexora" className="h-9 w-9 shrink-0" />
+          <svg viewBox="0 0 36 36" width="64" height="64" xmlns="http://www.w3.org/2000/svg" className="shrink-0 drop-shadow-[0_2px_8px_rgba(139,92,246,0.5)]">
+            <defs>
+              <linearGradient id="sg" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="#3B82F6"/>
+                <stop offset="25%" stopColor="#6366F1"/>
+                <stop offset="50%" stopColor="#8B5CF6"/>
+                <stop offset="75%" stopColor="#D946EF"/>
+                <stop offset="100%" stopColor="#EC4899"/>
+              </linearGradient>
+              <linearGradient id="shine" x1="50%" y1="0%" x2="50%" y2="100%">
+                <stop offset="0%" stopColor="white" stopOpacity="0.5"/>
+                <stop offset="40%" stopColor="white" stopOpacity="0.15"/>
+                <stop offset="100%" stopColor="white" stopOpacity="0"/>
+              </linearGradient>
+            </defs>
+            <path d="M18 2 L32 8 L32 20 C32 29 26 34 18 36 C10 34 4 29 4 20 L4 8 Z" fill="url(#sg)"/>
+            <path d="M18 2 L32 8 L32 20 C32 29 26 34 18 36 C10 34 4 29 4 20 L4 8 Z" fill="url(#shine)"/>
+            <path d="M18 5 L29 10 L29 20 C29 27 24.5 32 18 33.5 C11.5 32 7 27 7 20 L7 10 Z" fill="none" stroke="white" strokeOpacity="0.15" strokeWidth="0.5"/>
+            <text x="18" y="26.5" textAnchor="middle" fill="white" fontSize="21" fontWeight="900" fontFamily="-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif" letterSpacing="-0.05em">N</text>
+          </svg>
           <AnimatePresence>
             {!collapsed && (
               <motion.div initial={{ opacity: 0, width: 0 }} animate={{ opacity: 1, width: "auto" }} exit={{ opacity: 0, width: 0 }} transition={{ duration: 0.15 }} className="flex items-center gap-1 overflow-hidden">
@@ -118,7 +137,7 @@ export default function Sidebar({
 
         {collapsed && <button onClick={onToggleCollapse} title="Expand sidebar" aria-label="Expand sidebar" className="mb-4 p-2.5 rounded-xl hover:bg-glass-bg transition-colors min-h-[44px] min-w-[44px]"><PanelLeftOpen className="h-4 w-4 text-text-tertiary mx-auto" /></button>}
 
-        <nav aria-label="Main navigation" className={cn("flex-1 overflow-y-auto space-y-0.5", collapsed ? "px-2 w-full" : "px-2 w-full")}>
+        <nav aria-label="Main navigation" className={cn("flex-1 overflow-y-auto space-y-0.5 hide-scrollbar", collapsed ? "px-2 w-full" : "px-2 w-full")}>
           <NavItem v="home" icon={<Home className="w-[18px] h-[18px]" />} label="Home" isActive={view === "home"} collapsed={collapsed} onSelectView={onSelectView} />
           <NavItem v="search" icon={<Search className="w-[18px] h-[18px]" />} label="Search" isActive={view === "search"} collapsed={collapsed} onSelectView={onSelectView} />
           <NavItem v="saved-searches" icon={<Filter className="w-[18px] h-[18px]" />} label="Smart Folders" isActive={view === "saved-searches"} collapsed={collapsed} onSelectView={onSelectView} />

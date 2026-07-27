@@ -676,6 +676,17 @@ body {
 .markdown-body img { max-width: 100%; border-radius: 0.5rem; }
 
 /* ============================================================
+   Hide scrollbar utility — keeps scrolling but hides the bar
+   ============================================================ */
+.hide-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* ============================================================
    Scrollbar
    ============================================================ */
 
