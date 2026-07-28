@@ -123,18 +123,26 @@ export async function startDownload(rootId: string, path: string, name: string) 
       // Track time and bytes locally for real-time speed calculation.
       // IMPORTANT: initialization happens inside the first progress callback
       // so the save-dialog delay is excluded from speed calculations.
+      //
+      // NOTE: In the plugin's ProgressPayload:
+      //   - progress       = current chunk size (NOT cumulative!)
+      //   - progressTotal  = cumulative bytes transferred (this is what we need)
+      //   - total          = Content-Length or 0
+      //   - transferSpeed  = computed speed
       let lastTime = 0;
       let lastLoaded = 0;
       let trackingStarted = false;
       
       await tauriDownload(absoluteUrl, savePath, (p) => {
+        const cumulative = p.progressTotal; // cumulative bytes, NOT p.progress
+        
         if (!trackingStarted) {
           // First callback — just record baseline, skip speed (excludes dialog time)
           lastTime = performance.now();
-          lastLoaded = p.progress;
+          lastLoaded = cumulative;
           trackingStarted = true;
           useTransfers.getState().update(id, {
-            loaded: p.progress,
+            loaded: cumulative,
             total: p.total
           });
           return;
@@ -143,18 +151,18 @@ export async function startDownload(rootId: string, path: string, name: string) 
         const now = performance.now();
         const dt = (now - lastTime) / 1000;
         
-        if (dt > 0.25 && p.progress > lastLoaded) {
-          const speed = Math.round((p.progress - lastLoaded) / dt);
+        if (dt > 0.25 && cumulative > lastLoaded) {
+          const speed = Math.round((cumulative - lastLoaded) / dt);
           lastTime = now;
-          lastLoaded = p.progress;
+          lastLoaded = cumulative;
           useTransfers.getState().update(id, {
-            loaded: p.progress,
+            loaded: cumulative,
             total: p.total,
             speed
           });
         } else {
           useTransfers.getState().update(id, {
-            loaded: p.progress,
+            loaded: cumulative,
             total: p.total
           });
         }
