@@ -13,21 +13,42 @@ fn get_platform() -> serde_json::Value {
 /// Toggle system sleep inhibition for large transfers.
 #[tauri::command]
 async fn set_sleep_inhibition(inhibit: bool, _app: tauri::AppHandle) -> Result<(), String> {
-    // On Linux we can use the `power` crate or inhibit via D-Bus.
-    // On other platforms, we try to keep the app "busy" to prevent sleep.
-    // For now, we emit a log and let the frontend handle it visually.
-    // In production, integrate with `tauri-plugin-power-manager` or similar.
     if inhibit {
-        println!("[nexora] Preventing system sleep (transfers active)");
+        eprintln!("[nexora] Preventing system sleep (transfers active)");
     } else {
-        println!("[nexora] Allowing system sleep");
+        eprintln!("[nexora] Allowing system sleep");
     }
     Ok(())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    // Log startup info to stderr for debugging when running from terminal
+    eprintln!(
+        "[nexora] Starting Nexora Desktop v{} on {}/{}",
+        env!("CARGO_PKG_VERSION"),
+        std::env::consts::OS,
+        std::env::consts::ARCH
+    );
+
+    // Set a custom panic hook to capture startup crashes
+    std::panic::set_hook(Box::new(|panic_info| {
+        eprintln!("[nexora] PANIC: {}", panic_info);
+        // Try to log to a file in the app data directory
+        if let Some(msg) = panic_info.payload().downcast_ref::<&str>() {
+            let _ = std::fs::write(
+                std::env::temp_dir().join("nexora-crash.log"),
+                format!("Panic: {}\n{:?}", msg, panic_info.location()),
+            );
+        } else if let Some(msg) = panic_info.payload().downcast_ref::<String>() {
+            let _ = std::fs::write(
+                std::env::temp_dir().join("nexora-crash.log"),
+                format!("Panic: {}\n{:?}", msg, panic_info.location()),
+            );
+        }
+    }));
+
+    let builder = tauri::Builder::default()
         // ── Plugins ──────────────────────────────────────────────
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
@@ -57,13 +78,25 @@ pub fn run() {
         .on_window_event(|window, event| {
             // Save window state before closing
             if let tauri::WindowEvent::CloseRequested { .. } = event {
-                // Emit a custom event so the frontend can clean up
-                // window.app_handle() returns &AppHandle in Tauri v2
                 let app = window.app_handle();
                 let _ = app.emit("nexora:app-closing", ());
             }
-        })
+        });
 
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+    // Run with better error reporting
+    if let Err(e) = builder.run(tauri::generate_context!()) {
+        eprintln!("[nexora] Fatal error: {}", e);
+        // Also write to crash log file
+        let _ = std::fs::write(
+            std::env::temp_dir().join("nexora-error.log"),
+            format!(
+                "Nexora Desktop v{} - Fatal error\nPlatform: {}/{}\nError: {}\n",
+                env!("CARGO_PKG_VERSION"),
+                std::env::consts::OS,
+                std::env::consts::ARCH,
+                e
+            ),
+        );
+        std::process::exit(1);
+    }
 }
