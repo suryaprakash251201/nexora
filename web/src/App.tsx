@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { get, post } from "./api/client";
+import { get, post, discoverServerUrl } from "./api/client";
 import Login from "./components/Login";
 import Setup from "./components/Setup";
 import Workspace from "./components/Workspace";
@@ -21,14 +21,32 @@ export default function App() {
   );
 }
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 
 function AppInner() {
   const qc = useQueryClient();
   const [apiUrl, setApiUrl] = useState(localStorage.getItem("nexora-api-url") || "");
   const [inputUrl, setInputUrl] = useState(apiUrl);
+  const [discovering, setDiscovering] = useState("");
+  const discoverDone = useRef(false);
   
   const isTauri = "__TAURI_INTERNALS__" in window;
+
+  // ── Auto-discovery: probe Tailscale hosts when no URL is stored ──
+  useEffect(() => {
+    if (!isTauri || apiUrl || discoverDone.current) return;
+    discoverDone.current = true;
+    setDiscovering("Probing Tailscale hosts…");
+    discoverServerUrl()
+      .then((url) => {
+        if (url) {
+          localStorage.setItem("nexora-api-url", url);
+          setApiUrl(url);
+        }
+        setDiscovering("");
+      })
+      .catch(() => setDiscovering(""));
+  }, [isTauri, apiUrl]);
 
   const needsSetup = useQuery({ 
     queryKey: ["needs-setup"], 
@@ -47,25 +65,38 @@ function AppInner() {
       <div className="min-h-screen grid place-items-center bg-background">
         <div className="w-full max-w-sm p-6 bg-surface border rounded-xl shadow-lg space-y-4">
           <h2 className="text-xl font-bold">Connect to Nexora</h2>
-          <p className="text-sm text-content-muted">Enter your Nexora server URL to continue.</p>
-          <input 
-            type="url" 
-            className="w-full px-3 py-2 bg-background border rounded-lg focus:ring-2 focus:ring-primary focus:outline-none" 
-            placeholder="http://localhost:8080"
-            value={inputUrl}
-            onChange={(e) => setInputUrl(e.target.value)}
-          />
-          <button 
-            className="w-full py-2 bg-primary text-primary-foreground font-medium rounded-lg hover:bg-primary/90 transition"
-            onClick={() => {
-              if (inputUrl) {
-                localStorage.setItem("nexora-api-url", inputUrl);
-                setApiUrl(inputUrl);
-              }
-            }}
-          >
-            Connect
-          </button>
+          {discovering ? (
+            <div className="flex flex-col items-center gap-3 py-6">
+              <div className="h-8 w-8 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+              <p className="text-sm text-content-muted">{discovering}</p>
+              <p className="text-xs text-content-muted/50">Trying Tailscale MagicDNS…</p>
+            </div>
+          ) : (
+            <>
+              <p className="text-sm text-content-muted">
+                No Nexora server found on your Tailscale network. Enter the URL manually:
+              </p>
+              <input 
+                type="url" 
+                className="w-full px-3 py-2 bg-background border rounded-lg focus:ring-2 focus:ring-primary focus:outline-none" 
+                placeholder="http://localhost:8080"
+                value={inputUrl}
+                onChange={(e) => setInputUrl(e.target.value)}
+                autoFocus
+              />
+              <button 
+                className="w-full py-2 bg-primary text-primary-foreground font-medium rounded-lg hover:bg-primary/90 transition"
+                onClick={() => {
+                  if (inputUrl) {
+                    localStorage.setItem("nexora-api-url", inputUrl);
+                    setApiUrl(inputUrl);
+                  }
+                }}
+              >
+                Connect
+              </button>
+            </>
+          )}
         </div>
       </div>
     );

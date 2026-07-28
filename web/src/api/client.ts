@@ -1,5 +1,31 @@
 import type { ApiError, SavedSearch, SavedSearchInput, SearchResult, FileVersion, StorageStats } from "./types";
 
+// ── Tailscale / server discovery ──────────────────────────────────
+const TAILSCALE_HOSTS = [
+  "https://pms2.tail58d7ea.ts.net",
+  "http://100.67.251.1:80",
+];
+
+/**
+ * Try to discover the Nexora server URL by probing known Tailscale hosts.
+ * Returns the first responsive URL, or null if none respond.
+ */
+export async function discoverServerUrl(): Promise<string | null> {
+  for (const url of TAILSCALE_HOSTS) {
+    try {
+      const res = await fetch(`${url}/api/v1/auth/needs-setup`, {
+        signal: AbortSignal.timeout(3000),
+      });
+      if (res.ok) {
+        return url;
+      }
+    } catch {
+      // host unreachable — try next
+    }
+  }
+  return null;
+}
+
 const CSRF_COOKIE = "nexora_csrf";
 
 function readCookie(name: string): string {
