@@ -67,6 +67,20 @@ When you launch the Tauri app on any tailnet device, it auto-connects — no con
 | `docker-compose.yml` | `NEXORA_CORS_ORIGINS` | Allows Tailscale origins for CORS |
 | `web/src/api/client.ts` | `TAILSCALE_HOSTS` | Tauri auto-discovery probe list |
 
+## HTTP vs HTTPS
+
+By default, Nexora uses **HTTP on port 80** via Tailscale MagicDNS:
+
+- `http://pms2.tail58d7ea.ts.net` — works on any tailnet device, no setup
+- `https://pms2.tail58d7ea.ts.net` — requires Tailscale Serve (HTTPS on port 443)
+
+To enable HTTPS:
+
+```bash
+sudo tailscale serve --bg --https 443 http://localhost:80
+```
+After running this, update `NEXORA_BASE_URL` in `.env` to `https://pms2.tail58d7ea.ts.net` and restart Nexora.
+
 ## Helper Script
 
 ```bash
