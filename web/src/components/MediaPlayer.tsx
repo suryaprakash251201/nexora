@@ -28,6 +28,8 @@ import { usePlayer } from "../store/player";
 import { AddToPlaylistMenu } from "./PlaylistAdder";
 import { Button } from "./ui/Button";
 
+const isTauri = "__TAURI_INTERNALS__" in window;
+
 function fmt(t: number): string {
   if (!isFinite(t) || t < 0) t = 0;
   const m = Math.floor(t / 60);
@@ -1007,9 +1009,23 @@ function VideoPlayer({ url, item, autoPlay }: { url?: string; item?: FileItem; a
                 ? "Matroska container (.mkv) is not natively supported by your browser. Try downloading the file or using a Chromium-based browser."
                 : "The file may be corrupt or encoded with an unsupported codec."}
             </p>
-            <Button variant="primary" onClick={() => item ? startDownload(item.root_id, item.path, item.name) : window.location.href = dlUrl} icon={<Download className="h-4 w-4" />}>
-              Download File
-            </Button>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+              <Button variant="primary" onClick={() => item ? startDownload(item.root_id, item.path, item.name) : window.location.href = dlUrl} icon={<Download className="h-4 w-4" />}>
+                Download File
+              </Button>
+              {isTauri && (
+                <Button variant="secondary" onClick={async () => {
+                  try {
+                    const { Command } = await import("@tauri-apps/plugin-shell");
+                    await Command.create("vlc", [dlUrl]).execute();
+                  } catch (e) {
+                    alert("Could not start VLC. Please ensure VLC is installed and added to your system PATH.");
+                  }
+                }} icon={<Play className="h-4 w-4" />}>
+                  Open in VLC
+                </Button>
+              )}
+            </div>
           </div>
         </div>
       ) : (
