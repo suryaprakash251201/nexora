@@ -4,13 +4,16 @@ import Login from "./components/Login";
 import Setup from "./components/Setup";
 import Workspace from "./components/Workspace";
 import MouseGlow from "./components/MouseGlow";
+import UpdaterCheck from "./components/UpdaterCheck";
 import type { User } from "./api/types";
 
 export default function App() {
+  const isTauri = "__TAURI_INTERNALS__" in window;
   return (
     <>
       <div className="nexora-bg" aria-hidden="true" />
       <MouseGlow />
+      {isTauri && <UpdaterCheck />}
       <AppInner />
     </>
   );
