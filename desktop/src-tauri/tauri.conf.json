@@ -6,7 +6,7 @@
     "frontendDist": "../../web/dist"
   },
   "productName": "Nexora",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "identifier": "com.nexora.desktop",
   "app": {
     "windows": [

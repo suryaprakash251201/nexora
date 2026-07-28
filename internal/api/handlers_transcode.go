@@ -112,17 +112,18 @@ func (s *Server) handleTranscode(w http.ResponseWriter, r *http.Request) {
 		"-hide_banner", "-loglevel", "error",
 		"-i", inputArg,
 		"-map", "0:v:0", "-map", "0:a:0?",
-		"-c:v", "libvpx", "-cpu-used", "4", "-deadline", "realtime", "-crf", "30", "-b:v", "2M",
-		"-c:a", "libvorbis", "-b:a", "128k",
+		"-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p",
+		"-c:a", "aac", "-b:a", "128k",
 		"-sn", "-dn",
-		"-f", "webm",
+		"-movflags", "frag_keyframe+empty_moov",
+		"-f", "mp4",
 		"pipe:1",
 	)
 	if inputArg == "pipe:0" {
 		cmd.Stdin = rc
 	}
 
-	w.Header().Set("Content-Type", "video/webm")
+	w.Header().Set("Content-Type", "video/mp4")
 	w.Header().Set("Content-Disposition", "inline; filename*=UTF-8''"+urlEncode(info.Name))
 	w.WriteHeader(http.StatusOK)
 

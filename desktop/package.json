@@ -1,6 +1,6 @@
 {
   "name": "nexora-desktop",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "scripts": {
     "dev": "tauri dev",
     "build": "tauri build",
