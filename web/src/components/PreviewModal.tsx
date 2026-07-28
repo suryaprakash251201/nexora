@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState, useCallback } from "react";
-import { X, Download, Pencil, Share2, Copy, Check, ZoomIn, ZoomOut, Maximize, Minimize, ChevronLeft, ChevronRight, Info } from "lucide-react";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
+import { X, Download, Pencil, Share2, Copy, Check, ZoomIn, ZoomOut, Maximize, Minimize, ChevronLeft, ChevronRight, Info, File, ExternalLink } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { FileItem } from "../api/types";
 import { previewKind, isEditable, rawUrl, codeLanguage } from "../lib/preview";
@@ -8,6 +8,8 @@ import { renderMarkdown } from "../lib/markdown";
 import { usePlayer } from "../store/player";
 import MediaPlayer from "./MediaPlayer";
 import { Button } from "./ui/Button";
+
+const isTauri = "__TAURI_INTERNALS__" in window;
 import { formatBytes, formatDate } from "../lib/format";
 import { cn } from "@/lib/utils";
 
@@ -196,38 +198,16 @@ export default function PreviewModal({
         <div className="flex-1 flex overflow-hidden">
           <div className="flex-1 overflow-auto grid place-items-center bg-black/5 relative">
             {kind === "image" && (
-              <div className="w-full h-full overflow-auto custom-scrollbar grid place-items-center relative">
-                {/* Checkerboard background for transparent images */}
-                <div className="absolute inset-0 pointer-events-none opacity-20" style={{ backgroundImage: 'repeating-linear-gradient(45deg, #808080 25%, transparent 25%, transparent 75%, #808080 75%, #808080), repeating-linear-gradient(45deg, #808080 25%, transparent 25%, transparent 75%, #808080 75%, #808080)', backgroundPosition: '0 0, 10px 10px', backgroundSize: '20px 20px', zIndex: -1 }} />
-                <img 
-                  src={url} 
-                  alt={current.name} 
-                  className="max-w-none transition-transform duration-200 shadow-2xl" 
-                  style={{ transform: `scale(${zoom})`, transformOrigin: 'center' }} 
-                />
-                {/* Gallery navigation arrows */}
-                {hasGallery && (
-                  <>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); navigateGallery(-1); }}
-                      className="absolute left-4 top-1/2 -translate-y-1/2 p-3 rounded-full glass-strong border border-white/10 text-white/80 hover:text-white hover:bg-white/10 transition-all duration-200 shadow-xl z-10"
-                      title="Previous image (←)"
-                    >
-                      <ChevronLeft className="h-6 w-6" />
-                    </button>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); navigateGallery(1); }}
-                      className="absolute right-4 top-1/2 -translate-y-1/2 p-3 rounded-full glass-strong border border-white/10 text-white/80 hover:text-white hover:bg-white/10 transition-all duration-200 shadow-xl z-10"
-                      title="Next image (→)"
-                    >
-                      <ChevronRight className="h-6 w-6" />
-                    </button>
-                    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-full glass-strong border border-white/10 text-xs font-mono text-white/70 z-10">
-                      {galleryIndex + 1} / {galleryItems.length}
-                    </div>
-                  </>
-                )}
-              </div>
+              <ImagePreview
+                url={url}
+                name={current.name}
+                zoom={zoom}
+                setZoom={setZoom}
+                hasGallery={hasGallery}
+                galleryIndex={galleryIndex}
+                galleryItems={galleryItems}
+                navigateGallery={navigateGallery}
+              />
             )}
             {kind === "video" && (
             <div className="w-full h-full bg-black">
@@ -245,7 +225,48 @@ export default function PreviewModal({
               />
             </div>
           )}
-          {kind === "pdf" && <iframe src={url} className="w-full h-full bg-white" title={current.name} />}
+          {kind === "pdf" && (
+            <div className="w-full h-full flex flex-col items-center justify-center bg-white/5 relative">
+              <object
+                data={url}
+                type="application/pdf"
+                className="w-full h-full absolute inset-0"
+                title={current.name}
+              >
+                <div className="flex flex-col items-center justify-center p-10 text-center">
+                  <div className="h-16 w-16 rounded-full bg-surface-muted grid place-items-center mb-4">
+                    <File className="h-8 w-8 text-content-muted" />
+                  </div>
+                  <p className="text-content font-medium mb-2">PDF preview not available in browser</p>
+                  <p className="text-content-muted text-sm mb-6">Download the file to view it locally.</p>
+                  <Button
+                    variant="primary"
+                    onClick={() => startDownload(current.root_id || rootId, current.path, current.name)}
+                    icon={<Download className="h-4 w-4" />}
+                  >
+                    Download PDF
+                  </Button>
+                  {isTauri && (
+                    <Button
+                      variant="secondary"
+                      className="mt-3"
+                      onClick={async () => {
+                        try {
+                          const { open } = await import("@tauri-apps/plugin-shell");
+                          await open(url);
+                        } catch (e) {
+                          console.error("Failed to open PDF externally:", e);
+                        }
+                      }}
+                      icon={<ExternalLink className="h-4 w-4" />}
+                    >
+                      Open in System Viewer
+                    </Button>
+                  )}
+                </div>
+              </object>
+            </div>
+          )}
           {kind === "markdown" && (
             textLoading ? (
               <div className="flex flex-col items-center gap-3">
@@ -325,6 +346,97 @@ export default function PreviewModal({
           </AnimatePresence>
         </div>
       </div>
+    </div>
+  );
+}
+
+function ImagePreview({
+  url,
+  name,
+  zoom,
+  setZoom,
+  hasGallery,
+  galleryIndex,
+  galleryItems,
+  navigateGallery,
+}: {
+  url: string;
+  name: string;
+  zoom: number;
+  setZoom: (fn: (z: number) => number) => void;
+  hasGallery: boolean;
+  galleryIndex: number;
+  galleryItems: { path: string }[];
+  navigateGallery: (dir: 1 | -1) => void;
+}) {
+  const wrapRef = useRef<HTMLDivElement>(null);
+
+  // Mouse wheel zoom (Ctrl+Scroll)
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        const delta = e.deltaY > 0 ? -0.1 : 0.1;
+        setZoom((z) => Math.max(0.1, Math.min(10, z + delta)));
+      }
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [setZoom]);
+
+  return (
+    <div
+      ref={wrapRef}
+      className="w-full h-full overflow-auto custom-scrollbar grid place-items-center relative"
+    >
+      {/* Checkerboard background for transparent images */}
+      <div
+        className="absolute inset-0 pointer-events-none opacity-20"
+        style={{
+          backgroundImage:
+            "repeating-linear-gradient(45deg, #808080 25%, transparent 25%, transparent 75%, #808080 75%, #808080), repeating-linear-gradient(45deg, #808080 25%, transparent 25%, transparent 75%, #808080 75%, #808080)",
+          backgroundPosition: "0 0, 10px 10px",
+          backgroundSize: "20px 20px",
+          zIndex: -1,
+        }}
+      />
+      <img
+        src={url}
+        alt={name}
+        className="transition-transform duration-200 shadow-2xl"
+        style={{ transform: `scale(${zoom})`, transformOrigin: "center center" }}
+        draggable={false}
+      />
+      {/* Gallery navigation arrows */}
+      {hasGallery && (
+        <>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              navigateGallery(-1);
+            }}
+            className="absolute left-4 top-1/2 -translate-y-1/2 p-3 rounded-full glass-strong border border-white/10 text-white/80 hover:text-white hover:bg-white/10 transition-all duration-200 shadow-xl z-10"
+            title="Previous image (←)"
+          >
+            <ChevronLeft className="h-6 w-6" />
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              navigateGallery(1);
+            }}
+            className="absolute right-4 top-1/2 -translate-y-1/2 p-3 rounded-full glass-strong border border-white/10 text-white/80 hover:text-white hover:bg-white/10 transition-all duration-200 shadow-xl z-10"
+            title="Next image (→)"
+          >
+            <ChevronRight className="h-6 w-6" />
+          </button>
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-full glass-strong border border-white/10 text-xs font-mono text-white/70 z-10">
+            {galleryIndex + 1} / {galleryItems.length}
+          </div>
+        </>
+      )}
     </div>
   );
 }

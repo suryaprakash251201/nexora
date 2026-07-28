@@ -674,7 +674,7 @@ export default function Workspace({ user }: { user: User }) {
       )}
       <Suspense fallback={null}>
         <AnimatePresence>
-          {preview && <PreviewModal item={preview} rootId={rootId!} onClose={() => setPreview(null)} />}
+          {preview && <PreviewModal item={preview} rootId={rootId!} canWrite={canWrite} onClose={() => setPreview(null)} onEdit={(it) => setEditItem(it)} onShare={(it) => setShareItem(it)} />}
           {editItem && <Editor item={editItem} rootId={rootId!} onClose={() => { setEditItem(null); refresh(); }} />}
           {shareItem && <ShareDialog item={shareItem} rootId={rootId!} onClose={() => setShareItem(null)} />}
           {rootModal && <RootModal root={rootModal === true ? null : rootModal} onClose={() => setRootModal(false)} onDone={() => { setRootModal(false); refresh(); }} />}

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { X, ChevronLeft, ChevronRight, Download, Share2, ZoomIn, ZoomOut, RotateCw } from "lucide-react";
+import { X, ChevronLeft, ChevronRight, Download, Share2, ZoomIn, ZoomOut, RotateCw, Maximize2, Minimize2 } from "lucide-react";
 import type { FileItem } from "../api/types";
 import { rawUrl, thumbUrl } from "../lib/preview";
 import { startDownload } from "../lib/transfer";
@@ -22,12 +22,52 @@ export default function ImageView({
   const url = rawUrl(rootId, current.path);
 
   const [zoom, setZoom] = useState(1);
+  const [fitMode, setFitMode] = useState<"fit" | "actual">("fit");
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [showControls, setShowControls] = useState(true);
   const [imgLoaded, setImgLoaded] = useState(false);
+  const [imgNatural, setImgNatural] = useState({ w: 0, h: 0 });
   const controlsRef = useRef<number>();
   const wrapRef = useRef<HTMLDivElement>(null);
   const filmstripRef = useRef<HTMLDivElement>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
+  const [containerSize, setContainerSize] = useState({ w: 0, h: 0 });
+
+  // Calculate fit zoom level based on container and image natural size
+  const fitZoom = useCallback(() => {
+    if (!imgNatural.w || !imgNatural.h || !containerSize.w || !containerSize.h) return 1;
+    const scaleX = (containerSize.w - 64) / imgNatural.w;
+    const scaleY = (containerSize.h - 120) / imgNatural.h;
+    return Math.min(scaleX, scaleY, 1); // cap at 1 so we don't upscale
+  }, [imgNatural, containerSize]);
+
+  // When fit mode is active, update zoom to fit
+  useEffect(() => {
+    if (fitMode === "fit") {
+      setZoom(fitZoom());
+      setPan({ x: 0, y: 0 });
+    }
+  }, [fitMode, fitZoom]);
+
+  // Update zoom when fit mode changes or image loads
+  useEffect(() => {
+    if (fitMode === "fit" && imgLoaded) {
+      setZoom(fitZoom());
+    }
+  }, [imgLoaded, fitMode, fitZoom]);
+
+  // Track container size
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setContainerSize({ w: entry.contentRect.width, h: entry.contentRect.height });
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   const resetTimer = useCallback(() => {
     setShowControls(true);
@@ -41,9 +81,10 @@ export default function ImageView({
   }, [current.path, resetTimer]);
 
   useEffect(() => {
-    setZoom(1);
     setPan({ x: 0, y: 0 });
     setImgLoaded(false);
+    setImgNatural({ w: 0, h: 0 });
+    setFitMode("fit");
   }, [current.path]);
 
   const go = useCallback((dir: number) => {
@@ -75,11 +116,31 @@ export default function ImageView({
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose, go]);
 
-  // Pan on mouse drag when zoomed
+  // ── Mouse wheel zoom ──────────────────────────────────────
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        const delta = e.deltaY > 0 ? -0.1 : 0.1;
+        setZoom((z) => {
+          const newZoom = Math.max(0.1, Math.min(10, z + delta));
+          // Switch to actual size mode when user manually zooms
+          setFitMode("actual");
+          return newZoom;
+        });
+      }
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, []);
+
+  // ── Pan on mouse drag when zoomed ─────────────────────────
   const drag = useRef({ active: false, sx: 0, sy: 0, px: 0, py: 0 });
 
   const onImgMouseDown = (e: React.MouseEvent) => {
-    if (zoom <= 1.01) return;
+    if (zoom <= 1.01 && fitMode === "fit") return;
     drag.current = { active: true, sx: e.clientX, sy: e.clientY, px: pan.x, py: pan.y };
   };
 
@@ -93,15 +154,36 @@ export default function ImageView({
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);
     return () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
-  }, [zoom, pan]);
+  }, [zoom, pan, fitMode]);
 
   const hasPrev = index > 0;
   const hasNext = index < images.length - 1;
 
+  // Calculate transform: when in fit mode, center the image without panning
+  const imgStyle: React.CSSProperties = {
+    opacity: imgLoaded ? 1 : 0,
+    transition: "opacity 0.25s",
+    cursor: zoom > 1.01 ? "grab" : "default",
+    transform: fitMode === "fit"
+      ? `scale(${zoom})`
+      : `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px)`,
+  };
+
+  // Toggle fit mode
+  const toggleFit = () => {
+    if (fitMode === "fit") {
+      setFitMode("actual");
+      setZoom(1);
+      setPan({ x: 0, y: 0 });
+    } else {
+      setFitMode("fit");
+    }
+  };
+
   return (
     <div
       ref={wrapRef}
-      className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm select-none animate-fade-in"
+      className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm select-none animate-fade-in overflow-hidden"
       onMouseMove={resetTimer}
     >
       {/* Top bar */}
@@ -122,14 +204,25 @@ export default function ImageView({
             <Download className="h-5 w-5" />
           </button>
           <div className="w-px h-5 bg-white/15 mx-1" />
-          <button onClick={() => setZoom(z => Math.max(0.25, z - 0.25))} className="p-2 rounded-full hover:bg-white/15 text-white/70 hover:text-white transition-colors" title="Zoom out">
+          <button onClick={() => {
+            const newZoom = Math.max(0.1, zoom - 0.25);
+            setZoom(newZoom);
+            setFitMode("actual");
+          }} className="p-2 rounded-full hover:bg-white/15 text-white/70 hover:text-white transition-colors" title="Zoom out">
             <ZoomOut className="h-5 w-5" />
           </button>
           <span className="text-white/50 text-xs font-mono w-10 tabular-nums text-center">{Math.round(zoom * 100)}%</span>
-          <button onClick={() => setZoom(z => Math.min(5, z + 0.25))} className="p-2 rounded-full hover:bg-white/15 text-white/70 hover:text-white transition-colors" title="Zoom in">
+          <button onClick={() => {
+            const newZoom = Math.min(10, zoom + 0.25);
+            setZoom(newZoom);
+            setFitMode("actual");
+          }} className="p-2 rounded-full hover:bg-white/15 text-white/70 hover:text-white transition-colors" title="Zoom in">
             <ZoomIn className="h-5 w-5" />
           </button>
-          <button onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }} className="p-2 rounded-full hover:bg-white/15 text-white/70 hover:text-white transition-colors" title="Reset zoom">
+          <button onClick={toggleFit} className={`p-2 rounded-full hover:bg-white/15 transition-colors ${fitMode === "fit" ? "text-accent bg-white/15" : "text-white/70 hover:text-white"}`} title={fitMode === "fit" ? "Actual size" : "Fit to window"}>
+            {fitMode === "fit" ? <Maximize2 className="h-4 w-4" /> : <Minimize2 className="h-4 w-4" />}
+          </button>
+          <button onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); setFitMode("fit"); }} className="p-2 rounded-full hover:bg-white/15 text-white/70 hover:text-white transition-colors" title="Reset view">
             <RotateCw className="h-4 w-4" />
           </button>
           <div className="w-px h-6 bg-white/15 mx-1" />
@@ -159,23 +252,33 @@ export default function ImageView({
         </button>
       )}
 
-      {/* Image */}
-      <div className="absolute inset-0 z-10 grid place-items-center p-16 pb-28">
+      {/* Image container — full area, centered */}
+      <div className="absolute inset-0 z-10 flex items-center justify-center p-16 pb-28">
+        {!imgLoaded && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="h-10 w-10 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+          </div>
+        )}
         <img
+          ref={imgRef}
           key={current.path}
           src={url}
           alt={current.name}
-          className="max-h-full max-w-full object-contain select-none"
-          style={{
-            opacity: imgLoaded ? 1 : 0,
-            transition: "opacity 0.25s",
-            transform: `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px)`,
-            cursor: zoom > 1.01 ? "grab" : "default",
+          className="max-h-full max-w-full select-none shadow-2xl"
+          style={imgStyle}
+          onLoad={(e) => {
+            const img = e.currentTarget;
+            setImgNatural({ w: img.naturalWidth, h: img.naturalHeight });
+            setImgLoaded(true);
           }}
-          onLoad={() => setImgLoaded(true)}
           onMouseDown={onImgMouseDown}
           draggable={false}
         />
+      </div>
+
+      {/* Hint: Ctrl+Scroll to zoom */}
+      <div className={`absolute bottom-20 left-1/2 -translate-x-1/2 z-20 px-3 py-1.5 rounded-full bg-black/50 text-white/60 text-[11px] font-medium backdrop-blur-sm transition-opacity duration-500 ${showControls && zoom <= 1.01 && fitMode === "fit" ? "opacity-100" : "opacity-0 pointer-events-none"}`}>
+        Ctrl+Scroll to zoom · Drag to pan when zoomed
       </div>
 
       {/* Filmstrip */}
