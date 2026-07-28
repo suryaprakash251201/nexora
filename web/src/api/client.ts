@@ -1,6 +1,8 @@
 import type { ApiError, SavedSearch, SavedSearchInput, SearchResult, FileVersion, StorageStats } from "./types";
 
 // ── Tailscale / server discovery ──────────────────────────────────
+// Tailscale hosts are probed in order — the first to respond wins.
+// Prefer HTTPS (requires tailscale serve — see docs), fall back to direct Tailscale IP.
 const TAILSCALE_HOSTS = [
   "https://pms2.tail58d7ea.ts.net",
   "http://100.67.251.1:80",

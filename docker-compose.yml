@@ -34,7 +34,7 @@ services:
       NEXORA_THUMBNAIL_CACHE_DIR: /app/data/cache/thumbnails
       NEXORA_WEB_ROOT: /app/web
       NEXORA_LISTEN_ADDR: ":80"
-      NEXORA_CORS_ORIGINS: "http://tauri.localhost,tauri://localhost,http://localhost:5173"
+      NEXORA_CORS_ORIGINS: "http://tauri.localhost,tauri://localhost,http://localhost:5173,https://pms2.tail58d7ea.ts.net,http://100.67.251.1:80"
     ports:
       - "80:80"
     volumes:
