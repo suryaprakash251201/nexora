@@ -34,9 +34,10 @@ services:
       NEXORA_THUMBNAIL_CACHE_DIR: /app/data/cache/thumbnails
       NEXORA_WEB_ROOT: /app/web
       NEXORA_LISTEN_ADDR: ":80"
-      NEXORA_CORS_ORIGINS: "http://tauri.localhost,tauri://localhost,http://localhost:5173,http://pms2.tail58d7ea.ts.net,http://100.67.251.1:80"
-    ports:
-      - "80:80"
+      NEXORA_CORS_ORIGINS: "http://tauri.localhost,tauri://localhost,http://localhost:5173,https://pms2.tail58d7ea.ts.net,http://pms2.tail58d7ea.ts.net,http://100.67.251.1:80"
+    # Internal only — Caddy handles external HTTP/HTTPS
+    expose:
+      - "80"
     volumes:
       # Persistent application data (SQLite DB, config, cache).
       - nexora-data:/app/data
@@ -68,6 +69,22 @@ services:
     #       cpus: "1.0"
     #       memory: 512M
 
+  # ── Caddy reverse proxy (HTTPS on port 443) ──────────────
+  caddy:
+    image: caddy:2-alpine
+    container_name: nexora-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+    depends_on:
+      - nexora
+
 volumes:
   nexora-data:
+    driver: local
+  caddy-data:
     driver: local

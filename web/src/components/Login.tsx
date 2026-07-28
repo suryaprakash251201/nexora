@@ -50,7 +50,7 @@ export default function Login({ onSuccess }: { onSuccess: () => void }) {
       onSuccess();
     } catch (err: any) {
       if (err.message?.includes("tailscale_user_missing") || err.message?.includes("tailscale_auth_disabled")) {
-        setError("Tailscale authentication is not available. Make sure you're accessing via Tailscale (http://pms2.tail58d7ea.ts.net) and Tailscale Auth is enabled on the server.");
+        setError("Tailscale authentication is not available. Make sure you're accessing via Tailscale (https://pms2.tail58d7ea.ts.net) and Tailscale Auth is enabled on the server.");
       } else {
         setError(err.message || "Tailscale login failed");
       }

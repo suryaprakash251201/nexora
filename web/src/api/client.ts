@@ -2,10 +2,10 @@ import type { ApiError, SavedSearch, SavedSearchInput, SearchResult, FileVersion
 
 // ── Tailscale / server discovery ──────────────────────────────────
 // Tailscale hosts are probed in order — the first to respond wins.
-// These all use HTTP port 80 (no tailscale serve required).
-// Switch to https://pms2.tail58d7ea.ts.net after running:
-//   sudo tailscale serve --bg --https 443 http://localhost:80
+// HTTPS is handled by Caddy reverse proxy (self-signed cert).
+// HTTP fallback is always available.
 const TAILSCALE_HOSTS = [
+  "https://pms2.tail58d7ea.ts.net",
   "http://pms2.tail58d7ea.ts.net",
   "http://100.67.251.1:80",
 ];
