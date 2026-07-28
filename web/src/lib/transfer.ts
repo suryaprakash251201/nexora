@@ -120,24 +120,44 @@ export async function startDownload(rootId: string, path: string, name: string) 
       const token = localStorage.getItem("nexora-token");
       if (token) headers.set("Authorization", `Bearer ${token}`);
       
-      // Track time and bytes locally for real-time speed calculation
-      let lastTime = performance.now();
+      // Track time and bytes locally for real-time speed calculation.
+      // IMPORTANT: initialization happens inside the first progress callback
+      // so the save-dialog delay is excluded from speed calculations.
+      let lastTime = 0;
       let lastLoaded = 0;
+      let trackingStarted = false;
       
       await tauriDownload(absoluteUrl, savePath, (p) => {
+        if (!trackingStarted) {
+          // First callback — just record baseline, skip speed (excludes dialog time)
+          lastTime = performance.now();
+          lastLoaded = p.progress;
+          trackingStarted = true;
+          useTransfers.getState().update(id, {
+            loaded: p.progress,
+            total: p.total
+          });
+          return;
+        }
+        
         const now = performance.now();
         const dt = (now - lastTime) / 1000;
-        let speed = p.transferSpeed || 0;
+        
         if (dt > 0.25 && p.progress > lastLoaded) {
-          speed = (p.progress - lastLoaded) / dt;
+          const speed = Math.round((p.progress - lastLoaded) / dt);
           lastTime = now;
           lastLoaded = p.progress;
+          useTransfers.getState().update(id, {
+            loaded: p.progress,
+            total: p.total,
+            speed
+          });
+        } else {
+          useTransfers.getState().update(id, {
+            loaded: p.progress,
+            total: p.total
+          });
         }
-        useTransfers.getState().update(id, {
-          loaded: p.progress,
-          total: p.total,
-          speed
-        });
       }, headers);
       
       const st = useTransfers.getState().transfers.find(t => t.id === id);
