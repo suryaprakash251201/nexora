@@ -35,20 +35,6 @@
         "https://github.com/suryaprakash251201/nexora/releases/latest/download/updater.json"
       ],
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDExNDg2RDg2ODc4RjFFNzMKUldSekhvK0hobTFJRVpobjZqNHNKeC8yKzdiM3pLaXdYR3lUUEJUeXM1bGdsY1VtTGhLQnFBK04K"
-    },
-    "autostart": {
-      "title": "Nexora",
-      "description": "Launch Nexora at system startup"
-    },
-    "notification": {
-      "all": true
-    },
-    "global-shortcut": {
-      "shortcuts": {
-        "MediaPlay": "media:play",
-        "MediaPause": "media:pause",
-        "MediaStop": "media:stop"
-      }
     }
   },
   "bundle": {
