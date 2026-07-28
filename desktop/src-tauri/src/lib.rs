@@ -12,7 +12,7 @@ fn get_platform() -> serde_json::Value {
 
 /// Toggle system sleep inhibition for large transfers.
 #[tauri::command]
-async fn set_sleep_inhibition(inhibit: bool, app: tauri::AppHandle) -> Result<(), String> {
+async fn set_sleep_inhibition(inhibit: bool, _app: tauri::AppHandle) -> Result<(), String> {
     // On Linux we can use the `power` crate or inhibit via D-Bus.
     // On other platforms, we try to keep the app "busy" to prevent sleep.
     // For now, we emit a log and let the frontend handle it visually.
@@ -57,11 +57,10 @@ pub fn run() {
         .on_window_event(|window, event| {
             // Save window state before closing
             if let tauri::WindowEvent::CloseRequested { .. } = event {
-                // Let the window state plugin handle persistence
-                if let Some(app) = window.app_handle() {
-                    // Emit a custom event so the frontend can clean up
-                    let _ = app.emit("nexora:app-closing", ());
-                }
+                // Emit a custom event so the frontend can clean up
+                // window.app_handle() returns &AppHandle in Tauri v2
+                let app = window.app_handle();
+                let _ = app.emit("nexora:app-closing", ());
             }
         })
 
