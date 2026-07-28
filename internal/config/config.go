@@ -51,6 +51,7 @@ type Config struct {
 	SecureCookies       bool
 	ReadonlyFS          bool
 	PlaylistCoverPath   string
+	TailscaleAuth       bool
 }
 
 // Load reads configuration from .env (if present) then environment variables.
@@ -83,6 +84,7 @@ func Load() (*Config, error) {
 		SecureCookies:       envBool("NEXORA_SECURE_COOKIES", false),
 		ReadonlyFS:          envBool("NEXORA_READONLY_FS", false),
 		PlaylistCoverPath:   env("NEXORA_PLAYLIST_COVER_PATH", ""),
+	TailscaleAuth:       envBool("NEXORA_TAILSCALE_AUTH", false),
 	}
 	c.DatabasePath = env("NEXORA_DATABASE_PATH", c.DataDir+"/nexora.db")
 	c.DatabaseType = env("NEXORA_DATABASE_TYPE", "sqlite")

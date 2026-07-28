@@ -1,6 +1,6 @@
-import { useState, type FormEvent } from "react";
+import { useState, useEffect, type FormEvent } from "react";
 import { motion } from "motion/react";
-import { LogIn, Eye, EyeOff } from "lucide-react";
+import { LogIn, Eye, EyeOff, ShieldCheck } from "lucide-react";
 import { post } from "../api/client";
 import { Input } from "./ui/Input";
 import { Button } from "./ui/Button";
@@ -11,6 +11,16 @@ export default function Login({ onSuccess }: { onSuccess: () => void }) {
   const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [tailscaleBusy, setTailscaleBusy] = useState(false);
+  const [tailscaleAvailable, setTailscaleAvailable] = useState(false);
+
+  // Check if Tailscale auth is available by probing the header
+  // We'll just always show the button — it fails gracefully if not available.
+  useEffect(() => {
+    // If accessed via Tailscale, the header will be present and the endpoint will work.
+    // We optimistically show the button; the error message explains if it's not available.
+    setTailscaleAvailable(true);
+  }, []);
 
   const login = async (e: FormEvent) => {
     e.preventDefault();
@@ -27,6 +37,25 @@ export default function Login({ onSuccess }: { onSuccess: () => void }) {
       setError(err.message || "Invalid credentials");
     }
     setBusy(false);
+  };
+
+  const tailscaleLogin = async () => {
+    setError("");
+    setTailscaleBusy(true);
+    try {
+      const res = await post<{ token?: string }>("/auth/tailscale");
+      if (res && res.token) {
+        localStorage.setItem("nexora-token", res.token);
+      }
+      onSuccess();
+    } catch (err: any) {
+      if (err.message?.includes("tailscale_user_missing") || err.message?.includes("tailscale_auth_disabled")) {
+        setError("Tailscale authentication is not available. Make sure you're accessing via Tailscale (https://pms2.tail58d7ea.ts.net) and Tailscale Auth is enabled on the server.");
+      } else {
+        setError(err.message || "Tailscale login failed");
+      }
+    }
+    setTailscaleBusy(false);
   };
 
   return (
@@ -69,6 +98,36 @@ export default function Login({ onSuccess }: { onSuccess: () => void }) {
             </h1>
             <p className="text-sm text-text-tertiary mt-1">Sign in to your private file workspace</p>
           </motion.div>
+
+          {/* Tailscale Sign In */}
+          {tailscaleAvailable && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1, duration: 0.3 }}
+              className="mb-6"
+            >
+              <Button
+                variant="secondary"
+                size="lg"
+                className="w-full"
+                onClick={tailscaleLogin}
+                loading={tailscaleBusy}
+                icon={!tailscaleBusy ? <ShieldCheck className="h-5 w-5" /> : undefined}
+              >
+                Sign in with Tailscale
+              </Button>
+            </motion.div>
+          )}
+
+          {/* Divider */}
+          {tailscaleAvailable && (
+            <div className="flex items-center gap-3 mb-6">
+              <div className="flex-1 h-px bg-border/50" />
+              <span className="text-xs text-content-muted font-medium">or sign in with password</span>
+              <div className="flex-1 h-px bg-border/50" />
+            </div>
+          )}
 
           <form onSubmit={login} className="space-y-4">
             <motion.div

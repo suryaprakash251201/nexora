@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/nexora/nexora/internal/auth"
@@ -433,6 +434,64 @@ func (s *Server) handleTOTPVerifyLogin(w http.ResponseWriter, r *http.Request) {
 
 	token := s.startSession(w, r, user.ID)
 	_ = s.Audit.Record(user.ID, "login", user.Username, "successful login (2FA)", ip)
+	writeJSON(w, http.StatusOK, map[string]any{"user": toUserDTO(user), "token": token})
+}
+
+// Tailscale login --------------------------------------------------------
+
+func (s *Server) handleTailscaleLogin(w http.ResponseWriter, r *http.Request) {
+	if !s.Cfg.TailscaleAuth {
+		writeError(w, http.StatusForbidden, "tailscale_auth_disabled", "Tailscale authentication is not enabled", middleware.GetRequestID(r.Context()))
+		return
+	}
+
+	tailscaleUser := r.Header.Get("Tailscale-User")
+	if tailscaleUser == "" {
+		writeError(w, http.StatusUnauthorized, "tailscale_user_missing", "Tailscale-User header not found — ensure you're accessing via Tailscale", middleware.GetRequestID(r.Context()))
+		return
+	}
+
+	// tailscaleUser is an email like "user@domain" or "user@github"
+	user, exists, err := s.Users.GetByLogin(tailscaleUser)
+	if err != nil {
+		s.Log.Error("failed to look up tailscale user", "error", err)
+		writeError(w, http.StatusInternalServerError, "internal_error", "authentication error", middleware.GetRequestID(r.Context()))
+		return
+	}
+
+	if !exists {
+		// Auto-provision a new user from Tailscale identity.
+		// Username is the part before @; role defaults to "user".
+		parts := strings.SplitN(tailscaleUser, "@", 2)
+		username := parts[0]
+		if len(username) < 3 {
+			username = tailscaleUser
+		}
+		user = auth.User{
+			Username:    username,
+			Email:       tailscaleUser,
+			DisplayName: tailscaleUser,
+			Role:        auth.RoleUser,
+			Status:      "active",
+			// No password — Tailscale identity replaces it.
+		}
+		created, err := s.Users.Create(user)
+		if err != nil {
+			s.Log.Error("failed to create user from tailscale identity", "error", err)
+			writeError(w, http.StatusInternalServerError, "internal_error", "could not create user", middleware.GetRequestID(r.Context()))
+			return
+		}
+		user = created
+		s.Log.Info("auto-provisioned user from tailscale", "email", tailscaleUser, "id", user.ID, "username", user.Username)
+	}
+
+	if user.Status != "active" {
+		writeError(w, http.StatusForbidden, "account_disabled", "this account is disabled", middleware.GetRequestID(r.Context()))
+		return
+	}
+
+	token := s.startSession(w, r, user.ID)
+	_ = s.Audit.Record(user.ID, "tailscale_login", user.Username, "logged in via Tailscale", clientIP(r))
 	writeJSON(w, http.StatusOK, map[string]any{"user": toUserDTO(user), "token": token})
 }
 

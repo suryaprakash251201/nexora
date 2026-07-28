@@ -66,6 +66,7 @@ func (s *Server) Routes() http.Handler {
 	csrfExempt := []string{
 		"/healthz", "/readyz",
 		"/api/v1/auth/setup", "/api/v1/auth/login",
+		"/api/v1/auth/tailscale",
 		"/api/v1/auth/forgot-password", "/api/v1/auth/reset-password",
 		"/api/v1/auth/totp/verify-login",
 		"/api/v1/share", "/api/v1/csrf",
@@ -115,6 +116,7 @@ func (s *Server) Routes() http.Handler {
 	authRouter := chi.NewRouter()
 	authRouter.Post("/setup", s.handleSetup)
 	authRouter.With(s.Limiter.RateLimit(middleware.KeyByClientIP())).Post("/login", s.handleLogin)
+	authRouter.With(s.Limiter.RateLimit(middleware.KeyByClientIP())).Post("/tailscale", s.handleTailscaleLogin)
 	authRouter.With(s.Limiter.RateLimit(middleware.KeyByClientIP())).Post("/forgot-password", s.handleForgotPassword)
 	authRouter.With(s.Limiter.RateLimit(middleware.KeyByClientIP())).Post("/reset-password", s.handleResetPassword)
 	authRouter.Get("/needs-setup", s.handleNeedsSetup)
