@@ -37,12 +37,11 @@ import FolderPickerModal from "./FolderPickerModal";
 import ProfileMenu from "./ProfileMenu";
 import CommandPalette from "./CommandPalette";
 import KeyboardShortcutsModal from "./KeyboardShortcutsModal";
-import { formatDate, formatRelative } from "../lib/format";
+import { formatRelative } from "../lib/format";
 import { SkeletonGrid, SkeletonList } from "./ui/Skeleton";
 import { FileThumb } from "./FileThumb";
-import { staggerContainer, staggerItem, cardHover, slideUp } from "@/lib/animations";
+import { staggerContainer, staggerItem, cardHover } from "@/lib/animations";
 import { isEditable } from "../lib/preview";
-import { cn } from "@/lib/utils";
 import {
   Download, Trash2, Pencil, Copy, Eye, FolderOpen, RotateCcw,
   Star, Share2, Archive, FolderInput, FileEdit, ListMusic, HardDrive, Upload,
