@@ -23,17 +23,12 @@ async function ensurePlugins() {
   initPromise = (async () => {
     try {
       // ── Window state ────────────────────────────────────────
-      const { restoreStateCurrent, saveWindowState } = await import(
+      // The window-state plugin handles restore+save automatically.
+      // We just call restoreStateCurrent() once on startup.
+      const { restoreStateCurrent } = await import(
         "@tauri-apps/plugin-window-state"
       );
-
-      // Restore saved window position/size on startup
       await restoreStateCurrent().catch(() => {});
-
-      // Save state whenever window is about to close
-      window.addEventListener("beforeunload", () => {
-        saveWindowState().catch(() => {});
-      });
 
       // ── Global shortcuts ────────────────────────────────────
       const { register } = await import(
@@ -61,24 +56,8 @@ async function ensurePlugins() {
 
       await registerShortcuts();
 
-      // ── Deep links ──────────────────────────────────────────
-      // Listen for deep-link events (nexora://s/<token>) emitted by the
-      // Tauri single-instance plugin or OS-level protocol handler.
-      const { listen } = await import("@tauri-apps/api/event");
-      await listen<string>("nexora:deep-link", (event) => {
-        const url = event.payload;
-        // If it's a share token URL, navigate to it
-        const match = url.match(/nexora:\/\/s\/(\w+)/);
-        if (match) {
-          const token = match[1];
-          // Navigate using react-router
-          window.dispatchEvent(
-            new CustomEvent("nexora:navigate", { detail: `/s/${token}` })
-          );
-        }
-      }).catch(() => {});
-
       // ── App closing event ───────────────────────────────────
+      const { listen } = await import("@tauri-apps/api/event");
       await listen("nexora:app-closing", () => {
         // Clean up any active downloads before close
         console.log("[tauri] App closing — cleaning up");
