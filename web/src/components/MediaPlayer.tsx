@@ -251,33 +251,13 @@ function AudioPlayer({
     requestAnimationFrame(() => fsWrapRef.current?.requestFullscreen?.().catch(() => {}));
   };
 
-  const closeFs = () => {
+  const closeFs = (exitFullscreen = true) => {
     setFs(false);
-    onClose?.();
-  };
-
-  // When the in-app overlay closes, make sure we also leave real fullscreen.
-  useEffect(() => {
-    if (!fs && document.fullscreenElement && document.fullscreenElement === fsWrapRef.current) {
+    if (exitFullscreen && document.fullscreenElement) {
       document.exitFullscreen?.().catch(() => {});
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fs]);
-
-  const fsBtnToggle = useRef(false);
-  useEffect(() => {
-    const onFsChange = () => {
-      // If the user presses Esc to exit the browser fullscreen, also close the
-      // in-app overlay. (Skip when the exit came from our own toggle button.)
-      if (!document.fullscreenElement && fs && !fsBtnToggle.current) {
-        closeFs();
-      }
-      fsBtnToggle.current = false;
-    };
-    document.addEventListener("fullscreenchange", onFsChange);
-    return () => document.removeEventListener("fullscreenchange", onFsChange);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fs]);
+    onClose?.();
+  };
 
   useEffect(() => {
     if (!fs) return;
@@ -287,7 +267,7 @@ function AudioPlayer({
       switch (e.key) {
         case "Escape":
           e.preventDefault();
-          closeFs();
+          closeFs(true); // close overlay + exit fullscreen
           break;
         case " ":
           e.preventDefault();
@@ -318,9 +298,12 @@ function AudioPlayer({
         case "f":
         case "F":
           e.preventDefault();
-          fsBtnToggle.current = true;
-          if (document.fullscreenElement) document.exitFullscreen?.();
-          else fsWrapRef.current?.requestFullscreen?.();
+          // Toggle fullscreen without closing the overlay
+          if (document.fullscreenElement) {
+            document.exitFullscreen?.();
+          } else {
+            fsWrapRef.current?.requestFullscreen?.();
+          }
           break;
       }
     };
@@ -353,9 +336,9 @@ function AudioPlayer({
       {/* Top bar */}
       <div className="absolute top-0 inset-x-0 z-30 flex items-center justify-between p-5 sm:p-7">
         <button
-          onClick={(e) => { e.stopPropagation(); closeFs(); }}
+          onClick={(e) => { e.stopPropagation(); closeFs(false); }}
           className="p-3 rounded-full glass-hover text-white transition-transform hover:scale-110"
-          title="Close (Esc)"
+          title="Close overlay (Esc to also exit fullscreen)"
         >
           <X className="h-6 w-6" />
         </button>
@@ -363,9 +346,9 @@ function AudioPlayer({
           {multi ? `Track ${qIndex + 1} of ${queue.length}` : "Now Playing"}
         </span>
         <button
-          onClick={(e) => { e.stopPropagation(); fsBtnToggle.current = true; document.fullscreenElement ? document.exitFullscreen?.() : fsWrapRef.current?.requestFullscreen?.(); }}
+          onClick={(e) => { e.stopPropagation(); document.fullscreenElement ? document.exitFullscreen?.() : fsWrapRef.current?.requestFullscreen?.(); }}
           className="p-3 rounded-full glass-hover text-white transition-transform hover:scale-110"
-          title="Toggle screen fullscreen (F)"
+          title="Toggle fullscreen (F)"
         >
           {document.fullscreenElement ? <Minimize2 className="h-6 w-6" /> : <Maximize2 className="h-6 w-6" />}
         </button>
@@ -1056,9 +1039,25 @@ function VideoPlayer({ url, item, autoPlay }: { url?: string; item?: FileItem; a
                 <Button variant="secondary" onClick={async () => {
                   try {
                     const { Command } = await import("@tauri-apps/plugin-shell");
-                    await Command.create("vlc", [dlUrl]).execute();
+                    // Convert relative URL to absolute for VLC
+                    const baseUrl = localStorage.getItem("nexora-api-url") || window.location.origin;
+                    const absUrl = dlUrl.startsWith("http") ? dlUrl : new URL(dlUrl, baseUrl).toString();
+                    
+                    // Try known VLC command names from capabilities (supports Windows, macOS, Linux)
+                    const vlcCmds = ["vlc", "vlc-win64", "vlc-win32", "vlc-macos"];
+                    let lastErr: unknown;
+                    for (const cmdName of vlcCmds) {
+                      try {
+                        const cmd = Command.create(cmdName, [absUrl]);
+                        await cmd.spawn();
+                        return;
+                      } catch (err) {
+                        lastErr = err;
+                      }
+                    }
+                    throw lastErr || new Error("VLC not found");
                   } catch (e) {
-                    alert("Could not start VLC. Please ensure VLC is installed and added to your system PATH.");
+                    alert("Could not start VLC. Please ensure VLC is installed.\n\nTry installing VLC from: https://videolan.org\n\nIf VLC is already installed, try adding it to your system PATH or reinstalling with the \"Add to VLC\" option.");
                   }
                 }} icon={<Play className="h-4 w-4" />}>
                   Open in VLC

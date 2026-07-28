@@ -163,20 +163,25 @@ export default function TauriShell() {
   // Monitor transfers and notify / inhibit sleep
   const transfers = useTransfers((s) => s.transfers);
 
-  // Show native notification when transfers complete
+  // Track which transfers have already been notified to avoid duplicate OS notifications
+  const notifiedIds = useRef<Set<string>>(new Set());
+
+  // Show native notification when transfers complete (only once per transfer)
   useEffect(() => {
     if (!("__TAURI_INTERNALS__" in window)) return;
 
-    const last = transfers[transfers.length - 1];
-    if (!last) return;
-
-    if (last.status === "done") {
-      nativeNotify(
-        "Transfer Complete",
-        `${last.name} — ${last.kind === "upload" ? "Uploaded" : "Downloaded"} successfully.`
-      );
-    } else if (last.status === "error" && last.error) {
-      nativeNotify("Transfer Failed", `${last.name}: ${last.error}`);
+    for (const t of transfers) {
+      if (notifiedIds.current.has(t.id)) continue;
+      if (t.status === "done") {
+        notifiedIds.current.add(t.id);
+        nativeNotify(
+          "Transfer Complete",
+          `${t.name} — ${t.kind === "upload" ? "Uploaded" : "Downloaded"} successfully.`
+        );
+      } else if (t.status === "error" && t.error) {
+        notifiedIds.current.add(t.id);
+        nativeNotify("Transfer Failed", `${t.name}: ${t.error}`);
+      }
     }
   }, [transfers]);
 

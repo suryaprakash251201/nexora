@@ -120,11 +120,23 @@ export async function startDownload(rootId: string, path: string, name: string) 
       const token = localStorage.getItem("nexora-token");
       if (token) headers.set("Authorization", `Bearer ${token}`);
       
+      // Track time and bytes locally for real-time speed calculation
+      let lastTime = performance.now();
+      let lastLoaded = 0;
+      
       await tauriDownload(absoluteUrl, savePath, (p) => {
+        const now = performance.now();
+        const dt = (now - lastTime) / 1000;
+        let speed = p.transferSpeed || 0;
+        if (dt > 0.25 && p.progress > lastLoaded) {
+          speed = (p.progress - lastLoaded) / dt;
+          lastTime = now;
+          lastLoaded = p.progress;
+        }
         useTransfers.getState().update(id, {
           loaded: p.progress,
           total: p.total,
-          speed: p.transferSpeed
+          speed
         });
       }, headers);
       

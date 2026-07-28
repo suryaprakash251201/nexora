@@ -21,6 +21,21 @@
           "name": "vlc",
           "cmd": "vlc",
           "args": true
+        },
+        {
+          "name": "vlc-win64",
+          "cmd": "C:\\Program Files\\VideoLAN\\VLC\\vlc.exe",
+          "args": true
+        },
+        {
+          "name": "vlc-win32",
+          "cmd": "C:\\Program Files (x86)\\VideoLAN\\VLC\\vlc.exe",
+          "args": true
+        },
+        {
+          "name": "vlc-macos",
+          "cmd": "/Applications/VLC.app/Contents/MacOS/VLC",
+          "args": true
         }
       ]
     }

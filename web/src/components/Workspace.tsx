@@ -37,9 +37,12 @@ import FolderPickerModal from "./FolderPickerModal";
 import ProfileMenu from "./ProfileMenu";
 import CommandPalette from "./CommandPalette";
 import KeyboardShortcutsModal from "./KeyboardShortcutsModal";
-import { formatDate } from "../lib/format";
-import { SkeletonList } from "./ui/Skeleton";
+import { formatDate, formatRelative } from "../lib/format";
+import { SkeletonGrid, SkeletonList } from "./ui/Skeleton";
+import { FileThumb } from "./FileThumb";
+import { staggerContainer, staggerItem, cardHover, slideUp } from "@/lib/animations";
 import { isEditable } from "../lib/preview";
+import { cn } from "@/lib/utils";
 import {
   Download, Trash2, Pencil, Copy, Eye, FolderOpen, RotateCcw,
   Star, Share2, Archive, FolderInput, FileEdit, ListMusic, HardDrive, Upload,
@@ -515,8 +518,34 @@ export default function Workspace({ user }: { user: User }) {
               />
             )}
             {view === "trash" && <TrashView items={trash.data?.items || []} loading={trash.isLoading} onRestore={async (id) => { await post("/trash/restore", { id }); refresh(); }} onDelete={async (id) => { await del("/trash", { id }); refresh(); }} selection={selection} selectMode={selectMode} onSelect={(id) => toggleSelect(id)} />}
-            {view === "favorites" && <SimpleList loading={favorites.isLoading} empty="No favorites yet. Star files to find them here." selection={selection} selectMode={selectMode} onSelect={(id) => toggleSelect(id)} rows={(favorites.data?.items || []).map((f) => ({ id: f.root_id + f.path, title: f.name, sub: `${f.root_name} / ${f.path}`, onClick: () => navigateTo(f.root_id, f.path, false, f.name) }))} />}
-            {view === "recents" && <SimpleList loading={recents.isLoading} empty="No recent files yet." selection={selection} selectMode={selectMode} onSelect={(id) => toggleSelect(id)} rows={(recents.data?.items || []).map((f) => ({ id: f.root_id + f.path, title: f.name, sub: `${f.root_name} / ${f.path}`, meta: formatDate(f.accessed_at), onClick: () => navigateTo(f.root_id, f.path, false, f.name) }))} />}
+            {view === "favorites" && <GridView
+              loading={favorites.isLoading}
+              empty="No favorites yet. Star files to find them here."
+              items={(favorites.data?.items || []).map((f) => ({
+                id: f.root_id + f.path,
+                name: f.name,
+                root_name: f.root_name,
+                path: f.path,
+                root_id: f.root_id,
+                date: f.created_at,
+                extension: f.name.includes(".") ? f.name.slice(f.name.lastIndexOf(".") + 1).toLowerCase() : "",
+              }))}
+              onOpen={(item) => navigateTo(item.root_id, item.path, false, item.name)}
+            />}
+            {view === "recents" && <GridView
+              loading={recents.isLoading}
+              empty="No recent files yet."
+              items={(recents.data?.items || []).map((f) => ({
+                id: f.root_id + f.path,
+                name: f.name,
+                root_name: f.root_name,
+                path: f.path,
+                root_id: f.root_id,
+                date: f.accessed_at,
+                extension: f.name.includes(".") ? f.name.slice(f.name.lastIndexOf(".") + 1).toLowerCase() : "",
+              }))}
+              onOpen={(item) => navigateTo(item.root_id, item.path, false, item.name)}
+            />}
             {view === "home" && (
               <>
                 <div className="h-14 glass-bar flex items-center justify-between px-4">
@@ -728,43 +757,77 @@ export default function Workspace({ user }: { user: User }) {
   );
 }
 
-function SimpleList({ loading, empty, rows, selection, selectMode, onSelect }: {
+interface GridItem {
+  id: string;
+  name: string;
+  root_name: string;
+  path: string;
+  root_id: string;
+  date: string;
+  extension: string;
+}
+
+function GridView({ loading, empty, items, onOpen }: {
   loading: boolean;
   empty: string;
-  rows: { id: string; title: string; sub: string; meta?: string; onClick: () => void }[];
-  selection?: Set<string>;
-  selectMode?: boolean;
-  onSelect?: (id: string) => void;
+  items: GridItem[];
+  onOpen: (item: GridItem) => void;
 }) {
-  if (loading) return <div className="p-2"><SkeletonList count={5} /></div>;
-  if (!rows.length) return <div className="p-10 text-center text-content-muted">{empty}</div>;
+  if (loading) return <div className="p-6"><SkeletonGrid count={6} /></div>;
+  if (!items.length) return <div className="p-10 text-center text-content-muted">{empty}</div>;
   return (
-    <div className="p-2">
-      {rows.map((r) => {
-        const selected = selection?.has(r.id) ?? false;
+    <motion.div
+      variants={staggerContainer}
+      initial="initial"
+      animate="animate"
+      className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-6"
+    >
+      {items.map((item) => {
+        const fi: FileItem = {
+          name: item.name,
+          path: item.path,
+          size: 0,
+          is_dir: false,
+          modified: item.date,
+          mime: "",
+          root_id: item.root_id,
+          extension: item.extension,
+        };
         return (
-          <div key={r.id} className={`relative flex items-center gap-2 rounded-lg transition-colors ${selected ? "bg-accent/10 ring-1 ring-accent/30" : "hover:bg-surface/50"}`}>
-            {(selectMode || selection?.size) && onSelect && (
-              <label className="pl-3 py-2 flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={selected}
-                  onChange={() => onSelect(r.id)}
-                  className={`w-4 h-4 rounded border-2 border-border/80 bg-surface/80 text-accent focus:ring-accent cursor-pointer transition-all ${selected ? "opacity-100" : "opacity-60 hover:opacity-100"}`}
-                />
-              </label>
-            )}
-            <button onClick={r.onClick} className={`flex-1 grid grid-cols-[1fr_auto] gap-2 py-2 pr-3 text-left ${selectMode || selection?.size ? "" : "pl-3"}`}>
-              <div className="min-w-0">
-                <p className="truncate font-medium">{r.title}</p>
-                <p className="text-xs text-content-muted truncate">{r.sub}</p>
+          <motion.button
+            key={item.id}
+            variants={staggerItem}
+            {...cardHover}
+            onClick={() => onOpen(item)}
+            className="group w-full min-w-0 text-left outline-none flex items-center gap-4 p-3 rounded-2xl glass-strong border border-glass-border hover:border-accent/40 focus-visible:ring-2 focus-visible:ring-accent transition-all duration-300 overflow-hidden relative"
+          >
+            {/* Inner card glow */}
+            <div className="absolute inset-0 bg-gradient-to-br from-white/[0.03] via-transparent to-transparent pointer-events-none rounded-2xl" />
+            <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/8 to-transparent" />
+            
+            <div className="relative h-14 w-14 shrink-0 rounded-xl overflow-hidden shadow-sm">
+              <FileThumb it={fi} fill />
+              <div className="absolute inset-0 bg-black/[0.05] dark:bg-black/10 group-hover:bg-black/[0.1] dark:group-hover:bg-black/20 transition-colors duration-300" />
+            </div>
+            
+            <div className="flex-1 min-w-0">
+              <p className="truncate text-[15px] font-semibold text-content group-hover:text-accent transition-colors">
+                {item.name}
+              </p>
+              <div className="flex min-w-0 items-center gap-2 mt-1">
+                <p className="min-w-0 truncate text-xs font-medium text-content-muted">
+                  {item.root_name}
+                </p>
+                <span className="h-1 w-1 shrink-0 rounded-full bg-border/80" />
+                <p className="min-w-0 truncate text-xs font-medium text-content-muted/70 uppercase tracking-wider">
+                  {formatRelative(item.date)}
+                </p>
               </div>
-              {r.meta && <span className="text-xs text-content-muted whitespace-nowrap">{r.meta}</span>}
-            </button>
-          </div>
+            </div>
+          </motion.button>
         );
       })}
-    </div>
+    </motion.div>
   );
 }
 
