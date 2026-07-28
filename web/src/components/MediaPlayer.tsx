@@ -759,9 +759,6 @@ function VideoPlayer({ url, item, autoPlay }: { url?: string; item?: FileItem; a
   const controlsTimeout = useRef<number>();
   const [fallbackTriggered, setFallbackTriggered] = useState(false);
 
-  const ext = item?.extension?.toLowerCase() || "";
-  const isMkv = ext === "mkv";
-
   // ── Global media key shortcuts (Tauri) ─────────────────────
   useEffect(() => {
     if (!("__TAURI_INTERNALS__" in window)) return;
@@ -782,22 +779,31 @@ function VideoPlayer({ url, item, autoPlay }: { url?: string; item?: FileItem; a
 
   useEffect(() => {
     let cancelled = false;
+    
     if (item && needsTranscode(item)) {
-      serverSupportsTranscode().then((ok) => {
-        if (cancelled) return;
-        if (ok) {
-          setSrc(transcodeUrl(item.root_id, item.path));
-          setLive(true);
-        } else {
-          setSrc(url);
-          setLive(false);
-        }
-      });
+      if (isTauri) {
+        // On desktop (WebView2), try direct playback first — it often supports
+        // H.264/AAC inside MKV containers natively via the system codecs.
+        setSrc(url);
+        setLive(false);
+        setFallbackTriggered(false);
+      } else {
+        // Browser: attempt server-side transcoding right away
+        serverSupportsTranscode().then((ok) => {
+          if (cancelled) return;
+          if (ok) {
+            setSrc(transcodeUrl(item.root_id, item.path));
+            setLive(true);
+          } else {
+            setSrc(url);
+            setLive(false);
+          }
+        });
+      }
     } else {
       setSrc(url);
       setLive(false);
     }
-    setFallbackTriggered(false);
     return () => { cancelled = true; };
   }, [url, item]);
 
@@ -806,6 +812,7 @@ function VideoPlayer({ url, item, autoPlay }: { url?: string; item?: FileItem; a
     if (!v) return;
     const onTime = () => {
       setCur(v.currentTime);
+      // If direct play failed (readyState>=2 but no video dimensions), fall back to transcoding
       if (!live && !fallbackTriggered && v.readyState >= 2 && v.videoWidth === 0 && item) {
         setFallbackTriggered(true);
         serverSupportsTranscode().then((ok) => {
@@ -814,7 +821,7 @@ function VideoPlayer({ url, item, autoPlay }: { url?: string; item?: FileItem; a
             setLive(true);
           } else {
             setErrored(true);
-            setErroredMsg("The video codec is unsupported and server transcoding is unavailable.");
+            setErroredMsg("Cannot play this video format — server transcoding is also unavailable.");
           }
         });
       }
@@ -828,8 +835,8 @@ function VideoPlayer({ url, item, autoPlay }: { url?: string; item?: FileItem; a
       setErroredMsg(
         live
           ? "Transcoding failed — the file may use a codec ffmpeg can't handle."
-          : isMkv
-            ? "This .mkv file can't be played in your browser (codec/container not supported)."
+          : isTauri
+            ? "Your system doesn't have the required video codec for this file. Try downloading it instead."
             : "This video can't be played in your browser."
       );
     };
@@ -845,7 +852,7 @@ function VideoPlayer({ url, item, autoPlay }: { url?: string; item?: FileItem; a
       v.removeEventListener("pause", onPause);
       v.removeEventListener("error", onErr);
     };
-  }, [isMkv, live, fallbackTriggered, item]);
+  }, [isTauri, live, fallbackTriggered, item]);
 
   useEffect(() => {
     const v = ref.current;
@@ -1027,42 +1034,12 @@ function VideoPlayer({ url, item, autoPlay }: { url?: string; item?: FileItem; a
             </div>
             <p className="text-white font-bold text-xl mb-3">{erroredMsg}</p>
             <p className="text-white/70 text-sm mb-6 leading-relaxed">
-              {isMkv
-                ? "Matroska container (.mkv) is not natively supported by your browser. Try downloading the file or using a Chromium-based browser."
-                : "The file may be corrupt or encoded with an unsupported codec."}
+              Try downloading the file to play it locally on your device.
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
               <Button variant="primary" onClick={() => item ? startDownload(item.root_id, item.path, item.name) : window.location.href = dlUrl} icon={<Download className="h-4 w-4" />}>
                 Download File
               </Button>
-              {isTauri && (
-                <Button variant="secondary" onClick={async () => {
-                  try {
-                    const { Command } = await import("@tauri-apps/plugin-shell");
-                    // Convert relative URL to absolute for VLC
-                    const baseUrl = localStorage.getItem("nexora-api-url") || window.location.origin;
-                    const absUrl = dlUrl.startsWith("http") ? dlUrl : new URL(dlUrl, baseUrl).toString();
-                    
-                    // Try known VLC command names from capabilities (supports Windows, macOS, Linux)
-                    const vlcCmds = ["vlc", "vlc-win64", "vlc-win32", "vlc-macos"];
-                    let lastErr: unknown;
-                    for (const cmdName of vlcCmds) {
-                      try {
-                        const cmd = Command.create(cmdName, [absUrl]);
-                        await cmd.spawn();
-                        return;
-                      } catch (err) {
-                        lastErr = err;
-                      }
-                    }
-                    throw lastErr || new Error("VLC not found");
-                  } catch (e) {
-                    alert("Could not start VLC. Please ensure VLC is installed.\n\nTry installing VLC from: https://videolan.org\n\nIf VLC is already installed, try adding it to your system PATH or reinstalling with the \"Add to VLC\" option.");
-                  }
-                }} icon={<Play className="h-4 w-4" />}>
-                  Open in VLC
-                </Button>
-              )}
             </div>
           </div>
         </div>

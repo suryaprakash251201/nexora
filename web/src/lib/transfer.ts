@@ -25,7 +25,8 @@ export function startUpload(
 
   const isTauri = "__TAURI_INTERNALS__" in window;
   const storedUrl = localStorage.getItem("nexora-api-url") || "";
-  const baseUrl = (isTauri && storedUrl) ? storedUrl.replace(/\/$/, "") : "";
+  // Build absolute URL using the same pattern as startDownload.
+  const baseUrl = (isTauri && storedUrl) ? storedUrl.replace(/\/$/, "") : (isTauri ? window.location.origin : "");
 
   files.forEach((file) => {
     const id = uid();
@@ -49,7 +50,8 @@ export function startUpload(
     const xhr = new XMLHttpRequest();
     xhr.open("POST", uploadUrl);
     xhr.withCredentials = !isTauri;
-    xhr.setRequestHeader("X-CSRF-Token", getCsrfToken());
+    const csrf = getCsrfToken();
+    if (csrf) xhr.setRequestHeader("X-CSRF-Token", csrf);
 
     // In Tauri, cookies are not shared with the external API server, so send token via header
     const storedToken = localStorage.getItem("nexora-token");
@@ -86,7 +88,7 @@ export function startUpload(
         useTransfers.getState().update(id, { status: "error", error: msg });
       }
     };
-    xhr.onerror = () => useTransfers.getState().update(id, { status: "error", error: "Network error" });
+    xhr.onerror = () => useTransfers.getState().update(id, { status: "error", error: `Network error — could not reach server at ${uploadUrl.replace(/\?.*/, '')}` });
     xhr.send(form);
   });
 }
