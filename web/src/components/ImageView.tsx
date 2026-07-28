@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { X, ChevronLeft, ChevronRight, Download, Share2, ZoomIn, ZoomOut, RotateCw } from "lucide-react";
 import type { FileItem } from "../api/types";
 import { rawUrl, thumbUrl } from "../lib/preview";
+import { startDownload } from "../lib/transfer";
 
 export default function ImageView({
   item,
@@ -117,9 +118,9 @@ export default function ImageView({
               <Share2 className="h-5 w-5" />
             </button>
           )}
-          <a href={rawUrl(rootId, current.path, true)} download className="p-2 rounded-full hover:bg-white/15 text-white/70 hover:text-white transition-colors" title="Download">
+          <button onClick={() => startDownload(rootId, current.path, current.name)} className="p-2 rounded-full hover:bg-white/15 text-white/70 hover:text-white transition-colors" title="Download">
             <Download className="h-5 w-5" />
-          </a>
+          </button>
           <div className="w-px h-5 bg-white/15 mx-1" />
           <button onClick={() => setZoom(z => Math.max(0.25, z - 0.25))} className="p-2 rounded-full hover:bg-white/15 text-white/70 hover:text-white transition-colors" title="Zoom out">
             <ZoomOut className="h-5 w-5" />

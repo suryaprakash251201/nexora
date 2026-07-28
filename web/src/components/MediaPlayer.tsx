@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import type { FileItem } from "../api/types";
 import { thumbUrl, needsTranscode, transcodeUrl, serverSupportsTranscode, getAudioQuality, rawUrl } from "../lib/preview";
+import { startDownload } from "../lib/transfer";
 import { usePlayer } from "../store/player";
 import { AddToPlaylistMenu } from "./PlaylistAdder";
 import { Button } from "./ui/Button";
@@ -1006,7 +1007,7 @@ function VideoPlayer({ url, item, autoPlay }: { url?: string; item?: FileItem; a
                 ? "Matroska container (.mkv) is not natively supported by your browser. Try downloading the file or using a Chromium-based browser."
                 : "The file may be corrupt or encoded with an unsupported codec."}
             </p>
-            <Button variant="primary" onClick={() => window.location.href = dlUrl} icon={<Download className="h-4 w-4" />}>
+            <Button variant="primary" onClick={() => item ? startDownload(item.root_id, item.path, item.name) : window.location.href = dlUrl} icon={<Download className="h-4 w-4" />}>
               Download File
             </Button>
           </div>

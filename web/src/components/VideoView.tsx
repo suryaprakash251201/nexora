@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { ArrowLeft, Download, Share2 } from "lucide-react";
 import type { FileItem } from "../api/types";
 import { rawUrl } from "../lib/preview";
+import { startDownload } from "../lib/transfer";
 import MediaPlayer from "./MediaPlayer";
 
 export default function VideoView({
@@ -60,15 +61,14 @@ export default function VideoView({
               <Share2 className="h-5 w-5" />
             </button>
           )}
-          <a
-            href={rawUrl(rootId, item.path, true)}
-            download
+          <button
+            onClick={() => startDownload(rootId, item.path, item.name)}
             className="p-2 rounded-lg text-white/70 transition-colors hover:bg-white/10 hover:text-white"
             title="Download video"
             aria-label="Download video"
           >
             <Download className="h-5 w-5" />
-          </a>
+          </button>
         </div>
       </div>
 

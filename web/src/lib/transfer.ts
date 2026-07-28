@@ -83,12 +83,49 @@ export function startUpload(
 // startDownload streams the file via fetch so download progress can be shown,
 // then triggers a browser save. The transfer is recorded in the store.
 export async function startDownload(rootId: string, path: string, name: string) {
-  const id = uid();
+  const isTauri = "__TAURI_INTERNALS__" in window;
   const url = `/api/v1/files/download?root=${encodeURIComponent(rootId)}&path=${encodeURIComponent(path)}`;
+  const id = uid();
+  
   useTransfers.getState().add({
     id, name, kind: "download", rootId, path, loaded: 0, total: 0, speed: 0, status: "active",
   });
 
+  if (isTauri) {
+    try {
+      const { save } = await import("@tauri-apps/plugin-dialog");
+      const { download: tauriDownload } = await import("@tauri-apps/plugin-upload");
+      
+      const savePath = await save({ defaultPath: name });
+      if (!savePath) {
+        useTransfers.getState().update(id, { status: "error", error: "Download cancelled" });
+        return;
+      }
+      
+      // Need absolute URL for tauri upload plugin
+      const absoluteUrl = new URL(url, localStorage.getItem("nexora-api-url") || window.location.origin).toString();
+      
+      const headers = new Map<string, string>();
+      const token = localStorage.getItem("nexora-token");
+      if (token) headers.set("Authorization", `Bearer ${token}`);
+      
+      await tauriDownload(absoluteUrl, savePath, (p) => {
+        useTransfers.getState().update(id, {
+          loaded: p.progress,
+          total: p.total,
+          speed: p.transferSpeed
+        });
+      }, headers);
+      
+      const st = useTransfers.getState().transfers.find(t => t.id === id);
+      useTransfers.getState().update(id, { loaded: st?.total || 0, speed: 0, status: "done" });
+    } catch (e: any) {
+      useTransfers.getState().update(id, { status: "error", error: e?.message || "Download failed" });
+    }
+    return;
+  }
+
+  // Browser download
   try {
     const res = await fetch(url, { credentials: "include" });
     if (!res.ok || !res.body) throw new Error(`Download failed (${res.status})`);

@@ -3,6 +3,7 @@ import { X, Download, Pencil, Share2, Copy, Check, ZoomIn, ZoomOut, Maximize, Mi
 import { motion, AnimatePresence } from "framer-motion";
 import type { FileItem } from "../api/types";
 import { previewKind, isEditable, rawUrl, codeLanguage } from "../lib/preview";
+import { startDownload } from "../lib/transfer";
 import { renderMarkdown } from "../lib/markdown";
 import { usePlayer } from "../store/player";
 import MediaPlayer from "./MediaPlayer";
@@ -173,9 +174,9 @@ export default function PreviewModal({
               </button>
             )}
             
-            <a href={rawUrl(current.root_id || rootId, current.path, true)} className="p-2 rounded-lg glass-hover text-content-muted hover:text-content" title="Download" download>
+            <button onClick={() => startDownload(current.root_id || rootId, current.path, current.name)} className="p-2 rounded-lg glass-hover text-content-muted hover:text-content" title="Download">
               <Download className="h-4 w-4" />
-            </a>
+            </button>
             
             <div className="w-px h-6 bg-border/50 mx-1 hidden sm:block" />
             
@@ -278,7 +279,7 @@ export default function PreviewModal({
                 <span className="text-2xl font-mono opacity-50">{current.extension.toUpperCase()}</span>
               </div>
               <p className="mb-6 text-lg font-medium">No inline preview available for this file type.</p>
-              <Button variant="primary" onClick={() => window.location.href = rawUrl(current.root_id || rootId, current.path, true)} icon={<Download className="h-4 w-4" />}>
+              <Button variant="primary" onClick={() => startDownload(current.root_id || rootId, current.path, current.name)} icon={<Download className="h-4 w-4" />}>
                 Download File
               </Button>
             </div>

@@ -63,7 +63,7 @@ export function hasThumbnail(item: { extension: string }): boolean {
 // TRANSCODE_EXT lists video containers that browsers cannot play natively and
 // therefore need server-side transcoding to a streamable MP4.
 const TRANSCODE_EXT = new Set([
-  "avi", "wmv", "flv", "asf", "3gp", "vob", "mts", "m2ts", "ts", "rm", "divx",
+  "avi", "wmv", "flv", "asf", "3gp", "vob", "mts", "m2ts", "ts", "rm", "divx", "mkv",
 ]);
 
 export function needsTranscode(item: { extension: string }): boolean {

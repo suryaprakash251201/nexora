@@ -75,6 +75,23 @@ export default function SharePage({ token }: { token: string }) {
   }, [info, unlocked]);
 
   const handleDownload = async () => {
+    const isTauri = "__TAURI_INTERNALS__" in window;
+    if (isTauri) {
+      try {
+        const { save } = await import("@tauri-apps/plugin-dialog");
+        const { download: tauriDownload } = await import("@tauri-apps/plugin-upload");
+        const savePath = await save({ defaultPath: info?.name || "download" });
+        if (!savePath) return;
+        const absoluteUrl = new URL(downloadUrl, localStorage.getItem("nexora-api-url") || window.location.origin).toString();
+        const headers = new Map<string, string>();
+        if (password) headers.set("X-Share-Password", password);
+        await tauriDownload(absoluteUrl, savePath, undefined, headers);
+      } catch (e: any) {
+        console.error(e);
+      }
+      return;
+    }
+
     const res = await authFetch(downloadUrl);
     if (!res.ok) return;
     const blob = await res.blob();
