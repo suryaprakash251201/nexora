@@ -30,7 +30,7 @@ jobs:
       - name: setup node
         uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: 22
 
       - name: install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -56,7 +56,7 @@ jobs:
         working-directory: ./desktop
 
       - name: build tauri app
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
@@ -69,14 +69,24 @@ jobs:
           releaseDraft: false
           prerelease: false
 
-      - name: upload binaries to github actions
+      - name: upload linux bundles
+        if: startsWith(matrix.platform, 'ubuntu')
         uses: actions/upload-artifact@v4
         with:
           name: nexora-desktop-${{ matrix.platform }}
           path: |
             desktop/src-tauri/target/release/bundle/deb/*.deb
-            desktop/src-tauri/target/release/bundle/rpm/*.rpm
             desktop/src-tauri/target/release/bundle/appimage/*.AppImage
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: upload windows bundles
+        if: matrix.platform == 'windows-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexora-desktop-${{ matrix.platform }}
+          path: |
             desktop/src-tauri/target/release/bundle/nsis/*.exe
             desktop/src-tauri/target/release/bundle/msi/*.msi
+          if-no-files-found: warn
           retention-days: 7
