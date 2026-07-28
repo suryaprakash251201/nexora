@@ -24,7 +24,7 @@ import {
 import type { FileItem } from "../api/types";
 import { thumbUrl, needsTranscode, transcodeUrl, serverSupportsTranscode, getAudioQuality, rawUrl } from "../lib/preview";
 import { startDownload } from "../lib/transfer";
-import { usePlayer } from "../store/player";
+import { engine, usePlayer } from "../store/player";
 import { AddToPlaylistMenu } from "./PlaylistAdder";
 import { Button } from "./ui/Button";
 
@@ -137,6 +137,27 @@ function AudioPlayer({
   const [bgFailed, setBgFailed] = useState(false);
   const [showRates, setShowRates] = useState(false);
   const fsWrapRef = useRef<HTMLDivElement>(null);
+
+  // ── Global media key shortcuts (Tauri) ─────────────────────
+  useEffect(() => {
+    if (!("__TAURI_INTERNALS__" in window)) return;
+    const handler = (e: Event) => {
+      const action = (e as CustomEvent).detail;
+      const a = ref.current;
+      if (action === "MediaPlay" || action === "MediaPause") {
+        if (controlled) { player.toggle(); return; }
+        if (a) { if (a.paused) a.play().catch(() => {}); else a.pause(); }
+      } else if (action === "MediaStop") {
+        if (controlled) {
+          if (engine.audio) { engine.audio.pause(); engine.audio.currentTime = 0; }
+          return;
+        }
+        if (a) { a.pause(); a.currentTime = 0; setLCur(0); }
+      }
+    };
+    window.addEventListener("nexora:media", handler);
+    return () => window.removeEventListener("nexora:media", handler);
+  }, [controlled]);
 
   useEffect(() => {
     if (controlled) return;
@@ -757,6 +778,24 @@ function VideoPlayer({ url, item, autoPlay }: { url?: string; item?: FileItem; a
 
   const ext = item?.extension?.toLowerCase() || "";
   const isMkv = ext === "mkv";
+
+  // ── Global media key shortcuts (Tauri) ─────────────────────
+  useEffect(() => {
+    if (!("__TAURI_INTERNALS__" in window)) return;
+    const handler = (e: Event) => {
+      const action = (e as CustomEvent).detail;
+      const v = ref.current;
+      if (action === "MediaPlay" && v?.paused) {
+        v.play().catch(() => {});
+      } else if (action === "MediaPause" && v && !v.paused) {
+        v.pause();
+      } else if (action === "MediaStop") {
+        if (v) { v.pause(); v.currentTime = 0; }
+      }
+    };
+    window.addEventListener("nexora:media", handler);
+    return () => window.removeEventListener("nexora:media", handler);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;

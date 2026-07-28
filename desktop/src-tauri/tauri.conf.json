@@ -9,14 +9,20 @@
   "version": "1.0.4",
   "identifier": "com.nexora.desktop",
   "app": {
+    "withGlobalTauri": true,
     "windows": [
       {
         "title": "Nexora",
-        "width": 1024,
-        "height": 768,
+        "label": "main",
+        "width": 1280,
+        "height": 860,
+        "minWidth": 800,
+        "minHeight": 600,
         "resizable": true,
         "fullscreen": false,
-        "center": true
+        "center": true,
+        "decorations": true,
+        "transparent": false
       }
     ],
     "security": {
@@ -29,6 +35,20 @@
         "https://github.com/suryaprakash251201/nexora/releases/latest/download/updater.json"
       ],
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDExNDg2RDg2ODc4RjFFNzMKUldSekhvK0hobTFJRVpobjZqNHNKeC8yKzdiM3pLaXdYR3lUUEJUeXM1bGdsY1VtTGhLQnFBK04K"
+    },
+    "autostart": {
+      "title": "Nexora",
+      "description": "Launch Nexora at system startup"
+    },
+    "notification": {
+      "all": true
+    },
+    "global-shortcut": {
+      "shortcuts": {
+        "MediaPlay": "media:play",
+        "MediaPause": "media:pause",
+        "MediaStop": "media:stop"
+      }
     }
   },
   "bundle": {
@@ -53,6 +73,9 @@
       "nsis": {
         "installMode": "currentUser"
       }
+    },
+    "macOS": {
+      "minimumSystemVersion": "10.15"
     }
   }
 }

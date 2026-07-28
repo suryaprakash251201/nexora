@@ -87,7 +87,7 @@ export default function SharePage({ token }: { token: string }) {
         if (password) headers.set("X-Share-Password", password);
         await tauriDownload(absoluteUrl, savePath, undefined, headers);
       } catch (e: any) {
-        console.error(e);
+        setError(e?.message || "Download failed");
       }
       return;
     }

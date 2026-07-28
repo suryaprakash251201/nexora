@@ -23,6 +23,10 @@ export function startUpload(
   const files = Array.from(fileList);
   if (!files.length || !rootId) return;
 
+  const isTauri = "__TAURI_INTERNALS__" in window;
+  const storedUrl = localStorage.getItem("nexora-api-url") || "";
+  const baseUrl = (isTauri && storedUrl) ? storedUrl.replace(/\/$/, "") : "";
+
   files.forEach((file) => {
     const id = uid();
     const transfer: Transfer = {
@@ -41,10 +45,17 @@ export function startUpload(
     const form = new FormData();
     form.append("files", file);
 
+    const uploadUrl = baseUrl + `/api/v1/files/upload?root=${encodeURIComponent(rootId)}&path=${encodeURIComponent(path)}`;
     const xhr = new XMLHttpRequest();
-    xhr.open("POST", `/api/v1/files/upload?root=${encodeURIComponent(rootId)}&path=${encodeURIComponent(path)}`);
-    xhr.withCredentials = true;
+    xhr.open("POST", uploadUrl);
+    xhr.withCredentials = !isTauri;
     xhr.setRequestHeader("X-CSRF-Token", getCsrfToken());
+
+    // In Tauri, cookies are not shared with the external API server, so send token via header
+    const storedToken = localStorage.getItem("nexora-token");
+    if (isTauri && storedToken) {
+      xhr.setRequestHeader("Authorization", "Bearer " + storedToken);
+    }
 
     let lastTime = performance.now();
     let lastLoaded = 0;

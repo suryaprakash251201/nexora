@@ -1,6 +1,6 @@
 import { useEffect, useState, type MouseEvent } from "react";
 import { createPortal } from "react-dom";
-import { KeyRound, Smartphone, Shield, ShieldAlert, Check, AlertCircle, ArrowLeft, ChevronRight, X, Sun, Moon } from "lucide-react";
+import { KeyRound, Smartphone, Shield, ShieldAlert, Check, AlertCircle, ArrowLeft, ChevronRight, X, Sun, Moon, Power } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useQueryClient } from "@tanstack/react-query";
 import type { User } from "../api/types";
@@ -19,6 +19,30 @@ export default function SettingsModal({ user, onClose }: { user: User; onClose: 
   const [accent, setAccent] = useAccentTheme();
   const queryClient = useQueryClient();
   const dialogRef = useFocusTrap(true);
+
+  const isTauri = "__TAURI_INTERNALS__" in window;
+
+  // ── Auto-start ─────────────────────────────────────────────
+  const [autoStart, setAutoStart] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (!isTauri) return;
+    (async () => {
+      try {
+        const { isAutostartEnabled } = await import("./TauriShell");
+        setAutoStart(await isAutostartEnabled());
+      } catch { /* ignore */ }
+    })();
+  }, [isTauri]);
+
+  const toggleAutoStart = async () => {
+    try {
+      const { setAutostart } = await import("./TauriShell");
+      const next = !autoStart;
+      await setAutostart(next);
+      setAutoStart(next);
+    } catch { /* ignore */ }
+  };
 
   const setTotpStatus = (enabled: boolean) => {
     queryClient.setQueryData<{ user: User }>(["session"], (current) => (
@@ -199,6 +223,46 @@ export default function SettingsModal({ user, onClose }: { user: User; onClose: 
                   </div>
                 </div>
               </div>
+
+              {/* System Section — Tauri native settings */}
+              {isTauri && (
+                <div>
+                  <h3 className="text-xs font-bold text-content-muted uppercase tracking-wider mb-3">System</h3>
+                  <div className="space-y-2">
+                    <div
+                      className="flex items-center justify-between px-4 py-3.5 rounded-xl bg-surface-muted/30 border border-border/50"
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className="p-2 rounded-lg bg-accent/10 text-accent">
+                          <Power className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-content">Launch at Startup</p>
+                          <p className="text-xs text-content-muted">
+                            {autoStart === null
+                              ? "Checking…"
+                              : autoStart
+                              ? "Nexora starts automatically"
+                              : "Open Nexora when you log in"}
+                          </p>
+                        </div>
+                      </div>
+                      {autoStart !== null && (
+                        <button
+                          onClick={toggleAutoStart}
+                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                            autoStart ? "bg-accent" : "bg-surface-muted border border-border"
+                          }`}
+                        >
+                          <span className={`inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${
+                            autoStart ? "translate-x-6" : "translate-x-1"
+                          }`} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Security Section */}
               <div>

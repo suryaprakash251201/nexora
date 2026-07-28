@@ -5,6 +5,7 @@ import Setup from "./components/Setup";
 import Workspace from "./components/Workspace";
 import MouseGlow from "./components/MouseGlow";
 import UpdaterCheck from "./components/UpdaterCheck";
+import TauriShell from "./components/TauriShell";
 import type { User } from "./api/types";
 
 export default function App() {
@@ -13,6 +14,7 @@ export default function App() {
     <>
       <div className="nexora-bg" aria-hidden="true" />
       <MouseGlow />
+      {isTauri && <TauriShell />}
       {isTauri && <UpdaterCheck />}
       <AppInner />
     </>
