@@ -7,7 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { formatBytes } from "../lib/format";
 
-export type SidebarView = "home" | "files" | "trash" | "favorites" | "recents" | "shares" | "playlists" | "search" | "admin" | "video" | "image" | "saved-searches" | "analytics";
+export type SidebarView = "home" | "files" | "trash" | "favorites" | "recents" | "shares" | "playlists" | "search" | "admin" | "video" | "image" | "saved-searches" | "analytics" | "photos";
 
 const viewColors: Record<string, string> = {
   home: "#5B8CFF",
@@ -20,7 +20,8 @@ const viewColors: Record<string, string> = {
   trash: "#FB7185",
   admin: "#F87171",
   video: "#818CF8",
-  image: "#34D399"
+  image: "#34D399",
+  photos: "#F43F5E"
 };
 
 const NavItem = ({ v, icon, label, isActive, badge, collapsed, onSelectView }: { v: SidebarView; icon: React.ReactNode; label: string; isActive: boolean; badge?: number; collapsed: boolean; onSelectView: (v: SidebarView) => void; }) => {
@@ -142,6 +143,7 @@ export default function Sidebar({
           <NavItem v="search" icon={<Search className="w-[18px] h-[18px]" />} label="Search" isActive={view === "search"} collapsed={collapsed} onSelectView={onSelectView} />
           <NavItem v="saved-searches" icon={<Filter className="w-[18px] h-[18px]" />} label="Smart Folders" isActive={view === "saved-searches"} collapsed={collapsed} onSelectView={onSelectView} />
           <NavItem v="analytics" icon={<svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18" /></svg>} label="Analytics" isActive={view === "analytics"} collapsed={collapsed} onSelectView={onSelectView} />
+          <NavItem v="photos" icon={<svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2" strokeWidth={2}/><circle cx="8.5" cy="8.5" r="1.5" strokeWidth={2}/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 15l-5-5L5 21" /></svg>} label="Photos" isActive={view === "photos"} collapsed={collapsed} onSelectView={onSelectView} />
           <div className="my-1.5 mx-3 h-px bg-white/[0.06]" />
         
           <NavItem v="recents" icon={<Clock className="w-[18px] h-[18px]" />} label="Recent" isActive={view === "recents"} collapsed={collapsed} onSelectView={onSelectView} />

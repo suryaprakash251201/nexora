@@ -27,6 +27,7 @@ const VideoView = React.lazy(() => import("./VideoView"));
 const ImageView = React.lazy(() => import("./ImageView"));
 const SavedSearchesPanel = React.lazy(() => import("./SavedSearchesPanel"));
 const StorageAnalyticsPanel = React.lazy(() => import("./StorageAnalyticsPanel").then(m => ({ default: m.default })));
+const PhotosView = React.lazy(() => import("./PhotosView"));
 import { TagPicker } from "./TagManager";
 import { MobileNav } from "./layout/MobileNav";
 import { PlaylistPickerPopover } from "./PlaylistAdder";
@@ -93,6 +94,7 @@ export default function Workspace({ user }: { user: User }) {
   else if (pathname === "/playlists") view = "playlists";
   else if (pathname === "/saved-searches") view = "saved-searches";
   else if (pathname === "/analytics") view = "analytics";
+  else if (pathname === "/photos") view = "photos";
   else if (pathname.startsWith("/admin")) view = "admin";
   
   const roots = useQuery({ queryKey: ["roots"], queryFn: () => get<{ roots: Root[] }>("/roots") });
@@ -587,6 +589,14 @@ export default function Workspace({ user }: { user: User }) {
                 <StorageAnalyticsPanel
                   roots={roots.data?.roots || []}
                   onNavigateToFile={(rid, p) => navigateTo(rid, p, false, "")}
+                />
+              </Suspense>
+            )}
+            {view === "photos" && (
+              <Suspense fallback={<div className="flex-1 grid place-items-center text-content-muted">Loading...</div>}>
+                <PhotosView
+                  roots={roots.data?.roots || []}
+                  onOpen={(rid, p) => navigateTo(rid, p, false, "")}
                 />
               </Suspense>
             )}

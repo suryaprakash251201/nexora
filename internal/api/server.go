@@ -213,6 +213,8 @@ func (s *Server) Routes() http.Handler {
 
 	// Share links (authenticated management).
 
+	authed.Get("/photos", s.handleGetPhotosTimeline)
+
 	authed.Get("/saved-searches", s.handleListSavedSearches)
 	authed.Post("/saved-searches", s.handleCreateSavedSearch)
 	authed.Put("/saved-searches/{id}", s.handleUpdateSavedSearch)
