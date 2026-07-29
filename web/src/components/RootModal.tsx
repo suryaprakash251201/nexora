@@ -43,12 +43,15 @@ export default function RootModal({
   const [forceListV1, setForceListV1] = useState(initialS3Config.force_list_v1 || false);
   const [showSecret, setShowSecret] = useState(false);
 
-  // Provider-specific help text
+  // Provider-specific help text — use parsed hostname to avoid substring
+  // matching bypasses (e.g. "evil.com?s3.amazonaws.com").
   const providerHint = (() => {
     if (!endpoint) return "Select an endpoint format above";
-    if (endpoint.includes("s3.amazonaws.com")) return "AWS S3 — region matters (e.g. us-east-1)";
-    if (endpoint.includes("r2.cloudflarestorage.com")) return "Cloudflare R2 — region is 'auto'";
-    if (endpoint.includes("localhost") || endpoint.includes("minio") || endpoint.includes(":9000")) return "MinIO — enable path-style URLs below";
+    let hostname = "";
+    try { hostname = new URL(endpoint).hostname; } catch { hostname = endpoint; }
+    if (hostname === "s3.amazonaws.com" || hostname.endsWith(".s3.amazonaws.com")) return "AWS S3 — region matters (e.g. us-east-1)";
+    if (hostname === "r2.cloudflarestorage.com" || hostname.endsWith(".r2.cloudflarestorage.com")) return "Cloudflare R2 — region is 'auto'";
+    if (hostname === "localhost" || hostname === "minio" || hostname.endsWith(".minio") || endpoint.includes(":9000")) return "MinIO — enable path-style URLs below";
     return "Custom S3-compatible provider";
   })();
 

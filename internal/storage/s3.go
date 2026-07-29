@@ -19,6 +19,14 @@ import (
 	"time"
 )
 
+// sanitizeLog escapes newlines and control characters in a string so it
+// cannot inject fake log entries (CWE-117).
+func sanitizeLog(s string) string {
+	s = strings.ReplaceAll(s, "\n", "\\n")
+	s = strings.ReplaceAll(s, "\r", "\\r")
+	return s
+}
+
 // S3Config holds configuration for an S3-compatible storage backend.
 type S3Config struct {
 	Endpoint        string
@@ -275,10 +283,19 @@ func (p *S3Provider) sign(req *http.Request, body []byte) {
 		algorithm, p.cfg.AccessKeyID, credentialScope, signedHeaders.String(), signature)
 	req.Header.Set("Authorization", authHeader)
 
+	// Escape newlines and control characters in user-observable values to
+	// prevent log injection / log forging (CWE-117).
+	safeMethod := sanitizeLog(method)
+	safePath := sanitizeLog(canonicalURI)
+	safeQuery := sanitizeLog(canonicalQueryString)
+	safeHost := sanitizeLog(host)
+	safeReqHash := sanitizeLog(sha256Hex([]byte(canonicalRequest)))
+	safeSigHash := sanitizeLog(sha256Hex([]byte(stringToSign)))
+
 	log.Printf("S3 SigV4: method=%s path=%s query=%s host=%s credential=%s/%s region=%s algo=%s",
-		method, canonicalURI, canonicalQueryString, host, p.cfg.AccessKeyID, credentialScope, p.cfg.Region, algorithm)
+		safeMethod, safePath, safeQuery, safeHost, p.cfg.AccessKeyID, credentialScope, p.cfg.Region, algorithm)
 	log.Printf("S3 SigV4 canonical-request-hash=%s string-to-sign-hash=%s",
-		sha256Hex([]byte(canonicalRequest)), sha256Hex([]byte(stringToSign)))
+		safeReqHash, safeSigHash)
 }
 
 // buildSigningKey derives the AWS SigV4 signing key.

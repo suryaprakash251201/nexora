@@ -2,6 +2,7 @@ package storage
 
 import (
 	"errors"
+	"os"
 	"path"
 	"path/filepath"
 	"strings"
@@ -42,7 +43,8 @@ func CleanRelative(rel string) (string, error) {
 }
 
 // Resolve joins a root absolute path with a cleaned relative path and verifies
-// the result stays within rootPath. It returns the absolute OS path.
+// the result stays within rootPath and does not escape via symlinks.
+// It returns the absolute OS path.
 func Resolve(rootPath, rel string) (string, error) {
 	absRoot := filepath.Clean(rootPath)
 	cleaned, err := CleanRelative(rel)
@@ -56,6 +58,20 @@ func Resolve(rootPath, rel string) (string, error) {
 	}
 	if rel2 == ".." || strings.HasPrefix(rel2, ".."+string(filepath.Separator)) {
 		return "", ErrTraversal
+	}
+	// Resolve symlinks so an attacker cannot escape the root via a symlink
+	// planted inside the storage tree. EvalSymlinks returns the original path
+	// if it does not exist or is not a symlink, so this is safe to call even
+	// when the target does not yet exist (e.g. for Write/CreateDirectory).
+	resolved, err := filepath.EvalSymlinks(joined)
+	if err != nil && !os.IsNotExist(err) {
+		return "", err
+	}
+	if err == nil {
+		rel3, err := filepath.Rel(absRoot, resolved)
+		if err != nil || rel3 == ".." || strings.HasPrefix(rel3, ".."+string(filepath.Separator)) {
+			return "", ErrTraversal
+		}
 	}
 	return joined, nil
 }
