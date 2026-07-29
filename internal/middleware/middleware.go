@@ -66,6 +66,7 @@ func SecurityHeaders(cfg *config.Config) func(http.Handler) http.Handler {
 			h.Set("X-Content-Type-Options", "nosniff")
 			h.Set("Referrer-Policy", "same-origin")
 			h.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+			h.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
 			if !strings.HasPrefix(p, "/api/") {
 				h.Set("Cache-Control", "no-store")
 			}

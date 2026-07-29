@@ -125,6 +125,7 @@ func (s *Server) Routes() http.Handler {
 	authRouter.With(s.Limiter.RateLimit(middleware.KeyByClientIP())).Post("/tailscale", s.handleTailscaleLogin)
 	authRouter.With(s.Limiter.RateLimit(middleware.KeyByClientIP())).Post("/forgot-password", s.handleForgotPassword)
 	authRouter.With(s.Limiter.RateLimit(middleware.KeyByClientIP())).Post("/reset-password", s.handleResetPassword)
+	authRouter.With(s.Limiter.RateLimit(middleware.KeyByClientIP())).Post("/password", s.handleChangePassword)
 	authRouter.Get("/needs-setup", s.handleNeedsSetup)
 	authRouter.Get("/session", s.handleSession)
 	authRouter.Group(func(protected chi.Router) {

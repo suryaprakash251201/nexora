@@ -507,7 +507,7 @@ func (s *Server) startSession(w http.ResponseWriter, r *http.Request, userID str
 		Value:    sess.Token,
 		Path:     "/",
 		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
+		SameSite: http.SameSiteStrictMode,
 		Secure:   s.Cfg.SecureCookies,
 		MaxAge:   int(s.Cfg.SessionLifetime.Seconds()),
 	})
