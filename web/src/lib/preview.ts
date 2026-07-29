@@ -74,8 +74,12 @@ export function needsTranscode(item: { extension: string }): boolean {
   return TRANSCODE_EXT.has(ext);
 }
 
-export function transcodeUrl(rootId: string, path: string): string {
-  return getMediaUrl("/files/transcode", { root: rootId, path });
+export function transcodeUrl(rootId: string, path: string, start?: number): string {
+  const params: Record<string, string | number> = { root: rootId, path };
+  if (start !== undefined && start > 0) {
+    params.start = start;
+  }
+  return getMediaUrl("/files/transcode", params);
 }
 
 let transcodeSupported: boolean | null = null;

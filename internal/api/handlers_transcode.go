@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -154,9 +155,21 @@ func (fw *flushWriter) Write(p []byte) (int, error) {
 // handleTranscode converts an unsupported video (e.g. Matroska/.mkv) into a
 // browser-playable, streamable fragmented MP4 using ffmpeg. The transcoded
 // bytes are piped straight to the client so playback can start immediately.
+//
+// The optional ?start=<seconds> query parameter tells ffmpeg to begin
+// transcoding from a specific time offset (using fast keyframe-seeking via
+// -ss before -i), enabling server-side seeking for the client.
 func (s *Server) handleTranscode(w http.ResponseWriter, r *http.Request) {
 	rootID := queryParam(r, "root", "")
 	rel, err := storage.CleanRelative(queryParam(r, "path", ""))
+
+	// Parse optional start offset (seconds) for server-side seeking.
+	var startOffset float64
+	if startStr := queryParam(r, "start", ""); startStr != "" {
+		if parsed, parseErr := strconv.ParseFloat(startStr, 64); parseErr == nil && parsed > 0 {
+			startOffset = parsed
+		}
+	}
 	if err != nil || rel == "" {
 		writeError(w, http.StatusBadRequest, "invalid_path", "invalid path", middleware.GetRequestID(r.Context()))
 		return
@@ -225,8 +238,17 @@ func (s *Server) handleTranscode(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	cmd := exec.CommandContext(ctx, ffp,
+
+	// Build ffmpeg args. When a start offset is requested, use fast input
+	// seeking (-ss before -i) so ffmpeg jumps to the nearest keyframe and
+	// begins transcoding from there instead of processing the whole file.
+	ffArgs := []string{
 		"-hide_banner", "-loglevel", "warning",
+	}
+	if startOffset > 0 {
+		ffArgs = append(ffArgs, "-ss", fmt.Sprintf("%.3f", startOffset))
+	}
+	ffArgs = append(ffArgs,
 		"-i", inputArg,
 		"-map", "0:v:0", "-map", "0:a:0?",
 		"-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
@@ -237,6 +259,8 @@ func (s *Server) handleTranscode(w http.ResponseWriter, r *http.Request) {
 		"-f", "mp4",
 		"pipe:1",
 	)
+
+	cmd := exec.CommandContext(ctx, ffp, ffArgs...)
 	if inputArg == "pipe:0" {
 		cmd.Stdin = rc
 	}

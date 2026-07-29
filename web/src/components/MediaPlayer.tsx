@@ -758,6 +758,7 @@ function VideoPlayer({ url, item, autoPlay }: { url?: string; item?: FileItem; a
   const [showControls, setShowControls] = useState(true);
   const controlsTimeout = useRef<number>();
   const [fallbackTriggered, setFallbackTriggered] = useState(false);
+  const isTranscode = src?.includes("/files/transcode");
 
   // ── Global media key shortcuts (Tauri) ─────────────────────
   useEffect(() => {
@@ -899,8 +900,8 @@ function VideoPlayer({ url, item, autoPlay }: { url?: string; item?: FileItem; a
       if (tag === "INPUT" || tag === "TEXTAREA") return;
       handleMouseMove();
       switch (e.key) {
-        case "ArrowLeft": e.preventDefault(); v.currentTime = Math.max(0, v.currentTime - 10); break;
-        case "ArrowRight": e.preventDefault(); v.currentTime = Math.min(v.duration || 0, v.currentTime + 10); break;
+        case "ArrowLeft": e.preventDefault(); seek(Math.max(0, (v.currentTime || 0) - 10)); break;
+        case "ArrowRight": e.preventDefault(); seek(Math.min(v.duration || 0, (v.currentTime || 0) + 10)); break;
         case "ArrowUp": e.preventDefault(); changeVol(Math.min(1, v.volume + 0.1)); break;
         case "ArrowDown": e.preventDefault(); changeVol(Math.max(0, v.volume - 0.1)); break;
         case " ": e.preventDefault(); toggle(); break;
@@ -935,7 +936,31 @@ function VideoPlayer({ url, item, autoPlay }: { url?: string; item?: FileItem; a
   };
   const seek = (val: number) => {
     const v = ref.current;
-    if (v) v.currentTime = val;
+    if (!v) { setCur(val); return; }
+
+    // For transcoded streams, check if the target time is already buffered.
+    // If not, reload the stream from the requested offset so the server
+    // (via -ss) starts transcoding from that position.
+    if (isTranscode && val > 0 && v.buffered.length > 0) {
+      let isBuffered = false;
+      for (let i = 0; i < v.buffered.length; i++) {
+        if (val >= v.buffered.start(i) && val <= v.buffered.end(i)) {
+          isBuffered = true;
+          break;
+        }
+      }
+      if (!isBuffered && item) {
+        // Target not buffered — instruct server to seek via ?start= parameter.
+        // Seek 3s before target for context (keyframe rounding).
+        setSrc(transcodeUrl(item.root_id, item.path, Math.max(0, val - 3)));
+        setCur(0);
+        // Video reloads from the new offset; currentTime resets to 0
+        // because ffmpeg already starts at the correct position.
+        return;
+      }
+    }
+
+    v.currentTime = val;
     setCur(val);
   };
   const changeVol = (val: number) => {
@@ -952,7 +977,7 @@ function VideoPlayer({ url, item, autoPlay }: { url?: string; item?: FileItem; a
   const skip = (d: number) => {
     const v = ref.current;
     if (!v) return;
-    v.currentTime = Math.max(0, Math.min(v.duration || 0, v.currentTime + d));
+    seek(Math.max(0, Math.min(v.duration || 0, (v.currentTime || 0) + d)));
   };
   const changeRate = (r: number) => {
     setRate(r);
