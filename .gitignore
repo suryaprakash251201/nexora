@@ -12,7 +12,7 @@ web/dist/
 !.env.example
 
 # Runtime data
-./data/
+data/
 nexora-files/
 nexora-media/
 C/

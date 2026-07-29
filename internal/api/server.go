@@ -70,6 +70,7 @@ func (s *Server) Routes() http.Handler {
 		"/api/v1/auth/forgot-password", "/api/v1/auth/reset-password",
 		"/api/v1/auth/totp/verify-login",
 		"/api/v1/share", "/api/v1/csrf",
+		"/api/v1/files/upload",
 	}
 
 	r.Use(middleware.RequestID)
@@ -82,16 +83,21 @@ func (s *Server) Routes() http.Handler {
 	r.Use(middleware.CSRF(csrfExempt, s.Cfg.SecureCookies))
 	r.Use(auth.SessionAuth(s.Sessions, s.Users))
 
-	// Optional CORS (disabled by default).
-	if len(s.Cfg.CORSOrigins) > 0 {
-		r.Use(cors.Handler(cors.Options{
-			AllowedOrigins:   s.Cfg.CORSOrigins,
-			AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-			AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token", "X-Request-ID"},
-			AllowCredentials: true,
-			MaxAge:           300,
-		}))
+	// CORS — enabled by default with wildcard for desktop/Tailscale clients.
+	// Token-based auth (Authorization header) is used for cross-origin requests,
+	// so AllowCredentials is false unless specific origins are configured.
+	corsOrigins := s.Cfg.CORSOrigins
+	allowCredentials := len(corsOrigins) > 0
+	if len(corsOrigins) == 0 {
+		corsOrigins = []string{"*"}
 	}
+	r.Use(cors.Handler(cors.Options{
+		AllowedOrigins:   corsOrigins,
+		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token", "X-Request-ID"},
+		AllowCredentials: allowCredentials,
+		MaxAge:           300,
+	}))
 
 	// Health endpoints (no auth).
 	r.Get("/healthz", s.handleHealthz)
