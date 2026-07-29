@@ -20,6 +20,7 @@ import {
   Plus,
   MonitorPlay,
   Download,
+  ExternalLink,
 } from "lucide-react";
 import type { FileItem } from "../api/types";
 import { thumbUrl, needsTranscode, transcodeUrl, serverSupportsTranscode, getAudioQuality, rawUrl } from "../lib/preview";
@@ -1073,6 +1074,22 @@ function VideoPlayer({ url, item, autoPlay }: { url?: string; item?: FileItem; a
               <Button variant="primary" onClick={() => item ? startDownload(item.root_id, item.path, item.name) : window.location.href = dlUrl} icon={<Download className="h-4 w-4" />}>
                 Download File
               </Button>
+              {isTauri && (
+                <Button 
+                  variant="secondary" 
+                  onClick={async () => {
+                    try {
+                      const { open } = await import("@tauri-apps/plugin-shell");
+                      await open(dlUrl);
+                    } catch (e) {
+                      console.error("Failed to open externally:", e);
+                    }
+                  }} 
+                  icon={<ExternalLink className="h-4 w-4" />}
+                >
+                  Open in Native Player
+                </Button>
+              )}
             </div>
           </div>
         </div>
@@ -1170,6 +1187,25 @@ function VideoPlayer({ url, item, autoPlay }: { url?: string; item?: FileItem; a
               <Captions className="h-5 w-5 md:h-6 md:w-6" />
             </button>
             <input ref={fileRef} type="file" accept=".vtt,.srt" className="hidden" onChange={onSubtitle} />
+
+            {/* Native Player (Tauri) */}
+            {isTauri && (
+              <button 
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  try {
+                    const { open } = await import("@tauri-apps/plugin-shell");
+                    await open(dlUrl);
+                  } catch (e) {
+                    console.error("Failed to open externally:", e);
+                  }
+                }} 
+                className="p-2 rounded-full hover:bg-white/15 transition-colors hidden md:block" 
+                title="Open in Native Video Player"
+              >
+                <ExternalLink className="h-5 w-5 md:h-6 md:w-6" />
+              </button>
+            )}
 
             {/* Theater Mode */}
             {!full && (

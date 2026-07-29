@@ -241,14 +241,18 @@ func (s *Server) handleTranscode(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// --- Pre-flight codec check (only when we have a real file path) ---
+	var probe *ffprobeOutput
 	if inputArg != "pipe:0" && ffprobeP != "" {
-		probe, pErr := probeFile(ffprobeP, inputArg)
+		p, pErr := probeFile(ffprobeP, inputArg)
 		if pErr != nil {
 			s.Log.Warn("transcode: ffprobe preflight failed, proceeding anyway", "error", pErr)
-		} else if cErr := s.checkCodecSupport(probe); cErr != nil {
-			s.Log.Error("transcode: preflight rejected", "error", cErr)
-			writeError(w, http.StatusUnsupportedMediaType, "unsupported_codec", cErr.Error(), middleware.GetRequestID(r.Context()))
-			return
+		} else {
+			probe = p
+			if cErr := s.checkCodecSupport(probe); cErr != nil {
+				s.Log.Error("transcode: preflight rejected", "error", cErr)
+				writeError(w, http.StatusUnsupportedMediaType, "unsupported_codec", cErr.Error(), middleware.GetRequestID(r.Context()))
+				return
+			}
 		}
 	}
 
@@ -259,6 +263,24 @@ func (s *Server) handleTranscode(w http.ResponseWriter, r *http.Request) {
 	// Kill any existing ffmpeg for this session before creating the new one.
 	// This prevents overlapping processes when the client seeks rapidly.
 	tcm.killSession(sessionID)
+
+	// Determine codecs based on probe to support direct stream (remux) for compatible formats.
+	videoCodec := []string{"-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-vf", "format=yuv420p"}
+	audioCodec := []string{"-c:a", "aac", "-b:a", "128k"}
+
+	if probe != nil {
+		for _, st := range probe.Streams {
+			if st.CodecType == "video" {
+				if (st.CodecName == "h264" || st.CodecName == "hevc" || st.CodecName == "av1") && !strings.Contains(st.PixFmt, "10le") && !strings.Contains(st.PixFmt, "12le") {
+					videoCodec = []string{"-c:v", "copy"}
+				}
+			} else if st.CodecType == "audio" {
+				if st.CodecName == "aac" || st.CodecName == "mp3" || st.CodecName == "opus" {
+					audioCodec = []string{"-c:a", "copy"}
+				}
+			}
+		}
+	}
 
 	// Build ffmpeg args. When a start offset is requested, use fast input
 	// seeking (-ss before -i) so ffmpeg jumps to the nearest keyframe and
@@ -272,9 +294,10 @@ func (s *Server) handleTranscode(w http.ResponseWriter, r *http.Request) {
 	ffArgs = append(ffArgs,
 		"-i", inputArg,
 		"-map", "0:v:0", "-map", "0:a:0?",
-		"-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
-		"-vf", "format=yuv420p",
-		"-c:a", "aac", "-b:a", "128k",
+	)
+	ffArgs = append(ffArgs, videoCodec...)
+	ffArgs = append(ffArgs, audioCodec...)
+	ffArgs = append(ffArgs,
 		"-sn", "-dn",
 		"-movflags", "frag_keyframe+empty_moov",
 		"-f", "mp4",
