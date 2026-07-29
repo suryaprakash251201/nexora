@@ -788,12 +788,14 @@ function VideoPlayer({ url, item, autoPlay }: { url?: string; item?: FileItem; a
         setLive(false);
         setFallbackTriggered(false);
       } else {
-        // Browser: attempt server-side transcoding right away
+        // Browser: use transcoded stream but treat as regular video (not live)
+        // so the seekable timeline is available. The fragmented MP4 output
+        // from ffmpeg allows seeking within buffered ranges.
         serverSupportsTranscode().then((ok) => {
           if (cancelled) return;
           if (ok) {
             setSrc(transcodeUrl(item.root_id, item.path));
-            setLive(true);
+            setLive(false);
           } else {
             setSrc(url);
             setLive(false);
@@ -1020,7 +1022,7 @@ function VideoPlayer({ url, item, autoPlay }: { url?: string; item?: FileItem; a
         src={src}
         controls={false}
         autoPlay={autoPlay}
-        className={full ? "w-full h-full object-contain" : theater ? "w-full h-full max-h-screen object-contain rounded-xl shadow-2xl" : "w-full aspect-video object-cover hover:object-contain transition-all duration-500"}
+        className={full ? "w-full h-full object-contain" : theater ? "w-full h-full max-h-screen object-contain rounded-xl shadow-2xl" : "w-full max-h-full object-contain transition-all duration-500"}
         onClick={toggle}
       >
         {subUrl && <track kind="subtitles" src={subUrl} srcLang="en" label="Subtitles" default />}
