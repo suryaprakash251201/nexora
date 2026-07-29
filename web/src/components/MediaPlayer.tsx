@@ -758,6 +758,9 @@ function VideoPlayer({ url, item, autoPlay }: { url?: string; item?: FileItem; a
   const [showControls, setShowControls] = useState(true);
   const controlsTimeout = useRef<number>();
   const [fallbackTriggered, setFallbackTriggered] = useState(false);
+  const [transcodeSession] = useState(() =>
+    typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : ""
+  );
   const isTranscode = src?.includes("/files/transcode");
 
   // ── Global media key shortcuts (Tauri) ─────────────────────
@@ -789,13 +792,12 @@ function VideoPlayer({ url, item, autoPlay }: { url?: string; item?: FileItem; a
         setLive(false);
         setFallbackTriggered(false);
       } else {
-        // Browser: use transcoded stream but treat as regular video (not live)
-        // so the seekable timeline is available. The fragmented MP4 output
-        // from ffmpeg allows seeking within buffered ranges.
+        // Browser: use transcoded stream with session-based seeking.
+        // The session ID lets the server kill old ffmpeg processes explicitly.
         serverSupportsTranscode().then((ok) => {
           if (cancelled) return;
           if (ok) {
-            setSrc(transcodeUrl(item.root_id, item.path));
+            setSrc(transcodeUrl(item.root_id, item.path, { session: transcodeSession }));
             setLive(false);
           } else {
             setSrc(url);
@@ -820,7 +822,7 @@ function VideoPlayer({ url, item, autoPlay }: { url?: string; item?: FileItem; a
         setFallbackTriggered(true);
         serverSupportsTranscode().then((ok) => {
           if (ok) {
-            setSrc(transcodeUrl(item.root_id, item.path));
+            setSrc(transcodeUrl(item.root_id, item.path, { session: transcodeSession }));
             setLive(true);
           } else {
             setErrored(true);
@@ -951,8 +953,12 @@ function VideoPlayer({ url, item, autoPlay }: { url?: string; item?: FileItem; a
       }
       if (!isBuffered && item) {
         // Target not buffered — instruct server to seek via ?start= parameter.
-        // Seek 3s before target for context (keyframe rounding).
-        setSrc(transcodeUrl(item.root_id, item.path, Math.max(0, val - 3)));
+        // The same session ID is reused so the server kills the old ffmpeg
+        // before starting the new one from the requested position.
+        setSrc(transcodeUrl(item.root_id, item.path, {
+          start: Math.max(0, val - 3), // 3s before target for keyframe rounding
+          session: transcodeSession,
+        }));
         setCur(0);
         // Video reloads from the new offset; currentTime resets to 0
         // because ffmpeg already starts at the correct position.
