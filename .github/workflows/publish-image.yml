@@ -13,9 +13,8 @@ on:
         required: false
         default: ''
 
-permissions:
-  contents: read
-  packages: write
+# Default permissions: none — each job declares its own needs.
+permissions: {}
 
 concurrency:
   group: publish-image-${{ github.ref }}
@@ -23,6 +22,10 @@ concurrency:
 
 jobs:
   publish:
+    permissions:
+      contents: read
+      packages: write
+
     runs-on: ubuntu-latest
 
     steps:
@@ -31,17 +34,25 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Determine version
+      - name: Sanitize and determine version
         id: version
+        env:
+          # Read user input through an env var to prevent shell injection.
+          # GitHub expression interpolation is evaluated before the shell
+          # runs, so even quoting is insufficient if the value contains
+          # newlines. Using an env var as intermediary ensures the shell
+          # treats the value as a single scalar.
+          RAW_VERSION: ${{ github.event.inputs.version || '' }}
         run: |
-          if [ -n "${{ github.event.inputs.version }}" ]; then
-            echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          # Sanitize: only allow semver-like values (alphanum, dots, hyphens, plus)
+          SANITIZED=$(echo "${RAW_VERSION}" | grep -oE '^[a-zA-Z0-9._\-+]+$' || echo "")
+          if [ -n "${SANITIZED}" ]; then
+            echo "VERSION=${SANITIZED}" >> "$GITHUB_OUTPUT"
           elif [[ "${{ github.ref }}" == refs/tags/v* ]]; then
-            echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+            echo "VERSION=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
           else
-            # Use short SHA for main branch builds
             SHA=$(git rev-parse --short HEAD)
-            echo "VERSION=latest-${SHA}" >> $GITHUB_OUTPUT
+            echo "VERSION=latest-${SHA}" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Set up QEMU
