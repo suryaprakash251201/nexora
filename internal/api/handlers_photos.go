@@ -3,6 +3,8 @@ package api
 import (
 	"net/http"
 	"strconv"
+	
+	"github.com/nexora/nexora/internal/search"
 )
 
 // handleGetPhotosTimeline returns a paginated list of photos from all accessible roots
@@ -35,7 +37,7 @@ func (s *Server) handleGetPhotosTimeline(w http.ResponseWriter, r *http.Request)
 	}
 
 	if photos == nil {
-		photos = []interface{}{} // empty array for JSON
+		photos = []search.PhotoResult{} // empty array for JSON
 	}
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
