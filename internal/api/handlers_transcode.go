@@ -3,6 +3,8 @@ package api
 import (
 	"bytes"
 	"context"
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"os/exec"
@@ -20,15 +22,118 @@ var transcodeSem = make(chan struct{}, 2)
 var (
 	ffmpegOnce sync.Once
 	ffmpegBin  string
+	ffprobeBin string
 	ffmpegErr  error
 )
 
 // detectFfmpeg locates the ffmpeg binary once and caches the result.
-func detectFfmpeg() (string, error) {
+func detectFfmpeg() (string, string, error) {
 	ffmpegOnce.Do(func() {
 		ffmpegBin, ffmpegErr = exec.LookPath("ffmpeg")
+		if ffmpegErr == nil {
+			ffprobeBin, _ = exec.LookPath("ffprobe")
+		}
 	})
-	return ffmpegBin, ffmpegErr
+	return ffmpegBin, ffprobeBin, ffmpegErr
+}
+
+// knownUnsupportedCodecs lists codecs that FFmpeg commonly cannot decode or
+// that would produce unwatchable output. This is used as a pre-flight check.
+var knownUnsupportedCodecs = map[string]string{
+	"dts":              "DTS audio is not supported — use a file with AAC or MP3 audio",
+	"dca":              "DTS audio is not supported — use a file with AAC or MP3 audio",
+	"truehd":           "Dolby TrueHD audio is not supported",
+	"mlp":              "MLP (Meridian Lossless Packing) audio is not supported",
+	"wmav1":            "Windows Media Audio 1 is not supported",
+	"wmav2":            "Windows Media Audio 2 is not supported",
+	"wmapro":           "Windows Media Audio Pro is not supported",
+	"alac":             "ALAC audio is not supported — use a file with AAC or MP3",
+	"dolbyvision":      "Dolby Vision video is not supported",
+	"vp6":              "VP6 video is not supported",
+	"vp6f":             "VP6 video is not supported",
+	"svq1":             "Sorenson Video 1 is not supported",
+	"svq3":             "Sorenson Video 3 is not supported",
+	"wmv3":             "Windows Media Video 9 is not supported",
+	"vc1":              "VC-1 video is not supported",
+	"indeo5":           "Indeo 5 video is not supported",
+	"cook":             "Cooker audio is not supported",
+	"truespeech":       "TrueSpeech audio is not supported",
+	"qdmc":             "QDesign Music audio is not supported",
+	"qdm2":             "QDesign Music 2 audio is not supported",
+	"siren":            "Siren audio is not supported",
+	"atrac3":           "ATRAC3 audio is not supported",
+	"atrac3p":          "ATRAC3+ audio is not supported",
+	"atrac9":           "ATRAC9 audio is not supported",
+	"opus":             "Opus audio requires a compatible decoder (not available)",
+	// 10-bit HEVC is supported via pixel format conversion; warn but allow.
+}
+
+// ffprobeStream represents a single stream from ffprobe JSON output.
+type ffprobeStream struct {
+	Index       int    `json:"index"`
+	CodecType   string `json:"codec_type"`
+	CodecName   string `json:"codec_name"`
+	CodecLongName string `json:"codec_long_name"`
+	Profile     string `json:"profile"`
+	PixFmt      string `json:"pix_fmt"`
+	Width       int    `json:"width"`
+	Height      int    `json:"height"`
+	SampleRate  string `json:"sample_rate"`
+	Channels    int    `json:"channels"`
+}
+
+type ffprobeOutput struct {
+	Streams []ffprobeStream `json:"streams"`
+}
+
+// probeFile runs ffprobe on the input file and returns parsed stream info.
+func probeFile(ffprobe, input string) (*ffprobeOutput, error) {
+	cmd := exec.Command(ffprobe,
+		"-v", "quiet",
+		"-print_format", "json",
+		"-show_streams",
+		input,
+	)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("ffprobe failed: %w — %s", err, strings.TrimSpace(stderr.String()))
+	}
+	var out ffprobeOutput
+	if err := json.Unmarshal(stdout.Bytes(), &out); err != nil {
+		return nil, fmt.Errorf("ffprobe JSON parse error: %w", err)
+	}
+	return &out, nil
+}
+
+// checkCodecSupport examines ffprobe output and returns a user-friendly error
+// if any stream uses an unsupported codec. It also logs warnings for known
+// edge-cases (e.g. 10-bit HEVC).
+func (s *Server) checkCodecSupport(probe *ffprobeOutput) error {
+	var unsupported []string
+	for _, st := range probe.Streams {
+		codec := strings.ToLower(st.CodecName)
+		if reason, ok := knownUnsupportedCodecs[codec]; ok {
+			unsupported = append(unsupported, fmt.Sprintf(
+				"stream #%d (%s): %s (%s)",
+				st.Index, st.CodecType, st.CodecLongName, reason,
+			))
+			continue
+		}
+		// Warn about 10-bit video (needs pix_fmt conversion).
+		if st.CodecType == "video" && (strings.Contains(st.PixFmt, "10le") || strings.Contains(st.PixFmt, "12le")) {
+			s.Log.Warn("transcode: high-bit-depth video, will convert to 8-bit",
+				"codec", st.CodecName,
+				"pix_fmt", st.PixFmt,
+				"stream", st.Index,
+			)
+		}
+	}
+	if len(unsupported) > 0 {
+		return fmt.Errorf("unsupported codec(s): %s", strings.Join(unsupported, "; "))
+	}
+	return nil
 }
 
 // flushWriter streams ffmpeg's stdout to the client and flushes so the
@@ -78,7 +183,7 @@ func (s *Server) handleTranscode(w http.ResponseWriter, r *http.Request) {
 		s.recordRecent(r, rootID, rel, "access")
 	}
 
-	ffp, err := detectFfmpeg()
+	ffp, ffprobeP, err := detectFfmpeg()
 	if err != nil {
 		writeError(w, http.StatusNotImplemented, "transcode_unavailable", "transcoding is not available on this server (ffmpeg not installed)", middleware.GetRequestID(r.Context()))
 		return
@@ -107,12 +212,25 @@ func (s *Server) handleTranscode(w http.ResponseWriter, r *http.Request) {
 		rc.Close()
 	}
 
+	// --- Pre-flight codec check (only when we have a real file path) ---
+	if inputArg != "pipe:0" && ffprobeP != "" {
+		probe, pErr := probeFile(ffprobeP, inputArg)
+		if pErr != nil {
+			s.Log.Warn("transcode: ffprobe preflight failed, proceeding anyway", "error", pErr)
+		} else if cErr := s.checkCodecSupport(probe); cErr != nil {
+			s.Log.Error("transcode: preflight rejected", "error", cErr)
+			writeError(w, http.StatusUnsupportedMediaType, "unsupported_codec", cErr.Error(), middleware.GetRequestID(r.Context()))
+			return
+		}
+	}
+
 	ctx := r.Context()
 	cmd := exec.CommandContext(ctx, ffp,
-		"-hide_banner", "-loglevel", "error",
+		"-hide_banner", "-loglevel", "warning",
 		"-i", inputArg,
 		"-map", "0:v:0", "-map", "0:a:0?",
-		"-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p",
+		"-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+		"-vf", "format=yuv420p",
 		"-c:a", "aac", "-b:a", "128k",
 		"-sn", "-dn",
 		"-movflags", "frag_keyframe+empty_moov",

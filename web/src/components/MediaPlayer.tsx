@@ -834,10 +834,10 @@ function VideoPlayer({ url, item, autoPlay }: { url?: string; item?: FileItem; a
       setErrored(true);
       setErroredMsg(
         live
-          ? "Transcoding failed — the file may use a codec ffmpeg can't handle."
+          ? "Transcoding failed — the file may contain an unsupported codec. Check the server logs for details."
           : isTauri
             ? "Your system doesn't have the required video codec for this file. Try downloading it instead."
-            : "This video can't be played in your browser."
+            : "This video can't be streamed directly. If server transcoding is enabled, try again later."
       );
     };
     v.addEventListener("timeupdate", onTime);

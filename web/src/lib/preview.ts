@@ -68,11 +68,9 @@ const TRANSCODE_EXT = new Set([
 
 export function needsTranscode(item: { extension: string }): boolean {
   const ext = (item.extension || "").toLowerCase();
-  
-  // In Tauri (or if specifically requested), we can attempt to play mkv natively 
-  // bypassing the server transcode, since some webviews support h264 inside mkv.
-  // We removed "mkv" from TRANSCODE_EXT entirely to allow native playback attempts.
-  
+  // MKV is in TRANSCODE_EXT so browsers always route to server-side transcoding.
+  // In Tauri (WebView2), direct playback is attempted first as a fallback since
+  // system codecs often handle H.264/AAC inside MKV natively.
   return TRANSCODE_EXT.has(ext);
 }
 
