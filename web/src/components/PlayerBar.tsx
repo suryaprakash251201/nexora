@@ -82,6 +82,17 @@ export default function PlayerBar() {
   useEffect(() => {
     const a = audioRef.current;
     if (!a || !url) return;
+    // Validate the URL scheme — only http(s) and blob are accepted.
+    try {
+      const parsed = new URL(url, window.location.origin);
+      if (!["http:", "https:", "blob:"].includes(parsed.protocol)) {
+        console.warn("PlayerBar: rejecting unsafe URL protocol", parsed.protocol);
+        return;
+      }
+    } catch {
+      console.warn("PlayerBar: invalid URL", url);
+      return;
+    }
     a.src = url;
     a.load();
     if (usePlayer.getState().isPlaying) a.play().catch(() => {});
