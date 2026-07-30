@@ -1,7 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { motion } from "motion/react";
-import { Search, Clock, Sparkles, FileText, Music, Film, Plus, FilePlus, Upload, HardDrive, FolderPlus, Play, Sun, Moon, Star, FolderOpen, Share, TrendingUp } from "lucide-react";
-import type { RecentItem, FileItem, HomeData } from "../api/types";
+import { Search, Clock, Sparkles, FileText, Music, Film, Plus, FilePlus, Upload, HardDrive, FolderPlus, Play, Sun, FolderOpen, Share, TrendingUp, Sunrise, Sunset, CloudMoon } from "lucide-react";
+import type { RecentItem, FileItem, HomeData, User } from "../api/types";
 import { FileThumb } from "./FileThumb";
 import { formatRelative } from "../lib/format";
 import { Input } from "./ui/Input";
@@ -244,8 +244,9 @@ function AddTile({ icon, label, onClick }: { icon: React.ReactNode; label: strin
 }
 
 export default function HomePanel({
-  data, isLoading, isAdmin, onSearch, onOpenRecent, onUpload, onNewFolder, onNewFile, onNewRoot, onOpenPlaylist,
+  user, data, isLoading, isAdmin, onSearch, onOpenRecent, onUpload, onNewFolder, onNewFile, onNewRoot, onOpenPlaylist,
 }: {
+  user?: User;
   data?: HomeData;
   isLoading: boolean;
   isAdmin: boolean;
@@ -258,17 +259,33 @@ export default function HomePanel({
   onOpenPlaylist: () => void;
 }) {
   const [q, setQ] = useState("");
-  const [greeting, setGreeting] = useState("Good day");
-  const [greetingIcon, setGreetingIcon] = useState<React.ReactNode>(<Star className="h-8 w-8" />);
+  const [greeting, setGreeting] = useState("Good morning");
+  const [period, setPeriod] = useState<"morning" | "afternoon" | "evening" | "night">("morning");
+
+  // Adaptive greeting colors with time-based gradients
+  const greetingColors = useMemo(() => ({
+    morning: { from: "from-amber-500", via: "via-orange-400", to: "to-rose-400", icon: Sunrise, label: "Good morning" },
+    afternoon: { from: "from-sky-500", via: "via-blue-400", to: "to-indigo-400", icon: Sun, label: "Good afternoon" },
+    evening: { from: "from-violet-500", via: "via-purple-400", to: "to-pink-400", icon: Sunset, label: "Good evening" },
+    night: { from: "from-indigo-500", via: "via-blue-500", to: "to-cyan-400", icon: CloudMoon, label: "Late night" },
+  }), []);
 
   useEffect(() => {
     const hour = new Date().getHours();
-    if (hour < 5) { setGreeting("Late night"); setGreetingIcon(<Moon className="h-8 w-8" />); }
-    else if (hour < 12) { setGreeting("Good morning"); setGreetingIcon(<Sun className="h-8 w-8" />); }
-    else if (hour < 18) { setGreeting("Good afternoon"); setGreetingIcon(<Sun className="h-8 w-8" />); }
-    else if (hour < 22) { setGreeting("Good evening"); setGreetingIcon(<Moon className="h-8 w-8" />); }
-    else { setGreeting("Late night"); setGreetingIcon(<Moon className="h-8 w-8" />); }
-  }, []);
+    if (hour < 5) { setPeriod("night"); setGreeting("Late night"); }
+    else if (hour < 12) { setPeriod("morning"); setGreeting("Good morning"); }
+    else if (hour < 18) { setPeriod("afternoon"); setGreeting("Good afternoon"); }
+    else if (hour < 22) { setPeriod("evening"); setGreeting("Good evening"); }
+    else { setPeriod("night"); setGreeting("Late night"); }
+  }, [greetingColors]);
+
+  const GreetingIcon = greetingColors[period]?.icon || Sun;
+
+  // Animated greeting words — split into tokens for staggered text animation
+  const displayName = user?.display_name || user?.username || "there";
+  const greetingWords = useMemo(() => {
+    return [...greeting.split(" "), "", displayName];
+  }, [greeting, displayName]);
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -299,16 +316,48 @@ export default function HomePanel({
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-10 md:py-14 relative z-10">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, ease: [0.25, 0.1, 0.25, 1] }}>
             <div className="flex items-center gap-4 mb-2">
-              <div className="p-3 rounded-2xl bg-accent/10 text-accent">
-                {greetingIcon}
-              </div>
-              <div>
-                <h1 className="text-2xl sm:text-3xl md:text-4xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-text-primary via-accent to-accent-secondary">
-                  {greeting}
+              <motion.div
+                initial={{ scale: 0, rotate: -30 }}
+                animate={{ scale: 1, rotate: 0 }}
+                transition={{ type: "spring", stiffness: 260, damping: 20, delay: 0.1 }}
+                className="p-3 rounded-2xl"
+                style={{ backgroundColor: `color-mix(in srgb, var(--accent) 15%, transparent)`, color: "var(--accent)" }}
+              >
+                <GreetingIcon className="h-8 w-8" />
+              </motion.div>
+              <div className="overflow-hidden">
+                <h1 className="text-2xl sm:text-3xl md:text-4xl font-extrabold tracking-tight">
+                  <span className="inline-flex flex-wrap gap-x-3">
+                    {greetingWords.map((word, i) => (
+                      <motion.span
+                        key={i}
+                        initial={{ y: 50, opacity: 0 }}
+                        animate={{ y: 0, opacity: 1 }}
+                        transition={{
+                          duration: 0.5,
+                          delay: i * 0.15,
+                          ease: [0.25, 0.1, 0.25, 1],
+                        }}
+                        className={cn(
+                          "bg-clip-text text-transparent",
+                          i === greetingWords.length - 1
+                            ? `${greetingColors[period]?.from} ${greetingColors[period]?.via} ${greetingColors[period]?.to} bg-gradient-to-r`
+                            : "bg-gradient-to-r from-foreground via-foreground/90 to-foreground/80"
+                        )}
+                      >
+                        {word}
+                      </motion.span>
+                    ))}
+                  </span>
                 </h1>
-                <p className="text-content-muted text-base md:text-lg max-w-2xl">
+                <motion.p
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 1.0, duration: 0.4 }}
+                  className="text-content-muted text-base md:text-lg max-w-2xl"
+                >
                   Pick up where you left off or discover new files.
-                </p>
+                </motion.p>
               </div>
             </div>
           </motion.div>

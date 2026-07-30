@@ -53,10 +53,11 @@ type Service struct {
 	roots *storage.RootService
 	log   *logger.Logger
 
-	mu       sync.Mutex
-	scanning bool
-	lastScan time.Time
-	indexed  int64
+	mu            sync.Mutex
+	scanning      bool
+	mediaScanning bool
+	lastScan      time.Time
+	indexed       int64
 }
 
 // NewService constructs the search service.

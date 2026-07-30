@@ -15,16 +15,16 @@ import (
 // and extracts their EXIF data.
 func (s *Service) ScanMediaMetadata(ctx context.Context) {
 	s.mu.Lock()
-	if s.scanning { // Reuse the scanning lock or make a new one? Let's make a new one or just use a simple flag.
+	if s.mediaScanning {
 		s.mu.Unlock()
 		return
 	}
-	s.scanning = true
+	s.mediaScanning = true
 	s.mu.Unlock()
 
 	defer func() {
 		s.mu.Lock()
-		s.scanning = false
+		s.mediaScanning = false
 		s.mu.Unlock()
 	}()
 

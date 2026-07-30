@@ -1,4 +1,4 @@
-import { Trash2, Plus, Share2, Clock, Star, Search, Shield, ListMusic, Home, PanelLeftClose, PanelLeftOpen, LogOut, Filter } from "lucide-react";
+import { Trash2, Plus, Share2, Clock, Star, Search, Shield, ListMusic, Home, PanelLeftClose, PanelLeftOpen, LogOut } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import type { Root } from "../api/types";
 import { rootIcon } from "../lib/rootIcons";
@@ -7,7 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { formatBytes } from "../lib/format";
 
-export type SidebarView = "home" | "files" | "trash" | "favorites" | "recents" | "shares" | "playlists" | "search" | "admin" | "video" | "image" | "saved-searches" | "analytics" | "photos";
+export type SidebarView = "home" | "files" | "trash" | "favorites" | "recents" | "shares" | "playlists" | "search" | "admin" | "video" | "image" | "analytics" | "photos";
 
 const viewColors: Record<string, string> = {
   home: "#5B8CFF",
@@ -30,7 +30,7 @@ const NavItem = ({ v, icon, label, isActive, badge, collapsed, onSelectView }: {
     <button onClick={() => onSelectView(v)} title={collapsed ? label : undefined}
       className={cn("relative w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-sm font-medium transition-all duration-200 min-h-[44px] group overflow-hidden", 
         collapsed ? "justify-center px-0" : "",
-        isActive ? "bg-white/[0.04] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]" : "hover:bg-white/[0.02]"
+        isActive ? "bg-glass-bg-subtle shadow-sm" : "hover:bg-glass-bg-subtle/50"
       )}
     >
       {isActive && (
@@ -60,7 +60,7 @@ const NavItem = ({ v, icon, label, isActive, badge, collapsed, onSelectView }: {
           )}
         </AnimatePresence>
         {!collapsed && badge !== undefined && badge > 0 && (
-          <span className="ml-auto px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-white/[0.06] text-text-tertiary border border-white/[0.04]">
+          <span className="ml-auto px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-glass-bg-subtle text-text-tertiary border border-glass-border-soft">
             {badge > 99 ? "99+" : badge}
           </span>
         )}
@@ -102,7 +102,7 @@ export default function Sidebar({
       <motion.aside
         animate={{ width: collapsed ? 72 : 256 }}
         transition={{ duration: 0.25, ease: [0.25, 0.1, 0.25, 1] }}
-        className={cn("shrink-0 glass-strong flex-col h-full z-50 overflow-hidden border-r border-white/[0.06] relative hidden md:flex", collapsed ? "items-center" : "")}
+        className={cn("shrink-0 glass-strong flex-col h-full z-50 overflow-hidden border-r border-glass-border-soft relative hidden md:flex", collapsed ? "items-center" : "")}
       >
         <div className="absolute inset-0 bg-gradient-to-b from-white/[0.02] via-transparent to-transparent pointer-events-none" />
         <div className={cn("flex items-center gap-3 mb-4 mt-3", collapsed ? "justify-center px-0" : "px-4 w-full")}>
@@ -141,17 +141,15 @@ export default function Sidebar({
         <nav aria-label="Main navigation" className={cn("flex-1 overflow-y-auto space-y-0.5 hide-scrollbar", collapsed ? "px-2 w-full" : "px-2 w-full")}>
           <NavItem v="home" icon={<Home className="w-[18px] h-[18px]" />} label="Home" isActive={view === "home"} collapsed={collapsed} onSelectView={onSelectView} />
           <NavItem v="search" icon={<Search className="w-[18px] h-[18px]" />} label="Search" isActive={view === "search"} collapsed={collapsed} onSelectView={onSelectView} />
-          <NavItem v="saved-searches" icon={<Filter className="w-[18px] h-[18px]" />} label="Smart Folders" isActive={view === "saved-searches"} collapsed={collapsed} onSelectView={onSelectView} />
           <NavItem v="analytics" icon={<svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18" /></svg>} label="Analytics" isActive={view === "analytics"} collapsed={collapsed} onSelectView={onSelectView} />
           <NavItem v="photos" icon={<svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2" strokeWidth={2}/><circle cx="8.5" cy="8.5" r="1.5" strokeWidth={2}/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 15l-5-5L5 21" /></svg>} label="Photos" isActive={view === "photos"} collapsed={collapsed} onSelectView={onSelectView} />
-          <div className="my-1.5 mx-3 h-px bg-white/[0.06]" />
-        
+          <div className="my-1.5 mx-3 h-px bg-glass-border-soft" />
           <NavItem v="recents" icon={<Clock className="w-[18px] h-[18px]" />} label="Recent" isActive={view === "recents"} collapsed={collapsed} onSelectView={onSelectView} />
           <NavItem v="favorites" icon={<Star className="w-[18px] h-[18px]" />} label="Favorites" isActive={view === "favorites"} badge={badgeCounts.favorites} collapsed={collapsed} onSelectView={onSelectView} />
           <NavItem v="shares" icon={<Share2 className="w-[18px] h-[18px]" />} label="Shared" isActive={view === "shares"} badge={badgeCounts.shares} collapsed={collapsed} onSelectView={onSelectView} />
           <NavItem v="playlists" icon={<ListMusic className="w-[18px] h-[18px]" />} label="Playlists" isActive={view === "playlists"} collapsed={collapsed} onSelectView={onSelectView} />
         
-          <div className="my-1.5 mx-3 h-px bg-white/[0.06]" />
+          <div className="my-1.5 mx-3 h-px bg-glass-border-soft" />
           <NavItem v="trash" icon={<Trash2 className="w-[18px] h-[18px]" />} label="Trash" isActive={view === "trash"} badge={badgeCounts.trash} collapsed={collapsed} onSelectView={onSelectView} />
 
           {roots.map((r) => {
@@ -189,7 +187,7 @@ export default function Sidebar({
 
         <div className={cn("mt-auto flex flex-col gap-2 w-full", collapsed ? "p-2" : "p-2")}>
           {!collapsed && (
-            <div className="px-3 py-2.5 rounded-xl glass-subtle border border-white/[0.06] mb-1">
+            <div className="px-3 py-2.5 rounded-xl glass-subtle border border-glass-border-soft mb-1">
               <div className="flex justify-between text-[11px] mb-1.5 font-medium">
                 <span className="text-text-tertiary">Storage</span>
                 <span className="text-text-secondary">

@@ -65,7 +65,7 @@ jobs:
         working-directory: ./desktop
 
       - name: build tauri app
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
@@ -80,7 +80,7 @@ jobs:
 
       - name: upload linux bundles
         if: startsWith(matrix.platform, 'ubuntu')
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: nexora-desktop-${{ matrix.platform }}
           path: |
@@ -92,7 +92,7 @@ jobs:
 
       - name: upload windows bundles
         if: matrix.platform == 'windows-latest'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: nexora-desktop-${{ matrix.platform }}
           path: |

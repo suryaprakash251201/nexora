@@ -86,15 +86,22 @@ func (s *Server) Routes() http.Handler {
 	// CORS — enabled by default with wildcard for desktop/Tailscale clients.
 	// Token-based auth (Authorization header) is used for cross-origin requests,
 	// so AllowCredentials is false unless specific origins are configured.
+	// When using wildcard origins, the Authorization header is NOT exposed to
+	// prevent cross-origin token theft from arbitrary websites.
 	corsOrigins := s.Cfg.CORSOrigins
 	allowCredentials := len(corsOrigins) > 0
-	if len(corsOrigins) == 0 {
+	wildcard := len(corsOrigins) == 0
+	if wildcard {
 		corsOrigins = []string{"*"}
+	}
+	allowedHeaders := []string{"Accept", "Content-Type", "X-CSRF-Token", "X-Request-ID"}
+	if !wildcard {
+		allowedHeaders = append(allowedHeaders, "Authorization")
 	}
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   corsOrigins,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token", "X-Request-ID"},
+		AllowedHeaders:   allowedHeaders,
 		AllowCredentials: allowCredentials,
 		MaxAge:           300,
 	}))
