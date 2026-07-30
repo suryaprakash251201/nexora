@@ -300,20 +300,6 @@ export default function FileBrowser({
     <div ref={dropZoneRef} className="flex-1 overflow-auto hide-scrollbar">
       {viewMode === "grid" ? (
         <>
-          {selectMode && items.length > 0 && (
-            <div className="flex items-center gap-3 px-6 py-2 border-b border-glass-border-soft bg-glass-bg-subtle backdrop-blur-sm">
-              <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={allSelected}
-                  onChange={toggleSelectAll}
-                  className={cn("rounded border-2 border-glass-border bg-glass-bg text-accent focus:ring-accent cursor-pointer transition-all", dc.checkbox[d])}
-                />
-                <span className="font-medium text-text-secondary">{allSelected ? "Deselect all" : "Select all"}</span>
-              </label>
-              <span className="text-xs text-text-tertiary">{selection.size} of {items.length} selected</span>
-            </div>
-          )}
           <motion.div
             variants={staggerContainer}
             initial="initial"
