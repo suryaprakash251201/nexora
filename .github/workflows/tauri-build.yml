@@ -8,10 +8,13 @@ on:
       - 'v*'
   workflow_dispatch:
 
+# Default permissions: none — each job declares only what it needs.
+permissions: {}
+
 jobs:
   build-tauri:
     permissions:
-      contents: write
+      contents: write    # needed by tauri-action to create releases
     strategy:
       fail-fast: false
       matrix:
@@ -25,10 +28,10 @@ jobs:
 
     runs-on: ${{ matrix.platform }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v4
 
       - name: setup node
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@v4
         with:
           node-version: 22
 
@@ -57,9 +60,7 @@ jobs:
 
       - name: generate app icons from favicon
         run: |
-          # favicon.svg is in web/public/, which is a sibling of desktop/
           cp ../web/public/favicon.svg src-tauri/icons/app-icon.svg
-          # Generate all platform icons using Tauri CLI
           npx --yes @tauri-apps/cli icon src-tauri/icons/app-icon.svg -o src-tauri/icons
         working-directory: ./desktop
 

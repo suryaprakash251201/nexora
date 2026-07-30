@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -154,11 +155,38 @@ func (fw *flushWriter) Write(p []byte) (int, error) {
 // handleTranscode converts an unsupported video (e.g. Matroska/.mkv) into a
 // browser-playable, streamable fragmented MP4 using ffmpeg. The transcoded
 // bytes are piped straight to the client so playback can start immediately.
+//
+// Parameters:
+//   - root, path   — file identifier (required)
+//   - session      — client-generated UUID for session management (required)
+//   - start        — seek offset in seconds (optional, default 0)
+//
+// The session parameter lets the server explicitly kill the previous ffmpeg
+// process when the client seeks, rather than relying on HTTP connection abort.
+// Clients should generate a UUID via crypto.randomUUID() and reuse it across
+// seeks for the same playback session.
 func (s *Server) handleTranscode(w http.ResponseWriter, r *http.Request) {
+	// Ensure the stale-session cleanup goroutine is running.
+	tcm.startCleanup()
+
 	rootID := queryParam(r, "root", "")
 	rel, err := storage.CleanRelative(queryParam(r, "path", ""))
+	sessionID := queryParam(r, "session", "")
+
+	// Parse optional start offset (seconds) for server-side seeking.
+	var startOffset float64
+	if startStr := queryParam(r, "start", ""); startStr != "" {
+		if parsed, parseErr := strconv.ParseFloat(startStr, 64); parseErr == nil && parsed > 0 {
+			startOffset = parsed
+		}
+	}
+
 	if err != nil || rel == "" {
 		writeError(w, http.StatusBadRequest, "invalid_path", "invalid path", middleware.GetRequestID(r.Context()))
+		return
+	}
+	if sessionID == "" {
+		writeError(w, http.StatusBadRequest, "missing_session", "session parameter is required", middleware.GetRequestID(r.Context()))
 		return
 	}
 	acc, err := s.resolveAccess(r, rootID, false)
@@ -213,33 +241,76 @@ func (s *Server) handleTranscode(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// --- Pre-flight codec check (only when we have a real file path) ---
+	var probe *ffprobeOutput
 	if inputArg != "pipe:0" && ffprobeP != "" {
-		probe, pErr := probeFile(ffprobeP, inputArg)
+		p, pErr := probeFile(ffprobeP, inputArg)
 		if pErr != nil {
 			s.Log.Warn("transcode: ffprobe preflight failed, proceeding anyway", "error", pErr)
-		} else if cErr := s.checkCodecSupport(probe); cErr != nil {
-			s.Log.Error("transcode: preflight rejected", "error", cErr)
-			writeError(w, http.StatusUnsupportedMediaType, "unsupported_codec", cErr.Error(), middleware.GetRequestID(r.Context()))
-			return
+		} else {
+			probe = p
+			if cErr := s.checkCodecSupport(probe); cErr != nil {
+				s.Log.Error("transcode: preflight rejected", "error", cErr)
+				writeError(w, http.StatusUnsupportedMediaType, "unsupported_codec", cErr.Error(), middleware.GetRequestID(r.Context()))
+				return
+			}
 		}
 	}
 
-	ctx := r.Context()
-	cmd := exec.CommandContext(ctx, ffp,
+	// Create a cancellable context for this session.
+	ctx, cancel := context.WithCancel(r.Context())
+	defer cancel()
+
+	// Kill any existing ffmpeg for this session before creating the new one.
+	// This prevents overlapping processes when the client seeks rapidly.
+	tcm.killSession(sessionID)
+
+	// Determine codecs based on probe to support direct stream (remux) for compatible formats.
+	videoCodec := []string{"-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-vf", "format=yuv420p"}
+	audioCodec := []string{"-c:a", "aac", "-b:a", "128k"}
+
+	if probe != nil {
+		for _, st := range probe.Streams {
+			if st.CodecType == "video" {
+				if (st.CodecName == "h264" || st.CodecName == "hevc" || st.CodecName == "av1") && !strings.Contains(st.PixFmt, "10le") && !strings.Contains(st.PixFmt, "12le") {
+					videoCodec = []string{"-c:v", "copy"}
+				}
+			} else if st.CodecType == "audio" {
+				if st.CodecName == "aac" || st.CodecName == "mp3" || st.CodecName == "opus" {
+					audioCodec = []string{"-c:a", "copy"}
+				}
+			}
+		}
+	}
+
+	// Build ffmpeg args. When a start offset is requested, use fast input
+	// seeking (-ss before -i) so ffmpeg jumps to the nearest keyframe and
+	// begins transcoding from there instead of processing the whole file.
+	ffArgs := []string{
 		"-hide_banner", "-loglevel", "warning",
+	}
+	if startOffset > 0 {
+		ffArgs = append(ffArgs, "-ss", fmt.Sprintf("%.3f", startOffset))
+	}
+	ffArgs = append(ffArgs,
 		"-i", inputArg,
 		"-map", "0:v:0", "-map", "0:a:0?",
-		"-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
-		"-vf", "format=yuv420p",
-		"-c:a", "aac", "-b:a", "128k",
+	)
+	ffArgs = append(ffArgs, videoCodec...)
+	ffArgs = append(ffArgs, audioCodec...)
+	ffArgs = append(ffArgs,
 		"-sn", "-dn",
 		"-movflags", "frag_keyframe+empty_moov",
 		"-f", "mp4",
 		"pipe:1",
 	)
+
+	cmd := exec.CommandContext(ctx, ffp, ffArgs...)
 	if inputArg == "pipe:0" {
 		cmd.Stdin = rc
 	}
+
+	// Register the command with the session manager so it can be killed on seek.
+	tcm.startSession(sessionID, rootID, rel, cancel, cmd)
 
 	w.Header().Set("Content-Type", "video/mp4")
 	w.Header().Set("Content-Disposition", "inline; filename*=UTF-8''"+urlEncode(info.Name))
@@ -257,9 +328,13 @@ func (s *Server) handleTranscode(w http.ResponseWriter, r *http.Request) {
 	if inputArg == "pipe:0" && rc != nil {
 		rc.Close()
 	}
+
+	// Clean up the session after ffmpeg exits (or is killed).
+	tcm.stopSession(sessionID)
+
 	if runErr != nil {
-		if ctx.Err() == context.Canceled {
-			return // client disconnected; nothing to report
+		if ctx.Err() == context.Canceled || ctx.Err() == context.DeadlineExceeded {
+			return // client disconnected or session was replaced by a seek
 		}
 		s.Log.Error("transcode failed", "error", runErr, "detail", stderr.String())
 	}

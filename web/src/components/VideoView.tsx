@@ -72,7 +72,7 @@ export default function VideoView({
         </div>
       </div>
 
-      <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-black">
+      <div className="relative flex min-h-0 flex-1 items-center justify-center bg-black">
         <MediaPlayer kind="video" url={url} item={item} autoPlay />
       </div>
 

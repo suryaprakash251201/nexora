@@ -149,6 +149,7 @@ func webRoot() string {
 }
 
 func runMaintenance(db *sql.DB, sessions *auth.SessionStore, limiter *middleware.RateLimiter, searchSvc *search.Service, shares *sharing.Store, previewSvc *preview.Service, jobMgr *jobs.Manager, log *logger.Logger) {
+	go searchSvc.ScanMediaMetadata(context.Background())
 	ticker := time.NewTicker(15 * time.Minute)
 	defer ticker.Stop()
 	scanTicker := time.NewTicker(6 * time.Hour)

@@ -18,12 +18,33 @@ type LoginGuard struct {
 }
 
 // NewLoginGuard returns a guard allowing maxTries within window before locking.
+// A background goroutine periodically purges expired entries to prevent memory
+// leaks from brute-force attacks with random keys.
 func NewLoginGuard(maxTries int, window time.Duration) *LoginGuard {
-	return &LoginGuard{
+	g := &LoginGuard{
 		attempts:  make(map[string]int),
 		firstFail: make(map[string]time.Time),
 		window:    window,
 		maxTries:  maxTries,
+	}
+	go g.cleanupLoop()
+	return g
+}
+
+// cleanupLoop periodically removes expired entries.
+func (g *LoginGuard) cleanupLoop() {
+	ticker := time.NewTicker(g.window)
+	defer ticker.Stop()
+	for range ticker.C {
+		g.mu.Lock()
+		now := time.Now()
+		for key, t := range g.firstFail {
+			if now.Sub(t) > g.window {
+				delete(g.attempts, key)
+				delete(g.firstFail, key)
+			}
+		}
+		g.mu.Unlock()
 	}
 }
 
