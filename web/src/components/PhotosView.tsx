@@ -17,9 +17,11 @@ interface PhotoResult {
 }
 
 export default function PhotosView({ roots, onOpen }: { roots: Root[], onOpen: (rootId: string, path: string) => void }) {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["photos"],
-    queryFn: () => get<{ items: PhotoResult[], has_more: boolean }>("/photos?limit=1000")
+    queryFn: () => get<{ items: PhotoResult[], has_more: boolean }>("/photos?limit=1000"),
+    retry: 2,
+    staleTime: 30_000,
   });
 
   const photos = data?.items || [];
@@ -58,9 +60,24 @@ export default function PhotosView({ roots, onOpen }: { roots: Root[], onOpen: (
           <div className="flex justify-center p-12">
             <div className="h-8 w-8 rounded-full border-2 border-primary border-t-transparent animate-spin" />
           </div>
+        ) : isError ? (
+          <div className="text-center p-12">
+            <p className="text-red-400 font-medium mb-2">Failed to load photos</p>
+            <p className="text-content-muted text-sm mb-4">{(error as Error)?.message || "An unexpected error occurred."}</p>
+            <button
+              onClick={() => refetch()}
+              className="px-4 py-2 rounded-lg bg-accent/10 text-accent hover:bg-accent/20 transition text-sm font-medium"
+            >
+              Try again
+            </button>
+          </div>
         ) : groups.length === 0 ? (
           <div className="text-center p-12 text-content-muted">
-            No photos found. (Make sure you have indexed images and wait a moment for the metadata extractor to run).
+            <p className="text-lg font-medium mb-2">No photos found</p>
+            <p className="text-sm">
+              Make sure you have indexed images and wait a moment for the metadata extractor to run.
+              Photos must have EXIF date metadata to appear in the timeline.
+            </p>
           </div>
         ) : (
           groups.map(([monthYear, groupPhotos]) => (

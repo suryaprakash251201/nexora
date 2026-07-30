@@ -25,7 +25,6 @@ const SharesPanel = React.lazy(() => import("./SharesPanel"));
 const PlaylistsPanel = React.lazy(() => import("./PlaylistsPanel"));
 const VideoView = React.lazy(() => import("./VideoView"));
 const ImageView = React.lazy(() => import("./ImageView"));
-const SavedSearchesPanel = React.lazy(() => import("./SavedSearchesPanel"));
 const StorageAnalyticsPanel = React.lazy(() => import("./StorageAnalyticsPanel").then(m => ({ default: m.default })));
 const PhotosView = React.lazy(() => import("./PhotosView"));
 import { TagPicker } from "./TagManager";
@@ -92,7 +91,6 @@ export default function Workspace({ user }: { user: User }) {
   else if (pathname === "/favorites") view = "favorites";
   else if (pathname === "/recents") view = "recents";
   else if (pathname === "/playlists") view = "playlists";
-  else if (pathname === "/saved-searches") view = "saved-searches";
   else if (pathname === "/analytics") view = "analytics";
   else if (pathname === "/photos") view = "photos";
   else if (pathname.startsWith("/admin")) view = "admin";
@@ -118,7 +116,6 @@ export default function Workspace({ user }: { user: User }) {
           pendingFilesView.current = true;
         }
       }
-      else if (v === "saved-searches") navigate("/saved-searches");
       else if (v === "analytics") navigate("/analytics");
       else if (v === "search") navigate("/search");
       else if (v === "trash") navigate("/trash");
@@ -126,6 +123,7 @@ export default function Workspace({ user }: { user: User }) {
       else if (v === "favorites") navigate("/favorites");
       else if (v === "recents") navigate("/recents");
       else if (v === "playlists") navigate("/playlists");
+      else if (v === "photos") navigate("/photos");
       else if (v === "admin") navigate("/admin");
     });
   }, [navigate, rootId, roots.data?.roots]);
@@ -275,6 +273,16 @@ export default function Workspace({ user }: { user: User }) {
     toggleSelect(item.path);
     lastClickedRef.current = item.path;
   }, [filtered, toggleSelect, selectRange]);
+
+  const allSelected = filtered.length > 0 && filtered.every((i) => selection.has(i.path));
+
+  const toggleSelectAll = useCallback(() => {
+    if (allSelected) {
+      clearSelection();
+    } else {
+      useUI.getState().setSelection(filtered.map((i) => i.path));
+    }
+  }, [allSelected, filtered, clearSelection]);
 
   const savePlaylist = () => {
     const audio = (selectedItems.length ? selectedItems : items).filter((i) => i.mime.startsWith("audio/"));
@@ -459,29 +467,67 @@ export default function Workspace({ user }: { user: User }) {
 
         <input ref={fileInput} type="file" multiple className="hidden" onChange={(e) => { uploadFiles(e.target.files); e.target.value = ""; }} />
 
-        {selectMode && selection.size > 0 && (
-          <div className="flex items-center gap-2 px-4 sm:px-6 py-2 border-b border-glass-border-soft bg-glass-bg-subtle backdrop-blur-sm">
-            <span className="text-sm font-semibold text-content whitespace-nowrap shrink-0">{selection.size} selected</span>
-            <div className="w-px h-5 bg-border/40 shrink-0" />
-            <div className="flex items-center gap-1.5 overflow-x-auto">
-              <button onClick={() => handleSelectionAction("download")} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-xl glass-hover border border-border/30 transition-all hover:bg-surface/80 text-content-muted hover:text-content whitespace-nowrap">
+        {(selectMode || selection.size > 0) && (
+          <div className="flex items-center gap-2 sm:gap-3 px-4 sm:px-6 py-2 border-b border-glass-border-soft bg-glass-bg-subtle backdrop-blur-sm">
+            <label className="flex items-center gap-2 text-xs sm:text-sm font-medium cursor-pointer select-none shrink-0 hover:text-foreground">
+              <input
+                type="checkbox"
+                checked={allSelected}
+                onChange={toggleSelectAll}
+                className="rounded border-2 border-glass-border bg-glass-bg text-accent focus:ring-accent cursor-pointer transition-all w-4 h-4 sm:w-4.5 sm:h-4.5"
+              />
+              <span className="font-medium text-text-secondary hover:text-content">{allSelected ? "Deselect all" : "Select all"}</span>
+            </label>
+
+            <span className="text-xs text-text-tertiary whitespace-nowrap shrink-0">
+              {selection.size} of {filtered.length} selected
+            </span>
+
+            <div className="w-px h-5 bg-border/40 shrink-0 mx-0.5 sm:mx-1" />
+
+            <div className="flex items-center gap-1.5 overflow-x-auto hide-scrollbar">
+              <button
+                disabled={selection.size === 0}
+                onClick={() => handleSelectionAction("download")}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-xl glass-hover border border-border/30 transition-all hover:bg-surface/80 text-content-muted hover:text-content disabled:opacity-40 disabled:pointer-events-none whitespace-nowrap"
+              >
                 <Download className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Download</span>
               </button>
-              <button onClick={() => handleSelectionAction("move")} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-xl glass-hover border border-border/30 transition-all hover:bg-surface/80 text-content-muted hover:text-content whitespace-nowrap">
+              <button
+                disabled={selection.size === 0}
+                onClick={() => handleSelectionAction("move")}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-xl glass-hover border border-border/30 transition-all hover:bg-surface/80 text-content-muted hover:text-content disabled:opacity-40 disabled:pointer-events-none whitespace-nowrap"
+              >
                 <Move className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Move</span>
               </button>
-              <button onClick={() => handleSelectionAction("copy")} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-xl glass-hover border border-border/30 transition-all hover:bg-surface/80 text-content-muted hover:text-content whitespace-nowrap">
+              <button
+                disabled={selection.size === 0}
+                onClick={() => handleSelectionAction("copy")}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-xl glass-hover border border-border/30 transition-all hover:bg-surface/80 text-content-muted hover:text-content disabled:opacity-40 disabled:pointer-events-none whitespace-nowrap"
+              >
                 <Copy className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Copy</span>
               </button>
-              <button onClick={() => handleSelectionAction("share")} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-xl glass-hover border border-border/30 transition-all hover:bg-surface/80 text-content-muted hover:text-content whitespace-nowrap">
+              <button
+                disabled={selection.size === 0}
+                onClick={() => handleSelectionAction("share")}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-xl glass-hover border border-border/30 transition-all hover:bg-surface/80 text-content-muted hover:text-content disabled:opacity-40 disabled:pointer-events-none whitespace-nowrap"
+              >
                 <Share2 className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Share</span>
               </button>
-              <button onClick={() => handleSelectionAction("delete")} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-xl glass-hover border border-red-500/20 transition-all hover:bg-red-500/10 text-red-400 hover:text-red-300 whitespace-nowrap">
+              <button
+                disabled={selection.size === 0}
+                onClick={() => handleSelectionAction("delete")}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-xl glass-hover border border-red-500/20 transition-all hover:bg-red-500/10 text-red-400 hover:text-red-300 disabled:opacity-40 disabled:pointer-events-none whitespace-nowrap"
+              >
                 <Trash2 className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Delete</span>
               </button>
             </div>
+
             <div className="ml-auto flex items-center gap-1.5 shrink-0">
-              <button onClick={() => { clearSelection(); useUI.getState().setSelectMode(false); }} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-xl glass-hover border border-border/30 transition-all hover:bg-surface/80 text-content-muted hover:text-content whitespace-nowrap">
+              <button
+                onClick={() => { clearSelection(); useUI.getState().setSelectMode(false); }}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-xl glass-hover border border-border/30 transition-all hover:bg-surface/80 text-content-muted hover:text-content whitespace-nowrap"
+              >
                 <X className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Clear</span>
               </button>
             </div>
@@ -554,6 +600,7 @@ export default function Workspace({ user }: { user: User }) {
                   <ProfileMenu user={user} isAdmin={isAdmin} onLogout={logout} onAdmin={() => setView("admin")} />
                 </div>
                 <HomePanel
+                  user={user}
                   data={home.data}
                   isLoading={home.isLoading}
                   isAdmin={isAdmin}
@@ -578,11 +625,6 @@ export default function Workspace({ user }: { user: User }) {
                   </div>
                 </div>
               )
-            )}
-            {view === "saved-searches" && (
-              <Suspense fallback={<div className="flex-1 grid place-items-center text-content-muted">Loading...</div>}>
-                <SavedSearchesPanel roots={roots.data?.roots || []} />
-              </Suspense>
             )}
             {view === "analytics" && (
               <Suspense fallback={<div className="flex-1 grid place-items-center text-content-muted">Loading...</div>}>
