@@ -7,7 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { formatBytes } from "../lib/format";
 
-export type SidebarView = "home" | "files" | "trash" | "favorites" | "recents" | "shares" | "playlists" | "search" | "admin" | "video" | "image" | "saved-searches" | "analytics";
+export type SidebarView = "home" | "files" | "trash" | "favorites" | "recents" | "shares" | "playlists" | "search" | "admin" | "video" | "image" | "saved-searches" | "analytics" | "photos";
 
 const viewColors: Record<string, string> = {
   home: "#5B8CFF",
@@ -20,7 +20,8 @@ const viewColors: Record<string, string> = {
   trash: "#FB7185",
   admin: "#F87171",
   video: "#818CF8",
-  image: "#34D399"
+  image: "#34D399",
+  photos: "#F43F5E"
 };
 
 const NavItem = ({ v, icon, label, isActive, badge, collapsed, onSelectView }: { v: SidebarView; icon: React.ReactNode; label: string; isActive: boolean; badge?: number; collapsed: boolean; onSelectView: (v: SidebarView) => void; }) => {
@@ -142,6 +143,7 @@ export default function Sidebar({
           <NavItem v="search" icon={<Search className="w-[18px] h-[18px]" />} label="Search" isActive={view === "search"} collapsed={collapsed} onSelectView={onSelectView} />
           <NavItem v="saved-searches" icon={<Filter className="w-[18px] h-[18px]" />} label="Smart Folders" isActive={view === "saved-searches"} collapsed={collapsed} onSelectView={onSelectView} />
           <NavItem v="analytics" icon={<svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18" /></svg>} label="Analytics" isActive={view === "analytics"} collapsed={collapsed} onSelectView={onSelectView} />
+          <NavItem v="photos" icon={<svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2" strokeWidth={2}/><circle cx="8.5" cy="8.5" r="1.5" strokeWidth={2}/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 15l-5-5L5 21" /></svg>} label="Photos" isActive={view === "photos"} collapsed={collapsed} onSelectView={onSelectView} />
           <div className="my-1.5 mx-3 h-px bg-white/[0.06]" />
         
           <NavItem v="recents" icon={<Clock className="w-[18px] h-[18px]" />} label="Recent" isActive={view === "recents"} collapsed={collapsed} onSelectView={onSelectView} />
@@ -151,13 +153,6 @@ export default function Sidebar({
         
           <div className="my-1.5 mx-3 h-px bg-white/[0.06]" />
           <NavItem v="trash" icon={<Trash2 className="w-[18px] h-[18px]" />} label="Trash" isActive={view === "trash"} badge={badgeCounts.trash} collapsed={collapsed} onSelectView={onSelectView} />
-
-          {isAdmin && (
-            <>
-              <div className="my-1.5 mx-3 h-px bg-white/[0.06]" />
-              <NavItem v="admin" icon={<Shield className="w-[18px] h-[18px]" />} label="Administration" isActive={view === "admin"} collapsed={collapsed} onSelectView={onSelectView} />
-            </>
-          )}
 
           {roots.map((r) => {
             const Icon = rootIcon(r.icon);
@@ -236,9 +231,23 @@ export default function Sidebar({
             {!collapsed && <span>Log out</span>}
           </button>
 
-          {!collapsed && version.data?.version && (
-            <div className="text-center mt-1">
-              <span className="text-[10px] text-text-tertiary font-mono">v{version.data.version}</span>
+          {!collapsed && (
+            <div className="flex items-center justify-center gap-2 mt-1">
+              {version.data?.version && (
+                <span className="text-[10px] text-text-tertiary font-mono">v{version.data.version}</span>
+              )}
+              <a
+                href="https://github.com/suryaprakash251201/nexora"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-text-tertiary hover:text-foreground transition-colors"
+                title="Nexora on GitHub"
+                aria-label="View source code on GitHub"
+              >
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
+                </svg>
+              </a>
             </div>
           )}
         </div>

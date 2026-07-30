@@ -20,6 +20,7 @@ import {
   Plus,
   MonitorPlay,
   Download,
+  ExternalLink,
 } from "lucide-react";
 import type { FileItem } from "../api/types";
 import { thumbUrl, needsTranscode, transcodeUrl, serverSupportsTranscode, getAudioQuality, rawUrl } from "../lib/preview";
@@ -758,6 +759,10 @@ function VideoPlayer({ url, item, autoPlay }: { url?: string; item?: FileItem; a
   const [showControls, setShowControls] = useState(true);
   const controlsTimeout = useRef<number>();
   const [fallbackTriggered, setFallbackTriggered] = useState(false);
+  const [transcodeSession] = useState(() =>
+    typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : ""
+  );
+  const isTranscode = src?.includes("/files/transcode");
 
   // ── Global media key shortcuts (Tauri) ─────────────────────
   useEffect(() => {
@@ -788,12 +793,13 @@ function VideoPlayer({ url, item, autoPlay }: { url?: string; item?: FileItem; a
         setLive(false);
         setFallbackTriggered(false);
       } else {
-        // Browser: attempt server-side transcoding right away
+        // Browser: use transcoded stream with session-based seeking.
+        // The session ID lets the server kill old ffmpeg processes explicitly.
         serverSupportsTranscode().then((ok) => {
           if (cancelled) return;
           if (ok) {
-            setSrc(transcodeUrl(item.root_id, item.path));
-            setLive(true);
+            setSrc(transcodeUrl(item.root_id, item.path, { session: transcodeSession }));
+            setLive(false);
           } else {
             setSrc(url);
             setLive(false);
@@ -817,7 +823,7 @@ function VideoPlayer({ url, item, autoPlay }: { url?: string; item?: FileItem; a
         setFallbackTriggered(true);
         serverSupportsTranscode().then((ok) => {
           if (ok) {
-            setSrc(transcodeUrl(item.root_id, item.path));
+            setSrc(transcodeUrl(item.root_id, item.path, { session: transcodeSession }));
             setLive(true);
           } else {
             setErrored(true);
@@ -897,8 +903,8 @@ function VideoPlayer({ url, item, autoPlay }: { url?: string; item?: FileItem; a
       if (tag === "INPUT" || tag === "TEXTAREA") return;
       handleMouseMove();
       switch (e.key) {
-        case "ArrowLeft": e.preventDefault(); v.currentTime = Math.max(0, v.currentTime - 10); break;
-        case "ArrowRight": e.preventDefault(); v.currentTime = Math.min(v.duration || 0, v.currentTime + 10); break;
+        case "ArrowLeft": e.preventDefault(); seek(Math.max(0, (v.currentTime || 0) - 10)); break;
+        case "ArrowRight": e.preventDefault(); seek(Math.min(v.duration || 0, (v.currentTime || 0) + 10)); break;
         case "ArrowUp": e.preventDefault(); changeVol(Math.min(1, v.volume + 0.1)); break;
         case "ArrowDown": e.preventDefault(); changeVol(Math.max(0, v.volume - 0.1)); break;
         case " ": e.preventDefault(); toggle(); break;
@@ -933,7 +939,35 @@ function VideoPlayer({ url, item, autoPlay }: { url?: string; item?: FileItem; a
   };
   const seek = (val: number) => {
     const v = ref.current;
-    if (v) v.currentTime = val;
+    if (!v) { setCur(val); return; }
+
+    // For transcoded streams, check if the target time is already buffered.
+    // If not, reload the stream from the requested offset so the server
+    // (via -ss) starts transcoding from that position.
+    if (isTranscode && val > 0 && v.buffered.length > 0) {
+      let isBuffered = false;
+      for (let i = 0; i < v.buffered.length; i++) {
+        if (val >= v.buffered.start(i) && val <= v.buffered.end(i)) {
+          isBuffered = true;
+          break;
+        }
+      }
+      if (!isBuffered && item) {
+        // Target not buffered — instruct server to seek via ?start= parameter.
+        // The same session ID is reused so the server kills the old ffmpeg
+        // before starting the new one from the requested position.
+        setSrc(transcodeUrl(item.root_id, item.path, {
+          start: Math.max(0, val - 3), // 3s before target for keyframe rounding
+          session: transcodeSession,
+        }));
+        setCur(0);
+        // Video reloads from the new offset; currentTime resets to 0
+        // because ffmpeg already starts at the correct position.
+        return;
+      }
+    }
+
+    v.currentTime = val;
     setCur(val);
   };
   const changeVol = (val: number) => {
@@ -950,7 +984,7 @@ function VideoPlayer({ url, item, autoPlay }: { url?: string; item?: FileItem; a
   const skip = (d: number) => {
     const v = ref.current;
     if (!v) return;
-    v.currentTime = Math.max(0, Math.min(v.duration || 0, v.currentTime + d));
+    seek(Math.max(0, Math.min(v.duration || 0, (v.currentTime || 0) + d)));
   };
   const changeRate = (r: number) => {
     setRate(r);
@@ -1020,7 +1054,7 @@ function VideoPlayer({ url, item, autoPlay }: { url?: string; item?: FileItem; a
         src={src}
         controls={false}
         autoPlay={autoPlay}
-        className={full ? "w-full h-full object-contain" : theater ? "w-full h-full max-h-screen object-contain rounded-xl shadow-2xl" : "w-full aspect-video object-cover hover:object-contain transition-all duration-500"}
+        className={full ? "w-full h-full object-contain" : theater ? "w-full h-full max-h-screen object-contain rounded-xl shadow-2xl" : "w-full max-h-full object-contain transition-all duration-500"}
         onClick={toggle}
       >
         {subUrl && <track kind="subtitles" src={subUrl} srcLang="en" label="Subtitles" default />}
@@ -1040,6 +1074,22 @@ function VideoPlayer({ url, item, autoPlay }: { url?: string; item?: FileItem; a
               <Button variant="primary" onClick={() => item ? startDownload(item.root_id, item.path, item.name) : window.location.href = dlUrl} icon={<Download className="h-4 w-4" />}>
                 Download File
               </Button>
+              {isTauri && (
+                <Button 
+                  variant="secondary" 
+                  onClick={async () => {
+                    try {
+                      const { open } = await import("@tauri-apps/plugin-shell");
+                      await open(dlUrl);
+                    } catch (e) {
+                      console.error("Failed to open externally:", e);
+                    }
+                  }} 
+                  icon={<ExternalLink className="h-4 w-4" />}
+                >
+                  Open in Native Player
+                </Button>
+              )}
             </div>
           </div>
         </div>
@@ -1137,6 +1187,25 @@ function VideoPlayer({ url, item, autoPlay }: { url?: string; item?: FileItem; a
               <Captions className="h-5 w-5 md:h-6 md:w-6" />
             </button>
             <input ref={fileRef} type="file" accept=".vtt,.srt" className="hidden" onChange={onSubtitle} />
+
+            {/* Native Player (Tauri) */}
+            {isTauri && (
+              <button 
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  try {
+                    const { open } = await import("@tauri-apps/plugin-shell");
+                    await open(dlUrl);
+                  } catch (e) {
+                    console.error("Failed to open externally:", e);
+                  }
+                }} 
+                className="p-2 rounded-full hover:bg-white/15 transition-colors hidden md:block" 
+                title="Open in Native Video Player"
+              >
+                <ExternalLink className="h-5 w-5 md:h-6 md:w-6" />
+              </button>
+            )}
 
             {/* Theater Mode */}
             {!full && (

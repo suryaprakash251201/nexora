@@ -434,6 +434,12 @@ func (m *Manager) doExtract(id string, p ExtractPayload) error {
 		if strings.ContainsRune(name, 0) || strings.Contains(name, "\\") {
 			return fmt.Errorf("unsafe zip entry: %q", name)
 		}
+		// Check for path traversal in the raw entry name BEFORE any path.Join
+		// normalization that could absorb the ".." away.
+		cleanedName := path.Clean(name)
+		if strings.HasPrefix(cleanedName, "..") {
+			return fmt.Errorf("zip-slip blocked (traversal in raw name): %q", name)
+		}
 		// Zip entries may already include the destination folder (e.g. when the
 		// archive was created from inside it). Normalize to a path relative to
 		// dest so entries land in the right place without being doubled.

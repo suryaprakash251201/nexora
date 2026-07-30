@@ -1,4 +1,7 @@
 use tauri::{Emitter, Manager};
+use std::sync::atomic::{AtomicBool, Ordering};
+
+static SLEEP_INHIBITED: AtomicBool = AtomicBool::new(false);
 
 /// Returns platform info to the frontend so it can adapt its UI.
 #[tauri::command]
@@ -11,8 +14,65 @@ fn get_platform() -> serde_json::Value {
 }
 
 /// Toggle system sleep inhibition for large transfers.
+/// Uses platform-specific APIs to prevent the system from sleeping.
 #[tauri::command]
-async fn set_sleep_inhibition(inhibit: bool, _app: tauri::AppHandle) -> Result<(), String> {
+async fn set_sleep_inhibition(inhibit: bool, app: tauri::AppHandle) -> Result<(), String> {
+    if inhibit == SLEEP_INHIBITED.load(Ordering::SeqCst) {
+        return Ok(());
+    }
+    SLEEP_INHIBITED.store(inhibit, Ordering::SeqCst);
+
+    #[cfg(target_os = "linux")]
+    {
+        // Use systemd-inhibit or xdg-desktop-portal via dbus on Linux.
+        // For simplicity, we spawn a dbus-send to inhibit sleep.
+        use std::process::Command;
+        if inhibit {
+            let _ = Command::new("systemd-inhibit")
+                .args(["--what=idle:sleep", "--who=Nexora", "--why=File transfers active", "--mode=block", "sleep", "inf"])
+                .spawn();
+        } else {
+            // Kill any systemd-inhibit processes we started
+            let _ = Command::new("pkill")
+                .args(["-f", "systemd-inhibit.*Nexora"])
+                .output();
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        // Use SetThreadExecutionState on Windows
+        unsafe {
+            #[link(name = "kernel32")]
+            extern "system" {
+                fn SetThreadExecutionState(flags: u32) -> u32;
+            }
+            const ES_CONTINUOUS: u32 = 0x80000000;
+            const ES_SYSTEM_REQUIRED: u32 = 0x00000001;
+            const ES_DISPLAY_REQUIRED: u32 = 0x00000002;
+            if inhibit {
+                SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED);
+            } else {
+                SetThreadExecutionState(ES_CONTINUOUS);
+            }
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        // Use caffeinate on macOS
+        use std::process::Command;
+        if inhibit {
+            let _ = Command::new("caffeinate")
+                .args(["-dims", "&"])
+                .spawn();
+        } else {
+            let _ = Command::new("pkill")
+                .args(["-f", "caffeinate.*Nexora"])
+                .output();
+        }
+    }
+
     if inhibit {
         eprintln!("[nexora] Preventing system sleep (transfers active)");
     } else {

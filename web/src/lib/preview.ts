@@ -74,8 +74,28 @@ export function needsTranscode(item: { extension: string }): boolean {
   return TRANSCODE_EXT.has(ext);
 }
 
-export function transcodeUrl(rootId: string, path: string): string {
-  return getMediaUrl("/files/transcode", { root: rootId, path });
+// generateSessionId creates a UUID v4 for transcode session tracking.
+// This lets the server explicitly kill old ffmpeg processes when seeking.
+export function generateSessionId(): string {
+  if (typeof crypto !== "undefined" && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  // Fallback for older browsers
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
+  });
+}
+
+export function transcodeUrl(rootId: string, path: string, opts?: { start?: number; session?: string }): string {
+  const params: Record<string, string | number> = { root: rootId, path };
+  if (opts?.start !== undefined && opts.start > 0) {
+    params.start = opts.start;
+  }
+  if (opts?.session) {
+    params.session = opts.session;
+  }
+  return getMediaUrl("/files/transcode", params);
 }
 
 let transcodeSupported: boolean | null = null;

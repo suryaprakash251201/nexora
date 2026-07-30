@@ -133,6 +133,16 @@ func (s *UserStore) UpdateTOTPEnabled(id string, enabled bool) error {
 	return err
 }
 
+// DisableTOTP atomically clears both the TOTP secret and enabled flag in a
+// single statement, preventing inconsistent state where totp_enabled is true
+// but the secret is empty (which would permanently lock the user out of 2FA).
+func (s *UserStore) DisableTOTP(id string) error {
+	_, err := s.db.Exec(
+		`UPDATE users SET totp_secret='', totp_enabled=0, updated_at=? WHERE id=?`,
+		util.NowUTC(), id)
+	return err
+}
+
 // UpdateRole changes a user's role and status.
 func (s *UserStore) UpdateRole(id string, role Role, status string) error {
 	_, err := s.db.Exec(`UPDATE users SET role=?, status=?, updated_at=? WHERE id=?`, string(role), status, util.NowUTC(), id)
