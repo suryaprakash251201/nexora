@@ -15,7 +15,8 @@ import { useAccentTheme, accentThemes } from "../lib/useAccentTheme";
 
 export default function SettingsModal({ user, onClose }: { user: User; onClose: () => void }) {
   const [view, setView] = useState<View>("main");
-  const { theme, setTheme } = useTheme();
+  const { resolvedTheme, setTheme } = useTheme();
+  const isDark = resolvedTheme !== "light";
   const [accent, setAccent] = useAccentTheme();
   const queryClient = useQueryClient();
   const dialogRef = useFocusTrap(true);
@@ -179,21 +180,21 @@ export default function SettingsModal({ user, onClose }: { user: User; onClose: 
                   <div className="flex items-center justify-between px-4 py-3 rounded-xl bg-surface-muted/30 border border-border/50">
                     <div className="flex items-center gap-3">
                       <div className="p-2 rounded-lg bg-accent/10 text-accent">
-                        {theme === "dark" ? <Moon className="h-5 w-5" /> : <Sun className="h-5 w-5" />}
+                        {isDark ? <Moon className="h-5 w-5" /> : <Sun className="h-5 w-5" />}
                       </div>
                       <div>
                         <p className="text-sm font-medium text-content">Color Mode</p>
-                        <p className="text-xs text-content-muted">{theme === "dark" ? "Dark mode" : "Light mode"}</p>
+                        <p className="text-xs text-content-muted">{isDark ? "Dark mode" : "Light mode"}</p>
                       </div>
                     </div>
                     <button
-                      onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+                      onClick={() => setTheme(isDark ? "light" : "dark")}
                       className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                        theme === "dark" ? "bg-accent" : "bg-surface-muted border border-border"
+                        isDark ? "bg-accent" : "bg-surface-muted border border-border"
                       }`}
                     >
                       <span className={`inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${
-                        theme === "dark" ? "translate-x-6" : "translate-x-1"
+                        isDark ? "translate-x-6" : "translate-x-1"
                       }`} />
                     </button>
                   </div>
