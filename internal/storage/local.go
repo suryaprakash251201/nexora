@@ -115,7 +115,7 @@ func (p *LocalFilesystemProvider) Write(rel string, r io.Reader, size int64) err
 	if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
 		return err
 	}
-	f, err := os.Create(abs)
+	f, err := os.OpenFile(abs, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
 	if err != nil {
 		return err
 	}
