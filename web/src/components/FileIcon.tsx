@@ -17,7 +17,7 @@ import {
   Terminal,
   Settings,
   Cpu,
-  Figma,
+  PenTool,
   Package,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -46,7 +46,7 @@ export function iconForFile(item: { is_dir: boolean; mime: string; extension: st
   if (["bat", "cmd", "ps1"].includes(ext)) return { icon: Terminal, color: "gray", customIcon: custom };
   if (["env", "config", "cfg", "conf", "editorconfig", "properties"].includes(ext)) return { icon: Settings, color: "gray", customIcon: custom };
   if (["dll", "so", "sys", "bin"].includes(ext)) return { icon: Cpu, color: "gray", customIcon: custom };
-  if (["fig", "sketch", "ai", "psd", "xd"].includes(ext)) return { icon: Figma, color: "pink", customIcon: custom };
+  if (["fig", "sketch", "ai", "psd", "xd"].includes(ext)) return { icon: PenTool, color: "pink", customIcon: custom };
   
   if (["md", "markdown", "mdx", "txt", "log", "rtf"].includes(ext)) return { icon: FileText, color: "gray", customIcon: custom };
   

@@ -757,7 +757,7 @@ function VideoPlayer({ url, item, autoPlay }: { url?: string; item?: FileItem; a
   const [live, setLive] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const [showControls, setShowControls] = useState(true);
-  const controlsTimeout = useRef<number>();
+  const controlsTimeout = useRef<number>(0);
   const [fallbackTriggered, setFallbackTriggered] = useState(false);
   const [transcodeSession] = useState(() =>
     typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : ""

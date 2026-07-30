@@ -22,7 +22,7 @@ export function useKeyboardShortcuts({
   items: FileItem[];
   bulkDelete: () => void;
   setMenu: (menu: { kind: string; item?: FileItem } | null) => void;
-  fileInputRef: React.RefObject<HTMLInputElement>;
+  fileInputRef: React.RefObject<HTMLInputElement | null>;
   isModalOpen: boolean;
   setCommandPaletteOpen: (open: boolean) => void;
   setShortcutsModalOpen?: (open: boolean) => void;

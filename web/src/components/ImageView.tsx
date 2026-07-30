@@ -27,7 +27,7 @@ export default function ImageView({
   const [showControls, setShowControls] = useState(true);
   const [imgLoaded, setImgLoaded] = useState(false);
   const [imgNatural, setImgNatural] = useState({ w: 0, h: 0 });
-  const controlsRef = useRef<number>();
+  const controlsRef = useRef<number>(0);
   const wrapRef = useRef<HTMLDivElement>(null);
   const filmstripRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);

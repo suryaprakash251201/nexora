@@ -1,4 +1,4 @@
-import { type Variants, type Transition } from "motion/react";
+import { type Variants, type Transition, type HTMLMotionProps } from "motion/react";
 
 export const fadeIn: Variants = {
   initial: { opacity: 0 },
@@ -47,7 +47,7 @@ export const staggerItem: Variants = {
   },
 };
 
-export const cardHover = {
+export const cardHover: Pick<HTMLMotionProps<"button">, "whileHover" | "whileTap"> = {
   whileHover: {
     y: -4,
     boxShadow:
