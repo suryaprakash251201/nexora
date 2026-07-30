@@ -171,7 +171,7 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 		Path:     "/",
 		HttpOnly: true,
 		Secure:   true,
-		SameSite: http.SameSiteLaxMode,
+		SameSite: http.SameSiteStrictMode,
 		MaxAge:   -1,
 	})
 	if user.ID != "" {
@@ -215,6 +215,8 @@ func (s *Server) handleForgotPassword(w http.ResponseWriter, r *http.Request) {
 	user, ok, err := s.Users.GetByLogin(req.Login)
 	if err != nil || !ok {
 		// Don't reveal whether the user exists.
+		// Add a constant-time delay to prevent timing-based user enumeration.
+		time.Sleep(200 * time.Millisecond)
 		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "message": "If the account exists, a reset code has been generated."})
 		return
 	}
@@ -387,11 +389,7 @@ func (s *Server) handleTOTPDisable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.Users.UpdateTOTPSecret(user.ID, ""); err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "could not disable TOTP", middleware.GetRequestID(r.Context()))
-		return
-	}
-	if err := s.Users.UpdateTOTPEnabled(user.ID, false); err != nil {
+	if err := s.Users.DisableTOTP(user.ID); err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error", "could not disable TOTP", middleware.GetRequestID(r.Context()))
 		return
 	}

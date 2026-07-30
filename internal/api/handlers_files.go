@@ -739,6 +739,10 @@ func (s *Server) handleCreateFile(w http.ResponseWriter, r *http.Request) {
 		s.writeAccessError(w, r, err)
 		return
 	}
+	if err := s.checkAllowedMime(rel, ""); err != nil {
+		writeError(w, http.StatusBadRequest, "mime_not_allowed", err.Error(), middleware.GetRequestID(r.Context()))
+		return
+	}
 	if err := acc.provider.Write(rel, strings.NewReader(req.Content), int64(len(req.Content))); err != nil {
 		s.writeProviderError(w, r, err)
 		return
