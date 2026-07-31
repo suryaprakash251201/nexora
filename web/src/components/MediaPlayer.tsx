@@ -23,7 +23,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import type { FileItem } from "../api/types";
-import { thumbUrl, needsTranscode, transcodeUrl, serverSupportsTranscode, getAudioQuality, rawUrl } from "../lib/preview";
+import { thumbUrl, needsTranscode, transcodeUrl, serverSupportsTranscode, getAudioQuality, rawUrl, generateSessionId } from "../lib/preview";
 import { startDownload } from "../lib/transfer";
 import { engine, usePlayer } from "../store/player";
 import { AddToPlaylistMenu } from "./PlaylistAdder";
@@ -138,6 +138,17 @@ function AudioPlayer({
   const [bgFailed, setBgFailed] = useState(false);
   const [showRates, setShowRates] = useState(false);
   const fsWrapRef = useRef<HTMLDivElement>(null);
+  
+  const [transcodeFallback, setTranscodeFallback] = useState(false);
+  const sessionIdRef = useRef(generateSessionId());
+
+  useEffect(() => {
+    setTranscodeFallback(false);
+  }, [cur?.path]);
+
+  const resolvedUrl = transcodeFallback && cur
+    ? transcodeUrl(cur.root_id, cur.path, { session: sessionIdRef.current, start: 0 })
+    : (url || (cur ? rawUrl(cur.root_id, cur.path) : ""));
 
   // ── Global media key shortcuts (Tauri) ─────────────────────
   useEffect(() => {
@@ -733,7 +744,24 @@ function AudioPlayer({
       </div>
 
       {fs && fullscreen}
-      {!controlled && <audio ref={ref} src={url} preload="metadata" playsInline webkit-playsinline="true" />}
+      {!controlled && <audio 
+        ref={ref} 
+        src={resolvedUrl} 
+        preload="metadata" 
+        playsInline 
+        webkit-playsinline="true"
+        onError={(e) => {
+          const target = e.target as HTMLAudioElement;
+          if (target.error && target.error.code === 4 && !transcodeFallback && cur) {
+            serverSupportsTranscode().then(supp => {
+              if (supp) {
+                console.warn("MediaPlayer: native audio playback failed, falling back to transcode stream...");
+                setTranscodeFallback(true);
+              }
+            });
+          }
+        }}
+      />}
     </div>
   );
 }

@@ -17,7 +17,7 @@ import {
 import type { FileItem } from "../api/types";
 import { usePlayer, engine } from "../store/player";
 import { useShallow } from "zustand/react/shallow";
-import { thumbUrl, rawUrl, getAudioQuality } from "../lib/preview";
+import { thumbUrl, rawUrl, getAudioQuality, transcodeUrl, generateSessionId, serverSupportsTranscode } from "../lib/preview";
 import MediaPlayer from "./MediaPlayer";
 
 function fmt(t: number): string {
@@ -78,7 +78,15 @@ export default function PlayerBar() {
     }
   }, []);
 
-  const url = current ? rawUrl(current.root_id, current.path) : "";
+  const [transcodeFallback, setTranscodeFallback] = useState(false);
+  const sessionIdRef = useRef(generateSessionId());
+
+  // Reset fallback when the track changes
+  useEffect(() => {
+    setTranscodeFallback(false);
+  }, [current?.path]);
+
+  const url = current ? (transcodeFallback ? transcodeUrl(current.root_id, current.path, { session: sessionIdRef.current, start: 0 }) : rawUrl(current.root_id, current.path)) : "";
   useEffect(() => {
     const a = audioRef.current;
     if (!a || !url) return;
@@ -110,13 +118,25 @@ export default function PlayerBar() {
     usePlayer.setState({ queue: [], index: -1, isPlaying: false, currentTime: 0, duration: 0 });
   };
 
+  const handleError = (e: React.SyntheticEvent<HTMLAudioElement, Event>) => {
+    const target = e.target as HTMLAudioElement;
+    if (target.error && target.error.code === 4 && !transcodeFallback && current) {
+      serverSupportsTranscode().then(supp => {
+        if (supp) {
+          console.warn("PlayerBar: native playback failed, falling back to transcode stream...");
+          setTranscodeFallback(true);
+        }
+      });
+    }
+  };
+
   const showMini = !primaryOpen || expanded;
   // Only show mini player when music is actually playing or recently active
   const hasActivePlayer = current && (isPlaying || currentTime > 0);
 
   return (
     <>
-      <audio ref={audioRef} preload="none" playsInline webkit-playsinline="true" />
+      <audio ref={audioRef} preload="none" playsInline webkit-playsinline="true" onError={handleError} />
 
       {hasActivePlayer && showMini && !expanded && (
         <div className="fixed bottom-32 md:bottom-6 left-1/2 -translate-x-1/2 z-[60] w-[calc(100%-2rem)] max-w-lg pointer-events-none">

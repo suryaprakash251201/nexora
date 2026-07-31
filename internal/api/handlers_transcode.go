@@ -203,8 +203,10 @@ func (s *Server) handleTranscode(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "is_directory", "cannot transcode a directory", middleware.GetRequestID(r.Context()))
 		return
 	}
-	if !strings.HasPrefix(info.Mime, "video/") {
-		writeError(w, http.StatusUnsupportedMediaType, "unsupported", "only video files can be transcoded", middleware.GetRequestID(r.Context()))
+	isAudio := strings.HasPrefix(info.Mime, "audio/")
+	isVideo := strings.HasPrefix(info.Mime, "video/")
+	if !isVideo && !isAudio {
+		writeError(w, http.StatusUnsupportedMediaType, "unsupported", "only video and audio files can be transcoded", middleware.GetRequestID(r.Context()))
 		return
 	}
 	if r.Header.Get("Range") == "" {
@@ -291,11 +293,13 @@ func (s *Server) handleTranscode(w http.ResponseWriter, r *http.Request) {
 	if startOffset > 0 {
 		ffArgs = append(ffArgs, "-ss", fmt.Sprintf("%.3f", startOffset))
 	}
-	ffArgs = append(ffArgs,
-		"-i", inputArg,
-		"-map", "0:v:0", "-map", "0:a:0?",
-	)
-	ffArgs = append(ffArgs, videoCodec...)
+	ffArgs = append(ffArgs, "-i", inputArg)
+	if isAudio {
+		ffArgs = append(ffArgs, "-map", "0:a:0")
+	} else {
+		ffArgs = append(ffArgs, "-map", "0:v:0", "-map", "0:a:0?")
+		ffArgs = append(ffArgs, videoCodec...)
+	}
 	ffArgs = append(ffArgs, audioCodec...)
 	ffArgs = append(ffArgs,
 		"-sn", "-dn",
@@ -312,7 +316,11 @@ func (s *Server) handleTranscode(w http.ResponseWriter, r *http.Request) {
 	// Register the command with the session manager so it can be killed on seek.
 	tcm.startSession(sessionID, rootID, rel, cancel, cmd)
 
-	w.Header().Set("Content-Type", "video/mp4")
+	if isAudio {
+		w.Header().Set("Content-Type", "audio/mp4")
+	} else {
+		w.Header().Set("Content-Type", "video/mp4")
+	}
 	w.Header().Set("Content-Disposition", "inline; filename*=UTF-8''"+urlEncode(info.Name))
 	w.WriteHeader(http.StatusOK)
 
