@@ -162,6 +162,10 @@ func (fw *flushWriter) Write(p []byte) (int, error) {
 //   - root, path   — file identifier (required)
 //   - session      — client-generated UUID for session management (required)
 //   - start        — seek offset in seconds (optional, default 0)
+//   - format       — output audio codec (optional): "flac" re-encodes the audio
+//                    track losslessly (for lossless sources like ALAC .m4a), so
+//                    desktop/browser clients can play lossless audio without
+//                    losing quality. Default is AAC 128k.
 //
 // The session parameter lets the server explicitly kill the previous ffmpeg
 // process when the client seeks, rather than relying on HTTP connection abort.
@@ -182,6 +186,12 @@ func (s *Server) handleTranscode(w http.ResponseWriter, r *http.Request) {
 			startOffset = parsed
 		}
 	}
+
+	// Optional output format. "flac" produces a lossless FLAC stream inside the
+	// MP4 container — every webview engine (Chromium, WebKit, GStreamer) decodes
+	// FLAC natively, so ALAC/lossless sources keep their quality end-to-end.
+	outputFormat := queryParam(r, "format", "")
+	lossless := outputFormat == "flac"
 
 	if err != nil || rel == "" {
 		writeError(w, http.StatusBadRequest, "invalid_path", "invalid path", middleware.GetRequestID(r.Context()))
@@ -271,8 +281,11 @@ func (s *Server) handleTranscode(w http.ResponseWriter, r *http.Request) {
 	// Determine codecs based on probe to support direct stream (remux) for compatible formats.
 	videoCodec := []string{"-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-vf", "format=yuv420p"}
 	audioCodec := []string{"-c:a", "aac", "-b:a", "128k"}
-
-	if probe != nil {
+	if lossless {
+		// Lossless output: re-encode to FLAC (never stream-copy, the source
+		// codec differs from the requested output codec).
+		audioCodec = []string{"-c:a", "flac"}
+	} else if probe != nil {
 		for _, st := range probe.Streams {
 			if st.CodecType == "video" {
 				if (st.CodecName == "h264" || st.CodecName == "hevc" || st.CodecName == "av1") && !strings.Contains(st.PixFmt, "10le") && !strings.Contains(st.PixFmt, "12le") {

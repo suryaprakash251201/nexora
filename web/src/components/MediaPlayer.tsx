@@ -23,7 +23,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import type { FileItem } from "../api/types";
-import { thumbUrl, needsTranscode, transcodeUrl, serverSupportsTranscode, getAudioQuality, rawUrl, generateSessionId } from "../lib/preview";
+import { thumbUrl, needsTranscode, transcodeUrl, audioTranscodeUrl, serverSupportsTranscode, getAudioQuality, rawUrl, generateSessionId } from "../lib/preview";
 import { startDownload } from "../lib/transfer";
 import { engine, usePlayer } from "../store/player";
 import { AddToPlaylistMenu } from "./PlaylistAdder";
@@ -147,7 +147,7 @@ function AudioPlayer({
   }, [cur?.path]);
 
   const resolvedUrl = transcodeFallback && cur
-    ? transcodeUrl(cur.root_id, cur.path, { session: sessionIdRef.current, start: 0 })
+    ? audioTranscodeUrl(cur.root_id, cur.path, { session: sessionIdRef.current, start: 0 })
     : (url || (cur ? rawUrl(cur.root_id, cur.path) : ""));
 
   // ── Global media key shortcuts (Tauri) ─────────────────────

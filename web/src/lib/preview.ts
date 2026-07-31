@@ -90,7 +90,7 @@ export function generateSessionId(): string {
   });
 }
 
-export function transcodeUrl(rootId: string, path: string, opts?: { start?: number; session?: string }): string {
+export function transcodeUrl(rootId: string, path: string, opts?: { start?: number; session?: string; format?: string }): string {
   const params: Record<string, string | number> = { root: rootId, path };
   if (opts?.start !== undefined && opts.start > 0) {
     params.start = opts.start;
@@ -98,7 +98,25 @@ export function transcodeUrl(rootId: string, path: string, opts?: { start?: numb
   if (opts?.session) {
     params.session = opts.session;
   }
+  if (opts?.format) {
+    params.format = opts.format;
+  }
   return getMediaUrl("/files/transcode", params);
+}
+
+// isTauriRuntime reports whether the frontend is running inside the Tauri
+// desktop shell (as opposed to a plain web browser).
+export function isTauriRuntime(): boolean {
+  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+}
+
+// audioTranscodeUrl builds a transcode URL for audio fallback playback.
+// In the Tauri desktop app the webview (Chromium WebView2 / WebKitGTK) cannot
+// decode ALAC natively, but every engine decodes FLAC — so request a lossless
+// FLAC stream to keep lossless sources (ALAC .m4a, FLAC, WAV) at full quality.
+// In a plain browser we keep the smaller 128k AAC default.
+export function audioTranscodeUrl(rootId: string, path: string, opts?: { start?: number; session?: string }): string {
+  return transcodeUrl(rootId, path, { ...opts, format: isTauriRuntime() ? "flac" : undefined });
 }
 
 let transcodeSupported: boolean | null = null;

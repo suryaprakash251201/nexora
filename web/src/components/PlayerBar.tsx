@@ -17,7 +17,7 @@ import {
 import type { FileItem } from "../api/types";
 import { usePlayer, engine } from "../store/player";
 import { useShallow } from "zustand/react/shallow";
-import { thumbUrl, rawUrl, getAudioQuality, transcodeUrl, generateSessionId, serverSupportsTranscode } from "../lib/preview";
+import { thumbUrl, rawUrl, getAudioQuality, audioTranscodeUrl, generateSessionId, serverSupportsTranscode } from "../lib/preview";
 import MediaPlayer from "./MediaPlayer";
 
 function fmt(t: number): string {
@@ -86,7 +86,7 @@ export default function PlayerBar() {
     setTranscodeFallback(false);
   }, [current?.path]);
 
-  const url = current ? (transcodeFallback ? transcodeUrl(current.root_id, current.path, { session: sessionIdRef.current, start: 0 }) : rawUrl(current.root_id, current.path)) : "";
+  const url = current ? (transcodeFallback ? audioTranscodeUrl(current.root_id, current.path, { session: sessionIdRef.current, start: 0 }) : rawUrl(current.root_id, current.path)) : "";
   useEffect(() => {
     const a = audioRef.current;
     if (!a || !url) return;
