@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { motion, AnimatePresence } from "motion/react";
-import { Search, ChevronDown, ChevronLeft, ChevronRight, Grid, Layout, Calendar, Camera, MapPin, Star, SlidersHorizontal, Filter, X, Download, Share2, MoreHorizontal } from "lucide-react";
+import { AnimatePresence } from "motion/react";
+import { Search, Grid, Layout } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDateLabel } from "@/lib/format";
 import { Input } from "../ui/Input";
@@ -13,9 +13,10 @@ import { FilterBar } from "./FilterBar";
 import { SelectionToolbar } from "./SelectionToolbar";
 import { PhotoContextMenu } from "./PhotoContextMenu";
 import { DensitySelector } from "./DensitySelector";
-import { usePhotos, usePhotoSelection } from "./hooks/usePhotos";
-import { PhotoResult, PhotosResponse, PhotoFilters, Density, ViewMode } from "./types";
+import { usePhotos, usePhotoSelection } from "./hooks";
+import { PhotoResult, PhotoFilters, PhotosResponse, Density, ViewMode } from "./types";
 import { Root } from "@/api/types";
+import { PhotoCard } from "./PhotoCard";
 
 const STORAGE_KEY_DENSITY = "nexora.photos.density";
 const STORAGE_KEY_VIEW_MODE = "nexora.photos.viewMode";
@@ -66,7 +67,6 @@ export default function PhotosView({ roots, onOpen, onPreview }: PhotosViewProps
 
   // Scroll position
   const gridContainerRef = useRef<HTMLDivElement>(null);
-  const [scrollPosition, setScrollPosition] = useState(0);
 
   // Data fetching
   const {
@@ -81,7 +81,7 @@ export default function PhotosView({ roots, onOpen, onPreview }: PhotosViewProps
   } = usePhotos(filters, searchQuery);
 
   // Flatten pages
-  const photos = useMemo(() => data?.pages.flatMap((p) => p.items) || [], [data]);
+  const photos = useMemo(() => data?.pages.flatMap((p: PhotosResponse) => p.items) || [], [data]);
 
   // Year facets for navigator
   const yearFacets = useMemo(() => {
@@ -96,13 +96,16 @@ export default function PhotosView({ roots, onOpen, onPreview }: PhotosViewProps
       .map(([year, count]) => ({ year, count }));
   }, [photos]);
 
-  // Camera makes for filter
-  const cameraMakes = useMemo(() => {
-    const makes = new Set<string>();
+  // Camera facets for filter
+  const cameraFacets = useMemo(() => {
+    const makes = new Map<string, number>();
     for (const p of photos) {
-      if (p.make) makes.add(p.make);
+      if (p.make) makes.set(p.make, (makes.get(p.make) || 0) + 1);
     }
-    return Array.from(makes).sort();
+    return Array.from(makes.entries())
+      .map(([make, count]) => ({ make, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10);
   }, [photos]);
 
   // Selection
@@ -156,8 +159,9 @@ export default function PhotosView({ roots, onOpen, onPreview }: PhotosViewProps
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   const handleScroll = useCallback(() => {
+    // Scroll position tracking for future use
     if (gridContainerRef.current) {
-      setScrollPosition(gridContainerRef.current.scrollTop);
+      // setScrollPosition(gridContainerRef.current.scrollTop);
     }
   }, []);
 
@@ -185,9 +189,9 @@ export default function PhotosView({ roots, onOpen, onPreview }: PhotosViewProps
       } else if ((e.key === "a" && (e.metaKey || e.ctrlKey)) && !isViewerOpen) {
         e.preventDefault();
         const allIds = photos.map((p) => p.id);
-        toggleSelection(allIds[0]); // This triggers selectAll behavior
-        // Actually select all
-        // We'd need to add selectAll to the hook
+        for (const id of allIds) {
+          toggleSelection(id);
+        }
       } else if ((e.key === "Delete" || e.key === "Backspace") && selectionCount > 0 && !isViewerOpen) {
         handleBulkDelete();
       }
@@ -195,7 +199,7 @@ export default function PhotosView({ roots, onOpen, onPreview }: PhotosViewProps
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isViewerOpen, viewerIndex, photos.length, selectionCount, contextMenu, handleViewerClose, clearSelection, handleViewerNavigate, handleBulkDelete, photos, toggleSelection]);
+  }, [isViewerOpen, viewerIndex, photos.length, selectionCount, contextMenu, handleViewerClose, clearSelection, handleViewerNavigate, photos, toggleSelection]);
 
   // Click outside context menu
   useEffect(() => {
@@ -207,24 +211,24 @@ export default function PhotosView({ roots, onOpen, onPreview }: PhotosViewProps
   const totalPhotos = photos.length;
 
   // Bulk actions
-  const handleBulkDownload = async () => {
+  const handleBulkDownload = useCallback(async () => {
     // TODO: Implement zip download
     console.log("Download", selectionCount, "photos");
-  };
+  }, [selectionCount]);
 
-  const handleBulkShare = async () => {
+  const handleBulkShare = useCallback(async () => {
     console.log("Share", selectionCount, "photos");
-  };
+  }, [selectionCount]);
 
-  const handleBulkDelete = async () => {
+  const handleBulkDelete = useCallback(async () => {
     if (!confirm(`Delete ${selectionCount} photo(s)? This cannot be undone.`)) return;
     console.log("Delete", selectionCount, "photos");
     clearSelection();
-  };
+  }, [selectionCount, clearSelection]);
 
-  const handleAddToAlbum = async () => {
+  const handleAddToAlbum = useCallback(async () => {
     console.log("Add to album", selectionCount, "photos");
-  };
+  }, [selectionCount]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -293,7 +297,7 @@ export default function PhotosView({ roots, onOpen, onPreview }: PhotosViewProps
                 <FilterBar
                   filters={filters}
                   onChange={setFilters}
-                  cameraMakes={cameraMakes}
+                  cameraFacets={cameraFacets}
                   yearFacets={yearFacets}
                   className="hidden sm:flex"
                 />
@@ -365,7 +369,7 @@ export default function PhotosView({ roots, onOpen, onPreview }: PhotosViewProps
               <FilterBar
                 filters={filters}
                 onChange={setFilters}
-                cameraMakes={cameraMakes}
+                cameraFacets={cameraFacets}
                 yearFacets={yearFacets}
                 className="px-4 py-3 border-b border-glass-border/50 bg-background/80 backdrop-blur-sm sticky top-16 z-10 lg:hidden"
               />
@@ -507,6 +511,3 @@ function TimelineView({
     </div>
   );
 }
-
-import { PhotoCard } from "./PhotoCard";
-import { useState, useMemo, useCallback, useEffect, useRef } from "react";

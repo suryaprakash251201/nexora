@@ -1,11 +1,8 @@
 import { useCallback, useRef, useState, useEffect } from "react";
-import { useInfiniteQuery, UseInfiniteQueryResult } from "@tanstack/react-query";
+import { useInfiniteQuery } from "@tanstack/react-query";
 import { get } from "@/api/client";
 import { PhotoResult, PhotosResponse, PhotoFilters } from "./types";
 
-/**
- * Hook for fetching photos with infinite scroll and filtering
- */
 export function usePhotos(filters: PhotoFilters, searchQuery: string) {
   const buildQuery = useCallback(() => {
     const params = new URLSearchParams();
@@ -22,13 +19,11 @@ export function usePhotos(filters: PhotoFilters, searchQuery: string) {
     return params.toString();
   }, [filters, searchQuery]);
 
-  const queryKey = ["photos", buildQuery()];
-
   return useInfiniteQuery({
-    queryKey,
+    queryKey: ["photos", buildQuery()],
     queryFn: async ({ pageParam }) => {
-      const url = pageParam 
-        ? `/photos?cursor=${encodeURIComponent(pageParam)}` 
+      const url = pageParam
+        ? `/photos?cursor=${encodeURIComponent(pageParam)}`
         : `/photos?${buildQuery()}`;
       return get<PhotosResponse>(url);
     },
@@ -39,9 +34,6 @@ export function usePhotos(filters: PhotoFilters, searchQuery: string) {
   });
 }
 
-/**
- * Hook for managing photo selection state
- */
 export function usePhotoSelection() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isSelecting, setIsSelecting] = useState(false);
@@ -72,8 +64,8 @@ export function usePhotoSelection() {
     const startIndex = allIds.indexOf(startId);
     const endIndex = allIds.indexOf(endId);
     if (startIndex === -1 || endIndex === -1) return;
-    
-    const [min, max] = startIndex < endIndex ? [startIndex, endIndex] : [endIndex, startIndex];
+    const min = Math.min(startIndex, endIndex);
+    const max = Math.max(startIndex, endIndex);
     const rangeIds = allIds.slice(min, max + 1);
     setSelectedIds((prev) => new Set([...prev, ...rangeIds]));
     setIsSelecting(true);
@@ -87,13 +79,10 @@ export function usePhotoSelection() {
     clearSelection,
     isSelected,
     selectRange,
-    count: selectedIds.size,
+    selectionCount: selectedIds.size,
   };
 }
 
-/**
- * Hook for managing fullscreen photo viewer state
- */
 export function usePhotoViewer(photos: PhotoResult[]) {
   const [isOpen, setIsOpen] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -111,9 +100,7 @@ export function usePhotoViewer(photos: PhotoResult[]) {
     setRotation(0);
   }, []);
 
-  const close = useCallback(() => {
-    setIsOpen(false);
-  }, []);
+  const close = useCallback(() => { setIsOpen(false); }, []);
 
   const navigate = useCallback((delta: number) => {
     setCurrentIndex((prev) => Math.max(0, Math.min(photos.length - 1, prev + delta)));
@@ -128,135 +115,70 @@ export function usePhotoViewer(photos: PhotoResult[]) {
   const currentPhoto = photos[currentIndex] || null;
 
   return {
-    isOpen,
-    currentIndex,
-    currentPhoto,
-    zoom,
-    setZoom,
-    pan,
-    setPan,
-    rotation,
-    setRotation,
-    showMetadata,
-    setShowMetadata,
-    showMap,
-    setShowMap,
-    open,
-    close,
-    navigate,
-    resetView,
+    isOpen, currentIndex, currentPhoto,
+    zoom, setZoom, pan, setPan,
+    rotation, setRotation,
+    showMetadata, setShowMetadata,
+    showMap, setShowMap,
+    open, close, navigate, resetView,
   };
 }
 
-/**
- * Hook for virtualized grid scroll management
- */
 export function useVirtualizedGrid(
   itemCount: number,
   estimateSize: (index: number) => number,
-  options: { overscan?: number; onScroll?: () => void } = {}
+  options: { overscan?: number; onScroll?: () => void } = {},
 ) {
   const parentRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(0);
 
   useEffect(() => {
     const updateWidth = () => {
-      if (parentRef.current) {
-        setContainerWidth(parentRef.current.clientWidth);
-      }
+      if (parentRef.current) setContainerWidth(parentRef.current.clientWidth);
     };
     updateWidth();
     window.addEventListener("resize", updateWidth);
     return () => window.removeEventListener("resize", updateWidth);
   }, []);
 
-  // Note: Actual virtualizer would be created in component using @tanstack/react-virtual
-  // This hook provides shared ref and width state
-
-  return {
-    parentRef,
-    containerWidth,
-  };
+  return { parentRef, containerWidth };
 }
 
-/**
- * Hook for keyboard navigation in grid
- */
 export function useGridKeyboardNavigation(
   itemCount: number,
   columns: number,
   onSelect: (index: number) => void,
   onOpen: (index: number) => void,
-  enabled: boolean = true
+  enabled = true,
 ) {
   const [focusedIndex, setFocusedIndex] = useState(-1);
 
   useEffect(() => {
     if (!enabled) return;
-
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-
       let newIndex = focusedIndex;
-      const cols = columns;
-
       switch (e.key) {
-        case "ArrowRight":
-          e.preventDefault();
-          newIndex = Math.min(focusedIndex + 1, itemCount - 1);
-          break;
-        case "ArrowLeft":
-          e.preventDefault();
-          newIndex = Math.max(focusedIndex - 1, 0);
-          break;
-        case "ArrowDown":
-          e.preventDefault();
-          newIndex = Math.min(focusedIndex + cols, itemCount - 1);
-          break;
-        case "ArrowUp":
-          e.preventDefault();
-          newIndex = Math.max(focusedIndex - cols, 0);
-          break;
-        case "Home":
-          e.preventDefault();
-          newIndex = 0;
-          break;
-        case "End":
-          e.preventDefault();
-          newIndex = itemCount - 1;
-          break;
-        case "Enter":
-        case " ":
+        case "ArrowRight": e.preventDefault(); newIndex = Math.min(focusedIndex + 1, itemCount - 1); break;
+        case "ArrowLeft": e.preventDefault(); newIndex = Math.max(focusedIndex - 1, 0); break;
+        case "ArrowDown": e.preventDefault(); newIndex = Math.min(focusedIndex + columns, itemCount - 1); break;
+        case "ArrowUp": e.preventDefault(); newIndex = Math.max(focusedIndex - columns, 0); break;
+        case "Home": e.preventDefault(); newIndex = 0; break;
+        case "End": e.preventDefault(); newIndex = itemCount - 1; break;
+        case "Enter": case " ":
           e.preventDefault();
           if (focusedIndex >= 0) {
-            if (e.shiftKey || e.metaKey || e.ctrlKey) {
-              onSelect(focusedIndex);
-            } else {
-              onOpen(focusedIndex);
-            }
+            if (e.shiftKey || e.metaKey || e.ctrlKey) onSelect(focusedIndex);
+            else onOpen(focusedIndex);
           }
           break;
-        case "Escape":
-          // Let parent handle
-          break;
-        default:
-          return;
+        default: return;
       }
-
-      if (newIndex !== focusedIndex) {
-        setFocusedIndex(newIndex);
-        // Scroll into view would be handled by parent
-      }
+      if (newIndex !== focusedIndex) setFocusedIndex(newIndex);
     };
-
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [focusedIndex, itemCount, columns, onSelect, onOpen, enabled]);
 
-  return {
-    focusedIndex,
-    setFocusedIndex,
-  };
+  return { focusedIndex, setFocusedIndex };
 }
-
-import { useState } from "react";

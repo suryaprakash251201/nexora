@@ -26,7 +26,7 @@ const PlaylistsPanel = React.lazy(() => import("./PlaylistsPanel"));
 const VideoView = React.lazy(() => import("./VideoView"));
 const ImageView = React.lazy(() => import("./ImageView"));
 const StorageAnalyticsPanel = React.lazy(() => import("./StorageAnalyticsPanel").then(m => ({ default: m.default })));
-const PhotosView = React.lazy(() => import("./PhotosView"));
+const PhotosView = React.lazy(() => import("./PhotosView/index"));
 import { TagPicker } from "./TagManager";
 import { MobileNav } from "./layout/MobileNav";
 import { PlaylistPickerPopover } from "./PlaylistAdder";

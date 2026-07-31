@@ -1,28 +1,13 @@
-import { Grid, Layout, LayoutList, LayoutGrid } from "lucide-react";
+import { LayoutGrid, Layout, LayoutList } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { motion } from "motion/react";
+import { useState, useRef, useEffect } from "react";
 
 type Density = "compact" | "comfortable" | "spacious";
 
 const DENSITY_OPTIONS: Array<{ value: Density; label: string; icon: React.ReactNode; description: string }> = [
-  {
-    value: "compact",
-    label: "Compact",
-    icon: <LayoutGrid className="h-4 w-4" />,
-    description: "More photos per row",
-  },
-  {
-    value: "comfortable",
-    label: "Comfortable",
-    icon: <Layout className="h-4 w-4" />,
-    description: "Balanced spacing",
-  },
-  {
-    value: "spacious",
-    label: "Spacious",
-    icon: <LayoutList className="h-4 w-4" />,
-    description: "Larger thumbnails",
-  },
+  { value: "compact", label: "Compact", icon: <LayoutGrid className="h-4 w-4" />, description: "More photos per row" },
+  { value: "comfortable", label: "Comfortable", icon: <Layout className="h-4 w-4" />, description: "Balanced spacing" },
+  { value: "spacious", label: "Spacious", icon: <LayoutList className="h-4 w-4" />, description: "Larger thumbnails" },
 ];
 
 interface DensitySelectorProps {
@@ -52,7 +37,7 @@ export function DensitySelector({ value, onChange, className }: DensitySelectorP
         className={cn(
           "flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
           "hover:bg-accent/10 hover:text-accent",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
         )}
         aria-expanded={open}
         aria-haspopup="listbox"
@@ -65,51 +50,41 @@ export function DensitySelector({ value, onChange, className }: DensitySelectorP
         </svg>
       </button>
 
-      <motion.div
-        ref={popoverRef}
-        initial={{ opacity: 0, y: -8, scale: 0.95 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        exit={{ opacity: 0, y: -8, scale: 0.95 }}
-        transition={{ duration: 0.12 }}
-        className="absolute right-0 top-full mt-1.5 z-50 glass-strong border border-glass-border rounded-xl p-1 shadow-lg min-w-[160px]"
-        role="listbox"
-        aria-label="Select grid density"
-      >
-        {DENSITY_OPTIONS.map((option) => (
-          <motion.button
-            key={option.value}
-            onClick={() => {
-              onChange(option.value);
-              setOpen(false);
-            }}
-            whileHover={{ backgroundColor: "var(--color-glass-bg-strong)" }}
-            whileTap={{ scale: 0.98 }}
-            className={cn(
-              "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
-              "text-content hover:text-accent",
-              value === option.value && "bg-accent/10 text-accent",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-inset"
-            )}
-            role="option"
-            aria-selected={value === option.value}
-          >
-            <span className={cn("w-5 h-5 flex items-center justify-center", value === option.value && "text-accent")}>
-              {option.icon}
-            </span>
-            <div className="flex-1 text-left">
-              <p className="font-medium">{option.label}</p>
-              <p className="text-[11px] text-content-muted">{option.description}</p>
-            </div>
-            {value === option.value && (
-              <svg className="h-4 w-4 text-accent flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <polyline points="20 6 9 17 4 12" />
-              </svg>
-            )}
-          </motion.button>
-        ))}
-      </motion.div>
+      {open && (
+        <div
+          ref={popoverRef}
+          className="absolute right-0 top-full mt-1.5 z-50 glass-strong border border-glass-border rounded-xl p-1 shadow-lg min-w-[160px]"
+          role="listbox"
+          aria-label="Select grid density"
+        >
+          {DENSITY_OPTIONS.map((option) => (
+            <button
+              key={option.value}
+              onClick={() => { onChange(option.value); setOpen(false); }}
+              className={cn(
+                "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
+                "text-content hover:bg-accent/10 hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-inset",
+                value === option.value && "bg-accent/10 text-accent",
+              )}
+              role="option"
+              aria-selected={value === option.value}
+            >
+              <span className={cn("w-5 h-5 flex items-center justify-center", value === option.value && "text-accent")}>
+                {option.icon}
+              </span>
+              <div className="flex-1 text-left">
+                <p className="font-medium">{option.label}</p>
+                <p className="text-[11px] text-content-muted">{option.description}</p>
+              </div>
+              {value === option.value && (
+                <svg className="h-4 w-4 text-accent flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
-
-import { useState, useRef, useEffect } from "react";

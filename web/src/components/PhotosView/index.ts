@@ -1,4 +1,5 @@
 // PhotosView - Modern photo gallery with timeline, grid, and fullscreen viewer
+export { default } from "./PhotosView";
 export { default as PhotosView } from "./PhotosView";
 export { PhotoGrid } from "./PhotoGrid";
 export { PhotoCard } from "./PhotoCard";
@@ -10,7 +11,7 @@ export { PhotoContextMenu } from "./PhotoContextMenu";
 export { DensitySelector } from "./DensitySelector";
 
 // Hooks
-export { usePhotos, usePhotoSelection } from "./hooks/usePhotos";
+export { usePhotos, usePhotoSelection } from "./hooks";
 
 // Types
 export type { PhotoResult, PhotosResponse, PhotoFilters, PhotoMeta, Density, ViewMode } from "./types";

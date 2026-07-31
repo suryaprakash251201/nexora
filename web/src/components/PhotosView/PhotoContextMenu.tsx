@@ -1,6 +1,6 @@
-import { useEffect, useRef } from "react";
+import { useRef, useEffect } from "react";
 import { motion } from "motion/react";
-import { Download, Share2, Trash2, FolderPlus, Heart, MapPin, Star, Info, MoreHorizontal, X, Copy, Archive } from "lucide-react";
+import { Download, Share2, Star, Trash2, FolderPlus, Info, MapPin, Copy, Archive, Camera } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PhotoResult } from "@/api/types";
 
@@ -19,53 +19,29 @@ interface PhotoContextMenuProps {
   onViewOnMap: (photo: PhotoResult) => void;
   onArchive: (photo: PhotoResult) => void;
 }
-
 export function PhotoContextMenu({
-  contextMenu,
-  onClose,
-  onOpen,
-  onPreview,
-  onToggleFavorite,
-  onDownload,
-  onDelete,
-  onShare,
-  onCopyPath,
-  onAddToAlbum,
-  onViewMetadata,
-  onViewOnMap,
-  onArchive,
+  contextMenu, onClose, onOpen, onPreview, onToggleFavorite,
+  onDownload, onDelete, onShare, onCopyPath, onAddToAlbum, onViewMetadata, onViewOnMap, onArchive,
 }: PhotoContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const photo = contextMenu?.photo;
 
-  // Close on escape
   useEffect(() => {
+    if (!contextMenu) return;
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        onClose();
-      }
+      if (e.key === "Escape") onClose();
     };
-    if (contextMenu) {
-      document.addEventListener("keydown", handleKeyDown);
-    }
+    if (contextMenu) document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [contextMenu, onClose]);
 
-  // Focus trap
   useEffect(() => {
-    if (menuRef.current) {
-      menuRef.current.focus();
-    }
+    if (menuRef.current) menuRef.current.focus();
   }, [contextMenu]);
 
   if (!contextMenu || !photo) return null;
 
-  const handleAction = (action: () => void) => {
-    action();
-    onClose();
-  };
-
-  // Calculate position to keep menu in viewport
+  const handleAction = (action: () => void) => { action(); onClose(); };
   const menuWidth = 240;
   const menuHeight = 380;
   const x = Math.min(contextMenu.x, window.innerWidth - menuWidth - 16);
@@ -75,19 +51,12 @@ export function PhotoContextMenu({
     <motion.div
       ref={menuRef}
       initial={{ opacity: 0, scale: 0.95, y: 8 }}
-      animate={{ opacity: 1, scale: 1, y: 0 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, scale: 0.95, y: 8 }}
       transition={{ duration: 0.1, ease: "easeOut" }}
-      className={cn(
-        "fixed z-[70] glass-strong border border-glass-border rounded-xl shadow-2xl p-1 min-w-[240px]",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-      )}
-      style={{
-        left: x,
-        top: y,
-      }}
+      className="fixed z-[70] glass-strong border border-glass-border rounded-xl p-1 min-w-[240px] pointer-events-auto"
+      style={{ left: x, top: y }}
       role="menu"
-      tabIndex={-1}
       onClick={(e) => e.stopPropagation()}
       onContextMenu={(e) => e.preventDefault()}
     >
@@ -101,203 +70,71 @@ export function PhotoContextMenu({
         <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
         <div className="absolute bottom-2 left-2 right-2 text-white text-xs truncate">{photo.name}</div>
       </div>
-
       <nav className="space-y-0.5" aria-label="Photo actions">
-        {/* Primary actions */}
-        <motion.button
-          onClick={() => handleAction(() => onPreview?.(photo.root_id, photo.path) || onOpen(photo.root_id, photo.path))}
-          whileHover={{ backgroundColor: "var(--color-glass-bg-strong)" }}
-          whileTap={{ scale: 0.98 }}
-          className={cn(
-            "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium",
-            "text-content hover:text-accent transition-colors",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset"
-          )}
-          role="menuitem"
-        >
-          <span className="w-5 h-5 flex items-center justify-center">
-            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
-              <circle cx="12" cy="13" r="4" />
-            </svg>
-          </span>
-          <span>Open</span>
+        <MenuButton onClick={() => handleAction(() => onPreview?.(photo.root_id, photo.path) || onOpen(photo.root_id, photo.path))}>
+          <Camera className="h-4 w-4" /> Open
           <span className="ml-auto text-xs text-content-muted">Enter</span>
-        </motion.button>
-
-        <motion.button
-          onClick={() => handleAction(() => onToggleFavorite(photo.id))}
-          whileHover={{ backgroundColor: "var(--color-glass-bg-strong)" }}
-          whileTap={{ scale: 0.98 }}
-          className={cn(
-            "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium",
-            "text-content hover:text-accent transition-colors",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset"
-          )}
-          role="menuitem"
-          aria-pressed={photo.is_favorite}
-        >
-          <span className="w-5 h-5 flex items-center justify-center">
-            <Star className={cn("h-4 w-4", photo.is_favorite && "fill-current text-yellow-400")} />
-          </span>
+        </MenuButton>
+        <MenuButton onClick={() => handleAction(() => onToggleFavorite(photo.id))}>
+          <Star className={cn("h-4 w-4", photo.is_favorite && "fill-current text-yellow-400")} />
           <span>{photo.is_favorite ? "Remove from favorites" : "Add to favorites"}</span>
-          <span className="ml-auto text-xs text-content-muted">S</span>
-        </motion.button>
-
-        <div className="border-t border-glass-border/50 my-1" />
-
-        {/* Organization */}
-        <motion.button
-          onClick={() => handleAction(() => onAddToAlbum(photo))}
-          whileHover={{ backgroundColor: "var(--color-glass-bg-strong)" }}
-          whileTap={{ scale: 0.98 }}
-          className={cn(
-            "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium",
-            "text-content hover:text-accent transition-colors",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset"
-          )}
-          role="menuitem"
-        >
-          <span className="w-5 h-5 flex items-center justify-center">
-            <FolderPlus className="h-4 w-4" />
-          </span>
-          <span>Add to album</span>
-        </motion.button>
-
-        <motion.button
-          onClick={() => handleAction(() => onArchive(photo))}
-          whileHover={{ backgroundColor: "var(--color-glass-bg-strong)" }}
-          whileTap={{ scale: 0.98 }}
-          className={cn(
-            "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium",
-            "text-content hover:text-accent transition-colors",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset"
-          )}
-          role="menuitem"
-        >
-          <span className="w-5 h-5 flex items-center justify-center">
-            <Archive className="h-4 w-4" />
-          </span>
-          <span>Archive</span>
-        </motion.button>
-
-        <div className="border-t border-glass-border/50 my-1" />
-
-        {/* Sharing & Export */}
-        <motion.button
-          onClick={() => handleAction(() => onShare(photo))}
-          whileHover={{ backgroundColor: "var(--color-glass-bg-strong)" }}
-          whileTap={{ scale: 0.98 }}
-          className={cn(
-            "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium",
-            "text-content hover:text-accent transition-colors",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset"
-          )}
-          role="menuitem"
-        >
-          <span className="w-5 h-5 flex items-center justify-center">
-            <Share2 className="h-4 w-4" />
-          </span>
-          <span>Share</span>
-        </motion.button>
-
-        <motion.button
-          onClick={() => handleAction(() => onDownload(photo))}
-          whileHover={{ backgroundColor: "var(--color-glass-bg-strong)" }}
-          whileTap={{ scale: 0.98 }}
-          className={cn(
-            "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium",
-            "text-content hover:text-accent transition-colors",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset"
-          )}
-          role="menuitem"
-        >
-          <span className="w-5 h-5 flex items-center justify-center">
-            <Download className="h-4 w-4" />
-          </span>
-          <span>Download</span>
+          <span className="ml-auto text-xs text-content-muted">F</span>
+        </MenuButton>
+        <hr className="border-t border-glass-border/50 my-1" />
+        <MenuButton onClick={() => handleAction(() => onAddToAlbum(photo))}>
+          <FolderPlus className="h-4 w-4" /> Add to album
+        </MenuButton>
+        <MenuButton onClick={() => handleAction(() => onArchive(photo))}>
+          <Archive className="h-4 w-4" /> Archive
+        </MenuButton>
+        <hr className="border-t border-glass-border/50 my-1" />
+        <MenuButton onClick={() => handleAction(() => onShare(photo))}>
+          <Share2 className="h-4 w-4" /> Share
+        </MenuButton>
+        <MenuButton onClick={() => handleAction(() => onDownload(photo))}>
+          <Download className="h-4 w-4" /> Download
           <span className="ml-auto text-xs text-content-muted">D</span>
-        </motion.button>
-
-        <motion.button
-          onClick={() => handleAction(() => onCopyPath(photo))}
-          whileHover={{ backgroundColor: "var(--color-glass-bg-strong)" }}
-          whileTap={{ scale: 0.98 }}
-          className={cn(
-            "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium",
-            "text-content hover:text-accent transition-colors",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset"
-          )}
-          role="menuitem"
-        >
-          <span className="w-5 h-5 flex items-center justify-center">
-            <Copy className="h-4 w-4" />
-          </span>
-          <span>Copy path</span>
-        </motion.button>
-
-        <div className="border-t border-glass-border/50 my-1" />
-
-        {/* Info & Location */}
-        <motion.button
-          onClick={() => handleAction(() => onViewMetadata(photo))}
-          whileHover={{ backgroundColor: "var(--color-glass-bg-strong)" }}
-          whileTap={{ scale: 0.98 }}
-          className={cn(
-            "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium",
-            "text-content hover:text-accent transition-colors",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset"
-          )}
-          role="menuitem"
-        >
-          <span className="w-5 h-5 flex items-center justify-center">
-            <Info className="h-4 w-4" />
-          </span>
-          <span>Show details (EXIF)</span>
+        </MenuButton>
+        <MenuButton onClick={() => handleAction(() => onCopyPath(photo))}>
+          <Copy className="h-4 w-4" /> Copy path
+        </MenuButton>
+        <hr className="border-t border-glass-border/50 my-1" />
+        <MenuButton onClick={() => handleAction(() => onViewMetadata(photo))}>
+          <Info className="h-4 w-4" /> Show details (EXIF)
           <span className="ml-auto text-xs text-content-muted">I</span>
-        </motion.button>
-
+        </MenuButton>
         {photo.lat && photo.lng && (
-          <motion.button
-            onClick={() => handleAction(() => onViewOnMap(photo))}
-            whileHover={{ backgroundColor: "var(--color-glass-bg-strong)" }}
-            whileTap={{ scale: 0.98 }}
-            className={cn(
-              "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium",
-              "text-content hover:text-accent transition-colors",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset"
-            )}
-            role="menuitem"
-          >
-            <span className="w-5 h-5 flex items-center justify-center">
-              <MapPin className="h-4 w-4" />
-            </span>
-            <span>View on map</span>
+          <MenuButton onClick={() => handleAction(() => onViewOnMap(photo))}>
+            <MapPin className="h-4 w-4" /> View on map
             <span className="ml-auto text-xs text-content-muted">M</span>
-          </motion.button>
+          </MenuButton>
         )}
-
-        <div className="border-t border-glass-border/50 my-1" />
-
-        {/* Danger zone */}
-        <motion.button
-          onClick={() => handleAction(() => onDelete(photo))}
-          whileHover={{ backgroundColor: "rgba(239, 68, 68, 0.1)" }}
-          whileTap={{ scale: 0.98 }}
-          className={cn(
-            "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium",
-            "text-destructive hover:bg-destructive/10 transition-colors",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive focus-visible:ring-inset"
-          )}
-          role="menuitem"
-        >
-          <span className="w-5 h-5 flex items-center justify-center">
-            <Trash2 className="h-4 w-4" />
-          </span>
-          <span>Delete</span>
+        <hr className="border-t border-glass-border/50 my-1" />
+        <MenuButton destructive onClick={() => handleAction(() => onDelete(photo))}>
+          <Trash2 className="h-4 w-4" /> Delete
           <span className="ml-auto text-xs text-content-muted">Del</span>
-        </motion.button>
+        </MenuButton>
       </nav>
     </motion.div>
+  );
+}
+
+function MenuButton({ onClick, children, destructive, className }: { onClick: () => void; children: React.ReactNode; destructive?: boolean; className?: string }) {
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        "w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium transition-colors",
+        destructive
+          ? "text-destructive/80 hover:bg-destructive/10 hover:bg-destructive/20"
+          : "text-content hover:bg-accent/10 hover:text-accent",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-inset",
+        className,
+      )}
+      role="menuitem"
+    >
+      <span className="flex h-5 w-5 items-center justify-center">{children}</span>
+      <span className="flex-1 text-left">{Array.isArray(children) ? children : <></>}</span>
+    </button>
   );
 }

@@ -41,3 +41,14 @@ export function formatRelative(iso: string): string {
   if (day < 7) return `${day}d ago`;
   return formatDate(iso);
 }
+
+export function formatDateLabel(dateStr: string): string {
+  try {
+    if (!dateStr) return "";
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return "";
+    return d.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  } catch {
+    return "";
+  }
+}

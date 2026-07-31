@@ -1,24 +1,8 @@
-import { useState, useRef, useEffect } from "react";
-import { ChevronDown, Filter, X, Calendar, Camera, MapPin, Star, SlidersHorizontal, Loader2 } from "lucide-react";
+import { useState } from "react";
+import { motion } from "motion/react";
+import { Filter, X, ChevronDown, MapPin, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { motion, AnimatePresence } from "motion/react";
-
-interface FilterBarProps {
-  filters: {
-    year?: number;
-    month?: number;
-    cameraMake?: string;
-    hasLocation?: boolean;
-    favoritesOnly?: boolean;
-    dateFrom?: string;
-    dateTo?: string;
-    sort: "date_desc" | "date_asc" | "name";
-  };
-  onChange: (filters: FilterBarProps["filters"]) => void;
-  cameraMakes: string[];
-  yearFacets: Array<{ year: number; count: number }>;
-  className?: string;
-}
+import { PhotoFilters, YearFacet, CameraFacet } from "./types";
 
 const MONTHS = [
   { value: 1, label: "January" },
@@ -35,37 +19,70 @@ const MONTHS = [
   { value: 12, label: "December" },
 ];
 
-const SORT_OPTIONS = [
-  { value: "date_desc", label: "Newest first" },
-  { value: "date_asc", label: "Oldest first" },
-  { value: "name", label: "Name A–Z" },
-];
+interface FilterBarProps {
+  filters: PhotoFilters;
+  onChange: (filters: PhotoFilters) => void;
+  yearFacets: YearFacet[];
+  cameraFacets: CameraFacet[];
+  className?: string;
+}
 
-export function FilterBar({ filters, onChange, cameraMakes, yearFacets, className }: FilterBarProps) {
+interface FilterTriggerProps {
+  label: string;
+  open: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+}
+
+function FilterTrigger({ label, open, onToggle, children }: FilterTriggerProps) {
+  return (
+    <div className="relative">
+      <motion.button
+        onClick={onToggle}
+        whileHover={{ scale: 1.02 }}
+        whileTap={{ scale: 0.98 }}
+        className={cn(
+          "flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors",
+          open
+            ? "bg-accent text-white"
+            : "bg-surface/50 text-content-secondary hover:bg-surface border border-glass-border"
+        )}
+      >
+        <span>{label}</span>
+        <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", open && "rotate-180")} />
+      </motion.button>
+
+      {open && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -10 }}
+          className="absolute top-full left-0 mt-2 p-4 bg-surface border border-glass-border rounded-xl shadow-xl z-50 min-w-[280px]"
+        >
+          {children}
+        </motion.div>
+      )}
+    </div>
+  );
+}
+
+export function FilterBar({
+  filters,
+  onChange,
+  yearFacets,
+  cameraFacets,
+  className,
+}: FilterBarProps) {
   const [openFilters, setOpenFilters] = useState<string | null>(null);
-  const popoverRef = useRef<HTMLDivElement>(null);
 
-  // Close popover on outside click
-  useEffect(() => {
-    const handleClick = (e: MouseEvent) => {
-      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
-        setOpenFilters(null);
-      }
-    };
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, []);
-
-  const activeFilterCount = useMemo(() => {
-    let count = 0;
-    if (filters.year !== undefined) count++;
-    if (filters.month !== undefined) count++;
-    if (filters.cameraMake) count++;
-    if (filters.hasLocation !== undefined) count++;
-    if (filters.favoritesOnly) count++;
-    if (filters.dateFrom || filters.dateTo) count++;
-    return count;
-  }, [filters]);
+  const activeFilterCount = [
+    filters.year,
+    filters.cameraMake,
+    filters.hasLocation,
+    filters.favoritesOnly,
+    filters.dateFrom,
+    filters.dateTo,
+  ].filter(Boolean).length;
 
   const clearAllFilters = () => {
     onChange({
@@ -82,13 +99,12 @@ export function FilterBar({ filters, onChange, cameraMakes, yearFacets, classNam
 
   return (
     <div className={cn("flex flex-wrap items-center gap-2", className)}>
-      {/* Active filters indicator */}
       {activeFilterCount > 0 && (
         <motion.button
           onClick={clearAllFilters}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-accent bg-accent/10 rounded-lg hover:bg-accent/20 transition-colors"
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-accent bg-accent/10 rounded-lg hover:bg-accent/20 transition-colors"
           aria-label="Clear all filters"
         >
           <Filter className="h-3.5 w-3.5" />
@@ -97,18 +113,14 @@ export function FilterBar({ filters, onChange, cameraMakes, yearFacets, classNam
         </motion.button>
       )}
 
-      {/* Filter triggers */}
       <div className="flex items-center gap-1">
-        {/* Year/Month Filter */}
+        {/* Date Filter */}
         <FilterTrigger
           label={filters.year ? `${filters.year}${filters.month ? ` / ${MONTHS[filters.month - 1]?.label.slice(0, 3)}` : ""}` : "Date"}
-          icon={<Calendar className="h-3.5 w-3.5" />}
-          isActive={filters.year !== undefined || filters.month !== undefined}
           open={openFilters === "date"}
-          onClick={() => setOpenFilters(openFilters === "date" ? null : "date")}
-          popoverRef={popoverRef}
+          onToggle={() => setOpenFilters(openFilters === "date" ? null : "date")}
         >
-          <FilterPopoverContent>
+          {openFilters === "date" && (
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-medium text-content-muted mb-1">Year</label>
@@ -119,9 +131,7 @@ export function FilterBar({ filters, onChange, cameraMakes, yearFacets, classNam
                 >
                   <option value="">All years</option>
                   {yearFacets.map(({ year }) => (
-                    <option key={year} value={String(year)}>
-                      {year}
-                    </option>
+                    <option key={year} value={String(year)}>{year}</option>
                   ))}
                 </select>
               </div>
@@ -131,217 +141,88 @@ export function FilterBar({ filters, onChange, cameraMakes, yearFacets, classNam
                   value={filters.month || ""}
                   onChange={(e) => onChange({ ...filters, month: e.target.value ? parseInt(e.target.value) : undefined })}
                   disabled={!filters.year}
-                  className="w-full px-3 py-2 text-sm bg-surface/50 border border-glass-border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full px-3 py-2 text-sm bg-surface/50 border border-glass-border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-transparent disabled:opacity-50"
                 >
                   <option value="">All months</option>
-                  {MONTHS.map((m) => (
-                    <option key={m.value} value={String(m.value)}>
-                      {m.label}
-                    </option>
+                  {MONTHS.map(({ value, label }) => (
+                    <option key={value} value={String(value)}>{label}</option>
                   ))}
                 </select>
               </div>
-              <div className="col-span-2 flex gap-2 pt-2">
-                <button
-                  onClick={() => onChange({ ...filters, dateFrom: undefined, dateTo: undefined })}
-                  className="flex-1 px-3 py-2 text-sm text-content-muted bg-surface/50 border border-glass-border rounded-lg hover:bg-surface hover:border-accent/50 transition-colors"
-                >
-                  Clear dates
-                </button>
-                <button
-                  onClick={() => {
-                    const today = new Date().toISOString().split("T")[0];
-                    const monthAgo = new Date(Date.now() - 30 * 86400000).toISOString().split("T")[0];
-                    onChange({ ...filters, dateFrom: monthAgo, dateTo: today });
-                  }}
-                  className="flex-1 px-3 py-2 text-sm text-accent bg-accent/10 border border-accent/30 rounded-lg hover:bg-accent/20 transition-colors"
-                >
-                  Last 30 days
-                </button>
-              </div>
             </div>
-          </FilterPopoverContent>
+          )}
         </FilterTrigger>
 
-        {/* Camera Make Filter */}
+        {/* Camera Filter */}
         <FilterTrigger
           label={filters.cameraMake || "Camera"}
-          icon={<Camera className="h-3.5 w-3.5" />}
-          isActive={!!filters.cameraMake}
           open={openFilters === "camera"}
-          onClick={() => setOpenFilters(openFilters === "camera" ? null : "camera")}
-          popoverRef={popoverRef}
+          onToggle={() => setOpenFilters(openFilters === "camera" ? null : "camera")}
         >
-          <FilterPopoverContent className="max-h-60 overflow-auto">
-            <div className="space-y-1">
-              <label className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-accent/10 cursor-pointer">
-                <input
-                  type="radio"
-                  name="camera-make"
-                  checked={!filters.cameraMake}
-                  onChange={() => onChange({ ...filters, cameraMake: undefined })}
-                  className="h-4 w-4 text-accent border-glass-border focus:ring-accent"
-                />
-                <span className="text-sm">All cameras</span>
-              </label>
-              {cameraMakes.map((make) => (
-                <label key={make} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-accent/10 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="camera-make"
-                    checked={filters.cameraMake === make}
-                    onChange={() => onChange({ ...filters, cameraMake: make })}
-                    className="h-4 w-4 text-accent border-glass-border focus:ring-accent"
-                  />
-                  <span className="text-sm truncate">{make}</span>
-                </label>
-              ))}
+          {openFilters === "camera" && (
+            <div>
+              <label className="block text-xs font-medium text-content-muted mb-2">Camera Make</label>
+              <select
+                value={filters.cameraMake || ""}
+                onChange={(e) => onChange({ ...filters, cameraMake: e.target.value || undefined })}
+                className="w-full px-3 py-2 text-sm bg-surface/50 border border-glass-border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-transparent"
+              >
+                <option value="">All cameras</option>
+                {cameraFacets.map(({ make, count }) => (
+                  <option key={make} value={make}>{make} ({count})</option>
+                ))}
+              </select>
             </div>
-          </FilterPopoverContent>
+          )}
         </FilterTrigger>
 
-        {/* Location Filter */}
-        <FilterTrigger
-          label={filters.hasLocation !== undefined ? (filters.hasLocation ? "Has location" : "No location") : "Location"}
-          icon={<MapPin className="h-3.5 w-3.5" />}
-          isActive={filters.hasLocation !== undefined}
-          open={openFilters === "location"}
-          onClick={() => setOpenFilters(openFilters === "location" ? null : "location")}
-          popoverRef={popoverRef}
+        {/* Quick Filters */}
+        <motion.button
+          onClick={() => onChange({ ...filters, hasLocation: !filters.hasLocation })}
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          className={cn(
+            "flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors",
+            filters.hasLocation
+              ? "bg-accent text-white"
+              : "bg-surface/50 text-content-secondary hover:bg-surface border border-glass-border"
+          )}
+          aria-pressed={filters.hasLocation}
         >
-          <FilterPopoverContent>
-            <div className="space-y-1">
-              <label className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-accent/10 cursor-pointer">
-                <input
-                  type="radio"
-                  name="location"
-                  checked={filters.hasLocation === undefined}
-                  onChange={() => onChange({ ...filters, hasLocation: undefined })}
-                  className="h-4 w-4 text-accent border-glass-border focus:ring-accent"
-                />
-                <span className="text-sm">All photos</span>
-              </label>
-              <label className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-accent/10 cursor-pointer">
-                <input
-                  type="radio"
-                  name="location"
-                  checked={filters.hasLocation === true}
-                  onChange={() => onChange({ ...filters, hasLocation: true })}
-                  className="h-4 w-4 text-accent border-glass-border focus:ring-accent"
-                />
-                <span className="text-sm">Has GPS location</span>
-              </label>
-              <label className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-accent/10 cursor-pointer">
-                <input
-                  type="radio"
-                  name="location"
-                  checked={filters.hasLocation === false}
-                  onChange={() => onChange({ ...filters, hasLocation: false })}
-                  className="h-4 w-4 text-accent border-glass-border focus:ring-accent"
-                />
-                <span className="text-sm">No GPS location</span>
-              </label>
-            </div>
-          </FilterPopoverContent>
-        </FilterTrigger>
+          <MapPin className="h-3.5 w-3.5" />
+          <span>Location</span>
+        </motion.button>
 
-        {/* Favorites Filter */}
-        <FilterTrigger
-          label="Favorites"
-          icon={<Star className="h-3.5 w-3.5" />}
-          isActive={filters.favoritesOnly}
-          open={openFilters === "favorites"}
-          onClick={() => {
-            onChange({ ...filters, favoritesOnly: !filters.favoritesOnly });
-            setOpenFilters(null);
-          }}
-          popoverRef={popoverRef}
-        />
-
-        {/* Sort */}
-        <FilterTrigger
-          label={SORT_OPTIONS.find((s) => s.value === filters.sort)?.label || "Sort"}
-          icon={<SlidersHorizontal className="h-3.5 w-3.5" />}
-          isActive={false}
-          open={openFilters === "sort"}
-          onClick={() => setOpenFilters(openFilters === "sort" ? null : "sort")}
-          popoverRef={popoverRef}
+        <motion.button
+          onClick={() => onChange({ ...filters, favoritesOnly: !filters.favoritesOnly })}
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          className={cn(
+            "flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors",
+            filters.favoritesOnly
+              ? "bg-yellow-400 text-yellow-900"
+              : "bg-surface/50 text-content-secondary hover:bg-surface border border-glass-border"
+          )}
+          aria-pressed={filters.favoritesOnly}
         >
-          <FilterPopoverContent>
-            <div className="space-y-1">
-              {SORT_OPTIONS.map((opt) => (
-                <label
-                  key={opt.value}
-                  className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-accent/10 cursor-pointer"
-                >
-                  <input
-                    type="radio"
-                    name="sort"
-                    checked={filters.sort === opt.value}
-                    onChange={() => onChange({ ...filters, sort: opt.value })}
-                    className="h-4 w-4 text-accent border-glass-border focus:ring-accent"
-                  />
-                  <span className="text-sm">{opt.label}</span>
-                </label>
-              ))}
-            </div>
-          </FilterPopoverContent>
-        </FilterTrigger>
+          <Star className={cn("h-3.5 w-3.5", filters.favoritesOnly && "fill-current")} />
+          <span>Favorites</span>
+        </motion.button>
+      </div>
+
+      {/* Sort */}
+      <div className="ml-auto">
+        <select
+          value={filters.sort}
+          onChange={(e) => onChange({ ...filters, sort: e.target.value as PhotoFilters["sort"] })}
+          className="px-3 py-1.5 text-xs font-medium bg-surface/50 border border-glass-border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-transparent"
+          aria-label="Sort photos"
+        >
+          <option value="date_desc">Newest first</option>
+          <option value="date_asc">Oldest first</option>
+          <option value="name">Name</option>
+        </select>
       </div>
     </div>
   );
 }
-
-// Helper components
-interface FilterTriggerProps {
-  label: string;
-  icon: React.ReactNode;
-  isActive: boolean;
-  open: boolean;
-  onClick: () => void;
-  popoverRef: React.RefObject<HTMLDivElement>;
-  children: React.ReactNode;
-}
-
-function FilterTrigger({ label, icon, isActive, open, onClick, popoverRef, children }: FilterTriggerProps) {
-  return (
-    <div className="relative">
-      <button
-        onClick={onClick}
-        className={cn(
-          "flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors",
-          "hover:bg-accent/10 hover:text-accent",
-          isActive ? "bg-accent/10 text-accent" : "text-content-muted hover:text-content"
-        )}
-        aria-expanded={open}
-        aria-haspopup="true"
-      >
-        <span className="flex items-center">{icon}</span>
-        <span>{label}</span>
-        <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", open && "rotate-180")} />
-      </button>
-
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            ref={popoverRef}
-            initial={{ opacity: 0, y: -8, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -8, scale: 0.95 }}
-            transition={{ duration: 0.15 }}
-            className="absolute right-0 top-full mt-1.5 z-50 min-w-[200px] glass-strong border border-glass-border rounded-xl p-2 shadow-lg"
-            role="menu"
-          >
-            {children}
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
-
-function FilterPopoverContent({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <div className={cn("py-1", className)}>{children}</div>;
-}
-
-import { useMemo } from "react";

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { X, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, RotateCcw, RotateCw, Download, Share2, Info, MapPin, Star, Trash2, MoreHorizontal, Expand, Minimize } from "lucide-react";
+import { X, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, RotateCcw, RotateCw, Download, Share2, Info, MapPin, Star, MoreHorizontal, Expand } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PhotoResult } from "@/api/types";
 import { getMediaUrl } from "@/api/client";
@@ -45,7 +45,7 @@ export function PhotoViewer({
   const imageRef = useRef<HTMLImageElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const thumbnailStripRef = useRef<HTMLDivElement>(null);
-  const hideUITimer = useRef<NodeJS.Timeout>();
+  const hideUITimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const currentPhoto = photos[currentIndex];
   const isSelected = selectedIds.has(currentPhoto?.id || "");

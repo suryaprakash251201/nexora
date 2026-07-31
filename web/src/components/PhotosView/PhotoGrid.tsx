@@ -1,8 +1,9 @@
-import { useVirtualizer, Virtualizer } from "@tanstack/react-virtual";
-import { useRef, useCallback, useMemo, useEffect } from "react";
+import { useRef, useCallback, useMemo, useEffect, useState } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { PhotoCard } from "./PhotoCard";
 import { PhotoResult } from "@/api/types";
 import { cn } from "@/lib/utils";
+import { Loader2 } from "lucide-react";
 
 type Density = "compact" | "comfortable" | "spacious";
 
@@ -23,7 +24,7 @@ interface PhotoGridProps {
   onLoadMore?: () => void;
   hasMore?: boolean;
   isLoadingMore?: boolean;
-  containerRef?: React.RefObject<HTMLDivElement>;
+  containerRef?: React.RefObject<HTMLDivElement | null>;
 }
 
 export function PhotoGrid({
@@ -40,7 +41,6 @@ export function PhotoGrid({
   containerRef,
 }: PhotoGridProps) {
   const parentRef = useRef<HTMLDivElement>(null);
-  const gridRef = useRef<HTMLDivElement>(null);
   const config = DENSITY_CONFIG[density];
   const [containerWidth, setContainerWidth] = useState(0);
 
@@ -75,7 +75,7 @@ export function PhotoGrid({
 
   const virtualizer = useVirtualizer({
     count: photos.length,
-    getScrollElement: () => parentRef.current,
+    getScrollElement: () => parentRef.current as HTMLDivElement,
     estimateSize,
     overscan: 5,
     horizontal: false,
@@ -97,21 +97,19 @@ export function PhotoGrid({
   useEffect(() => {
     const el = parentRef.current;
     if (!el) return;
-    el.addEventListener("scroll", handleScroll, { passive: true });
-    return () => el.removeEventListener("scroll", handleScroll, { passive: true });
+    el.addEventListener("scroll", handleScroll, { passive: true } as AddEventListenerOptions);
+    return () => el.removeEventListener("scroll", handleScroll, { passive: true } as EventListenerOptions);
   }, [handleScroll]);
 
   const virtualItems = virtualizer.getVirtualItems();
 
-  // Group items by row for month headers (optional)
-  // For simplicity, we render flat grid
-
   const combinedRef = useCallback(
     (node: HTMLDivElement | null) => {
-      parentRef.current = node;
-      if (containerRef) {
-        // @ts-ignore
-        containerRef.current = node;
+      if (node) {
+        parentRef.current = node;
+        if (containerRef) {
+          containerRef.current = node;
+        }
       }
     },
     [containerRef]
@@ -125,7 +123,6 @@ export function PhotoGrid({
       aria-label="Photo grid"
     >
       <div
-        ref={gridRef}
         className={cn("relative", "grid", `grid-cols-${columns}`, `gap-${config.gap}`, "p-4")}
         style={{
           height: virtualizer.getTotalSize(),
@@ -134,7 +131,7 @@ export function PhotoGrid({
         }}
         role="list"
       >
-        {virtualItems.map((virtualRow) => (
+        {virtualItems.map((virtualRow: { index: number; start: number; size: number }) => (
           <PhotoCard
             key={photos[virtualRow.index]?.id || virtualRow.index}
             photo={photos[virtualRow.index]!}
@@ -200,5 +197,3 @@ export function PhotoGrid({
   );
 }
 
-import { useState, useMemo, useCallback, useEffect } from "react";
-import { Loader2 } from "lucide-react";

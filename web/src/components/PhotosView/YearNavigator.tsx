@@ -1,4 +1,4 @@
-import { ChevronRight, ChevronDown } from "lucide-react";
+import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { motion } from "motion/react";
 
@@ -19,12 +19,14 @@ export function YearNavigator({ years, selectedYear, onYearSelect, className }: 
         className={cn(
           "w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-sm font-medium transition-colors",
           "hover:bg-accent/10 hover:text-accent",
-          selectedYear === undefined && "bg-accent/10 text-accent"
+          selectedYear === undefined && "bg-accent/10 text-accent",
         )}
         aria-expanded={expanded}
       >
         <span>All Years</span>
-        <ChevronDown className={cn("h-4 w-4 transition-transform", expanded && "rotate-180")} />
+        <svg className={cn("h-4 w-4 transition-transform", expanded && "rotate-180")} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
       </button>
 
       {expanded && (
@@ -42,7 +44,7 @@ export function YearNavigator({ years, selectedYear, onYearSelect, className }: 
               className={cn(
                 "w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-sm transition-colors",
                 "hover:bg-accent/10 hover:text-accent",
-                selectedYear === year && "bg-accent/15 text-accent font-medium"
+                selectedYear === year && "bg-accent/15 text-accent font-medium",
               )}
               aria-current={selectedYear === year ? "true" : "false"}
             >

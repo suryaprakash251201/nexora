@@ -15,6 +15,16 @@ export interface PhotoResult {
   height?: number;
 }
 
+export interface YearFacet {
+  year: number;
+  count: number;
+}
+
+export interface CameraFacet {
+  make: string;
+  count: number;
+}
+
 export interface PhotosResponse {
   items: PhotoResult[];
   next_cursor?: string;
@@ -34,7 +44,7 @@ export interface PhotoFilters {
   favoritesOnly?: boolean;
   dateFrom?: string;
   dateTo?: string;
-  sort?: "date_desc" | "date_asc" | "name";
+  sort: "date_desc" | "date_asc" | "name";
   query?: string;
 }
 
@@ -80,12 +90,7 @@ export interface PhotoMeta {
 export type Density = "compact" | "comfortable" | "spacious";
 export type ViewMode = "grid" | "timeline";
 
-export const DENSITY_CONFIG: Record<Density, { 
-  cols: { base: number; sm: number; md: number; lg: number; xl: number }; 
-  gap: number; 
-  cardWidth: number;
-  aspectRatio: number;
-}> = {
+export const DENSITY_CONFIG: Record<Density, { cols: { base: number; sm: number; md: number; lg: number; xl: number }; gap: number; cardWidth: number; aspectRatio: number }> = {
   compact: { cols: { base: 3, sm: 4, md: 5, lg: 6, xl: 8 }, gap: 4, cardWidth: 140, aspectRatio: 4 / 3 },
   comfortable: { cols: { base: 2, sm: 3, md: 4, lg: 5, xl: 6 }, gap: 8, cardWidth: 180, aspectRatio: 4 / 3 },
   spacious: { cols: { base: 2, sm: 2, md: 3, lg: 4, xl: 4 }, gap: 16, cardWidth: 240, aspectRatio: 3 / 2 },
