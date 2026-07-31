@@ -639,6 +639,15 @@ export default function Workspace({ user }: { user: User }) {
                 <PhotosView
                   roots={roots.data?.roots || []}
                   onOpen={(rid, p) => navigateTo(rid, p, false, "")}
+                  onPreview={(rid, p) => {
+                    get<FileItem>("/files/stat", { root: rid, path: p }).then((info) => {
+                      if (info.mime?.startsWith("image/") || ["jpg", "jpeg", "png", "gif", "webp", "bmp", "avif"].includes((info.extension || "").toLowerCase())) {
+                        setImageItem(info);
+                      } else {
+                        setPreview(info);
+                      }
+                    }).catch(() => {});
+                  }}
                 />
               </Suspense>
             )}

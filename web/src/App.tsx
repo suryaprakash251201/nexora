@@ -6,6 +6,7 @@ import Workspace from "./components/Workspace";
 import MouseGlow from "./components/MouseGlow";
 import UpdaterCheck from "./components/UpdaterCheck";
 import TauriShell from "./components/TauriShell";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import type { User } from "./api/types";
 
 export default function App() {
@@ -137,7 +138,11 @@ function AppInner() {
     return <Login onSuccess={() => { qc.invalidateQueries(); }} />;
   }
 
-  return <Workspace user={session.data.user} />;
+  return (
+    <ErrorBoundary>
+      <Workspace user={session.data.user} />
+    </ErrorBoundary>
+  );
 }
 
 // Re-export for potential external use.
