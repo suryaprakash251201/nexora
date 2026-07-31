@@ -48,7 +48,9 @@ var knownUnsupportedCodecs = map[string]string{
 	"wmav1":            "Windows Media Audio 1 is not supported",
 	"wmav2":            "Windows Media Audio 2 is not supported",
 	"wmapro":           "Windows Media Audio Pro is not supported",
-	"alac":             "ALAC audio is not supported — use a file with AAC or MP3",
+	// ALAC (Apple Lossless) is intentionally NOT blocked: browsers cannot
+	// decode it natively, but FFmpeg decodes it fine, so it must be allowed
+	// through the transcode pipeline (ALAC -> AAC) to be playable.
 	"dolbyvision":      "Dolby Vision video is not supported",
 	"vp6":              "VP6 video is not supported",
 	"vp6f":             "VP6 video is not supported",
