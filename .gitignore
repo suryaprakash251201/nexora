@@ -35,3 +35,7 @@ Thumbs.db
 .idea/
 .vscode/
 pi-session-*.html
+
+# Build / analysis artifacts
+nexora_test
+static_analysis_codeql_*/
