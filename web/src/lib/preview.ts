@@ -40,6 +40,9 @@ export function isAudio(item: { mime: string; extension?: string }): boolean {
 }
 
 // codeLanguage returns a coarse language label for display purposes.
+export { getAudioQuality, fetchAudioInfo, clearAudioInfoCache, isLosslessExtension } from "./audioQuality";
+export type { AudioQualityInfo, AudioInfo, AudioTier } from "./audioQuality";
+
 export function codeLanguage(ext: string): string {
   const map: Record<string, string> = {
     js: "JavaScript", jsx: "JavaScript", ts: "TypeScript", tsx: "TypeScript",
@@ -90,7 +93,7 @@ export function generateSessionId(): string {
   });
 }
 
-export function transcodeUrl(rootId: string, path: string, opts?: { start?: number; session?: string; format?: string }): string {
+export function transcodeUrl(rootId: string, path: string, opts?: { start?: number; session?: string; format?: string; quality?: string }): string {
   const params: Record<string, string | number> = { root: rootId, path };
   if (opts?.start !== undefined && opts.start > 0) {
     params.start = opts.start;
@@ -101,6 +104,9 @@ export function transcodeUrl(rootId: string, path: string, opts?: { start?: numb
   if (opts?.format) {
     params.format = opts.format;
   }
+  if (opts?.quality) {
+    params.quality = opts.quality;
+  }
   return getMediaUrl("/files/transcode", params);
 }
 
@@ -110,14 +116,15 @@ export function isTauriRuntime(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
 
-// audioTranscodeUrl builds a transcode URL for audio fallback playback.
-// In the Tauri desktop app the webview (Chromium WebView2 / WebKitGTK) cannot
-// decode ALAC natively, but every engine decodes FLAC — so request a lossless
-// FLAC stream to keep lossless sources (ALAC .m4a, FLAC, WAV) at full quality.
-// In a plain browser we keep the smaller 128k AAC default.
-export function audioTranscodeUrl(rootId: string, path: string, opts?: { start?: number; session?: string }): string {
-  return transcodeUrl(rootId, path, { ...opts, format: isTauriRuntime() ? "flac" : undefined });
+export function audioTranscodeUrl(rootId: string, path: string, opts?: { start?: number; session?: string; format?: AudioTranscodeFormat; quality?: AudioTranscodeQuality }): string {
+  // Desktop (Tauri): lossless FLAC so ALAC/lossless m4a keeps original quality.
+  // Browser: default AAC.
+  const format = opts?.format ?? (isTauriRuntime() ? "flac" : "aac");
+  return transcodeUrl(rootId, path, { start: opts?.start, session: opts?.session, format, quality: opts?.quality });
 }
+
+export type AudioTranscodeFormat = "flac" | "flac24" | "wav" | "aac";
+export type AudioTranscodeQuality = "lossless" | "high" | "medium";
 
 let transcodeSupported: boolean | null = null;
 
@@ -134,18 +141,4 @@ export function serverSupportsTranscode(): Promise<boolean> {
       transcodeSupported = false;
       return false;
     });
-}
-
-export function getAudioQuality(item: { extension?: string; mime?: string }): { label: string; color: string } {
-  const ext = item.extension?.toLowerCase() || '';
-  const mime = item.mime || '';
-  if (ext === 'flac') return { label: 'FLAC · Lossless', color: 'text-emerald-400' };
-  if (ext === 'wav') return { label: 'WAV · Lossless', color: 'text-blue-400' };
-  if (ext === 'alac') return { label: 'ALAC · Lossless', color: 'text-emerald-400' };
-  if (ext === 'm4a') return { label: 'M4A · High Quality', color: 'text-amber-400' };
-  if (ext === 'mp3') return { label: 'MP3 · High Quality', color: 'text-amber-400' };
-  if (ext === 'ogg' || ext === 'opus') return { label: 'Opus · High Quality', color: 'text-purple-400' };
-  if (ext === 'aac') return { label: 'AAC · High Quality', color: 'text-orange-400' };
-  if (mime.startsWith('audio/')) return { label: 'Audio', color: 'text-white/70' };
-  return { label: '', color: 'text-white/50' };
 }

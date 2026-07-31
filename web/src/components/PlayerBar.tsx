@@ -17,7 +17,9 @@ import {
 import type { FileItem } from "../api/types";
 import { usePlayer, engine } from "../store/player";
 import { useShallow } from "zustand/react/shallow";
-import { thumbUrl, rawUrl, getAudioQuality, audioTranscodeUrl, generateSessionId, serverSupportsTranscode } from "../lib/preview";
+import { thumbUrl, rawUrl, audioTranscodeUrl, generateSessionId, serverSupportsTranscode, isLosslessExtension, isTauriRuntime } from "../lib/preview";
+import type { AudioTranscodeFormat } from "../lib/preview";
+import { AudioInfoPanel, EqualizerBars } from "./LosslessPlayer";
 import MediaPlayer from "./MediaPlayer";
 
 function fmt(t: number): string {
@@ -58,7 +60,7 @@ export default function PlayerBar() {
   const [expanded, setExpanded] = useState(false);
 
   const VolIcon = muted || volume === 0 ? VolumeX : volume < 0.5 ? Volume1 : Volume2;
-  const quality = current ? getAudioQuality(current) : null;
+  const lossless = current ? isLosslessExtension(current.extension) : false;
   const pct = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   const openExpanded = () => {
@@ -78,15 +80,28 @@ export default function PlayerBar() {
     }
   }, []);
 
-  const [transcodeFallback, setTranscodeFallback] = useState(false);
+  // Smart format routing: native → lossless FLAC (desktop) → flac24 → AAC.
+  // Browsers stay on the small AAC default and only try FLAC as a last resort
+  // (Chromium/WebKit decode FLAC-in-MP4 natively, so it always plays).
+  const [fallbackStage, setFallbackStage] = useState(-1);
+  const fallbackFormats: AudioTranscodeFormat[] = isTauriRuntime() ? ["flac", "flac24", "aac"] : ["aac", "flac"];
   const sessionIdRef = useRef(generateSessionId());
 
   // Reset fallback when the track changes
   useEffect(() => {
-    setTranscodeFallback(false);
+    setFallbackStage(-1);
   }, [current?.path]);
 
-  const url = current ? (transcodeFallback ? audioTranscodeUrl(current.root_id, current.path, { session: sessionIdRef.current, start: 0 }) : rawUrl(current.root_id, current.path)) : "";
+  const url = current
+    ? fallbackStage >= 0
+      ? audioTranscodeUrl(current.root_id, current.path, {
+          session: sessionIdRef.current,
+          start: 0,
+          format: fallbackFormats[fallbackStage],
+          quality: fallbackStage === 0 && isTauriRuntime() ? "lossless" : undefined,
+        })
+      : rawUrl(current.root_id, current.path)
+    : "";
   useEffect(() => {
     const a = audioRef.current;
     if (!a || !url) return;
@@ -120,13 +135,16 @@ export default function PlayerBar() {
 
   const handleError = (e: React.SyntheticEvent<HTMLAudioElement, Event>) => {
     const target = e.target as HTMLAudioElement;
-    if (target.error && target.error.code === 4 && !transcodeFallback && current) {
-      serverSupportsTranscode().then(supp => {
-        if (supp) {
-          console.warn("PlayerBar: native playback failed, falling back to transcode stream...");
-          setTranscodeFallback(true);
-        }
-      });
+    if (target.error && target.error.code === 4 && current) {
+      const next = fallbackStage + 1;
+      if (next < fallbackFormats.length) {
+        serverSupportsTranscode().then((supp) => {
+          if (supp) {
+            console.warn(`PlayerBar: stream failed (stage ${fallbackStage}), trying ${fallbackFormats[next]}...`);
+            setFallbackStage(next);
+          }
+        });
+      }
     }
   };
 
@@ -153,8 +171,9 @@ export default function PlayerBar() {
               <div className="min-w-0 flex-1 cursor-pointer" onClick={openExpanded}>
                 <p className="truncate text-[13px] sm:text-sm font-bold text-content leading-tight hover:text-accent transition-colors">{current.name.replace(/\.[^.]+$/, '')}</p>
                 <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
-                  {quality?.label && (
-                    <span className={`text-[9px] font-semibold ${quality.color}`}>{quality.label}</span>
+                  <AudioInfoPanel item={current} compact />
+                  {lossless && isPlaying && (
+                    <EqualizerBars analyser={null} isPlaying={isPlaying} bars={3} className="h-3 w-6" />
                   )}
                 </div>
                 <p className="truncate text-[10px] font-medium text-content-muted mt-0.5">

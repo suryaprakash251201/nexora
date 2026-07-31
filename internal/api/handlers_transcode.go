@@ -165,7 +165,10 @@ func (fw *flushWriter) Write(p []byte) (int, error) {
 //   - format       — output audio codec (optional): "flac" re-encodes the audio
 //                    track losslessly (for lossless sources like ALAC .m4a), so
 //                    desktop/browser clients can play lossless audio without
-//                    losing quality. Default is AAC 128k.
+//                    losing quality. "flac24" is 24-bit FLAC, "wav" is 24-bit
+//                    PCM in a WAV container. Default is AAC.
+//   - quality      — AAC bitrate hint (optional): lossless|high → 320k,
+//                    medium → 192k, default (empty) → 128k.
 //
 // The session parameter lets the server explicitly kill the previous ffmpeg
 // process when the client seeks, rather than relying on HTTP connection abort.
@@ -187,11 +190,20 @@ func (s *Server) handleTranscode(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Optional output format. "flac" produces a lossless FLAC stream inside the
-	// MP4 container — every webview engine (Chromium, WebKit, GStreamer) decodes
-	// FLAC natively, so ALAC/lossless sources keep their quality end-to-end.
+	// Optional output format. "flac"/"flac24" produce lossless FLAC streams
+	// inside the MP4 container — every webview engine (Chromium, WebKit,
+	// GStreamer) decodes FLAC natively, so ALAC/lossless sources keep their
+	// quality end-to-end. "wav" produces 24-bit PCM in a WAV container.
+	// Default is AAC, tuned by the "quality" param (lossless|high|medium).
 	outputFormat := queryParam(r, "format", "")
-	lossless := outputFormat == "flac"
+	quality := queryParam(r, "quality", "medium")
+	aacBitrate := "128k"
+	switch quality {
+	case "lossless", "high":
+		aacBitrate = "320k"
+	case "medium":
+		aacBitrate = "192k"
+	}
 
 	if err != nil || rel == "" {
 		writeError(w, http.StatusBadRequest, "invalid_path", "invalid path", middleware.GetRequestID(r.Context()))
@@ -280,20 +292,29 @@ func (s *Server) handleTranscode(w http.ResponseWriter, r *http.Request) {
 
 	// Determine codecs based on probe to support direct stream (remux) for compatible formats.
 	videoCodec := []string{"-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-vf", "format=yuv420p"}
-	audioCodec := []string{"-c:a", "aac", "-b:a", "128k"}
-	if lossless {
+	audioCodec := []string{"-c:a", "aac", "-b:a", aacBitrate}
+	containerOut := "mp4"
+	switch outputFormat {
+	case "flac":
 		// Lossless output: re-encode to FLAC (never stream-copy, the source
 		// codec differs from the requested output codec).
 		audioCodec = []string{"-c:a", "flac"}
-	} else if probe != nil {
-		for _, st := range probe.Streams {
-			if st.CodecType == "video" {
-				if (st.CodecName == "h264" || st.CodecName == "hevc" || st.CodecName == "av1") && !strings.Contains(st.PixFmt, "10le") && !strings.Contains(st.PixFmt, "12le") {
-					videoCodec = []string{"-c:v", "copy"}
-				}
-			} else if st.CodecType == "audio" {
-				if st.CodecName == "aac" || st.CodecName == "mp3" || st.CodecName == "opus" {
-					audioCodec = []string{"-c:a", "copy"}
+	case "flac24":
+		audioCodec = []string{"-c:a", "flac", "-sample_fmt", "s32"}
+	case "wav":
+		audioCodec = []string{"-c:a", "pcm_s24le"}
+		containerOut = "wav"
+	default:
+		if probe != nil {
+			for _, st := range probe.Streams {
+				if st.CodecType == "video" {
+					if (st.CodecName == "h264" || st.CodecName == "hevc" || st.CodecName == "av1") && !strings.Contains(st.PixFmt, "10le") && !strings.Contains(st.PixFmt, "12le") {
+						videoCodec = []string{"-c:v", "copy"}
+					}
+				} else if st.CodecType == "audio" {
+					if st.CodecName == "aac" || st.CodecName == "mp3" || st.CodecName == "opus" {
+						audioCodec = []string{"-c:a", "copy"}
+					}
 				}
 			}
 		}
@@ -316,12 +337,11 @@ func (s *Server) handleTranscode(w http.ResponseWriter, r *http.Request) {
 		ffArgs = append(ffArgs, videoCodec...)
 	}
 	ffArgs = append(ffArgs, audioCodec...)
-	ffArgs = append(ffArgs,
-		"-sn", "-dn",
-		"-movflags", "frag_keyframe+empty_moov",
-		"-f", "mp4",
-		"pipe:1",
-	)
+	ffArgs = append(ffArgs, "-sn", "-dn")
+	if containerOut == "mp4" {
+		ffArgs = append(ffArgs, "-movflags", "frag_keyframe+empty_moov")
+	}
+	ffArgs = append(ffArgs, "-f", containerOut, "pipe:1")
 
 	cmd := exec.CommandContext(ctx, ffp, ffArgs...)
 	if inputArg == "pipe:0" {
@@ -331,7 +351,9 @@ func (s *Server) handleTranscode(w http.ResponseWriter, r *http.Request) {
 	// Register the command with the session manager so it can be killed on seek.
 	tcm.startSession(sessionID, rootID, rel, cancel, cmd)
 
-	if isAudio {
+	if containerOut == "wav" {
+		w.Header().Set("Content-Type", "audio/wav")
+	} else if isAudio {
 		w.Header().Set("Content-Type", "audio/mp4")
 	} else {
 		w.Header().Set("Content-Type", "video/mp4")

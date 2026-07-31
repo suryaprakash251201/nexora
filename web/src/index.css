@@ -454,6 +454,11 @@ body {
   animation: eq-bar 0.85s ease-in-out infinite;
 }
 
+@keyframes eq-bounce {
+  0%, 100% { transform: scaleY(0.3); }
+  50% { transform: scaleY(1); }
+}
+
 @keyframes n-disc-spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }

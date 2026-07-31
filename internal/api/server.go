@@ -164,6 +164,11 @@ func (s *Server) Routes() http.Handler {
 	authed.Get("/files/download", s.handleDownload)
 	authed.Get("/files/raw", s.handleRaw)
 	authed.Get("/files/transcode", s.handleTranscode)
+
+	// Lossless audio metadata, waveforms, and server capabilities.
+	authed.Get("/audio/info", s.handleAudioInfo)
+	authed.Get("/audio/waveform", s.handleAudioWaveform)
+	authed.Get("/audio/formats", s.handleAudioFormats)
 	authed.Get("/trash", s.handleListTrash)
 	authed.Post("/trash/restore", s.handleRestoreTrash)
 	authed.Delete("/trash", s.handleDeleteTrash)

@@ -21,9 +21,12 @@ import {
   MonitorPlay,
   Download,
   ExternalLink,
+  Info,
 } from "lucide-react";
 import type { FileItem } from "../api/types";
-import { thumbUrl, needsTranscode, transcodeUrl, audioTranscodeUrl, serverSupportsTranscode, getAudioQuality, rawUrl, generateSessionId } from "../lib/preview";
+import { thumbUrl, needsTranscode, transcodeUrl, audioTranscodeUrl, serverSupportsTranscode, rawUrl, generateSessionId, isLosslessExtension } from "../lib/preview";
+import type { AudioTranscodeFormat } from "../lib/preview";
+import { AudioInfoPanel, WaveformDisplay, EqualizerBars, OutputDevicePicker, useAudioContext } from "./LosslessPlayer";
 import { startDownload } from "../lib/transfer";
 import { engine, usePlayer } from "../store/player";
 import { AddToPlaylistMenu } from "./PlaylistAdder";
@@ -137,18 +140,29 @@ function AudioPlayer({
   const [fs, setFs] = useState(startFullscreen || false);
   const [bgFailed, setBgFailed] = useState(false);
   const [showRates, setShowRates] = useState(false);
+  const [showInfo, setShowInfo] = useState(false);
   const fsWrapRef = useRef<HTMLDivElement>(null);
-  
-  const [transcodeFallback, setTranscodeFallback] = useState(false);
+
+  // Smart format routing: native → lossless FLAC (desktop) → flac24 → AAC.
+  // Browsers default to AAC; FLAC is the last-resort fallback.
+  const [fallbackStage, setFallbackStage] = useState(-1);
+  const fallbackFormats: AudioTranscodeFormat[] = isTauri ? ["flac", "flac24", "aac"] : ["aac", "flac"];
   const sessionIdRef = useRef(generateSessionId());
 
   useEffect(() => {
-    setTranscodeFallback(false);
+    setFallbackStage(-1);
   }, [cur?.path]);
 
-  const resolvedUrl = transcodeFallback && cur
-    ? audioTranscodeUrl(cur.root_id, cur.path, { session: sessionIdRef.current, start: 0 })
-    : (url || (cur ? rawUrl(cur.root_id, cur.path) : ""));
+  const resolvedUrl = cur
+    ? fallbackStage >= 0
+      ? audioTranscodeUrl(cur.root_id, cur.path, {
+          session: sessionIdRef.current,
+          start: 0,
+          format: fallbackFormats[fallbackStage],
+          quality: fallbackStage === 0 && isTauri ? "lossless" : undefined,
+        })
+      : (url || rawUrl(cur.root_id, cur.path))
+    : "";
 
   // ── Global media key shortcuts (Tauri) ─────────────────────
   useEffect(() => {
@@ -208,6 +222,10 @@ function AudioPlayer({
   useEffect(() => {
     setBgFailed(false);
   }, [cur?.path]);
+
+  // Live spectrum analyser — attaches only while the fullscreen lossless view
+  // is open (user gesture), never blocks playback, and falls back to CSS bars.
+  const { analyser } = useAudioContext(controlled ? engine.audio : ref.current, fs && !!cur);
 
   const toggle = () => {
     if (controlled) { player.toggle(); return; }
@@ -486,19 +504,39 @@ function AudioPlayer({
         </div>
 
         {/* Track Info */}
-        <div className="w-full text-center mb-4 sm:mb-7">
+        <div className="w-full flex flex-col items-center text-center mb-4 sm:mb-7">
           <h2 className="text-white font-bold text-lg sm:text-2xl md:text-3xl truncate drop-shadow-md">{cur?.name?.replace(/\.[^.]+$/, '')}</h2>
-          {cur && getAudioQuality(cur).label && (
-            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${getAudioQuality(cur).color} bg-white/10 mt-2`}>
-              {getAudioQuality(cur).label}
-            </span>
+          {cur && (
+            <div className="mt-2 flex items-center justify-center gap-2">
+              <AudioInfoPanel item={cur} compact />
+              <button
+                onClick={(e) => { e.stopPropagation(); setShowInfo((v) => !v); }}
+                className={`p-1.5 rounded-full glass-hover transition-colors ${showInfo ? "text-accent bg-accent/20" : "text-white/70 hover:text-white"}`}
+                title="Audio details"
+              >
+                <Info className="h-4 w-4" />
+              </button>
+            </div>
           )}
-          <p className="text-white/55 text-base truncate font-medium mt-1">
-            {cur ? (cur.extension ? cur.extension.replace(/^\./, "").toUpperCase() + " Audio" : "Audio") : ""}
-          </p>
+          {showInfo && cur && (
+            <div className="mt-3 flex justify-center animate-scale-in">
+              <AudioInfoPanel item={cur} />
+            </div>
+          )}
         </div>
 
         <div className="w-full space-y-2" onClick={(e) => e.stopPropagation()}>
+          {/* Waveform seek (lossless player) */}
+          {cur && duration > 0 && (
+            <WaveformDisplay
+              rootId={cur.root_id}
+              path={cur.path}
+              currentTime={curTime}
+              duration={duration}
+              onSeek={seek}
+              height={48}
+            />
+          )}
           {/* Progress Bar with touch swipe/tap support */}
           <div className="w-full space-y-2">
             <div
@@ -576,8 +614,12 @@ function AudioPlayer({
           )}
         </div>
 
-        {/* Secondary row: rate + volume + add to playlist */}
+        {/* Secondary row: rate + volume + EQ + output device + playlist */}
         <div className="flex items-center justify-center gap-5 sm:gap-6 mt-8 text-white/70">
+          {cur && (isLosslessExtension(cur.extension) || playing) && (
+            <EqualizerBars analyser={analyser} isPlaying={playing} bars={16} className="h-5 w-14" />
+          )}
+          <OutputDevicePicker />
           <div className="relative">
             <button
               onClick={() => setShowRates(!showRates)}
@@ -653,10 +695,10 @@ function AudioPlayer({
       <div className="w-full mt-8 space-y-6 px-2">
         <div className="text-center">
           <h3 className="font-bold text-xl truncate">{cur?.name?.replace(/\.[^.]+$/, '')}</h3>
-          {cur && getAudioQuality(cur).label && (
-            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${getAudioQuality(cur).color} bg-white/10 mt-2`}>
-              {getAudioQuality(cur).label}
-            </span>
+          {cur && (
+            <div className="mt-2 flex justify-center">
+              <AudioInfoPanel item={cur} compact />
+            </div>
           )}
           <p className="text-content-muted text-sm mt-1">{multi ? `Track ${qIndex + 1} of ${queue.length}` : "Audio playback"}</p>
         </div>
@@ -752,13 +794,16 @@ function AudioPlayer({
         webkit-playsinline="true"
         onError={(e) => {
           const target = e.target as HTMLAudioElement;
-          if (target.error && target.error.code === 4 && !transcodeFallback && cur) {
-            serverSupportsTranscode().then(supp => {
-              if (supp) {
-                console.warn("MediaPlayer: native audio playback failed, falling back to transcode stream...");
-                setTranscodeFallback(true);
-              }
-            });
+          if (target.error && target.error.code === 4 && cur) {
+            const next = fallbackStage + 1;
+            if (next < fallbackFormats.length) {
+              serverSupportsTranscode().then(supp => {
+                if (supp) {
+                  console.warn(`MediaPlayer: stream failed (stage ${fallbackStage}), trying ${fallbackFormats[next]}...`);
+                  setFallbackStage(next);
+                }
+              });
+            }
           }
         }}
       />}
