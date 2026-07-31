@@ -4,6 +4,7 @@ import { X, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, RotateCcw, RotateCw, Dow
 import { cn } from "@/lib/utils";
 import { PhotoResult } from "@/api/types";
 import { getMediaUrl } from "@/api/client";
+import { rawUrl } from "@/lib/preview";
 
 interface PhotoViewerProps {
   photos: PhotoResult[];
@@ -99,21 +100,24 @@ export function PhotoViewer({
           break;
         case "ArrowLeft":
           if (currentIndex > 0) {
-            setCurrentIndex((i) => i - 1);
-            onNavigate(currentIndex - 1);
+            const next = currentIndex - 1;
+            setCurrentIndex(next);
+            onNavigate(next);
           }
           break;
         case "ArrowRight":
           if (currentIndex < photos.length - 1) {
-            setCurrentIndex((i) => i + 1);
-            onNavigate(currentIndex + 1);
+            const next = currentIndex + 1;
+            setCurrentIndex(next);
+            onNavigate(next);
           }
           break;
         case " ":
           e.preventDefault();
           if (currentIndex < photos.length - 1) {
-            setCurrentIndex((i) => i + 1);
-            onNavigate(currentIndex + 1);
+            const next = currentIndex + 1;
+            setCurrentIndex(next);
+            onNavigate(next);
           }
           break;
         case "+":
@@ -136,8 +140,7 @@ export function PhotoViewer({
           break;
         case "r":
           setRotation((r) => (r + 90) % 360);
-          break;
-        case "i":
+          break;        case "i":
           setShowMetadata((s) => !s);
           break;
         case "m":
@@ -292,11 +295,13 @@ export function PhotoViewer({
       // Horizontal swipe to navigate (only when not zoomed and not panning)
       if (zoom <= 1 && Math.abs(deltaX) > swipeThreshold && Math.abs(deltaY) < swipeThreshold) {
         if (deltaX < 0 && currentIndex < photos.length - 1) {
-          setCurrentIndex((i) => i + 1);
-          onNavigate(currentIndex + 1);
+          const next = currentIndex + 1;
+          setCurrentIndex(next);
+          onNavigate(next);
         } else if (deltaX > 0 && currentIndex > 0) {
-          setCurrentIndex((i) => i - 1);
-          onNavigate(currentIndex - 1);
+          const next = currentIndex - 1;
+          setCurrentIndex(next);
+          onNavigate(next);
         }
       }
 
@@ -344,8 +349,8 @@ export function PhotoViewer({
     scrollThumbnailIntoView();
   }, [currentIndex, scrollThumbnailIntoView]);
 
-  // Build image URL
-  const imageUrl = currentPhoto ? getMediaUrl("/files/thumbnail", { root: currentPhoto.root_id, path: currentPhoto.path, size: "full" }) : "";
+  // Build image URL — use the full-resolution raw file, fall back to thumbnail
+  const imageUrl = currentPhoto ? rawUrl(currentPhoto.root_id, currentPhoto.path) : "";
 
   const transform = useMemo(() => {
     return `translate(${pan.x}px, ${pan.y}px) scale(${zoom}) rotate(${rotation}deg)`;
@@ -483,7 +488,9 @@ export function PhotoViewer({
               )}
 
               <motion.button
-                onClick={() => onSelectionToggle(currentPhoto!.id)}
+                onClick={() => {
+                  if (currentPhoto) onSelectionToggle(currentPhoto.id);
+                }}
                 whileHover={{ scale: 1.1 }}
                 whileTap={{ scale: 0.95 }}
                 className={cn(
@@ -541,7 +548,7 @@ export function PhotoViewer({
               {/* Thumbnail Strip */}
               <div
                 ref={thumbnailStripRef}
-                className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide max-w-[80vw]"
+                className="flex gap-2 overflow-x-auto pb-2 hide-scrollbar max-w-[80vw]"
                 role="tablist"
                 aria-label="Photo thumbnails"
               >
@@ -619,7 +626,7 @@ export function PhotoViewer({
                 <div className="w-px h-6 bg-white/20 mx-1" />
 
                 <motion.button
-                  onClick={() => setRotation((r) => (r - 90) % 360)}
+                  onClick={() => setRotation((r) => (r + 270) % 360)}
                   whileHover={{ scale: 1.1 }}
                   whileTap={{ scale: 0.95 }}
                   className="p-2 rounded-full text-white hover:bg-white/10 transition-colors"
@@ -679,7 +686,7 @@ export function PhotoViewer({
 
       {/* Metadata Sidebar */}
       <AnimatePresence>
-        {showMetadata && showUI && (
+        {showMetadata && (
           <motion.div
             initial={{ x: 400, opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}
@@ -731,7 +738,7 @@ export function PhotoViewer({
 
       {/* Map View */}
       <AnimatePresence>
-        {showMap && showUI && currentPhoto?.lat && currentPhoto?.lng && (
+        {showMap && currentPhoto?.lat && currentPhoto?.lng && (
           <motion.div
             initial={{ x: 400, opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}

@@ -615,7 +615,8 @@ func (s *Server) handleRaw(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Disposition", "inline; filename*=UTF-8''"+ urlEncode(info.Name))
 	}
 
-	if start == 0 && end == total-1 {
+	rangeHeader := r.Header.Get("Range")
+	if rangeHeader == "" {
 		w.Header().Set("Content-Length", strconv.FormatInt(total, 10))
 		w.WriteHeader(http.StatusOK)
 		_, _ = io.Copy(w, rc)

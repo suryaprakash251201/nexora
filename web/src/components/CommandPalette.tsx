@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useMemo } from "react";
 import { createPortal } from "react-dom";
-import { Search, Keyboard, Command, X, FolderOpen, File, Download, Upload, Share2, Star, Trash2, Pencil, Move, Copy, Archive, Settings, HelpCircle, RefreshCw, ChevronRight, Clock, Music, Archive as ArchiveIcon, FolderPlus, FilePlus, LayoutGrid, List, CheckSquare } from "lucide-react";
+import { Search, Keyboard, Command, X, FolderOpen, File, Download, Upload, FolderUp, Share2, Star, Trash2, Pencil, Move, Copy, Archive, Settings, HelpCircle, RefreshCw, ChevronRight, Clock, Music, Archive as ArchiveIcon, FolderPlus, FilePlus, LayoutGrid, List, CheckSquare } from "lucide-react";
 import type { FileItem, Root, User } from "../api/types";
 import type { SidebarView } from "./Sidebar";
 import { formatBytes } from "../lib/format";
@@ -33,6 +33,7 @@ interface CommandPaletteProps {
   onNewFolder: () => void;
   onNewFile: () => void;
   onUpload: () => void;
+  onUploadFolder?: () => void;
   onRefresh: () => void;
   onLogout: () => void;
   onAdmin: () => void;
@@ -63,6 +64,7 @@ export default function CommandPalette({
   onNewFolder,
   onNewFile,
   onUpload,
+  onUploadFolder,
   onRefresh,
   onLogout,
   onAdmin,
@@ -98,6 +100,7 @@ export default function CommandPalette({
       { id: "new-folder", label: "New Folder", description: "Create a new folder", icon: <FolderPlus className="h-4 w-4" />, shortcut: "⌘N", category: "file", action: () => { onNewFolder(); onClose(); }, keywords: ["new", "folder", "create", "mkdir"] },
       { id: "new-file", label: "New Text File", description: "Create a new text file", icon: <FilePlus className="h-4 w-4" />, shortcut: "⌘⇧N", category: "file", action: () => { onNewFile(); onClose(); }, keywords: ["new", "file", "create", "text"] },
       { id: "upload", label: "Upload Files", description: "Upload files to current location", icon: <Upload className="h-4 w-4" />, shortcut: "⌘U", category: "file", action: () => { onUpload(); onClose(); }, keywords: ["upload", "add", "import"] },
+      ...(onUploadFolder ? [{ id: "upload-folder", label: "Upload Folder", description: "Upload an entire folder structure", icon: <FolderUp className="h-4 w-4" />, shortcut: "⌘⇧U", category: "file" as const, action: () => { onUploadFolder(); onClose(); }, keywords: ["upload", "folder", "directory", "import"] }] : []),
       { id: "refresh", label: "Refresh", description: "Reload current view", icon: <RefreshCw className="h-4 w-4" />, shortcut: "F5", category: "file", action: () => { onRefresh(); onClose(); }, keywords: ["refresh", "reload", "update"] },
       { id: "download", label: "Download", description: "Download selected items", icon: <Download className="h-4 w-4" />, shortcut: "⌘D", category: "file", action: () => { onClose(); }, keywords: ["download", "save", "export"], disabled: selection.size === 0 },
       { id: "share", label: "Share", description: "Create share link for selection", icon: <Share2 className="h-4 w-4" />, shortcut: "⌘⇧S", category: "file", action: () => { onClose(); }, keywords: ["share", "link", "public"], disabled: selection.size === 0 },

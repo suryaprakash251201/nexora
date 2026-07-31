@@ -4,9 +4,10 @@ import { get } from "@/api/client";
 import { PhotoResult, PhotosResponse, PhotoFilters } from "./types";
 
 export function usePhotos(filters: PhotoFilters, searchQuery: string) {
-  const buildQuery = useCallback(() => {
+  const buildQuery = useCallback((offset: number) => {
     const params = new URLSearchParams();
     params.set("limit", "100");
+    if (offset > 0) params.set("offset", String(offset));
     if (filters.year) params.set("year", String(filters.year));
     if (filters.month) params.set("month", String(filters.month));
     if (filters.cameraMake) params.set("camera_make", filters.cameraMake);
@@ -20,15 +21,15 @@ export function usePhotos(filters: PhotoFilters, searchQuery: string) {
   }, [filters, searchQuery]);
 
   return useInfiniteQuery({
-    queryKey: ["photos", buildQuery()],
+    queryKey: ["photos", buildQuery(0)],
     queryFn: async ({ pageParam }) => {
-      const url = pageParam
-        ? `/photos?cursor=${encodeURIComponent(pageParam)}`
-        : `/photos?${buildQuery()}`;
-      return get<PhotosResponse>(url);
+      return get<PhotosResponse>(`/photos?${buildQuery(pageParam as number)}`);
     },
-    getNextPageParam: (lastPage) => lastPage.next_cursor,
-    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage, allPages) => {
+      if (!lastPage.has_more) return undefined;
+      return allPages.reduce((sum, p) => sum + p.items.length, 0);
+    },
+    initialPageParam: 0,
     staleTime: 30_000,
     retry: 2,
   });
@@ -43,9 +44,9 @@ export function usePhotoSelection() {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
+      setIsSelecting(next.size > 0);
       return next;
     });
-    setIsSelecting(true);
   }, []);
 
   const selectAll = useCallback((ids: string[]) => {

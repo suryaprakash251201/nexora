@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { motion } from "motion/react";
-import { Search, Clock, Sparkles, FileText, Music, Film, Plus, FilePlus, Upload, HardDrive, FolderPlus, Play, Sun, FolderOpen, Share, TrendingUp, Sunrise, Sunset, CloudMoon } from "lucide-react";
+import { Search, Clock, Sparkles, FileText, Music, Film, Plus, FilePlus, Upload, FolderUp, HardDrive, FolderPlus, Play, Sun, FolderOpen, Share, TrendingUp, Sunrise, Sunset, CloudMoon } from "lucide-react";
 import type { RecentItem, FileItem, HomeData, User } from "../api/types";
 import { FileThumb } from "./FileThumb";
 import { formatRelative } from "../lib/format";
@@ -244,7 +244,7 @@ function AddTile({ icon, label, onClick }: { icon: React.ReactNode; label: strin
 }
 
 export default function HomePanel({
-  user, data, isLoading, isAdmin, onSearch, onOpenRecent, onUpload, onNewFolder, onNewFile, onNewRoot, onOpenPlaylist,
+  user, data, isLoading, isAdmin, onSearch, onOpenRecent, onUpload, onUploadFolder, onNewFolder, onNewFile, onNewRoot, onOpenPlaylist,
 }: {
   user?: User;
   data?: HomeData;
@@ -253,6 +253,7 @@ export default function HomePanel({
   onSearch: (q: string) => void;
   onOpenRecent: (item: RecentItem) => void;
   onUpload: () => void;
+  onUploadFolder?: () => void;
   onNewFolder: () => void;
   onNewFile: () => void;
   onNewRoot: () => void;
@@ -319,44 +320,40 @@ export default function HomePanel({
               <motion.div
                 initial={{ scale: 0, rotate: -30 }}
                 animate={{ scale: 1, rotate: 0 }}
-                transition={{ type: "spring", stiffness: 260, damping: 20, delay: 0.1 }}
-                className="p-3 rounded-2xl"
-                style={{ backgroundColor: `color-mix(in srgb, var(--accent) 15%, transparent)`, color: "var(--accent)" }}
+                transition={{ type: "spring", stiffness: 200, damping: 15, delay: 0.1 }}
+                className={cn(
+                  "p-3 rounded-2xl bg-gradient-to-br shadow-xl text-white",
+                  greetingColors[period]?.from || "from-amber-500",
+                  greetingColors[period]?.to || "to-rose-400"
+                )}
               >
-                <GreetingIcon className="h-8 w-8" />
+                <GreetingIcon className="h-6 w-6 sm:h-7 sm:w-7" />
               </motion.div>
-              <div className="overflow-hidden">
-                <h1 className="text-2xl sm:text-3xl md:text-4xl font-extrabold tracking-tight">
-                  <span className="inline-flex flex-wrap gap-x-3">
-                    {greetingWords.map((word, i) => (
-                      <motion.span
-                        key={i}
-                        initial={{ y: 50, opacity: 0 }}
-                        animate={{ y: 0, opacity: 1 }}
-                        transition={{
-                          duration: 0.5,
-                          delay: i * 0.15,
-                          ease: [0.25, 0.1, 0.25, 1],
-                        }}
-                        className={cn(
-                          "bg-clip-text text-transparent",
-                          i === greetingWords.length - 1
-                            ? `${greetingColors[period]?.from} ${greetingColors[period]?.via} ${greetingColors[period]?.to} bg-gradient-to-r`
-                            : "bg-gradient-to-r from-foreground via-foreground/90 to-foreground/80"
-                        )}
-                      >
-                        {word}
-                      </motion.span>
-                    ))}
-                  </span>
+              <div>
+                <h1 className="text-2xl sm:text-4xl md:text-5xl font-black tracking-tight flex flex-wrap gap-x-2">
+                  {greetingWords.map((word, i) => (
+                    <motion.span
+                      key={i}
+                      initial={{ opacity: 0, y: 12 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.15 + i * 0.05, duration: 0.3 }}
+                      className={cn(
+                        word === displayName
+                          ? "bg-gradient-to-r from-accent via-accent-purple to-pink-500 bg-clip-text text-transparent"
+                          : "text-foreground"
+                      )}
+                    >
+                      {word}
+                    </motion.span>
+                  ))}
                 </h1>
                 <motion.p
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 1.0, duration: 0.4 }}
-                  className="text-content-muted text-base md:text-lg max-w-2xl"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.4, duration: 0.4 }}
+                  className="text-xs sm:text-sm text-text-tertiary mt-1"
                 >
-                  Pick up where you left off or discover new files.
+                  Welcome back to your workspace
                 </motion.p>
               </div>
             </div>
@@ -471,6 +468,9 @@ export default function HomePanel({
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <AddTile icon={<Upload className="h-6 w-6" />} label="Upload Files" onClick={onUpload} />
+                {onUploadFolder && (
+                  <AddTile icon={<FolderUp className="h-6 w-6" />} label="Upload Folder" onClick={onUploadFolder} />
+                )}
                 <AddTile icon={<FolderPlus className="h-6 w-6" />} label="New Folder" onClick={onNewFolder} />
                 <AddTile icon={<FilePlus className="h-6 w-6" />} label="New Text File" onClick={onNewFile} />
                 {isAdmin && (

@@ -12,16 +12,16 @@ function formatDateShort(dateStr: string): string {
     if (!dateStr) return "";
     const d = new Date(dateStr);
     if (isNaN(d.getTime())) return "";
-    return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" });
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
   } catch {
     return "";
   }
 }
 
-const DENSITY_STYLES: Record<Density, { cardSize: string; badgeSize: string }> = {
-  compact: { cardSize: "h-36 w-36 sm:h-40 sm:w-40", badgeSize: "text-[10px] px-1.5 py-0.5" },
-  comfortable: { cardSize: "h-44 w-44 sm:h-48 sm:w-48", badgeSize: "text-[11px] px-2 py-0.5" },
-  spacious: { cardSize: "h-56 w-56 sm:h-64 sm:w-64", badgeSize: "text-[12px] px-2.5 py-0.5" },
+const DENSITY_BADGE: Record<Density, string> = {
+  compact: "text-[10px] px-1.5 py-0.5",
+  comfortable: "text-[11px] px-2 py-0.5",
+  spacious: "text-[12px] px-2.5 py-0.5",
 };
 
 interface PhotoCardProps {
@@ -42,7 +42,8 @@ export function PhotoCard({
 }: PhotoCardProps) {
   const dateStr = formatDateShort(photo.date_taken);
   const cameraStr = photo.model ? (photo.make ? `${photo.make} ${photo.model}` : photo.model) : photo.make || "";
-  const styles = DENSITY_STYLES[density];
+  const badgeSize = DENSITY_BADGE[density];
+  const isCompact = density === "compact";
 
   const fileItem: FileItem = {
     root_id: photo.root_id || "",
@@ -83,8 +84,7 @@ export function PhotoCard({
         "transition-all duration-200 ease-out",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background",
         isSelected && "ring-2 ring-accent ring-offset-2 ring-offset-background",
-        isSelecting && "opacity-80",
-        styles.cardSize,
+        isSelecting && !isSelected && "opacity-70",
       )}
       onClick={handleClick}
       onContextMenu={onContextMenu}
@@ -99,7 +99,9 @@ export function PhotoCard({
         <div className="absolute inset-0 transition-transform duration-300 group-hover:scale-[1.03]">
           <FileThumb it={fileItem} fill />
         </div>
-        <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-black/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
+
+        {/* Video badge — top-right */}
         {photo.is_video && (
           <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
             <span className="flex items-center gap-1 px-2 py-1 rounded-full bg-black/60 backdrop-blur text-white text-[10px] font-medium">
@@ -108,54 +110,64 @@ export function PhotoCard({
             </span>
           </div>
         )}
+
+        {/* Favorite star — top-left */}
         {photo.is_favorite && (
           <div className="absolute top-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
             <Star className="h-5 w-5 fill-yellow-400 text-yellow-400 filter drop-shadow" />
           </div>
         )}
+
+        {/* Location badge — bottom-left */}
         {photo.lat && photo.lng && (
           <div className="absolute bottom-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-            <span className="flex items-center gap-1 px-2 py-1 rounded-full bg-black/60 backdrop-blur text-white text-[10px]">
+            <span className={cn("flex items-center gap-1 rounded-full bg-black/60 backdrop-blur text-white", badgeSize)}>
               <MapPin className="h-3 w-3" />
               Location
             </span>
           </div>
         )}
+
+        {/* Date — bottom-right */}
         {dateStr && (
-          <div className="absolute bottom-2 left-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-            <span className={cn("block truncate rounded bg-black/60 backdrop-blur text-white", styles.badgeSize)}>{dateStr}</span>
+          <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+            <span className={cn("block truncate rounded bg-black/60 backdrop-blur text-white", badgeSize)}>{dateStr}</span>
           </div>
         )}
+
+        {/* Camera — stacked above date, bottom-right */}
         {cameraStr && (
-          <div className="absolute bottom-2 left-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-            <span className={cn("block truncate rounded bg-black/60 backdrop-blur text-white", styles.badgeSize)}>
-              <Camera className="inline h-2.5 w-2.5 mr-1" />
+          <div className="absolute bottom-9 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+            <span className={cn("block max-w-[140px] truncate rounded bg-black/60 backdrop-blur text-white", badgeSize)}>
+              <Camera className="inline h-2.5 w-2.5 mr-1 -mt-0.5" />
               {cameraStr}
             </span>
           </div>
         )}
       </div>
+
+      {/* Selection checkbox — top-right, visible while selecting */}
       {isSelecting && (
         <div className="absolute top-2 right-2 z-10">
           <button
             onClick={(e) => { e.stopPropagation(); onSelectionToggle(); }}
             className={cn(
-              "flex h-6 w-6 items-center justify-center rounded-full border-2 transition-all duration-150",
+              "flex items-center justify-center rounded-full border-2 transition-all duration-150",
+              isCompact ? "h-5 w-5" : "h-6 w-6",
               isSelected
                 ? "bg-accent border-accent text-accent-foreground"
                 : "bg-black/40 border-white/30 text-transparent hover:bg-white/10",
-              styles.cardSize.includes("h-36") && "h-5 w-5",
             )}
             aria-label={isSelected ? "Deselect" : "Select"}
             aria-pressed={isSelected}
           >
-            {isSelected && <Check className={cn("h-3.5 w-3.5", styles.cardSize.includes("h-36") && "h-3 w-3")} />}
+            {isSelected && <Check className={cn(isCompact ? "h-3 w-3" : "h-3.5 w-3.5")} />}
           </button>
         </div>
       )}
       {isSelected && !isSelecting && (
-        <div className="absolute top-2 right-2 z-10 flex h-6 w-6 items-center justify-center rounded-full bg-accent text-accent-foreground shadow-lg">
-          <Check className="h-3.5 w-3.5" />
+        <div className="absolute top-2 right-2 z-10 flex items-center justify-center rounded-full bg-accent text-accent-foreground shadow-lg">
+          <Check className={cn(isCompact ? "h-3 w-3" : "h-3.5 w-3.5")} />
         </div>
       )}
     </div>

@@ -29,7 +29,7 @@ const DONE_AUTO_DISMISS_MS = 30_000;
 
 export const useTransfers = create<TransfersState>((set, get) => ({
   transfers: [],
-  add: (t) => set({ transfers: [t, ...get().transfers] }),
+  add: (t) => set({ transfers: [...get().transfers, t] }),
   update: (id, patch) => {
     const next = get().transfers.map((t) => (t.id === id ? { ...t, ...patch } : t));
     set({ transfers: next });

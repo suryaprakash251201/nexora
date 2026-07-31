@@ -14,15 +14,16 @@ const EDITABLE_NAMES = new Set(["dockerfile", "docker-compose.yml", "docker-comp
 
 const IMAGE_EXT = new Set(["jpg", "jpeg", "png", "gif", "webp", "svg", "bmp", "avif"]);
 const VIDEO_EXT = new Set(["mp4", "webm", "mkv", "mov", "avi", "m4v"]);
+const AUDIO_EXT = new Set(["mp3", "flac", "wav", "ogg", "m4a", "aac", "opus", "wma", "alac", "m4b", "oga"]);
 
 export function previewKind(item: { mime: string; extension: string; name?: string }): PreviewKind {
   const ext = item.extension?.toLowerCase() || "";
-  if (item.mime.startsWith("image/") || IMAGE_EXT.has(ext)) return "image";
-  if (item.mime.startsWith("video/") || VIDEO_EXT.has(ext)) return "video";
-  if (item.mime.startsWith("audio/")) return "audio";
+  if (IMAGE_EXT.has(ext) || (item.mime || "").startsWith("image/")) return "image";
+  if (AUDIO_EXT.has(ext) || (item.mime || "").startsWith("audio/")) return "audio";
+  if (VIDEO_EXT.has(ext) || (item.mime || "").startsWith("video/")) return "video";
   if (item.mime === "application/pdf" || ext === "pdf") return "pdf";
   if (ext === "md" || ext === "markdown") return "markdown";
-  if (item.mime.startsWith("text/") || TEXT_EXT.has(ext)) return "text";
+  if ((item.mime || "").startsWith("text/") || TEXT_EXT.has(ext)) return "text";
   return "none";
 }
 
@@ -32,8 +33,10 @@ export function isEditable(item: { extension: string; name: string }): boolean {
   return EDITABLE_EXT.has((item.extension || "").toLowerCase());
 }
 
-export function isAudio(item: { mime: string }): boolean {
-  return item.mime.startsWith("audio/");
+export function isAudio(item: { mime: string; extension?: string }): boolean {
+  const ext = (item.extension || "").toLowerCase();
+  if (AUDIO_EXT.has(ext)) return true;
+  return (item.mime || "").startsWith("audio/");
 }
 
 // codeLanguage returns a coarse language label for display purposes.
@@ -121,6 +124,7 @@ export function getAudioQuality(item: { extension?: string; mime?: string }): { 
   if (ext === 'flac') return { label: 'FLAC · Lossless', color: 'text-emerald-400' };
   if (ext === 'wav') return { label: 'WAV · Lossless', color: 'text-blue-400' };
   if (ext === 'alac') return { label: 'ALAC · Lossless', color: 'text-emerald-400' };
+  if (ext === 'm4a') return { label: 'M4A · High Quality', color: 'text-amber-400' };
   if (ext === 'mp3') return { label: 'MP3 · High Quality', color: 'text-amber-400' };
   if (ext === 'ogg' || ext === 'opus') return { label: 'Opus · High Quality', color: 'text-purple-400' };
   if (ext === 'aac') return { label: 'AAC · High Quality', color: 'text-orange-400' };

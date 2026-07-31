@@ -2,7 +2,7 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   Home, Search, Folder, Star, Clock, ListMusic,
-  Shield, LogOut, X, Ellipsis, Upload, FolderPlus, Trash2
+  Shield, LogOut, X, Ellipsis, Upload, FolderUp, FolderPlus, Trash2
 } from "lucide-react";
 import type { SidebarView } from "../Sidebar";
 import type { Root } from "../../api/types";
@@ -19,6 +19,7 @@ interface MobileNavProps {
   onSelectRoot: (id: string) => void;
   onSearch: () => void;
   onUpload: () => void;
+  onUploadFolder?: () => void;
   onNewFolder: () => void;
   onLogout: () => void;
 }
@@ -32,7 +33,7 @@ const primaryTabs: { id: SidebarView; label: string; icon: typeof Home }[] = [
 
 export function MobileNav({
   view, roots, activeRoot, canWrite, isAdmin,
-  onSelectView, onSelectRoot, onSearch, onUpload, onNewFolder, onLogout,
+  onSelectView, onSelectRoot, onSearch, onUpload, onUploadFolder, onNewFolder, onLogout,
 }: MobileNavProps) {
   const [moreOpen, setMoreOpen] = useState(false);
   const isFilesView = view === "files";
@@ -187,8 +188,17 @@ export function MobileNav({
                       className="flex items-center gap-3 px-3 py-3 rounded-xl border border-white/[0.04] hover:border-white/[0.08] hover:bg-white/[0.02] transition-all min-h-[52px]"
                     >
                       <Upload className="h-5 w-5 text-accent shrink-0" />
-                      <span className="text-sm font-semibold">Upload</span>
+                      <span className="text-sm font-semibold">Upload Files</span>
                     </button>
+                    {onUploadFolder && (
+                      <button
+                        onClick={() => { onUploadFolder(); setMoreOpen(false); }}
+                        className="flex items-center gap-3 px-3 py-3 rounded-xl border border-white/[0.04] hover:border-white/[0.08] hover:bg-white/[0.02] transition-all min-h-[52px]"
+                      >
+                        <FolderUp className="h-5 w-5 text-purple-400 shrink-0" />
+                        <span className="text-sm font-semibold">Upload Folder</span>
+                      </button>
+                    )}
                     <button
                       onClick={() => { onNewFolder(); setMoreOpen(false); }}
                       className="flex items-center gap-3 px-3 py-3 rounded-xl border border-white/[0.04] hover:border-white/[0.08] hover:bg-white/[0.02] transition-all min-h-[52px]"

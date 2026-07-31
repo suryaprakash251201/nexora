@@ -24,6 +24,15 @@ func (s *Server) handleGetPhotosTimeline(w http.ResponseWriter, r *http.Request)
 	}
 	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
 
+	var q search.PhotoQuery
+	q.Q = r.URL.Query().Get("q")
+	q.Year, _ = strconv.Atoi(r.URL.Query().Get("year"))
+	q.Month, _ = strconv.Atoi(r.URL.Query().Get("month"))
+	q.CameraMake = r.URL.Query().Get("camera_make")
+	q.HasLocation = r.URL.Query().Get("has_location") == "true" || r.URL.Query().Get("has_location") == "1"
+	q.FavoritesOnly = r.URL.Query().Get("favorites_only") == "true" || r.URL.Query().Get("favorites_only") == "1"
+	q.Sort = r.URL.Query().Get("sort")
+
 	// Find roots the user can read
 	roots, err := s.StorageRoots.UserRoots(user.ID, user.Role == "admin")
 	if err != nil {
@@ -36,7 +45,7 @@ func (s *Server) handleGetPhotosTimeline(w http.ResponseWriter, r *http.Request)
 		rootIDs = append(rootIDs, rt.ID)
 	}
 
-	photos, err := s.Search.GetPhotosTimeline(ctx, rootIDs, limit, offset)
+	photos, err := s.Search.GetPhotosTimeline(ctx, user.ID, rootIDs, q, limit, offset)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error", err.Error(), middleware.GetRequestID(ctx))
 		return

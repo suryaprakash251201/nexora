@@ -136,35 +136,52 @@ func extractExif(path string) (dateTaken string, lat, lng float64, makeStr, mode
 
 // PhotoResult represents an image for the timeline view.
 type PhotoResult struct {
-	ID        string    `json:"id"`
-	RootID    string    `json:"root_id"`
-	Path      string    `json:"path"`
-	Name      string    `json:"name"`
-	DateTaken string    `json:"date_taken"` // ISO8601
-	Lat       float64   `json:"lat,omitempty"`
-	Lng       float64   `json:"lng,omitempty"`
-	Make      string    `json:"make,omitempty"`
-	Model     string    `json:"model,omitempty"`
+	ID         string  `json:"id"`
+	RootID     string  `json:"root_id"`
+	Path       string  `json:"path"`
+	Name       string  `json:"name"`
+	DateTaken  string  `json:"date_taken"` // ISO8601
+	Lat        float64 `json:"lat,omitempty"`
+	Lng        float64 `json:"lng,omitempty"`
+	Make       string  `json:"make,omitempty"`
+	Model      string  `json:"model,omitempty"`
+	IsFavorite bool    `json:"is_favorite"`
+}
+
+// PhotoQuery carries optional filters for the photos timeline.
+type PhotoQuery struct {
+	Q             string // name search
+	Year          int
+	Month         int
+	CameraMake    string
+	HasLocation   bool
+	FavoritesOnly bool
+	Sort          string // date_desc | date_asc | name
 }
 
 // GetPhotosTimeline returns indexed photos sorted by date_taken descending.
-func (s *Service) GetPhotosTimeline(ctx context.Context, rootIDs []string, limit, offset int) ([]PhotoResult, error) {
+// Falls back to file modification date for images without EXIF data.
+func (s *Service) GetPhotosTimeline(ctx context.Context, userID string, rootIDs []string, q PhotoQuery, limit, offset int) ([]PhotoResult, error) {
 	if len(rootIDs) == 0 {
 		return nil, nil
 	}
-	
+
 	if limit <= 0 || limit > 1000 {
 		limit = 100
 	}
 
 	var sb strings.Builder
 	sb.WriteString(`
-		SELECT s.id, s.root_id, s.path, s.name, m.date_taken, m.lat, m.lng, m.make, m.model
+		SELECT s.id, s.root_id, s.path, s.name,
+		       COALESCE(NULLIF(m.date_taken, ''), s.modified) as date_taken,
+		       m.lat, m.lng, m.make, m.model,
+		       CASE WHEN fav.id IS NULL THEN 0 ELSE 1 END AS is_favorite
 		FROM search_index s
-		JOIN media_metadata m ON s.id = m.id
+		LEFT JOIN media_metadata m ON s.id = m.id
+		LEFT JOIN favorites fav ON fav.user_id = ? AND fav.root_id = s.root_id AND fav.path = s.path
 		WHERE s.root_id IN (`)
-		
-	args := []any{}
+
+	args := []any{userID}
 	for i, id := range rootIDs {
 		if i > 0 {
 			sb.WriteString(",")
@@ -172,7 +189,40 @@ func (s *Service) GetPhotosTimeline(ctx context.Context, rootIDs []string, limit
 		sb.WriteString("?")
 		args = append(args, id)
 	}
-	sb.WriteString(") AND m.date_taken != '' ORDER BY m.date_taken DESC LIMIT ? OFFSET ?")
+	sb.WriteString(") AND s.mime LIKE 'image/%'")
+
+	if q.Q != "" {
+		sb.WriteString(" AND s.name LIKE ? ESCAPE '\\'")
+		args = append(args, "%"+escapeLike(q.Q)+"%")
+	}
+	if q.Year > 0 {
+		sb.WriteString(" AND CAST(strftime('%Y', COALESCE(NULLIF(m.date_taken, ''), s.modified)) AS INTEGER) = ?")
+		args = append(args, q.Year)
+	}
+	if q.Month > 0 {
+		sb.WriteString(" AND CAST(strftime('%m', COALESCE(NULLIF(m.date_taken, ''), s.modified)) AS INTEGER) = ?")
+		args = append(args, q.Month)
+	}
+	if q.CameraMake != "" {
+		sb.WriteString(" AND m.make = ?")
+		args = append(args, q.CameraMake)
+	}
+	if q.HasLocation {
+		sb.WriteString(" AND m.lat IS NOT NULL AND m.lng IS NOT NULL")
+	}
+	if q.FavoritesOnly {
+		sb.WriteString(" AND fav.id IS NOT NULL")
+	}
+
+	switch q.Sort {
+	case "date_asc":
+		sb.WriteString(" ORDER BY date_taken ASC")
+	case "name":
+		sb.WriteString(" ORDER BY s.name COLLATE NOCASE ASC")
+	default:
+		sb.WriteString(" ORDER BY date_taken DESC")
+	}
+	sb.WriteString(" LIMIT ? OFFSET ?")
 	args = append(args, limit, offset)
 
 	rows, err := s.db.QueryContext(ctx, sb.String(), args...)
@@ -186,17 +236,25 @@ func (s *Service) GetPhotosTimeline(ctx context.Context, rootIDs []string, limit
 		var p PhotoResult
 		var lat, lng sql.NullFloat64
 		var makeStr, modelStr sql.NullString
-		
-		if err := rows.Scan(&p.ID, &p.RootID, &p.Path, &p.Name, &p.DateTaken, &lat, &lng, &makeStr, &modelStr); err != nil {
+
+		if err := rows.Scan(&p.ID, &p.RootID, &p.Path, &p.Name, &p.DateTaken, &lat, &lng, &makeStr, &modelStr, &p.IsFavorite); err != nil {
 			return nil, err
 		}
-		if lat.Valid { p.Lat = lat.Float64 }
-		if lng.Valid { p.Lng = lng.Float64 }
-		if makeStr.Valid { p.Make = makeStr.String }
-		if modelStr.Valid { p.Model = modelStr.String }
-		
+		if lat.Valid {
+			p.Lat = lat.Float64
+		}
+		if lng.Valid {
+			p.Lng = lng.Float64
+		}
+		if makeStr.Valid {
+			p.Make = makeStr.String
+		}
+		if modelStr.Valid {
+			p.Model = modelStr.String
+		}
+
 		out = append(out, p)
 	}
-	
+
 	return out, rows.Err()
 }

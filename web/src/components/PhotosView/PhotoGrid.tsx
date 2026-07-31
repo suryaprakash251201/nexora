@@ -2,15 +2,14 @@ import { useRef, useCallback, useMemo, useEffect, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { PhotoCard } from "./PhotoCard";
 import { PhotoResult } from "@/api/types";
-import { cn } from "@/lib/utils";
 import { Loader2 } from "lucide-react";
 
 type Density = "compact" | "comfortable" | "spacious";
 
-const DENSITY_CONFIG: Record<Density, { cols: { base: number; sm: number; md: number; lg: number; xl: number }; gap: number; cardWidth: number }> = {
-  compact: { cols: { base: 3, sm: 4, md: 5, lg: 6, xl: 8 }, gap: 4, cardWidth: 140 },
-  comfortable: { cols: { base: 2, sm: 3, md: 4, lg: 5, xl: 6 }, gap: 8, cardWidth: 180 },
-  spacious: { cols: { base: 2, sm: 2, md: 3, lg: 4, xl: 4 }, gap: 16, cardWidth: 240 },
+const DENSITY_CONFIG: Record<Density, { cols: { base: number; sm: number; md: number; lg: number; xl: number }; gap: number; cardWidth: number; aspectRatio: number }> = {
+  compact: { cols: { base: 3, sm: 4, md: 5, lg: 6, xl: 8 }, gap: 4, cardWidth: 140, aspectRatio: 4 / 3 },
+  comfortable: { cols: { base: 2, sm: 3, md: 4, lg: 5, xl: 6 }, gap: 8, cardWidth: 180, aspectRatio: 4 / 3 },
+  spacious: { cols: { base: 2, sm: 2, md: 3, lg: 4, xl: 4 }, gap: 16, cardWidth: 240, aspectRatio: 3 / 2 },
 };
 
 interface PhotoGridProps {
@@ -52,44 +51,54 @@ export function PhotoGrid({
       }
     };
     updateWidth();
+    const observer = new ResizeObserver(updateWidth);
+    if (parentRef.current) observer.observe(parentRef.current);
     window.addEventListener("resize", updateWidth);
-    return () => window.removeEventListener("resize", updateWidth);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", updateWidth);
+    };
   }, []);
 
-  // Calculate number of columns based on container width
+  // Responsive column count
   const columns = useMemo(() => {
     if (containerWidth === 0) return config.cols.base;
-    const cardWidthWithGap = config.cardWidth + config.gap;
-    const calculatedCols = Math.max(1, Math.floor((containerWidth + config.gap) / cardWidthWithGap));
-    // Clamp to density max
-    const maxCols = config.cols.xl;
-    return Math.min(calculatedCols, maxCols);
-  }, [containerWidth, config.cardWidth, config.gap, config.cols.xl]);
+    const breakpoints = [
+      { min: 1536, cols: config.cols.xl },
+      { min: 1024, cols: config.cols.lg },
+      { min: 768, cols: config.cols.md },
+      { min: 640, cols: config.cols.sm },
+      { min: 0, cols: config.cols.base },
+    ];
+    const bp = breakpoints.find((b) => containerWidth >= b.min);
+    return bp?.cols ?? config.cols.base;
+  }, [containerWidth, config.cols]);
 
-  // Estimate row height based on aspect ratio (4:3) + header space
-  const estimateSize = useCallback((index: number) => {
-    const cardWidth = (containerWidth - config.gap * (columns - 1)) / columns;
-    const cardHeight = cardWidth * (4 / 3); // 4:3 aspect ratio
-    return cardHeight + 32; // Add space for potential month header
-  }, [containerWidth, columns, config.gap]);
+  // Row height from card width at this breakpoint
+  const rowHeight = useMemo(() => {
+    if (containerWidth === 0) return 160;
+    const cardWidth = Math.max(60, (containerWidth - config.gap * (columns - 1) - 32) / columns);
+    return cardWidth / config.aspectRatio + config.gap;
+  }, [containerWidth, columns, config.gap, config.aspectRatio]);
 
+  // Virtualize ROWS, not individual photos
+  const rowCount = Math.ceil(photos.length / columns);
   const virtualizer = useVirtualizer({
-    count: photos.length,
+    count: rowCount,
     getScrollElement: () => parentRef.current as HTMLDivElement,
-    estimateSize,
-    overscan: 5,
+    estimateSize: () => rowHeight,
+    overscan: 4,
     horizontal: false,
   });
 
-  // Handle scroll for infinite loading
+  // Infinite scroll: load more when near the bottom
   const handleScroll = useCallback(() => {
     if (!hasMore || isLoadingMore || !onLoadMore || !parentRef.current) return;
     const el = parentRef.current;
     const scrollTop = el.scrollTop;
     const scrollHeight = el.scrollHeight;
     const clientHeight = el.clientHeight;
-    // Trigger load when within 200px of bottom
-    if (scrollTop + clientHeight >= scrollHeight - 200) {
+    if (scrollTop + clientHeight >= scrollHeight - 400) {
       onLoadMore();
     }
   }, [hasMore, isLoadingMore, onLoadMore]);
@@ -101,7 +110,7 @@ export function PhotoGrid({
     return () => el.removeEventListener("scroll", handleScroll, { passive: true } as EventListenerOptions);
   }, [handleScroll]);
 
-  const virtualItems = virtualizer.getVirtualItems();
+  const virtualRows = virtualizer.getVirtualItems();
 
   const combinedRef = useCallback(
     (node: HTMLDivElement | null) => {
@@ -123,48 +132,54 @@ export function PhotoGrid({
       aria-label="Photo grid"
     >
       <div
-        className={cn("relative", "grid", `grid-cols-${columns}`, `gap-${config.gap}`, "p-4")}
+        className="relative"
         style={{
           height: virtualizer.getTotalSize(),
           width: "100%",
-          position: "relative",
         }}
-        role="list"
       >
-        {virtualItems.map((virtualRow: { index: number; start: number; size: number }) => (
-          <PhotoCard
-            key={photos[virtualRow.index]?.id || virtualRow.index}
-            photo={photos[virtualRow.index]!}
-            index={virtualRow.index}
-            density={density}
-            isSelected={selectedIds.has(photos[virtualRow.index]?.id || "")}
-            isSelecting={isSelecting}
-            onClick={() => onPhotoClick(photos[virtualRow.index]!, virtualRow.index)}
-            onContextMenu={(e) => onPhotoContextMenu(photos[virtualRow.index]!, e)}
-            onSelectionToggle={() => onSelectionToggle(photos[virtualRow.index]!.id)}
-            style={{
-              position: "absolute",
-              top: virtualRow.start,
-              left: 0,
-              width: "100%",
-              height: virtualRow.size,
-            }}
-          />
-        ))}
+        {virtualRows.map((virtualRow: { index: number; start: number; size: number }) => {
+          const rowStart = virtualRow.index * columns;
+          const rowPhotos = photos.slice(rowStart, rowStart + columns);
+          return (
+            <div
+              key={virtualRow.index}
+              className="absolute left-0 right-0 px-4"
+              style={{
+                top: virtualRow.start,
+                height: virtualRow.size,
+                display: "grid",
+                gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
+                gap: `${config.gap}px`,
+              }}
+              role="list"
+            >
+              {rowPhotos.map((photo, colIndex) => {
+                const globalIndex = rowStart + colIndex;
+                return (
+                  <PhotoCard
+                    key={photo.id}
+                    photo={photo}
+                    index={globalIndex}
+                    density={density}
+                    isSelected={selectedIds.has(photo.id)}
+                    isSelecting={isSelecting}
+                    onClick={() => onPhotoClick(photo, globalIndex)}
+                    onContextMenu={(e) => onPhotoContextMenu(photo, e)}
+                    onSelectionToggle={() => onSelectionToggle(photo.id)}
+                    style={{ width: "100%", height: "100%" }}
+                  />
+                );
+              })}
+            </div>
+          );
+        })}
 
         {/* Load more indicator */}
         {hasMore && isLoadingMore && (
           <div
-            style={{
-              position: "absolute",
-              top: virtualizer.getTotalSize(),
-              left: 0,
-              right: 0,
-              height: 60,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
+            className="absolute left-0 right-0 flex items-center justify-center"
+            style={{ top: virtualizer.getTotalSize(), height: 60 }}
             role="status"
             aria-live="polite"
           >
@@ -176,24 +191,15 @@ export function PhotoGrid({
         )}
 
         {/* End marker */}
-        {hasMore && !isLoadingMore && photos.length > 0 && (
+        {!hasMore && photos.length > 0 && (
           <div
-            style={{
-              position: "absolute",
-              top: virtualizer.getTotalSize(),
-              left: 0,
-              right: 0,
-              height: 40,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
+            className="absolute left-0 right-0 flex items-center justify-center"
+            style={{ top: virtualizer.getTotalSize(), height: 48 }}
           >
-            <p className="text-xs text-content-muted/50">Scroll to load more</p>
+            <p className="text-xs text-content-muted/50">You're all caught up</p>
           </div>
         )}
       </div>
     </div>
   );
 }
-

@@ -26,6 +26,7 @@ interface FileBrowserProps {
   onContextMenu: (e: React.MouseEvent, item: FileItem) => void;
   onDropItem?: (targetFolder: FileItem) => void;
   onUpload?: () => void;
+  onUploadFolder?: () => void;
   hasMore?: boolean;
   onLoadMore?: () => void;
   isLoadingMore?: boolean;
@@ -72,6 +73,7 @@ export default function FileBrowser({
   onContextMenu,
   onDropItem,
   onUpload,
+  onUploadFolder,
   hasMore,
   onLoadMore,
   isLoadingMore,
@@ -193,9 +195,17 @@ export default function FileBrowser({
         <EmptyState
           variant="files"
           title="This folder is empty"
-          description="Drag files here or use the Upload button to add content."
+          description="Drag files or folders here, or use the Upload buttons to add content."
           action={canWrite && onUpload ? { label: "Upload files", onClick: onUpload } : undefined}
         />
+        {canWrite && onUploadFolder && (
+          <button
+            onClick={onUploadFolder}
+            className="mt-3 px-4 py-2 rounded-xl border border-glass-border text-sm font-medium text-text-secondary hover:text-foreground hover:bg-accent/10 transition-colors"
+          >
+            Upload folder
+          </button>
+        )}
       </div>
     );
   }

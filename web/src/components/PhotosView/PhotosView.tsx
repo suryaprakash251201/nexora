@@ -17,6 +17,8 @@ import { usePhotos, usePhotoSelection } from "./hooks";
 import { PhotoResult, PhotoFilters, PhotosResponse, Density, ViewMode } from "./types";
 import { Root } from "@/api/types";
 import { PhotoCard } from "./PhotoCard";
+import { post, del } from "@/api/client";
+import { rawUrl } from "@/lib/preview";
 
 const STORAGE_KEY_DENSITY = "nexora.photos.density";
 const STORAGE_KEY_VIEW_MODE = "nexora.photos.viewMode";
@@ -126,13 +128,13 @@ export default function PhotosView({ roots, onOpen, onPreview }: PhotosViewProps
 
   // Handlers
   const handlePhotoClick = useCallback((photo: PhotoResult, index: number) => {
-    if (isSelecting || selectionCount > 0) {
+    if (isSelecting) {
       toggleSelection(photo.id);
     } else {
       setViewerIndex(index);
       setIsViewerOpen(true);
     }
-  }, [isSelecting, selectionCount, toggleSelection]);
+  }, [isSelecting, toggleSelection]);
 
   const handlePhotoContextMenu = useCallback((photo: PhotoResult, e: React.MouseEvent) => {
     e.preventDefault();
@@ -212,19 +214,39 @@ export default function PhotosView({ roots, onOpen, onPreview }: PhotosViewProps
 
   // Bulk actions
   const handleBulkDownload = useCallback(async () => {
-    // TODO: Implement zip download
-    console.log("Download", selectionCount, "photos");
-  }, [selectionCount]);
+    const selected = photos.filter((p) => selectedIds.has(p.id));
+    for (const photo of selected) {
+      const url = rawUrl(photo.root_id, photo.path, true);
+      window.open(url, "_blank");
+    }
+  }, [photos, selectedIds]);
 
   const handleBulkShare = useCallback(async () => {
-    console.log("Share", selectionCount, "photos");
-  }, [selectionCount]);
+    const selected = photos.filter((p) => selectedIds.has(p.id));
+    const first = selected[0];
+    if (first) {
+      try {
+        await navigator.clipboard.writeText(rawUrl(first.root_id, first.path));
+      } catch {
+        /* clipboard unavailable */
+      }
+    }
+  }, [photos, selectedIds]);
 
   const handleBulkDelete = useCallback(async () => {
-    if (!confirm(`Delete ${selectionCount} photo(s)? This cannot be undone.`)) return;
-    console.log("Delete", selectionCount, "photos");
+    const selected = photos.filter((p) => selectedIds.has(p.id));
+    if (selected.length === 0) return;
+    if (!confirm(`Delete ${selected.length} photo(s)? This cannot be undone.`)) return;
+    for (const photo of selected) {
+      try {
+        await del("/files", { root: photo.root_id, path: photo.path });
+      } catch {
+        /* continue */
+      }
+    }
     clearSelection();
-  }, [selectionCount, clearSelection]);
+    refetch();
+  }, [photos, selectedIds, clearSelection, refetch]);
 
   const handleAddToAlbum = useCallback(async () => {
     console.log("Add to album", selectionCount, "photos");
@@ -234,6 +256,73 @@ export default function PhotosView({ roots, onOpen, onPreview }: PhotosViewProps
     e.preventDefault();
     // Search handled by searchQuery state
   };
+
+  // Context menu actions
+  const handleToggleFavorite = useCallback(async (id: string) => {
+    const photo = photos.find((p) => p.id === id);
+    if (!photo) return;
+    try {
+      if (photo.is_favorite) {
+        await del("/favorites", { root: photo.root_id, path: photo.path });
+      } else {
+        await post("/favorites", { root: photo.root_id, path: photo.path });
+      }
+      refetch();
+    } catch {
+      /* favorite toggle failed */
+    }
+  }, [photos, refetch]);
+
+  const handleDownload = useCallback((photo: PhotoResult) => {
+    window.open(rawUrl(photo.root_id, photo.path, true), "_blank");
+  }, []);
+
+  const handleDelete = useCallback(async (photo: PhotoResult) => {
+    if (!confirm(`Delete "${photo.name}"? This cannot be undone.`)) return;
+    try {
+      await del("/files", { root: photo.root_id, path: photo.path });
+      refetch();
+    } catch {
+      /* delete failed */
+    }
+  }, [refetch]);
+
+  const handleShare = useCallback(async (photo: PhotoResult) => {
+    try {
+      await navigator.clipboard.writeText(rawUrl(photo.root_id, photo.path));
+    } catch {
+      /* clipboard unavailable */
+    }
+  }, []);
+
+  const handleCopyPath = useCallback(async (photo: PhotoResult) => {
+    try {
+      await navigator.clipboard.writeText(photo.path);
+    } catch {
+      /* clipboard unavailable */
+    }
+  }, []);
+
+  const handleViewMetadata = useCallback((photo: PhotoResult) => {
+    const index = photos.findIndex((p) => p.id === photo.id);
+    if (index >= 0) {
+      setViewerIndex(index);
+      setIsViewerOpen(true);
+    }
+  }, [photos]);
+
+  const handleViewOnMap = useCallback((photo: PhotoResult) => {
+    const index = photos.findIndex((p) => p.id === photo.id);
+    if (index >= 0) {
+      setViewerIndex(index);
+      setIsViewerOpen(true);
+    }
+  }, [photos]);
+
+  const handleArchive = useCallback((photo: PhotoResult) => {
+    // Archiving not implemented yet
+    console.log("Archive", photo.name);
+  }, []);
 
   return (
     <div className="flex flex-col h-full bg-background" data-density={density}>
@@ -302,6 +391,15 @@ export default function PhotosView({ roots, onOpen, onPreview }: PhotosViewProps
                   className="hidden sm:flex"
                 />
               </div>
+
+              {/* Mobile Filter Bar — inside sticky header so it stays visible */}
+              <FilterBar
+                filters={filters}
+                onChange={setFilters}
+                cameraFacets={cameraFacets}
+                yearFacets={yearFacets}
+                className="sm:hidden mt-3"
+              />
             </div>
           </div>
         </div>
@@ -365,15 +463,6 @@ export default function PhotosView({ roots, onOpen, onPreview }: PhotosViewProps
 
           {!isLoading && !isError && totalPhotos > 0 && (
             <>
-              {/* Mobile Filter Bar */}
-              <FilterBar
-                filters={filters}
-                onChange={setFilters}
-                cameraFacets={cameraFacets}
-                yearFacets={yearFacets}
-                className="px-4 py-3 border-b border-glass-border/50 bg-background/80 backdrop-blur-sm sticky top-16 z-10 lg:hidden"
-              />
-
               <div className="flex-1 min-w-0 overflow-auto custom-scrollbar">
                 {viewMode === "grid" ? (
                   <PhotoGrid
@@ -439,15 +528,15 @@ export default function PhotosView({ roots, onOpen, onPreview }: PhotosViewProps
         onClose={() => setContextMenu(null)}
         onOpen={onOpen}
         onPreview={onPreview}
-        onToggleFavorite={(id) => { /* TODO */ }}
-        onDownload={(photo) => { /* TODO */ }}
-        onDelete={(photo) => { /* TODO */ }}
-        onShare={(photo) => { /* TODO */ }}
-        onCopyPath={(photo) => { /* TODO */ }}
-        onAddToAlbum={(photo) => { /* TODO */ }}
-        onViewMetadata={(photo) => { /* TODO */ }}
-        onViewOnMap={(photo) => { /* TODO */ }}
-        onArchive={(photo) => { /* TODO */ }}
+        onToggleFavorite={handleToggleFavorite}
+        onDownload={handleDownload}
+        onDelete={handleDelete}
+        onShare={handleShare}
+        onCopyPath={handleCopyPath}
+        onAddToAlbum={() => {}}
+        onViewMetadata={handleViewMetadata}
+        onViewOnMap={handleViewOnMap}
+        onArchive={handleArchive}
       />
     </div>
   );
@@ -478,33 +567,41 @@ function TimelineView({
       arr.push(p);
       map.set(key, arr);
     }
-    return Array.from(map.entries())
-      .sort((a, b) => new Date(b[1][0].date_taken).getTime() - new Date(a[1][0].date_taken).getTime())
-      .map(([label, groupPhotos]) => ({ label, photos: groupPhotos }));
+    let offset = 0;
+    const sorted = Array.from(map.entries())
+      .sort((a, b) => new Date(b[1][0].date_taken).getTime() - new Date(a[1][0].date_taken).getTime());
+    return sorted.map(([label, groupPhotos]) => {
+      const startIndex = offset;
+      offset += groupPhotos.length;
+      return { label, photos: groupPhotos, startIndex };
+    });
   }, [photos]);
 
   return (
     <div className="p-6 pt-4 space-y-8">
-      {groups.map(({ label, photos: groupPhotos }) => (
+      {groups.map(({ label, photos: groupPhotos, startIndex }) => (
         <section key={label} className="space-y-4">
           <h2 className="text-xl font-semibold sticky top-20 z-10 bg-background/80 backdrop-blur-sm py-2 border-b border-glass-border/50">
             {label}
             <span className="ml-2 text-sm font-normal text-content-muted">{groupPhotos.length}</span>
           </h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
-            {groupPhotos.map((p, i) => (
-              <PhotoCard
-                key={p.id}
-                photo={p}
-                index={i}
-                density="comfortable"
-                isSelected={selectedIds.has(p.id)}
-                isSelecting={isSelecting}
-                onClick={() => onPhotoClick(p, i)}
-                onContextMenu={(e) => onPhotoContextMenu(p, e)}
-                onSelectionToggle={() => onSelectionToggle(p.id)}
-              />
-            ))}
+            {groupPhotos.map((p, i) => {
+              const globalIndex = startIndex + i;
+              return (
+                <PhotoCard
+                  key={p.id}
+                  photo={p}
+                  index={globalIndex}
+                  density="comfortable"
+                  isSelected={selectedIds.has(p.id)}
+                  isSelecting={isSelecting}
+                  onClick={() => onPhotoClick(p, globalIndex)}
+                  onContextMenu={(e) => onPhotoContextMenu(p, e)}
+                  onSelectionToggle={() => onSelectionToggle(p.id)}
+                />
+              );
+            })}
           </div>
         </section>
       ))}

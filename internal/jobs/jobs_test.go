@@ -101,7 +101,7 @@ func makeZipBytes(t *testing.T, entries map[string][]byte) []byte {
 
 func newJobsManager(t *testing.T, archiveRel string, archiveData []byte) (*Manager, *memProvider) {
 	t.Helper()
-	db, err := sql.Open("sqlite", "file:nexora_jobs_test?mode=memory&cache=shared")
+	db, err := sql.Open("sqlite", "file:"+t.Name()+"_jobs?mode=memory&cache=shared")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -118,19 +118,19 @@ func newJobsManager(t *testing.T, archiveRel string, archiveData []byte) (*Manag
 	mp.files[archiveRel] = archiveData
 
 	// Build a RootService whose single root hands out our in-memory provider.
-	rootsDB, derr := sql.Open("sqlite", "file:nexora_roots_test?mode=memory&cache=shared")
+	rootsDB, derr := sql.Open("sqlite", "file:"+t.Name()+"_roots?mode=memory&cache=shared")
 	if derr != nil {
 		t.Fatal(derr)
 	}
 	t.Cleanup(func() { rootsDB.Close() })
 	rootsDB.SetMaxOpenConns(1)
 	if _, err := rootsDB.Exec(`CREATE TABLE storage_roots(
-		id TEXT PRIMARY KEY, name TEXT, path TEXT, read_only INTEGER, enabled INTEGER, indexed INTEGER, created_at TEXT, updated_at TEXT
+		id TEXT PRIMARY KEY, name TEXT, path TEXT, icon TEXT, type TEXT, config TEXT, read_only INTEGER, enabled INTEGER, indexed INTEGER, created_at TEXT, updated_at TEXT
 	)`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := rootsDB.Exec(`INSERT INTO storage_roots(id,name,path,read_only,enabled,indexed,created_at,updated_at)
-		VALUES('r1','root','/data',0,1,1,'','')`); err != nil {
+	if _, err := rootsDB.Exec(`INSERT INTO storage_roots(id,name,path,icon,type,config,read_only,enabled,indexed,created_at,updated_at)
+		VALUES('r1','root','/data','','local','{}',0,1,1,'','')`); err != nil {
 		t.Fatal(err)
 	}
 	rs := storage.NewRootService(rootsDB)

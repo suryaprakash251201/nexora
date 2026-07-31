@@ -27,8 +27,9 @@ export interface CameraFacet {
 
 export interface PhotosResponse {
   items: PhotoResult[];
+  has_more: boolean;
   next_cursor?: string;
-  total_count: number;
+  total_count?: number;
   facets?: {
     years: Array<{ year: number; count: number }>;
     cameras: Array<{ make: string; model: string; count: number }>;

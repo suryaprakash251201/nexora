@@ -1,4 +1,5 @@
 import { useRef, useEffect } from "react";
+import React from "react";
 import { motion } from "motion/react";
 import { Download, Share2, Star, Trash2, FolderPlus, Info, MapPin, Copy, Archive, Camera } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -120,6 +121,10 @@ export function PhotoContextMenu({
 }
 
 function MenuButton({ onClick, children, destructive, className }: { onClick: () => void; children: React.ReactNode; destructive?: boolean; className?: string }) {
+  // Split children into icon (first element) and label (rest)
+  const items = React.Children.toArray(children);
+  const icon = items[0];
+  const rest = items.slice(1);
   return (
     <button
       onClick={onClick}
@@ -133,8 +138,8 @@ function MenuButton({ onClick, children, destructive, className }: { onClick: ()
       )}
       role="menuitem"
     >
-      <span className="flex h-5 w-5 items-center justify-center">{children}</span>
-      <span className="flex-1 text-left">{Array.isArray(children) ? children : <></>}</span>
+      <span className="flex h-5 w-5 items-center justify-center shrink-0">{icon}</span>
+      <span className="flex-1 text-left">{rest}</span>
     </button>
   );
 }

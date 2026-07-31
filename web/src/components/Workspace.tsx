@@ -41,7 +41,7 @@ import { formatRelative } from "../lib/format";
 import { SkeletonGrid, SkeletonList } from "./ui/Skeleton";
 import { FileThumb } from "./FileThumb";
 import { staggerContainer, staggerItem, cardHover } from "@/lib/animations";
-import { isEditable } from "../lib/preview";
+import { isEditable, isAudio } from "../lib/preview";
 import {
   Download, Trash2, Pencil, Copy, Eye, FolderOpen, RotateCcw,
   Star, Share2, Archive, FolderInput, FileEdit, ListMusic, HardDrive, Upload,
@@ -160,6 +160,7 @@ export default function Workspace({ user }: { user: User }) {
   const modals = useModals();
   const { preview, setPreview, imageItem, setImageItem, videoItem, setVideoItem, setPrevView, editItem, setEditItem, shareItem, setShareItem, ctx, setCtx, ctxPlaylist, setCtxPlaylist, menu, setMenu, rootModal, setRootModal, playlistModal, setPlaylistModal, playlistName, setPlaylistName, commandPaletteOpen, setCommandPaletteOpen, tagPicker, setTagPicker } = modals;
   const fileInput = useRef<HTMLInputElement>(null);
+  const folderInput = useRef<HTMLInputElement>(null);
 
   const activeRoot = roots.data?.roots.find((r) => r.id === rootId) || null;
   const canWrite = !!activeRoot && activeRoot.permission === "write" && !activeRoot.read_only;
@@ -239,8 +240,8 @@ export default function Workspace({ user }: { user: User }) {
       clearSelection();
     } else if (item.extension === "zip" && canWrite) {
       setMenu({ kind: "extract", item });
-    } else if (item.mime.startsWith("audio/")) {
-      const audio = items.filter((i) => i.mime.startsWith("audio/"));
+    } else if (isAudio(item)) {
+      const audio = items.filter((i) => isAudio(i));
       const idx = audio.findIndex((i) => i.path === item.path);
       usePlayer.getState().play(audio, idx >= 0 ? idx : 0);
     } else if (item.mime.startsWith("image/") || ["jpg", "jpeg", "png", "gif", "webp", "bmp", "avif"].includes((item.extension || "").toLowerCase())) {
@@ -285,7 +286,7 @@ export default function Workspace({ user }: { user: User }) {
   }, [allSelected, filtered, clearSelection]);
 
   const savePlaylist = () => {
-    const audio = (selectedItems.length ? selectedItems : items).filter((i) => i.mime.startsWith("audio/"));
+    const audio = (selectedItems.length ? selectedItems : items).filter((i) => isAudio(i));
     if (!audio.length) { pushToast("error", "No audio files selected"); setPlaylistModal(false); return; }
     usePlaylists.getState().create(playlistName.trim() || `Playlist ${usePlaylists.getState().playlists.length + 1}`, audio);
     setPlaylistName("");
@@ -337,7 +338,7 @@ export default function Workspace({ user }: { user: User }) {
       { label: "Share", icon: <Share2 className="h-4 w-4" />, onClick: () => setShareItem(item) },
       { label: "Add to favorites", icon: <Star className="h-4 w-4" />, onClick: () => toggleFavorite(item) },
     ];
-    if (!item.is_dir && item.mime.startsWith("audio/")) {
+    if (!item.is_dir && isAudio(item)) {
       const targets = selectedItems.length ? selectedItems : [item];
       menuItems.push({
         label: selectedItems.length ? `Add ${selectedItems.length} to playlist` : "Add to playlist",
@@ -451,6 +452,7 @@ export default function Workspace({ user }: { user: User }) {
             onNewFolder={() => setMenu({ kind: "newFolder" })}
             onNewFile={() => setMenu({ kind: "newFile" })}
             onUpload={() => fileInput.current?.click()}
+            onUploadFolder={() => folderInput.current?.click()}
             onRefresh={refresh}
             user={user}
             isAdmin={isAdmin}
@@ -466,6 +468,7 @@ export default function Workspace({ user }: { user: User }) {
         )}
 
         <input ref={fileInput} type="file" multiple className="hidden" onChange={(e) => { uploadFiles(e.target.files); e.target.value = ""; }} />
+        <input ref={folderInput} type="file" {...{ webkitdirectory: "", directory: "" }} multiple className="hidden" onChange={(e) => { uploadFiles(e.target.files); e.target.value = ""; }} />
 
         {(selectMode || selection.size > 0) && (
           <div className="flex items-center gap-2 sm:gap-3 px-4 sm:px-6 py-2 border-b border-glass-border-soft bg-glass-bg-subtle backdrop-blur-sm">
@@ -556,6 +559,7 @@ export default function Workspace({ user }: { user: User }) {
                 onContextMenu={onContextMenu}
                 onDropItem={(folder) => moveSelectionTo()}
                 onUpload={() => fileInput.current?.click()}
+                onUploadFolder={() => folderInput.current?.click()}
                 hasMore={hasMoreFiles}
                 onLoadMore={() => setFileOffset(prev => prev + (files.data?.limit || 500))}
                 isLoadingMore={files.isFetching && fileOffset > 0}
@@ -607,6 +611,7 @@ export default function Workspace({ user }: { user: User }) {
                   onSearch={(q) => { setSearch(q); setView("search"); }}
                   onOpenRecent={(item) => navigateTo(item.root_id, item.path, false, item.name)}
                   onUpload={() => fileInput.current?.click()}
+                  onUploadFolder={() => folderInput.current?.click()}
                   onNewFolder={() => setMenu({ kind: "newFolder" })}
                   onNewFile={() => setMenu({ kind: "newFile" })}
                   onNewRoot={() => isAdmin && setRootModal(true)}
@@ -679,6 +684,7 @@ export default function Workspace({ user }: { user: User }) {
         onSelectRoot={(id) => { setRootId(id); clearSelection(); }}
         onSearch={() => setCommandPaletteOpen(true)}
         onUpload={() => fileInput.current?.click()}
+        onUploadFolder={() => folderInput.current?.click()}
         onNewFolder={() => setMenu({ kind: "newFolder" })}
         onLogout={logout}
       />
@@ -796,6 +802,7 @@ export default function Workspace({ user }: { user: User }) {
         onNewFolder={() => setMenu({ kind: "newFolder" })}
         onNewFile={() => setMenu({ kind: "newFile" })}
         onUpload={() => fileInput.current?.click()}
+        onUploadFolder={() => folderInput.current?.click()}
         onRefresh={refresh}
         onLogout={logout}
         onAdmin={() => setView("admin")}

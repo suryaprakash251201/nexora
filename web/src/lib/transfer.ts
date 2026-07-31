@@ -1,4 +1,4 @@
-import { getCsrfToken } from "../api/client";
+import { getCsrfToken, getBaseUrl } from "../api/client";
 import { useTransfers, uid, type Transfer } from "../store/transfers";
 
 function fmtSpeed(bps: number): string {
@@ -17,25 +17,31 @@ export function speedLabel(bps: number): string {
 export function startUpload(
   rootId: string,
   path: string,
-  fileList: FileList,
+  fileList: FileList | File[],
   onDone?: () => void
 ) {
   const files = Array.from(fileList);
   if (!files.length || !rootId) return;
 
   const isTauri = "__TAURI_INTERNALS__" in window;
-  const storedUrl = localStorage.getItem("nexora-api-url") || "";
-  // Build absolute URL using the same pattern as startDownload.
-  const baseUrl = (isTauri && storedUrl) ? storedUrl.replace(/\/$/, "") : (isTauri ? window.location.origin : "");
+  const baseUrl = getBaseUrl();
 
   files.forEach((file) => {
     const id = uid();
+    // Support relative folder path if uploaded via webkitdirectory or folder drop
+    const relPath = (file as any).webkitRelativePath || "";
+    let targetPath = path;
+    if (relPath && relPath.includes("/")) {
+      const relDir = relPath.substring(0, relPath.lastIndexOf("/"));
+      targetPath = path ? `${path}/${relDir}` : relDir;
+    }
+
     const transfer: Transfer = {
       id,
       name: file.name,
       kind: "upload",
       rootId,
-      path,
+      path: targetPath,
       loaded: 0,
       total: file.size,
       speed: 0,
@@ -46,7 +52,7 @@ export function startUpload(
     const form = new FormData();
     form.append("files", file);
 
-    const uploadUrl = baseUrl + `/api/v1/files/upload?root=${encodeURIComponent(rootId)}&path=${encodeURIComponent(path)}`;
+    const uploadUrl = baseUrl + `/api/v1/files/upload?root=${encodeURIComponent(rootId)}&path=${encodeURIComponent(targetPath)}`;
     const xhr = new XMLHttpRequest();
     xhr.open("POST", uploadUrl);
     xhr.withCredentials = !isTauri;
@@ -97,7 +103,9 @@ export function startUpload(
 // then triggers a browser save. The transfer is recorded in the store.
 export async function startDownload(rootId: string, path: string, name: string) {
   const isTauri = "__TAURI_INTERNALS__" in window;
-  const url = `/api/v1/files/download?root=${encodeURIComponent(rootId)}&path=${encodeURIComponent(path)}`;
+  const baseUrl = getBaseUrl();
+  const pathUrl = `/api/v1/files/download?root=${encodeURIComponent(rootId)}&path=${encodeURIComponent(path)}`;
+  const fullUrl = baseUrl + pathUrl;
   const id = uid();
   
   useTransfers.getState().add({
@@ -115,31 +123,20 @@ export async function startDownload(rootId: string, path: string, name: string) 
         return;
       }
       
-      // Need absolute URL for tauri upload plugin
-      const absoluteUrl = new URL(url, localStorage.getItem("nexora-api-url") || window.location.origin).toString();
+      const absoluteUrl = fullUrl;
       
       const headers = new Map<string, string>();
       const token = localStorage.getItem("nexora-token");
       if (token) headers.set("Authorization", `Bearer ${token}`);
       
-      // Track time and bytes locally for real-time speed calculation.
-      // IMPORTANT: initialization happens inside the first progress callback
-      // so the save-dialog delay is excluded from speed calculations.
-      //
-      // NOTE: In the plugin's ProgressPayload:
-      //   - progress       = current chunk size (NOT cumulative!)
-      //   - progressTotal  = cumulative bytes transferred (this is what we need)
-      //   - total          = Content-Length or 0
-      //   - transferSpeed  = computed speed
       let lastTime = 0;
       let lastLoaded = 0;
       let trackingStarted = false;
       
       await tauriDownload(absoluteUrl, savePath, (p) => {
-        const cumulative = p.progressTotal; // cumulative bytes, NOT p.progress
+        const cumulative = p.progressTotal;
         
         if (!trackingStarted) {
-          // First callback — just record baseline, skip speed (excludes dialog time)
           lastTime = performance.now();
           lastLoaded = cumulative;
           trackingStarted = true;
@@ -180,7 +177,7 @@ export async function startDownload(rootId: string, path: string, name: string) 
 
   // Browser download
   try {
-    const res = await fetch(url, { credentials: "include" });
+    const res = await fetch(fullUrl, { credentials: "include" });
     if (!res.ok || !res.body) throw new Error(`Download failed (${res.status})`);
     const total = Number(res.headers.get("Content-Length")) || 0;
     const reader = res.body.getReader();

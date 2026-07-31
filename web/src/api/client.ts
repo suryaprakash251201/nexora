@@ -5,10 +5,25 @@ import type { ApiError, SavedSearch, SavedSearchInput, SearchResult, FileVersion
 // HTTPS is handled by Caddy reverse proxy (self-signed cert).
 // HTTP fallback is always available.
 const TAILSCALE_HOSTS = [
+  "http://localhost:8080",
+  "http://127.0.0.1:8080",
   "https://pms2.tail58d7ea.ts.net",
   "http://pms2.tail58d7ea.ts.net",
   "http://100.67.251.1:80",
 ];
+
+/**
+ * Get the base API URL for network requests.
+ * In Tauri desktop environment, defaults to http://localhost:8080 if nexora-api-url is not set.
+ */
+export function getBaseUrl(): string {
+  const isTauri = "__TAURI_INTERNALS__" in window;
+  const storedUrl = localStorage.getItem("nexora-api-url") || "";
+  if (isTauri) {
+    return (storedUrl || "http://localhost:8080").replace(/\/$/, "");
+  }
+  return "";
+}
 
 /**
  * Try to discover the Nexora server URL by probing known Tailscale hosts.
@@ -69,8 +84,7 @@ function buildQuery(query?: Record<string, string | number | undefined>): string
 
 export function getMediaUrl(path: string, query?: Record<string, string | number | undefined | boolean>): string {
   const isTauri = "__TAURI_INTERNALS__" in window;
-  const storedUrl = localStorage.getItem("nexora-api-url") || "";
-  const baseUrl = (isTauri && storedUrl) ? storedUrl.replace(/\/$/, "") : "";
+  const baseUrl = getBaseUrl();
 
   const params = new URLSearchParams();
   if (query) {
@@ -106,8 +120,7 @@ export async function api<T>(path: string, opts: RequestOptions = {}): Promise<T
   }
 
   const isTauri = "__TAURI_INTERNALS__" in window;
-  const storedUrl = localStorage.getItem("nexora-api-url") || "";
-  const baseUrl = (isTauri && storedUrl) ? storedUrl.replace(/\/$/, "") : "";
+  const baseUrl = getBaseUrl();
 
   const storedToken = localStorage.getItem("nexora-token");
   if (storedToken && isTauri) {

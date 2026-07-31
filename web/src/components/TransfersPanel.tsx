@@ -194,10 +194,11 @@ export default function TransfersPanel() {
 
       {/* Transfer List */}
       <div 
-        className={`bg-surface/30 backdrop-blur-sm transition-all duration-300 ease-in-out overflow-hidden
-          ${open ? (isExpanded ? "flex-1 overflow-auto max-h-[60vh]" : "max-h-72 overflow-auto") : "max-h-0"}`}
+        className={`bg-surface/30 backdrop-blur-sm transition-all duration-300 ease-in-out ${
+          open ? (isExpanded ? "flex-1 overflow-y-auto max-h-[60vh]" : "max-h-64 sm:max-h-72 overflow-y-auto") : "max-h-0 overflow-hidden"
+        }`}
       >
-        <div className="custom-scrollbar">
+        <div className="divide-y divide-border/20">
           {transfers.map((t) => <Row key={t.id} t={t} onDismiss={() => remove(t.id)} />)}
         </div>
       </div>

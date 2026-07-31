@@ -9,6 +9,7 @@ import {
   FolderPlus,
   FilePlus,
   Upload,
+  FolderUp,
   X,
   Filter,
 } from "lucide-react";
@@ -37,6 +38,7 @@ interface CommandBarProps {
   onNewFolder: () => void;
   onNewFile: () => void;
   onUpload: () => void;
+  onUploadFolder?: () => void;
   onRefresh: () => void;
   user: User;
   isAdmin: boolean;
@@ -61,6 +63,7 @@ export default function CommandBar({
   onNewFolder,
   onNewFile,
   onUpload,
+  onUploadFolder,
   onRefresh,
   user,
   isAdmin,
@@ -307,8 +310,19 @@ export default function CommandBar({
                   className="hidden sm:inline-flex"
                   icon={<Upload className="h-4 w-4" />}
                 >
-                  Upload
+                  Upload files
                 </Button>
+                {onUploadFolder && (
+                  <Button
+                    variant="secondary"
+                    onClick={onUploadFolder}
+                    size="sm"
+                    className="hidden sm:inline-flex"
+                    icon={<FolderUp className="h-4 w-4" />}
+                  >
+                    Upload folder
+                  </Button>
+                )}
               </>
             )}
 
@@ -396,6 +410,15 @@ export default function CommandBar({
           >
             <Upload className="h-4 w-4 text-accent-tertiary" /> Upload files
           </button>
+          {onUploadFolder && (
+            <button
+              onClick={() => { closeAllMenus(); onUploadFolder(); }}
+              className="w-full flex items-center gap-3 px-3 py-2 text-sm rounded-lg hover:bg-accent/10 hover:text-accent font-medium transition-colors"
+              role="menuitem"
+            >
+              <FolderUp className="h-4 w-4 text-purple-400" /> Upload folder
+            </button>
+          )}
         </motion.div>,
         document.body,
       )}
