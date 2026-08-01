@@ -156,7 +156,64 @@ type PhotoQuery struct {
 	CameraMake    string
 	HasLocation   bool
 	FavoritesOnly bool
+	DateFrom      string // YYYY-MM-DD (inclusive, start of day)
+	DateTo        string // YYYY-MM-DD (inclusive, end of day)
 	Sort          string // date_desc | date_asc | name
+}
+
+// dateTakenExpr is the SQL expression for the effective photo date:
+// EXIF date_taken when present, otherwise the indexed file modification time.
+const dateTakenExpr = "COALESCE(NULLIF(m.date_taken, ''), s.modified)"
+
+// buildPhotoWhere writes the shared WHERE clause (excluding the base root/mime
+// predicate) for photo queries and appends its arguments.
+func buildPhotoWhere(sb *strings.Builder, args *[]any, userID string, rootIDs []string, q PhotoQuery) {
+	sb.WriteString(`
+		FROM search_index s
+		LEFT JOIN media_metadata m ON s.id = m.id
+		LEFT JOIN favorites fav ON fav.user_id = ? AND fav.root_id = s.root_id AND fav.path = s.path
+		WHERE s.root_id IN (`)
+
+	*args = append(*args, userID)
+	for i, id := range rootIDs {
+		if i > 0 {
+			sb.WriteString(",")
+		}
+		sb.WriteString("?")
+		*args = append(*args, id)
+	}
+	sb.WriteString(") AND s.mime LIKE 'image/%'")
+
+	if q.Q != "" {
+		sb.WriteString(" AND s.name LIKE ? ESCAPE '\\'")
+		*args = append(*args, "%"+escapeLike(q.Q)+"%")
+	}
+	if q.Year > 0 {
+		sb.WriteString(" AND CAST(strftime('%Y', " + dateTakenExpr + ") AS INTEGER) = ?")
+		*args = append(*args, q.Year)
+	}
+	if q.Month > 0 {
+		sb.WriteString(" AND CAST(strftime('%m', " + dateTakenExpr + ") AS INTEGER) = ?")
+		*args = append(*args, q.Month)
+	}
+	if q.CameraMake != "" {
+		sb.WriteString(" AND m.make = ?")
+		*args = append(*args, q.CameraMake)
+	}
+	if q.HasLocation {
+		sb.WriteString(" AND m.lat IS NOT NULL AND m.lng IS NOT NULL")
+	}
+	if q.FavoritesOnly {
+		sb.WriteString(" AND fav.id IS NOT NULL")
+	}
+	if q.DateFrom != "" {
+		sb.WriteString(" AND " + dateTakenExpr + " >= ?")
+		*args = append(*args, q.DateFrom+"T00:00:00")
+	}
+	if q.DateTo != "" {
+		sb.WriteString(" AND " + dateTakenExpr + " <= ?")
+		*args = append(*args, q.DateTo+"T23:59:59.999Z")
+	}
 }
 
 // GetPhotosTimeline returns indexed photos sorted by date_taken descending.
@@ -173,54 +230,20 @@ func (s *Service) GetPhotosTimeline(ctx context.Context, userID string, rootIDs 
 	var sb strings.Builder
 	sb.WriteString(`
 		SELECT s.id, s.root_id, s.path, s.name,
-		       COALESCE(NULLIF(m.date_taken, ''), s.modified) as date_taken,
+		       ` + dateTakenExpr + ` as date_taken,
 		       m.lat, m.lng, m.make, m.model,
-		       CASE WHEN fav.id IS NULL THEN 0 ELSE 1 END AS is_favorite
-		FROM search_index s
-		LEFT JOIN media_metadata m ON s.id = m.id
-		LEFT JOIN favorites fav ON fav.user_id = ? AND fav.root_id = s.root_id AND fav.path = s.path
-		WHERE s.root_id IN (`)
+		       CASE WHEN fav.id IS NULL THEN 0 ELSE 1 END AS is_favorite`)
 
-	args := []any{userID}
-	for i, id := range rootIDs {
-		if i > 0 {
-			sb.WriteString(",")
-		}
-		sb.WriteString("?")
-		args = append(args, id)
-	}
-	sb.WriteString(") AND s.mime LIKE 'image/%'")
-
-	if q.Q != "" {
-		sb.WriteString(" AND s.name LIKE ? ESCAPE '\\'")
-		args = append(args, "%"+escapeLike(q.Q)+"%")
-	}
-	if q.Year > 0 {
-		sb.WriteString(" AND CAST(strftime('%Y', COALESCE(NULLIF(m.date_taken, ''), s.modified)) AS INTEGER) = ?")
-		args = append(args, q.Year)
-	}
-	if q.Month > 0 {
-		sb.WriteString(" AND CAST(strftime('%m', COALESCE(NULLIF(m.date_taken, ''), s.modified)) AS INTEGER) = ?")
-		args = append(args, q.Month)
-	}
-	if q.CameraMake != "" {
-		sb.WriteString(" AND m.make = ?")
-		args = append(args, q.CameraMake)
-	}
-	if q.HasLocation {
-		sb.WriteString(" AND m.lat IS NOT NULL AND m.lng IS NOT NULL")
-	}
-	if q.FavoritesOnly {
-		sb.WriteString(" AND fav.id IS NOT NULL")
-	}
+	args := []any{}
+	buildPhotoWhere(&sb, &args, userID, rootIDs, q)
 
 	switch q.Sort {
 	case "date_asc":
-		sb.WriteString(" ORDER BY date_taken ASC")
+		sb.WriteString(" ORDER BY " + dateTakenExpr + " ASC")
 	case "name":
 		sb.WriteString(" ORDER BY s.name COLLATE NOCASE ASC")
 	default:
-		sb.WriteString(" ORDER BY date_taken DESC")
+		sb.WriteString(" ORDER BY " + dateTakenExpr + " DESC")
 	}
 	sb.WriteString(" LIMIT ? OFFSET ?")
 	args = append(args, limit, offset)
@@ -257,4 +280,25 @@ func (s *Service) GetPhotosTimeline(ctx context.Context, userID string, rootIDs 
 	}
 
 	return out, rows.Err()
+}
+
+// CountPhotos returns the total number of photos matching the query filters.
+// Used for the timeline header stats; not paginated.
+func (s *Service) CountPhotos(ctx context.Context, userID string, rootIDs []string, q PhotoQuery) (int, error) {
+	if len(rootIDs) == 0 {
+		return 0, nil
+	}
+
+	var sb strings.Builder
+	sb.WriteString(`
+		SELECT COUNT(*)`)
+
+	args := []any{}
+	buildPhotoWhere(&sb, &args, userID, rootIDs, q)
+
+	var total int
+	if err := s.db.QueryRowContext(ctx, sb.String(), args...).Scan(&total); err != nil {
+		return 0, err
+	}
+	return total, nil
 }

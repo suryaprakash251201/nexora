@@ -1,16 +1,8 @@
 import { useRef, useCallback, useMemo, useEffect, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { PhotoCard } from "./PhotoCard";
-import { PhotoResult } from "@/api/types";
+import { DENSITY_CONFIG, Density, PhotoResult } from "./types";
 import { Loader2 } from "lucide-react";
-
-type Density = "compact" | "comfortable" | "spacious";
-
-const DENSITY_CONFIG: Record<Density, { cols: { base: number; sm: number; md: number; lg: number; xl: number }; gap: number; cardWidth: number; aspectRatio: number }> = {
-  compact: { cols: { base: 3, sm: 4, md: 5, lg: 6, xl: 8 }, gap: 4, cardWidth: 140, aspectRatio: 4 / 3 },
-  comfortable: { cols: { base: 2, sm: 3, md: 4, lg: 5, xl: 6 }, gap: 8, cardWidth: 180, aspectRatio: 4 / 3 },
-  spacious: { cols: { base: 2, sm: 2, md: 3, lg: 4, xl: 4 }, gap: 16, cardWidth: 240, aspectRatio: 3 / 2 },
-};
 
 interface PhotoGridProps {
   photos: PhotoResult[];
@@ -23,7 +15,8 @@ interface PhotoGridProps {
   onLoadMore?: () => void;
   hasMore?: boolean;
   isLoadingMore?: boolean;
-  containerRef?: React.RefObject<HTMLDivElement | null>;
+  /** Called with the scrollable element so the parent can track/restore scroll. */
+  onScrollRef?: (el: HTMLDivElement | null) => void;
 }
 
 export function PhotoGrid({
@@ -37,7 +30,7 @@ export function PhotoGrid({
   onLoadMore,
   hasMore,
   isLoadingMore,
-  containerRef,
+  onScrollRef,
 }: PhotoGridProps) {
   const parentRef = useRef<HTMLDivElement>(null);
   const config = DENSITY_CONFIG[density];
@@ -106,22 +99,19 @@ export function PhotoGrid({
   useEffect(() => {
     const el = parentRef.current;
     if (!el) return;
-    el.addEventListener("scroll", handleScroll, { passive: true } as AddEventListenerOptions);
-    return () => el.removeEventListener("scroll", handleScroll, { passive: true } as EventListenerOptions);
+    el.addEventListener("scroll", handleScroll, { passive: true });
+    return () => el.removeEventListener("scroll", handleScroll);
   }, [handleScroll]);
 
   const virtualRows = virtualizer.getVirtualItems();
 
+  // Expose the scrollable element to the parent (scroll restoration).
   const combinedRef = useCallback(
     (node: HTMLDivElement | null) => {
-      if (node) {
-        parentRef.current = node;
-        if (containerRef) {
-          containerRef.current = node;
-        }
-      }
+      parentRef.current = node;
+      onScrollRef?.(node);
     },
-    [containerRef]
+    [onScrollRef]
   );
 
   return (
@@ -138,7 +128,7 @@ export function PhotoGrid({
           width: "100%",
         }}
       >
-        {virtualRows.map((virtualRow: { index: number; start: number; size: number }) => {
+        {virtualRows.map((virtualRow) => {
           const rowStart = virtualRow.index * columns;
           const rowPhotos = photos.slice(rowStart, rowStart + columns);
           return (
@@ -152,7 +142,6 @@ export function PhotoGrid({
                 gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
                 gap: `${config.gap}px`,
               }}
-              role="list"
             >
               {rowPhotos.map((photo, colIndex) => {
                 const globalIndex = rowStart + colIndex;

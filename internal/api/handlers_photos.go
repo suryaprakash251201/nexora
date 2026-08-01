@@ -31,6 +31,8 @@ func (s *Server) handleGetPhotosTimeline(w http.ResponseWriter, r *http.Request)
 	q.CameraMake = r.URL.Query().Get("camera_make")
 	q.HasLocation = r.URL.Query().Get("has_location") == "true" || r.URL.Query().Get("has_location") == "1"
 	q.FavoritesOnly = r.URL.Query().Get("favorites_only") == "true" || r.URL.Query().Get("favorites_only") == "1"
+	q.DateFrom = r.URL.Query().Get("date_from")
+	q.DateTo = r.URL.Query().Get("date_to")
 	q.Sort = r.URL.Query().Get("sort")
 
 	// Find roots the user can read
@@ -45,18 +47,34 @@ func (s *Server) handleGetPhotosTimeline(w http.ResponseWriter, r *http.Request)
 		rootIDs = append(rootIDs, rt.ID)
 	}
 
-	photos, err := s.Search.GetPhotosTimeline(ctx, user.ID, rootIDs, q, limit, offset)
+	// Fetch one extra row so has_more is exact: a full page plus one means
+	// there is definitely another page (no wasted request on the boundary).
+	photos, err := s.Search.GetPhotosTimeline(ctx, user.ID, rootIDs, q, limit+1, offset)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error", err.Error(), middleware.GetRequestID(ctx))
 		return
 	}
 
+	hasMore := len(photos) > limit
+	if hasMore {
+		photos = photos[:limit]
+	}
 	if photos == nil {
 		photos = []search.PhotoResult{} // empty array for JSON
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	resp := map[string]interface{}{
 		"items":    photos,
-		"has_more": len(photos) == limit,
-	})
+		"has_more": hasMore,
+	}
+
+	// Total count is only needed on the first page; skip it on subsequent
+	// pages so pagination stays cheap.
+	if offset == 0 {
+		if total, err := s.Search.CountPhotos(ctx, user.ID, rootIDs, q); err == nil {
+			resp["total_count"] = total
+		}
+	}
+
+	writeJSON(w, http.StatusOK, resp)
 }

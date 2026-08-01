@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
 import { Filter, X, ChevronDown, MapPin, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -29,23 +29,28 @@ interface FilterBarProps {
 
 interface FilterTriggerProps {
   label: string;
+  active?: boolean;
   open: boolean;
   onToggle: () => void;
   children: React.ReactNode;
 }
 
-function FilterTrigger({ label, open, onToggle, children }: FilterTriggerProps) {
+function FilterTrigger({ label, active, open, onToggle, children }: FilterTriggerProps) {
   return (
     <div className="relative">
       <motion.button
         onClick={onToggle}
         whileHover={{ scale: 1.02 }}
         whileTap={{ scale: 0.98 }}
+        aria-haspopup="true"
+        aria-expanded={open}
         className={cn(
           "flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors",
           open
             ? "bg-accent text-white"
-            : "bg-surface/50 text-content-secondary hover:bg-surface border border-glass-border"
+            : active
+              ? "bg-accent/15 text-accent border border-accent/30"
+              : "bg-surface/50 text-content-secondary hover:bg-surface border border-glass-border"
         )}
       >
         <span>{label}</span>
@@ -66,17 +71,34 @@ function FilterTrigger({ label, open, onToggle, children }: FilterTriggerProps) 
   );
 }
 
-export function FilterBar({
-  filters,
-  onChange,
-  yearFacets,
-  cameraFacets,
-  className,
-}: FilterBarProps) {
+export function FilterBar({ filters, onChange, yearFacets, cameraFacets, className }: FilterBarProps) {
   const [openFilters, setOpenFilters] = useState<string | null>(null);
+  const barRef = useRef<HTMLDivElement>(null);
+
+  // Close any open dropdown on outside click or Escape.
+  useEffect(() => {
+    if (!openFilters) return;
+    const onPointerDown = (e: MouseEvent | TouchEvent) => {
+      if (barRef.current && !barRef.current.contains(e.target as Node)) {
+        setOpenFilters(null);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpenFilters(null);
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("touchstart", onPointerDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("touchstart", onPointerDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [openFilters]);
 
   const activeFilterCount = [
     filters.year,
+    filters.month,
     filters.cameraMake,
     filters.hasLocation,
     filters.favoritesOnly,
@@ -95,10 +117,11 @@ export function FilterBar({
       dateTo: undefined,
       sort: "date_desc",
     });
+    setOpenFilters(null);
   };
 
   return (
-    <div className={cn("flex flex-wrap items-center gap-2", className)}>
+    <div ref={barRef} className={cn("flex flex-wrap items-center gap-2", className)}>
       {activeFilterCount > 0 && (
         <motion.button
           onClick={clearAllFilters}
@@ -109,7 +132,7 @@ export function FilterBar({
         >
           <Filter className="h-3.5 w-3.5" />
           <span>{activeFilterCount} filter{activeFilterCount !== 1 ? "s" : ""}</span>
-          <X className="h-3.5 w-3.5 hover:opacity-70" />
+          <X className="h-3.5 w-3.5" />
         </motion.button>
       )}
 
@@ -117,68 +140,90 @@ export function FilterBar({
         {/* Date Filter */}
         <FilterTrigger
           label={filters.year ? `${filters.year}${filters.month ? ` / ${MONTHS[filters.month - 1]?.label.slice(0, 3)}` : ""}` : "Date"}
+          active={!!(filters.year || filters.month || filters.dateFrom || filters.dateTo)}
           open={openFilters === "date"}
           onToggle={() => setOpenFilters(openFilters === "date" ? null : "date")}
         >
-          {openFilters === "date" && (
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-medium text-content-muted mb-1">Year</label>
-                <select
-                  value={filters.year || ""}
-                  onChange={(e) => onChange({ ...filters, year: e.target.value ? parseInt(e.target.value) : undefined, month: undefined })}
-                  className="w-full px-3 py-2 text-sm bg-surface/50 border border-glass-border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-transparent"
-                >
-                  <option value="">All years</option>
-                  {yearFacets.map(({ year }) => (
-                    <option key={year} value={String(year)}>{year}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-content-muted mb-1">Month</label>
-                <select
-                  value={filters.month || ""}
-                  onChange={(e) => onChange({ ...filters, month: e.target.value ? parseInt(e.target.value) : undefined })}
-                  disabled={!filters.year}
-                  className="w-full px-3 py-2 text-sm bg-surface/50 border border-glass-border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-transparent disabled:opacity-50"
-                >
-                  <option value="">All months</option>
-                  {MONTHS.map(({ value, label }) => (
-                    <option key={value} value={String(value)}>{label}</option>
-                  ))}
-                </select>
-              </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-content-muted mb-1">Year</label>
+              <select
+                value={filters.year || ""}
+                onChange={(e) =>
+                  onChange({ ...filters, year: e.target.value ? parseInt(e.target.value) : undefined, month: undefined })
+                }
+                className="w-full px-3 py-2 text-sm bg-surface/50 border border-glass-border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-transparent"
+              >
+                <option value="">All years</option>
+                {yearFacets.map(({ year }) => (
+                  <option key={year} value={String(year)}>{year}</option>
+                ))}
+              </select>
             </div>
-          )}
+            <div>
+              <label className="block text-xs font-medium text-content-muted mb-1">Month</label>
+              <select
+                value={filters.month || ""}
+                onChange={(e) => onChange({ ...filters, month: e.target.value ? parseInt(e.target.value) : undefined })}
+                disabled={!filters.year}
+                className="w-full px-3 py-2 text-sm bg-surface/50 border border-glass-border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-transparent disabled:opacity-50"
+              >
+                <option value="">All months</option>
+                {MONTHS.map(({ value, label }) => (
+                  <option key={value} value={String(value)}>{label}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-content-muted mb-1">From</label>
+              <input
+                type="date"
+                value={filters.dateFrom || ""}
+                onChange={(e) => onChange({ ...filters, dateFrom: e.target.value || undefined })}
+                className="w-full px-3 py-2 text-sm bg-surface/50 border border-glass-border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-transparent"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-content-muted mb-1">To</label>
+              <input
+                type="date"
+                value={filters.dateTo || ""}
+                onChange={(e) => onChange({ ...filters, dateTo: e.target.value || undefined })}
+                className="w-full px-3 py-2 text-sm bg-surface/50 border border-glass-border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-transparent"
+              />
+            </div>
+          </div>
         </FilterTrigger>
 
         {/* Camera Filter */}
         <FilterTrigger
           label={filters.cameraMake || "Camera"}
+          active={!!filters.cameraMake}
           open={openFilters === "camera"}
           onToggle={() => setOpenFilters(openFilters === "camera" ? null : "camera")}
         >
-          {openFilters === "camera" && (
-            <div>
-              <label className="block text-xs font-medium text-content-muted mb-2">Camera Make</label>
-              <select
-                value={filters.cameraMake || ""}
-                onChange={(e) => onChange({ ...filters, cameraMake: e.target.value || undefined })}
-                className="w-full px-3 py-2 text-sm bg-surface/50 border border-glass-border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-transparent"
-              >
-                <option value="">All cameras</option>
-                {cameraFacets.map(({ make, count }) => (
-                  <option key={make} value={make}>{make} ({count})</option>
-                ))}
-              </select>
-            </div>
-          )}
+          <label className="block text-xs font-medium text-content-muted mb-2">Camera Make</label>
+          <select
+            value={filters.cameraMake || ""}
+            onChange={(e) => onChange({ ...filters, cameraMake: e.target.value || undefined })}
+            className="w-full px-3 py-2 text-sm bg-surface/50 border border-glass-border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-transparent"
+          >
+            <option value="">All cameras</option>
+            {cameraFacets.map(({ make, count }) => (
+              <option key={make} value={make}>{make} ({count})</option>
+            ))}
+          </select>
         </FilterTrigger>
 
         {/* Quick Filters */}
         <motion.button
-          onClick={() => onChange({ ...filters, hasLocation: !filters.hasLocation })}
+          onClick={() =>
+            onChange({
+              ...filters,
+              // Normalize to a strict boolean so the active state is stable.
+              hasLocation: !filters.hasLocation,
+            })
+          }
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
           className={cn(

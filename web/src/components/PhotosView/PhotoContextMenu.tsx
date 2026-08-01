@@ -72,7 +72,17 @@ export function PhotoContextMenu({
         <div className="absolute bottom-2 left-2 right-2 text-white text-xs truncate">{photo.name}</div>
       </div>
       <nav className="space-y-0.5" aria-label="Photo actions">
-        <MenuButton onClick={() => handleAction(() => onPreview?.(photo.root_id, photo.path) || onOpen(photo.root_id, photo.path))}>
+        <MenuButton
+          onClick={() =>
+            handleAction(() => {
+              // Preview takes precedence; only fall back to navigating the file
+              // browser when no preview callback is wired up. (Calling both used
+              // to navigate away *and* pop a preview modal.)
+              if (onPreview) onPreview(photo.root_id, photo.path);
+              else onOpen(photo.root_id, photo.path);
+            })
+          }
+        >
           <Camera className="h-4 w-4" /> Open
           <span className="ml-auto text-xs text-content-muted">Enter</span>
         </MenuButton>

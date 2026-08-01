@@ -11,8 +11,8 @@ export { PhotoContextMenu } from "./PhotoContextMenu";
 export { DensitySelector } from "./DensitySelector";
 
 // Hooks
-export { usePhotos, usePhotoSelection } from "./hooks";
+export { usePhotos, usePhotoSelection, useDebouncedValue } from "./hooks";
 
 // Types
-export type { PhotoResult, PhotosResponse, PhotoFilters, PhotoMeta, Density, ViewMode } from "./types";
+export type { PhotoResult, PhotosResponse, PhotoFilters, PhotoMeta, Density, ViewMode, YearFacet, CameraFacet } from "./types";
 export { DENSITY_CONFIG } from "./types";

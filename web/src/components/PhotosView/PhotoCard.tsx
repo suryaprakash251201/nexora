@@ -3,9 +3,7 @@ import { FileItem } from "@/api/types";
 import { FileThumb } from "../FileThumb";
 import { Check, MapPin, Star, Video, Camera } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { PhotoResult } from "@/api/types";
-
-type Density = "compact" | "comfortable" | "spacious";
+import { Density, PhotoResult } from "./types";
 
 function formatDateShort(dateStr: string): string {
   try {
@@ -44,6 +42,7 @@ export function PhotoCard({
   const cameraStr = photo.model ? (photo.make ? `${photo.make} ${photo.model}` : photo.model) : photo.make || "";
   const badgeSize = DENSITY_BADGE[density];
   const isCompact = density === "compact";
+  const hasLocation = photo.lat != null && photo.lng != null;
 
   const fileItem: FileItem = {
     root_id: photo.root_id || "",
@@ -84,7 +83,8 @@ export function PhotoCard({
         "transition-all duration-200 ease-out",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background",
         isSelected && "ring-2 ring-accent ring-offset-2 ring-offset-background",
-        isSelecting && !isSelected && "opacity-70",
+        isSelecting && !isSelected && "opacity-80 hover:opacity-100",
+        isSelecting && isSelected && "ring-2 ring-accent ring-offset-2 ring-offset-background",
       )}
       onClick={handleClick}
       onContextMenu={onContextMenu}
@@ -92,8 +92,9 @@ export function PhotoCard({
       tabIndex={0}
       role="listitem"
       aria-selected={isSelected}
-      aria-label={`${photo.name}${dateStr ? `, taken ${dateStr}` : ""}${cameraStr ? `, ${cameraStr}` : ""}${photo.lat && photo.lng ? ", has location" : ""}${isSelected ? ", selected" : ""}`}
+      aria-label={`${photo.name}${dateStr ? `, taken ${dateStr}` : ""}${cameraStr ? `, ${cameraStr}` : ""}${hasLocation ? ", has location" : ""}${isSelected ? ", selected" : ""}`}
       style={style}
+      title={`${photo.name}${cameraStr ? ` — ${cameraStr}` : ""}${dateStr ? ` — ${dateStr}` : ""}`}
     >
       <div className="absolute inset-0 overflow-hidden">
         <div className="absolute inset-0 transition-transform duration-300 group-hover:scale-[1.03]">
@@ -119,7 +120,7 @@ export function PhotoCard({
         )}
 
         {/* Location badge — bottom-left */}
-        {photo.lat && photo.lng && (
+        {hasLocation && (
           <div className="absolute bottom-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
             <span className={cn("flex items-center gap-1 rounded-full bg-black/60 backdrop-blur text-white", badgeSize)}>
               <MapPin className="h-3 w-3" />
@@ -147,7 +148,7 @@ export function PhotoCard({
       </div>
 
       {/* Selection checkbox — top-right, visible while selecting */}
-      {isSelecting && (
+      {(isSelecting || isSelected) && (
         <div className="absolute top-2 right-2 z-10">
           <button
             onClick={(e) => { e.stopPropagation(); onSelectionToggle(); }}
@@ -156,18 +157,13 @@ export function PhotoCard({
               isCompact ? "h-5 w-5" : "h-6 w-6",
               isSelected
                 ? "bg-accent border-accent text-accent-foreground"
-                : "bg-black/40 border-white/30 text-transparent hover:bg-white/10",
+                : "bg-black/40 border-white/60 text-transparent hover:bg-white/20",
             )}
             aria-label={isSelected ? "Deselect" : "Select"}
             aria-pressed={isSelected}
           >
             {isSelected && <Check className={cn(isCompact ? "h-3 w-3" : "h-3.5 w-3.5")} />}
           </button>
-        </div>
-      )}
-      {isSelected && !isSelecting && (
-        <div className="absolute top-2 right-2 z-10 flex items-center justify-center rounded-full bg-accent text-accent-foreground shadow-lg">
-          <Check className={cn(isCompact ? "h-3 w-3" : "h-3.5 w-3.5")} />
         </div>
       )}
     </div>
