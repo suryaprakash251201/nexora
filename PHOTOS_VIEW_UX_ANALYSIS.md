@@ -603,3 +603,52 @@ Shipped on branch `fix/photos-section-bugs` (commit `c84b547`).
 - `go build ./...`, `go vet ./...`, `go test ./...` — pass
 - `npx tsc --noEmit` — clean
 - `npm run build` (production Vite bundle) — success
+
+---
+
+## Rebuild — Google-Photos-Style Gallery (2026-08-01, second pass)
+
+The previous modular implementation (PhotoGrid/PhotoCard/FilterBar/…) was
+**completely removed** and replaced with a fresh, cohesive gallery.
+
+### New architecture (`web/src/components/PhotosView/`)
+| File | Role |
+|---|---|
+| `PhotosView.tsx` | Orchestrator: sticky header, year chips, search, filters, selection, viewer, context menu, confirm dialog |
+| `Gallery.tsx` | Day grouping + **perfect-row packing** (real aspect ratios), sticky day headers, "On this day" memories strip, infinite-scroll sentinel |
+| `PhotoTile.tsx` | Variable-width tile (flex-grow = aspect), hover favorite/select, selection veil |
+| `PhotoViewer.tsx` | **Ambient lightbox**: dominant-color backdrop, pinch/ctrl-zoom, pan/rotate, filmstrip, info + map panels |
+| `MapGallery.tsx` | Dependency-free OSM tile map with grid clustering, drag-pan, fit-all |
+| `FilterMenu.tsx` | Favorites / location toggles, camera, sort, date range |
+| `SelectionBar.tsx` | Floating multi-select bar (favorite/download/share/trash) |
+| `ConfirmDialog.tsx` | Trash confirmation via shared `Modal` |
+| `hooks.ts` / `types.ts` / `media.ts` | Feed hook (offset pagination), shared types, thumb/raw URL helpers |
+
+### New ideas over the old UI
+1. **Perfect rows** — every row fills the full width; tile widths come from real
+   pixel dimensions served by the backend, not a fixed grid.
+2. **"On this day" memories** — photos from prior years on today's date, shown
+   as a horizontal strip above the gallery.
+3. **Ambient viewer** — backdrop color extracted from each photo's dominant
+   color (24×24 canvas, cached per id) instead of a flat black scrim.
+4. **Map mode** — real OSM tiles + cluster counting with zero new dependencies.
+5. **Insights in the header** — photo count, geotagged count, favorites count,
+   dominant camera ("mostly Canon EOS R5").
+
+### Backend additions
+- `imageDimensions()` in `internal/search/media.go` parses JPEG/PNG/GIF/WebP
+  pixel dimensions from file headers (64 KB read, no full decode).
+- Media scanner backfills `width`/`height` for rows indexed before this feature
+  (upsert + pending query includes `m.width = 0 OR m.height = 0`).
+- `PhotoResult` now carries `width`/`height`; `GET /photos` returns them.
+
+### Verification
+- `go build ./...`, `go test ./...` — pass (incl. `TestImageDimensions` for all
+  four formats and `TestGetPhotosTimelineAgainstRealSchema` asserting dimensions
+  flow through the real query)
+- `npx tsc --noEmit` — clean; `npm run build` — success
+
+### Deploy note
+The backend must be rebuilt/redeployed to serve `width`/`height`. Existing
+libraries get dimensions after the next media scan cycle (a few minutes);
+new uploads are scanned immediately.
