@@ -204,7 +204,7 @@ func buildPhotoWhere(sb *strings.Builder, args *[]any, userID string, rootIDs []
 		sb.WriteString(" AND m.lat IS NOT NULL AND m.lng IS NOT NULL")
 	}
 	if q.FavoritesOnly {
-		sb.WriteString(" AND fav.id IS NOT NULL")
+		sb.WriteString(" AND fav.path IS NOT NULL")
 	}
 	if q.DateFrom != "" {
 		sb.WriteString(" AND " + dateTakenExpr + " >= ?")
@@ -232,7 +232,7 @@ func (s *Service) GetPhotosTimeline(ctx context.Context, userID string, rootIDs 
 		SELECT s.id, s.root_id, s.path, s.name,
 		       ` + dateTakenExpr + ` as date_taken,
 		       m.lat, m.lng, m.make, m.model,
-		       CASE WHEN fav.id IS NULL THEN 0 ELSE 1 END AS is_favorite`)
+		       CASE WHEN fav.path IS NULL THEN 0 ELSE 1 END AS is_favorite`)
 
 	args := []any{}
 	buildPhotoWhere(&sb, &args, userID, rootIDs, q)
