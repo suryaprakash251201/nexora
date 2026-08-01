@@ -562,3 +562,44 @@ export default function PhotosView({ roots, onOpen, onPreview }) {
 5. **Extend backend `/photos` endpoint** with cursor pagination + facets
 6. **Create Storybook stories** for PhotoCard states and densities
 7. **Write integration tests** with MSW mocking the new API
+---
+
+## Implementation Log — Bug Fixes & Restructuring (2026-08-01)
+
+Shipped on branch `fix/photos-section-bugs` (commit `c84b547`).
+
+### Critical bugs fixed
+
+| # | Bug | Root cause | Fix |
+|---|-----|-----------|-----|
+| 1 | Grid virtualization + infinite scroll dead | Scroll events fired on a wrapper `<div class="overflow-auto">`, but the virtualizer and infinite-scroll listener were attached to the grid's inner (non-scrolling) element → **all rows always rendered, "load more" never fired** | PhotoGrid is now the single scroll container (wrapper removed for grid mode) |
+| 2 | Pinch-zoom & Ctrl+wheel zoom broken | React 17+ attaches `wheel`/`touchmove` as **passive** root listeners, so `e.preventDefault()` no-ops (browsers also warn) | Wheel + touchmove re-attached natively with `{ passive: false }` on the viewer container |
+| 3 | Dragging at 1× zoom panned the image off-center, unrecoverable | Pan was allowed at zoom ≤ 1 and never clamped | Pan only starts when `zoom > 1`; pan offset clamped to image bounds (works with mouse, wheel, pinch) |
+| 4 | Context menu "Open" navigated away *and* popped a preview modal | `onPreview?.(...) || onOpen(...)` — `onPreview` returns `void`, so the RHS **always** ran | `if (onPreview) onPreview(...) else onOpen(...)` |
+| 5 | "Show details (EXIF)" / "View on map" opened the viewer but showed nothing | Viewer mounted with info/map panels closed; `initialIndex` prop changes while open were ignored | Viewer accepts `initialPanel`; index changes sync via effect while open |
+| 6 | Duplicate arrow-key handlers (PhotosView + PhotoViewer) | Both registered window keydown listeners | Viewer owns all keyboard handling while open (PhotosView returns early) |
+| 7 | `d` (download) shortcut was a no-op in the viewer | Empty `case "d":` | Downloads via same-origin anchor with `Content-Disposition: attachment` |
+| 8 | Timeline view dropped photos without EXIF dates | `if (!p.date_taken) continue;` silently discarded them | Grouped into an **"Unknown date"** bucket; sticky headers corrected to `top-0` |
+| 9 | Native `confirm()` for deletes (inconsistent, no i18n/theming) | — | In-app confirm dialog (existing `Modal`), with trash semantics explained |
+| 10 | Bulk download opened N tabs → popup blocker killed almost all | `window.open` per photo | Sequential same-origin anchor clicks (no popup needed) |
+| 11 | "Share" copied the raw (auth-required) URL of only the **first** photo | — | Real share links via `POST /shares` (`scope: preview`); bulk copies all URLs to clipboard (cap 20) |
+| 12 | Search fired a request on every keystroke | — | 300 ms debounce via `useDebouncedValue` |
+| 13 | `has_more` incorrect at page boundaries → one wasted request per page | `len(photos) == limit` | Backend fetches `limit+1`; exact `has_more` + `total_count` on first page |
+| 14 | `date_from` / `date_to` filters sent by UI but **ignored by backend** | Query params never parsed | Parsed in handler; SQL bounds on the effective photo date (EXIF date, else file mtime) |
+
+### Smaller fixes & polish
+
+- **PhotoCard**: `lat/lng` null-safe badges (0,0 was falsy), checkbox always visible during selection, `title` tooltip, `aria` labels.
+- **SelectionToolbar**: labeled icon buttons + "select all on screen".
+- **FilterBar**: closes on outside click / Escape; stable active states; date-range pickers added; year selection in the sidebar clears month.
+- **Scroll restoration**: scroll position remembered per filter/search combo (`sessionStorage`).
+- **Toast feedback** for favorite / delete / share / download / select-all actions.
+- **Empty state** distinguishes "no photos" from "no matches" (offers *Clear filters*).
+- **PhotoViewer**: low-res thumbnail placeholder while full-res streams in, broken-image fallback, "Invalid Date" guard, pinch midpoint panning, `+`/`-`/`0`/`f`/`r`/`i`/`m`/`s`/`d`/`t` shortcuts, Escape closes panels before the viewer.
+- **Removed dead code**: unused `usePhotoViewer`/`useVirtualizedGrid`/`useGridKeyboardNavigation` hooks; duplicated `DENSITY_CONFIG` (now imported from `types.ts`).
+- **Selection hook**: no longer calls `setState` from inside a `setState` updater.
+
+### Verification
+- `go build ./...`, `go vet ./...`, `go test ./...` — pass
+- `npx tsc --noEmit` — clean
+- `npm run build` (production Vite bundle) — success
