@@ -1,935 +1,505 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  ChevronLeft, ChevronRight, X, Star, Info, MapPin, Download, Trash2,
+  FolderOpen, Maximize, Minimize, RotateCw, ZoomIn, ZoomOut, ImageOff,
+  Share2, Check, Loader2,
+} from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import { X, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, RotateCcw, RotateCw, Download, Share2, Info, MapPin, Star, MoreHorizontal, Expand, ImageOff } from "lucide-react";
+import { photoRaw, photoThumb } from "./media";
 import { cn } from "@/lib/utils";
-import { PhotoResult } from "./types";
-import { getMediaUrl } from "@/api/client";
-import { rawUrl } from "@/lib/preview";
-
-const MIN_ZOOM = 1;
-const MAX_ZOOM = 10;
-const SWIPE_THRESHOLD = 50;
+import type { PhotoResult } from "./types";
 
 interface PhotoViewerProps {
   photos: PhotoResult[];
   initialIndex: number;
   onClose: () => void;
   onNavigate: (index: number) => void;
-  onSelectionToggle: (id: string) => void;
-  selectedIds: Set<string>;
-  /** Panel to open on mount (e.g. opened from "Show details" action). */
-  initialPanel?: "info" | "map" | null;
-  onDownload?: (photo: PhotoResult) => void;
-  onShare?: (photo: PhotoResult) => void;
+  onToggleFavorite: (photo: PhotoResult) => void;
+  onDelete: (photo: PhotoResult) => void;
+  onOpenInFolder: (photo: PhotoResult) => void;
+  onShare: (photo: PhotoResult) => Promise<void>;
 }
 
-/**
- * Clamp a pan offset so the image can't be dragged fully off-screen.
- * Bounds depend on zoom and the viewer's viewport size.
- */
-function clampPan(pan: { x: number; y: number }, zoom: number, viewport: { w: number; h: number }, imageSize: { width: number; height: number }) {
-  if (zoom <= 1) return { x: 0, y: 0 };
-  // Effective rendered image size at this zoom level.
-  const scale = Math.min(viewport.w / imageSize.width, viewport.h / imageSize.height) || 1;
-  const imgW = imageSize.width * scale * zoom;
-  const imgH = imageSize.height * scale * zoom;
+const ZOOM_STEP = 1.4;
 
-  const maxX = Math.max(0, (imgW - viewport.w) / 2);
-  const maxY = Math.max(0, (imgH - viewport.h) / 2);
-  return {
-    x: Math.max(-maxX, Math.min(maxX, pan.x)),
-    y: Math.max(-maxY, Math.min(maxY, pan.y)),
-  };
+/** Average color of an <img> via a tiny canvas, cached per photo id. */
+const colorCache = new Map<string, string>();
+function dominantColor(img: HTMLImageElement, id: string): string | null {
+  const hit = colorCache.get(id);
+  if (hit) return hit;
+  try {
+    const c = document.createElement("canvas");
+    c.width = c.height = 24;
+    const ctx = c.getContext("2d");
+    if (!ctx) return null;
+    ctx.drawImage(img, 0, 0, 24, 24);
+    const { data } = ctx.getImageData(0, 0, 24, 24);
+    let r = 0, g = 0, b = 0, n = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      r += data[i]; g += data[i + 1]; b += data[i + 2]; n++;
+    }
+    const color = `rgb(${Math.round(r / n)}, ${Math.round(g / n)}, ${Math.round(b / n)})`;
+    colorCache.set(id, color);
+    return color;
+  } catch {
+    return null;
+  }
+}
+
+function formatDate(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso || "Unknown";
+  return d.toLocaleString(undefined, { dateStyle: "long", timeStyle: "short" });
 }
 
 export function PhotoViewer({
-  photos,
-  initialIndex,
-  onClose,
-  onNavigate,
-  onSelectionToggle,
-  selectedIds,
-  initialPanel = null,
-  onDownload,
-  onShare,
+  photos, initialIndex, onClose, onNavigate,
+  onToggleFavorite, onDelete, onOpenInFolder, onShare,
 }: PhotoViewerProps) {
-  const [currentIndex, setCurrentIndex] = useState(initialIndex);
+  const [index, setIndex] = useState(initialIndex);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
-  const [isPanning, setIsPanning] = useState(false);
-  const [panStart, setPanStart] = useState({ x: 0, y: 0 });
-  const [showUI, setShowUI] = useState(true);
-  const [showMetadata, setShowMetadata] = useState(initialPanel === "info");
-  const [showMap, setShowMap] = useState(initialPanel === "map");
-  const [rotation, setRotation] = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
-  const [imageError, setImageError] = useState(false);
-  const [imageNaturalSize, setImageNaturalSize] = useState({ width: 0, height: 0 });
-  const [touchState, setTouchState] = useState<{
-    startX: number;
-    startY: number;
-    startZoom: number;
-    startPan: { x: number; y: number };
-    distance: number;
-  } | null>(null);
+  const [rotate, setRotate] = useState(0);
+  const [panel, setPanel] = useState<"info" | "map" | null>(null);
+  const [loaded, setLoaded] = useState(false);
+  const [broken, setBroken] = useState(false);
+  const [ambient, setAmbient] = useState<string | null>(null);
+  const [shared, setShared] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
+  const imgRef = useRef<HTMLImageElement>(null);
+  const dragRef = useRef<{ x: number; y: number; px: number; py: number; moved: boolean } | null>(null);
+  const touchZoomRef = useRef<{ dist: number; zoom: number } | null>(null);
 
-  const viewerRef = useRef<HTMLDivElement>(null);
-  const imageRef = useRef<HTMLImageElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const thumbnailStripRef = useRef<HTMLDivElement>(null);
-  const hideUITimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const viewportSize = useRef({ w: 0, h: 0 });
-
-  const currentPhoto = photos[currentIndex];
-  const isSelected = selectedIds.has(currentPhoto?.id || "");
-
-  // Sync external index changes (e.g. "show details" while already open).
-  useEffect(() => {
-    setCurrentIndex(initialIndex);
-  }, [initialIndex]);
-
-  // Reset zoom/pan on photo change
-  useEffect(() => {
-    setZoom(1);
-    setPan({ x: 0, y: 0 });
-    setRotation(0);
-    setIsLoading(true);
-    setImageError(false);
-    setImageNaturalSize({ width: 0, height: 0 });
-  }, [currentIndex]);
-
-  // Measure the viewport once the viewer mounts (used for pan clamping).
-  useEffect(() => {
-    if (containerRef.current) {
-      viewportSize.current = {
-        w: containerRef.current.clientWidth,
-        h: containerRef.current.clientHeight,
-      };
-    }
-  }, []);
-
-  // Load image and get natural dimensions
-  const handleImageLoad = useCallback(() => {
-    if (imageRef.current) {
-      setImageNaturalSize({
-        width: imageRef.current.naturalWidth,
-        height: imageRef.current.naturalHeight,
-      });
-    }
-    setIsLoading(false);
-  }, []);
-
-  const handleImageError = useCallback(() => {
-    setIsLoading(false);
-    setImageError(true);
-  }, []);
-
-  // Auto-hide UI after 3 seconds of inactivity
-  const resetHideTimer = useCallback(() => {
-    if (hideUITimer.current) clearTimeout(hideUITimer.current);
-    setShowUI(true);
-    hideUITimer.current = setTimeout(() => setShowUI(false), 3000);
-  }, []);
+  const photo = photos[index] ?? photos[initialIndex];
+  const total = photos.length;
+  const hasGeo = typeof photo?.lat === "number" && typeof photo?.lng === "number";
 
   useEffect(() => {
-    resetHideTimer();
-    return () => {
-      if (hideUITimer.current) clearTimeout(hideUITimer.current);
-    };
-  }, [resetHideTimer]);
+    if (initialIndex >= 0 && initialIndex < photos.length) setIndex(initialIndex);
+  }, [initialIndex, photos.length]);
 
-  const resetView = useCallback(() => {
-    setZoom(1);
-    setPan({ x: 0, y: 0 });
-    setRotation(0);
-  }, []);
+  // Reset view state per photo
+  useEffect(() => {
+    setZoom(1); setPan({ x: 0, y: 0 }); setRotate(0); setLoaded(false); setBroken(false);
+    setAmbient(null); setShared(false); setPanel((p) => (p === "map" && !hasGeo ? null : p));
+  }, [index, hasGeo]);
 
-  const applyZoom = useCallback(
-    (nextZoom: number, anchor?: { x: number; y: number }) => {
-      const z = Math.min(Math.max(nextZoom, MIN_ZOOM), MAX_ZOOM);
-      setZoom(z);
-      if (z <= 1) {
-        setPan({ x: 0, y: 0 });
-        return;
-      }
-      // Keep the point under the cursor stable when zooming with a wheel anchor.
-      if (anchor && imageRef.current) {
-        const rect = imageRef.current.getBoundingClientRect();
-        const cx = rect.width / 2;
-        const cy = rect.height / 2;
-        const px = anchor.x - rect.left;
-        const py = anchor.y - rect.top;
-        const ratio = (z - zoom) / zoom;
-        setPan((p) => clampPan(
-          { x: p.x - (px - cx) * ratio, y: p.y - (py - cy) * ratio },
-          z,
-          viewportSize.current,
-          imageNaturalSize
-        ));
-      }
+  const clampPan = useCallback(
+    (x: number, y: number) => {
+      if (zoom <= 1) return { x: 0, y: 0 };
+      // Rough clamp: image is centered and at most container-sized, so pan
+      // range grows linearly with zoom. Uses viewport dims as an approximation.
+      const vw = window.innerWidth, vh = window.innerHeight;
+      const halfExcessW = (vw * (zoom - 1)) / 2;
+      const halfExcessH = (vh * (zoom - 1)) / 2;
+      return { x: Math.max(-halfExcessW, Math.min(halfExcessW, x)), y: Math.max(-halfExcessH, Math.min(halfExcessH, y)) };
     },
-    [zoom, imageNaturalSize]
+    [zoom]
   );
 
-  // Keyboard navigation
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+  const goTo = useCallback(
+    (next: number) => {
+      const i = ((next % total) + total) % total;
+      onNavigate(i);
+      setIndex(i);
+    },
+    [total, onNavigate]
+  );
 
+  const toggleZoom = useCallback(() => {
+    if (zoom <= 1.01) { setZoom(2); setPan({ x: 0, y: 0 }); }
+    else { setZoom(1); setPan({ x: 0, y: 0 }); }
+  }, [zoom]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
       switch (e.key) {
         case "Escape":
-          // Close panels first, then the viewer.
-          if (showMetadata) setShowMetadata(false);
-          else if (showMap) setShowMap(false);
+          if (panel) setPanel(null);
           else onClose();
           break;
-        case "ArrowLeft":
-          if (currentIndex > 0) {
-            const next = currentIndex - 1;
-            setCurrentIndex(next);
-            onNavigate(next);
-          }
+        case "ArrowLeft": e.preventDefault(); goTo(index - 1); break;
+        case "ArrowRight": case " ": case "PageDown": e.preventDefault(); goTo(index + 1); break;
+        case "PageUp": e.preventDefault(); goTo(index - 1); break;
+        case "+": case "=": setZoom((z) => Math.min(8, z * ZOOM_STEP)); break;
+        case "-": setZoom((z) => Math.max(1, z / ZOOM_STEP)); break;
+        case "0": case "f": setZoom(1); setPan({ x: 0, y: 0 }); break;
+        case "r": setRotate((r) => (r + 90) % 360); break;
+        case "i": setPanel((p) => (p === "info" ? null : "info")); break;
+        case "m": if (hasGeo) setPanel((p) => (p === "map" ? null : "map")); break;
+        case "d": {
+          const a = document.createElement("a");
+          a.href = photoRaw(photo.root_id, photo.path, true);
+          a.download = photo.name || "photo";
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
           break;
-        case "ArrowRight":
-        case " ":
-          e.preventDefault();
-          if (currentIndex < photos.length - 1) {
-            const next = currentIndex + 1;
-            setCurrentIndex(next);
-            onNavigate(next);
-          }
-          break;
-        case "+":
-        case "=":
-          e.preventDefault();
-          applyZoom(zoom + 1);
-          break;
-        case "-":
-          e.preventDefault();
-          applyZoom(zoom - 1);
-          break;
-        case "0":
-        case "f":
-          e.preventDefault();
-          resetView();
-          break;
-        case "r":
-          setRotation((r) => (r + 90) % 360);
-          break;
-        case "i":
-          setShowMetadata((s) => !s);
-          break;
-        case "m":
-          if (currentPhoto?.lat != null && currentPhoto?.lng != null) {
-            setShowMap((s) => !s);
-          }
-          break;
-        case "s":
-          if (currentPhoto) onSelectionToggle(currentPhoto.id);
-          break;
-        case "d":
-          e.preventDefault();
-          if (currentPhoto) onDownload?.(currentPhoto);
-          break;
-        case "t":
-          // Share shortcut (matches context menu convention)
-          if (currentPhoto) onShare?.(currentPhoto);
-          break;
+        }
+        case "t": void onShare(photo).then(() => setShared(true)); break;
+        case "s": onToggleFavorite(photo); break;
       }
-      resetHideTimer();
     };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [index, panel, photo, hasGeo, onClose, onShare, onToggleFavorite, goTo]);
 
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [currentIndex, photos.length, onClose, onNavigate, currentPhoto, onSelectionToggle, resetHideTimer, applyZoom, resetView, zoom, showMetadata, showMap, onDownload, onShare]);
-
-  // ── Non-passive native listeners for wheel/touch so preventDefault works ──
+  // Prevent the page behind from scrolling while open
   useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = prev; };
+  }, []);
 
+  // Non-passive wheel handling so Ctrl+wheel / pinch can zoom.
+  useEffect(() => {
     const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey && !e.metaKey) return;
       e.preventDefault();
-      const rect = el.getBoundingClientRect();
-      const anchor = { x: e.clientX - rect.left, y: e.clientY - rect.top };
-      if (e.ctrlKey || e.metaKey) {
-        const factor = e.deltaY > 0 ? 1 / 1.1 : 1.1;
-        applyZoom(zoom * factor, anchor);
-      } else if (zoom > 1) {
-        // Pan with the wheel when zoomed in.
-        setPan((p) => clampPan(
-          { x: p.x - e.deltaX, y: p.y - e.deltaY },
-          zoom,
-          viewportSize.current,
-          imageNaturalSize
-        ));
-      }
-      resetHideTimer();
+      const factor = e.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP;
+      setZoom((z) => Math.max(1, Math.min(8, z * factor)));
     };
+    window.addEventListener("wheel", onWheel, { passive: false });
+    return () => window.removeEventListener("wheel", onWheel);
+  }, []);
 
-    const onTouchMove = (e: TouchEvent) => {
-      if (!touchState) return;
-      if (e.touches.length === 1 && touchState.distance === 0) {
-        const touch = e.touches[0];
-        const deltaX = touch.clientX - touchState.startX;
-        const deltaY = touch.clientY - touchState.startY;
-        if (zoom > 1) {
-          e.preventDefault();
-          setPan((p) => clampPan(
-            { x: touchState.startPan.x + deltaX, y: touchState.startPan.y + deltaY },
-            zoom,
-            viewportSize.current,
-            imageNaturalSize
-          ));
-        }
-      } else if (e.touches.length === 2 && touchState.distance > 0) {
-        e.preventDefault();
-        const t1 = e.touches[0];
-        const t2 = e.touches[1];
-        const distance = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
-        const scale = distance / touchState.distance;
-        setZoom(Math.min(Math.max(touchState.startZoom * scale, MIN_ZOOM), MAX_ZOOM));
-        // Pan with the pinch midpoint so the gesture feels anchored.
-        const midX = (t1.clientX + t2.clientX) / 2;
-        const midY = (t1.clientY + t2.clientY) / 2;
-        setPan((p) => clampPan(
-          {
-            x: touchState.startPan.x + (midX - touchState.startX),
-            y: touchState.startPan.y + (midY - touchState.startY),
-          },
-          touchState.startZoom * scale,
-          viewportSize.current,
-          imageNaturalSize
-        ));
-      }
-      resetHideTimer();
-    };
+  // Pointer-based drag to pan (only meaningful when zoomed). These handlers
+  // live on the image area only, so clicking chrome (nav buttons, filmstrip…)
+  // can never trigger swipe-to-next.
+  const onPointerDown = (e: React.PointerEvent) => {
+    dragRef.current = { x: e.clientX, y: e.clientY, px: pan.x, py: pan.y, moved: false };
+    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+  };
+  const onPointerMove = (e: React.PointerEvent) => {
+    const d = dragRef.current;
+    if (!d || zoom <= 1) return;
+    const dx = e.clientX - d.x, dy = e.clientY - d.y;
+    if (Math.abs(dx) + Math.abs(dy) > 3) d.moved = true;
+    setPan(clampPan(d.px + dx, d.py + dy));
+  };
+  const onPointerUp = (e: React.PointerEvent) => {
+    const d = dragRef.current;
+    dragRef.current = null;
+    if (zoom <= 1 && d && !d.moved) goTo(index + (e.clientX < window.innerWidth / 2 ? -1 : 1));
+  };
 
-    el.addEventListener("wheel", onWheel, { passive: false });
-    el.addEventListener("touchmove", onTouchMove, { passive: false });
-    return () => {
-      el.removeEventListener("wheel", onWheel);
-      el.removeEventListener("touchmove", onTouchMove);
-    };
-  }, [zoom, touchState, imageNaturalSize, applyZoom, resetHideTimer]);
-
-  // Mouse drag to pan (only when zoomed in)
-  const handleMouseDown = useCallback(
-    (e: React.MouseEvent) => {
-      if (e.button !== 0) return;
-      if (zoom <= 1) return; // never pan at 1x — keeps image centered
-      if (e.target !== imageRef.current && e.target !== containerRef.current) return;
-
-      e.preventDefault();
-      setIsPanning(true);
-      setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
-      document.body.style.cursor = "grabbing";
-      resetHideTimer();
-    },
-    [zoom, pan, resetHideTimer]
-  );
-
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!isPanning) return;
-      setPan((p) => clampPan(
-        { x: e.clientX - panStart.x, y: e.clientY - panStart.y },
-        zoom,
-        viewportSize.current,
-        imageNaturalSize
-      ));
-    };
-
-    const handleMouseUp = () => {
-      setIsPanning(false);
-      document.body.style.cursor = "";
-    };
-
-    if (isPanning) {
-      window.addEventListener("mousemove", handleMouseMove);
-      window.addEventListener("mouseup", handleMouseUp);
+  // Touch: pinch to zoom via native touch events on the image area.
+  const onTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 2) {
+      const [a, b] = [e.touches[0], e.touches[1]];
+      const dist = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+      touchZoomRef.current = { dist, zoom };
     }
-    return () => {
-      window.removeEventListener("mousemove", handleMouseMove);
-      window.removeEventListener("mouseup", handleMouseUp);
-      document.body.style.cursor = "";
-    };
-  }, [isPanning, panStart, zoom, imageNaturalSize]);
-
-  // Touch gesture state
-  const handleTouchStart = useCallback(
-    (e: React.TouchEvent) => {
-      if (e.touches.length === 1) {
-        const touch = e.touches[0];
-        setTouchState({
-          startX: touch.clientX,
-          startY: touch.clientY,
-          startZoom: zoom,
-          startPan: pan,
-          distance: 0,
-        });
-      } else if (e.touches.length === 2) {
-        const t1 = e.touches[0];
-        const t2 = e.touches[1];
-        const distance = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
-        setTouchState({
-          startX: (t1.clientX + t2.clientX) / 2,
-          startY: (t1.clientY + t2.clientY) / 2,
-          startZoom: zoom,
-          startPan: pan,
-          distance,
-        });
-      }
-      resetHideTimer();
-    },
-    [zoom, pan, resetHideTimer]
-  );
-
-  const handleTouchEnd = useCallback(
-    (e: React.TouchEvent) => {
-      if (!touchState) return;
-
-      const deltaX = (e.changedTouches[0]?.clientX || 0) - touchState.startX;
-      const deltaY = (e.changedTouches[0]?.clientY || 0) - touchState.startY;
-
-      // Horizontal swipe to navigate (only when not zoomed and not panning)
-      if (zoom <= 1 && Math.abs(deltaX) > SWIPE_THRESHOLD && Math.abs(deltaY) < SWIPE_THRESHOLD) {
-        if (deltaX < 0 && currentIndex < photos.length - 1) {
-          const next = currentIndex + 1;
-          setCurrentIndex(next);
-          onNavigate(next);
-        } else if (deltaX > 0 && currentIndex > 0) {
-          const next = currentIndex - 1;
-          setCurrentIndex(next);
-          onNavigate(next);
-        }
-      }
-
-      setTouchState(null);
-      resetHideTimer();
-    },
-    [touchState, zoom, currentIndex, photos.length, onNavigate, resetHideTimer]
-  );
-
-  // Double click/tap to zoom
-  const handleDoubleClick = useCallback(
-    (e: React.MouseEvent | React.TouchEvent) => {
-      if (zoom === 1) {
-        setZoom(2);
-        if ("clientX" in e) {
-          const rect = imageRef.current?.getBoundingClientRect();
-          if (rect) {
-            setPan((p) => clampPan(
-              {
-                x: -(e.clientX - rect.left - rect.width / 2) * 2 + rect.width / 2,
-                y: -(e.clientY - rect.top - rect.height / 2) * 2 + rect.height / 2,
-              },
-              2,
-              viewportSize.current,
-              imageNaturalSize
-            ));
-          }
-        }
-      } else {
-        resetView();
-      }
-      resetHideTimer();
-    },
-    [zoom, imageNaturalSize, resetHideTimer, resetView]
-  );
-
-  // Thumbnail strip scroll to keep current visible
-  const scrollThumbnailIntoView = useCallback(() => {
-    if (thumbnailStripRef.current) {
-      const thumb = thumbnailStripRef.current.querySelector(`[data-index="${currentIndex}"]`);
-      if (thumb) {
-        thumb.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
-      }
+  };
+  const onTouchMove = (e: React.TouchEvent) => {
+    const tz = touchZoomRef.current;
+    if (tz && e.touches.length === 2) {
+      const [a, b] = [e.touches[0], e.touches[1]];
+      const dist = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+      setZoom(Math.max(1, Math.min(8, (tz.zoom * dist) / Math.max(tz.dist, 1))));
     }
-  }, [currentIndex]);
+  };
+  const onTouchEnd = () => { touchZoomRef.current = null; };
 
-  useEffect(() => {
-    scrollThumbnailIntoView();
-  }, [currentIndex, scrollThumbnailIntoView]);
+  const onImgLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
+    setLoaded(true);
+    const c = dominantColor(e.currentTarget, photo.id);
+    if (c) setAmbient(c);
+  };
 
-  // Build image URLs — full-res raw file with a low-res thumbnail placeholder.
-  const imageUrl = currentPhoto ? rawUrl(currentPhoto.root_id, currentPhoto.path) : "";
-  const placeholderUrl = currentPhoto
-    ? getMediaUrl("/files/thumbnail", { root: currentPhoto.root_id, path: currentPhoto.path, size: 400 })
-    : "";
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) document.documentElement.requestFullscreen?.().then(() => setFullscreen(true)).catch(() => {});
+    else document.exitFullscreen?.().then(() => setFullscreen(false)).catch(() => {});
+  };
 
-  const transform = useMemo(() => {
-    return `translate(${pan.x}px, ${pan.y}px) scale(${zoom}) rotate(${rotation}deg)`;
-  }, [pan, zoom, rotation]);
+  const imgSrc = photoRaw(photo.root_id, photo.path);
+  const thumb = photoThumb(photo.root_id, photo.path, 160);
+
+  const filmstrip = useMemo(() => {
+    const out: { photo: PhotoResult; i: number }[] = [];
+    for (let d = -6; d <= 6; d++) {
+      const i = ((index + d) % total + total) % total;
+      out.push({ photo: photos[i], i });
+    }
+    return out;
+  }, [index, photos, total]);
 
   return (
     <motion.div
-      ref={viewerRef}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      transition={{ duration: 0.2 }}
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/95 backdrop-blur-sm"
-      onMouseDown={handleMouseDown}
-      onTouchStart={handleTouchStart}
-      onTouchEnd={handleTouchEnd}
-      onDoubleClick={handleDoubleClick}
-      onClick={() => resetHideTimer()}
+      className="fixed inset-0 z-50 overflow-hidden text-white"
+      style={{
+        background: ambient
+          ? `radial-gradient(130% 130% at 50% 40%, ${ambient} 0%, rgba(0,0,0,0.82) 62%, #000 100%)`
+          : "radial-gradient(130% 130% at 50% 40%, #14151a 0%, #000 100%)",
+      }}
       role="dialog"
-      aria-modal="true"
       aria-label="Photo viewer"
     >
-      {/* Background click to close */}
-      <div className="absolute inset-0" onClick={onClose} />
+      {/* ambient color transition */}
+      <div key={photo.id} className="pointer-events-none absolute inset-0 transition-opacity duration-500" />
 
-      {/* Image container */}
-      <div
-        ref={containerRef}
-        className="relative flex-1 w-full h-full flex items-center justify-center overflow-hidden"
-        style={{ touchAction: "none" }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {currentPhoto && (
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={currentIndex}
-              initial={{ opacity: 0, scale: 0.96 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 1.04 }}
-              transition={{ duration: 0.2, ease: "easeOut" }}
-              className="relative flex items-center justify-center"
-            >
-              {/* Low-res placeholder while the full image streams in */}
-              {placeholderUrl && isLoading && (
-                <img
-                  src={placeholderUrl}
-                  alt=""
-                  aria-hidden
-                  className="absolute inset-0 w-full h-full object-contain blur-sm scale-105 select-none"
-                />
-              )}
-
-              {!imageError ? (
-                <img
-                  ref={imageRef}
-                  src={imageUrl}
-                  alt={currentPhoto?.name || "Photo"}
-                  onLoad={handleImageLoad}
-                  onError={handleImageError}
-                  draggable={false}
-                  style={{
-                    transform,
-                    transformOrigin: "center center",
-                    maxWidth: zoom > 1 ? "none" : "100%",
-                    maxHeight: zoom > 1 ? "none" : "100%",
-                    width: zoom > 1 ? imageNaturalSize.width : "auto",
-                    height: zoom > 1 ? imageNaturalSize.height : "auto",
-                    userSelect: "none",
-                    pointerEvents: zoom > 1 ? "auto" : "none",
-                    opacity: isLoading ? 0 : 1,
-                    transition: "opacity 0.25s ease",
-                  }}
-                  className="select-none"
-                />
-              ) : (
-                <div className="flex flex-col items-center gap-3 text-white/60">
-                  <ImageOff className="h-14 w-14" />
-                  <p className="text-sm">This image could not be loaded</p>
-                  <p className="font-mono text-xs text-white/40 max-w-xs truncate">{currentPhoto.name}</p>
-                </div>
-              )}
-            </motion.div>
-          </AnimatePresence>
-        )}
-
-        {/* Loading spinner */}
-        {isLoading && !imageError && (
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div className="h-10 w-10 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-          </div>
-        )}
-
-        {/* Zoom indicator */}
-        {zoom !== 1 && showUI && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.8 }}
-            className="absolute top-4 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-black/70 backdrop-blur text-white text-sm font-mono"
+      {/* Top bar */}
+      <div className="absolute inset-x-0 top-0 z-20 flex items-center gap-1 bg-gradient-to-b from-black/60 to-transparent p-3 sm:p-4">
+        <button onClick={onClose} aria-label="Close viewer" className="rounded-full p-2 glass-hover">
+          <X className="h-5 w-5" />
+        </button>
+        <div className="ml-2 min-w-0">
+          <p className="truncate text-sm font-medium">{photo.name}</p>
+          <p className="text-xs text-white/60">{index + 1} of {total}{hasGeo ? " · has location" : ""}</p>
+        </div>
+        <div className="ml-auto flex items-center gap-1">
+          <button
+            onClick={() => { onToggleFavorite(photo); }}
+            aria-label="Toggle favorite"
+            className={cn("rounded-full p-2 glass-hover", photo.is_favorite && "text-amber-400")}
           >
-            {Math.round(zoom * 100)}%
-          </motion.div>
-        )}
+            <Star className={cn("h-5 w-5", photo.is_favorite && "fill-current")} />
+          </button>
+          <button
+            onClick={() => setPanel((p) => (p === "info" ? null : "info"))}
+            aria-label="Photo info"
+            className={cn("rounded-full p-2 glass-hover", panel === "info" && "bg-white/20")}
+          >
+            <Info className="h-5 w-5" />
+          </button>
+          {hasGeo && (
+            <button
+              onClick={() => setPanel((p) => (p === "map" ? null : "map"))}
+              aria-label="Location"
+              className={cn("rounded-full p-2 glass-hover", panel === "map" && "bg-white/20")}
+            >
+              <MapPin className="h-5 w-5" />
+            </button>
+          )}
+          <button
+            onClick={() => void onShare(photo).then(() => setShared(true))}
+            aria-label="Share"
+            className="rounded-full p-2 glass-hover"
+          >
+            {shared ? <Check className="h-5 w-5 text-emerald-400" /> : <Share2 className="h-5 w-5" />}
+          </button>
+          <button onClick={toggleFullscreen} aria-label="Fullscreen" className="rounded-full p-2 glass-hover">
+            {fullscreen ? <Minimize className="h-5 w-5" /> : <Maximize className="h-5 w-5" />}
+          </button>
+        </div>
       </div>
 
-      {/* Top Bar */}
-      <AnimatePresence>
-        {showUI && (
-          <motion.div
-            initial={{ y: -60, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: -60, opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="absolute top-0 left-0 right-0 px-4 py-4 flex items-center justify-between pointer-events-none z-10"
-          >
-            <div className="pointer-events-auto flex items-center gap-2">
-              <motion.button
-                onClick={onClose}
-                whileHover={{ scale: 1.1 }}
-                whileTap={{ scale: 0.95 }}
-                className="p-2 rounded-full bg-black/50 backdrop-blur text-white hover:bg-black/70 transition-colors"
-                aria-label="Close (Esc)"
-              >
-                <X className="h-6 w-6" />
-              </motion.button>
-
-              <div className="ml-4 px-3 py-1.5 rounded-full bg-black/50 backdrop-blur text-white text-sm font-mono">
-                {currentIndex + 1} / {photos.length}
+      {/* Main image */}
+      <div
+        className="absolute inset-0 flex items-center justify-center"
+        style={{ cursor: zoom > 1 ? "grab" : "pointer" }}
+        onDoubleClick={toggleZoom}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+      >
+        <div
+          className="relative will-change-transform"
+          style={{ transform: `translate(${pan.x}px, ${pan.y}px) rotate(${rotate}deg) scale(${zoom})`, transition: "transform 0.12s ease-out" }}
+        >
+          {!loaded && !broken && (
+            <img src={thumb} alt="" className="max-h-[70vh] max-w-[80vw] rounded-md opacity-50 blur-[1px]" />
+          )}
+          <img
+            ref={imgRef}
+            src={imgSrc}
+            alt={photo.name}
+            draggable={false}
+            onLoad={onImgLoad}
+            onError={() => setBroken(true)}
+            className={cn("max-h-[92vh] max-w-[94vw] rounded-lg object-contain shadow-2xl shadow-black/50", loaded ? "" : "hidden")}
+          />
+          {!loaded && !broken && (
+            <div className="absolute inset-0 grid place-items-center">
+              <Loader2 className="h-6 w-6 animate-spin text-white/70" />
+            </div>
+          )}
+          {broken && (
+            <div className="grid h-64 w-96 max-w-[80vw] place-items-center rounded-xl bg-black/50 text-white/60">
+              <div className="flex flex-col items-center gap-2">
+                <ImageOff className="h-8 w-8" />
+                <p className="text-sm">Couldn't load this image</p>
               </div>
             </div>
+          )}
+        </div>
+      </div>
 
-            <div className="pointer-events-auto flex items-center gap-2">
-              <motion.button
-                onClick={() => setShowMetadata(!showMetadata)}
-                whileHover={{ scale: 1.1 }}
-                whileTap={{ scale: 0.95 }}
-                className={cn(
-                  "p-2 rounded-full bg-black/50 backdrop-blur text-white transition-colors",
-                  showMetadata ? "bg-accent/80" : "hover:bg-black/70"
-                )}
-                aria-label="Info (i)"
-                aria-pressed={showMetadata}
-              >
-                <Info className="h-5 w-5" />
-              </motion.button>
-
-              {currentPhoto?.lat != null && currentPhoto?.lng != null && (
-                <motion.button
-                  onClick={() => setShowMap(!showMap)}
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.95 }}
-                  className={cn(
-                    "p-2 rounded-full bg-black/50 backdrop-blur text-white transition-colors",
-                    showMap ? "bg-accent/80" : "hover:bg-black/70"
-                  )}
-                  aria-label="Map (m)"
-                  aria-pressed={showMap}
-                >
-                  <MapPin className="h-5 w-5" />
-                </motion.button>
-              )}
-
-              <motion.button
-                onClick={() => {
-                  if (currentPhoto) onSelectionToggle(currentPhoto.id);
-                }}
-                whileHover={{ scale: 1.1 }}
-                whileTap={{ scale: 0.95 }}
-                className={cn(
-                  "p-2 rounded-full bg-black/50 backdrop-blur transition-colors",
-                  isSelected ? "bg-accent/80 text-white" : "text-white hover:bg-black/70"
-                )}
-                aria-label={isSelected ? "Remove from selection" : "Add to selection"}
-                aria-pressed={isSelected}
-              >
-                <Star className={cn("h-5 w-5", isSelected && "fill-current")} />
-              </motion.button>
-
-              <motion.button
-                onClick={() => currentPhoto && onDownload?.(currentPhoto)}
-                whileHover={{ scale: 1.1 }}
-                whileTap={{ scale: 0.95 }}
-                className="p-2 rounded-full bg-black/50 backdrop-blur text-white hover:bg-black/70 transition-colors"
-                aria-label="Download (d)"
-              >
-                <Download className="h-5 w-5" />
-              </motion.button>
-
-              <motion.button
-                onClick={() => currentPhoto && onShare?.(currentPhoto)}
-                whileHover={{ scale: 1.1 }}
-                whileTap={{ scale: 0.95 }}
-                className="p-2 rounded-full bg-black/50 backdrop-blur text-white hover:bg-black/70 transition-colors"
-                aria-label="Share (t)"
-              >
-                <Share2 className="h-5 w-5" />
-              </motion.button>
-
-              <motion.button
-                whileHover={{ scale: 1.1 }}
-                whileTap={{ scale: 0.95 }}
-                className="p-2 rounded-full bg-black/50 backdrop-blur text-white hover:bg-black/70 transition-colors"
-                aria-label="More"
-              >
-                <MoreHorizontal className="h-5 w-5" />
-              </motion.button>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Bottom Bar - Thumbnail Strip + Controls */}
-      <AnimatePresence>
-        {showUI && (
-          <motion.div
-            initial={{ y: 60, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: 60, opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="absolute bottom-0 left-0 right-0 p-4 pointer-events-none z-10"
+      {/* Prev / Next */}
+      {total > 1 && (
+        <>
+          <button
+            onClick={(e) => { e.stopPropagation(); goTo(index - 1); }}
+            aria-label="Previous photo"
+            className="absolute left-2 sm:left-4 top-1/2 z-20 -translate-y-1/2 rounded-full bg-black/40 p-2.5 backdrop-blur glass-hover"
           >
-            <div className="pointer-events-auto flex flex-col items-center gap-4">
-              {/* Thumbnail Strip */}
-              <div
-                ref={thumbnailStripRef}
-                className="flex gap-2 overflow-x-auto pb-2 hide-scrollbar max-w-[80vw]"
-                role="tablist"
-                aria-label="Photo thumbnails"
-              >
-                {photos.map((photo, index) => (
-                  <motion.button
-                    key={photo.id}
-                    onClick={() => {
-                      setCurrentIndex(index);
-                      onNavigate(index);
-                    }}
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    className={cn(
-                      "relative shrink-0 w-20 h-20 rounded-lg overflow-hidden border-2 transition-all",
-                      index === currentIndex
-                        ? "border-accent ring-2 ring-accent ring-offset-2 ring-offset-black"
-                        : "border-transparent hover:border-white/30"
-                    )}
-                    data-index={index}
-                    role="tab"
-                    aria-selected={index === currentIndex}
-                    aria-label={`${photo.name}, ${index + 1} of ${photos.length}`}
+            <ChevronLeft className="h-6 w-6" />
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); goTo(index + 1); }}
+            aria-label="Next photo"
+            className="absolute right-2 sm:right-4 top-1/2 z-20 -translate-y-1/2 rounded-full bg-black/40 p-2.5 backdrop-blur glass-hover"
+          >
+            <ChevronRight className="h-6 w-6" />
+          </button>
+        </>
+      )}
+
+      {/* Filmstrip */}
+      <div className="absolute inset-x-0 bottom-0 z-20 flex items-end gap-1.5 overflow-x-auto px-3 pb-3 hide-scrollbar">
+        {filmstrip.map(({ photo: fp, i }) => (
+          <button
+            key={fp.id + i}
+            onClick={() => goTo(i)}
+            className={cn(
+              "relative h-12 w-12 shrink-0 overflow-hidden rounded-md ring-1 transition-all",
+              i === index ? "h-16 w-16 ring-2 ring-white" : "ring-white/20 opacity-60 hover:opacity-100"
+            )}
+          >
+            <img src={photoThumb(fp.root_id, fp.path, 128)} alt="" loading="lazy" className="h-full w-full object-cover" />
+          </button>
+        ))}
+      </div>
+
+      {/* Bottom-left utility row */}
+      <div className="absolute bottom-4 left-3 z-20 flex items-center gap-1 sm:left-4">
+        <button onClick={() => setZoom((z) => Math.max(1, z / ZOOM_STEP))} aria-label="Zoom out" className="rounded-full bg-black/40 p-2 backdrop-blur glass-hover">
+          <ZoomOut className="h-4 w-4" />
+        </button>
+        <button onClick={toggleZoom} aria-label="Reset zoom" className="rounded-full bg-black/40 px-3 py-2 text-xs backdrop-blur glass-hover">
+          {Math.round(zoom * 100)}%
+        </button>
+        <button onClick={() => setZoom((z) => Math.min(8, z * ZOOM_STEP))} aria-label="Zoom in" className="rounded-full bg-black/40 p-2 backdrop-blur glass-hover">
+          <ZoomIn className="h-4 w-4" />
+        </button>
+        <button onClick={() => setRotate((r) => (r + 90) % 360)} aria-label="Rotate" className="rounded-full bg-black/40 p-2 backdrop-blur glass-hover">
+          <RotateCw className="h-4 w-4" />
+        </button>
+        <button
+          onClick={() => {
+            const a = document.createElement("a");
+            a.href = photoRaw(photo.root_id, photo.path, true);
+            a.download = photo.name || "photo";
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+          }}
+          aria-label="Download"
+          className="rounded-full bg-black/40 p-2 backdrop-blur glass-hover"
+        >
+          <Download className="h-4 w-4" />
+        </button>
+        <button
+          onClick={() => onOpenInFolder(photo)}
+          aria-label="Open in folder"
+          className="hidden rounded-full bg-black/40 p-2 backdrop-blur glass-hover sm:block"
+        >
+          <FolderOpen className="h-4 w-4" />
+        </button>
+        <button
+          onClick={() => onDelete(photo)}
+          aria-label="Delete photo"
+          className="rounded-full bg-black/40 p-2 backdrop-blur glass-hover hover:text-red-400"
+        >
+          <Trash2 className="h-4 w-4" />
+        </button>
+      </div>
+
+      {/* Info panel */}
+      <AnimatePresence>
+        {panel && (
+          <motion.aside
+            initial={{ x: 40, opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            exit={{ x: 40, opacity: 0 }}
+            transition={{ duration: 0.18 }}
+            className="absolute right-0 top-0 z-30 h-full w-80 max-w-[85vw] overflow-y-auto border-l border-white/10 bg-black/70 p-5 backdrop-blur-xl"
+          >
+            {panel === "info" ? (
+              <>
+                <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-white/50">Details</h3>
+                <dl className="space-y-3 text-sm">
+                  <div>
+                    <dt className="text-white/50">Name</dt>
+                    <dd className="break-all text-white/90">{photo.name}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-white/50">Taken</dt>
+                    <dd>{formatDate(photo.date_taken)}</dd>
+                  </div>
+                  {photo.make || photo.model ? (
+                    <div>
+                      <dt className="text-white/50">Camera</dt>
+                      <dd>{[photo.make, photo.model].filter(Boolean).join(" ")}</dd>
+                    </div>
+                  ) : null}
+                  {photo.width && photo.height ? (
+                    <div>
+                      <dt className="text-white/50">Resolution</dt>
+                      <dd>{photo.width} × {photo.height} px</dd>
+                    </div>
+                  ) : null}
+                  {hasGeo ? (
+                    <div>
+                      <dt className="text-white/50">Location</dt>
+                      <dd className="font-mono text-xs">
+                        {photo.lat!.toFixed(5)}, {photo.lng!.toFixed(5)}
+                      </dd>
+                    </div>
+                  ) : null}
+                  <div>
+                    <dt className="text-white/50">Path</dt>
+                    <dd className="break-all font-mono text-xs text-white/70">{photo.path}</dd>
+                  </div>
+                </dl>
+                <button
+                  onClick={() => onOpenInFolder(photo)}
+                  className="mt-5 flex w-full items-center justify-center gap-2 rounded-lg bg-white/10 px-3 py-2 text-sm font-medium glass-hover"
+                >
+                  <FolderOpen className="h-4 w-4" /> Open in folder
+                </button>
+                {hasGeo && (
+                  <a
+                    href={`https://www.openstreetmap.org/?mlat=${photo.lat}&mlon=${photo.lng}#map=15/${photo.lat}/${photo.lng}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg bg-white/10 px-3 py-2 text-sm font-medium glass-hover"
                   >
-                    <img
-                      src={getMediaUrl("/files/thumbnail", { root: photo.root_id, path: photo.path, size: 160 })}
-                      alt=""
-                      className="w-full h-full object-cover"
-                      loading="lazy"
-                    />
-                    {index === currentIndex && (
-                      <div className="absolute inset-0 bg-accent/20" />
-                    )}
-                  </motion.button>
-                ))}
-              </div>
-
-              {/* Zoom/Nav Controls */}
-              <div className="flex items-center gap-3 px-4 py-2 rounded-full bg-black/50 backdrop-blur border border-white/10">
-                <motion.button
-                  onClick={() => applyZoom(zoom - 1)}
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.95 }}
-                  disabled={zoom <= MIN_ZOOM}
-                  className="p-2 rounded-full text-white hover:bg-white/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                  aria-label="Zoom out (-)"
-                >
-                  <ZoomOut className="h-5 w-5" />
-                </motion.button>
-
-                <motion.button
-                  onClick={resetView}
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.95 }}
-                  className="p-2 rounded-full text-white hover:bg-white/10 transition-colors"
-                  aria-label="Reset zoom (0)"
-                >
-                  <Expand className="h-5 w-5" />
-                </motion.button>
-
-                <motion.button
-                  onClick={() => applyZoom(zoom + 1)}
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.95 }}
-                  disabled={zoom >= MAX_ZOOM}
-                  className="p-2 rounded-full text-white hover:bg-white/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                  aria-label="Zoom in (+)"
-                >
-                  <ZoomIn className="h-5 w-5" />
-                </motion.button>
-
-                <div className="w-px h-6 bg-white/20 mx-1" />
-
-                <motion.button
-                  onClick={() => setRotation((r) => (r + 270) % 360)}
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.95 }}
-                  className="p-2 rounded-full text-white hover:bg-white/10 transition-colors"
-                  aria-label="Rotate left"
-                >
-                  <RotateCcw className="h-5 w-5" />
-                </motion.button>
-
-                <motion.button
-                  onClick={() => setRotation((r) => (r + 90) % 360)}
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.95 }}
-                  className="p-2 rounded-full text-white hover:bg-white/10 transition-colors"
-                  aria-label="Rotate right"
-                >
-                  <RotateCw className="h-5 w-5" />
-                </motion.button>
-
-                <div className="w-px h-6 bg-white/20 mx-1" />
-
-                <motion.button
-                  onClick={() => {
-                    if (currentIndex > 0) {
-                      const next = currentIndex - 1;
-                      setCurrentIndex(next);
-                      onNavigate(next);
-                    }
-                  }}
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.95 }}
-                  disabled={currentIndex === 0}
-                  className="p-2 rounded-full text-white hover:bg-white/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                  aria-label="Previous photo (←)"
-                >
-                  <ChevronLeft className="h-6 w-6" />
-                </motion.button>
-
-                <motion.button
-                  onClick={() => {
-                    if (currentIndex < photos.length - 1) {
-                      const next = currentIndex + 1;
-                      setCurrentIndex(next);
-                      onNavigate(next);
-                    }
-                  }}
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.95 }}
-                  disabled={currentIndex === photos.length - 1}
-                  className="p-2 rounded-full text-white hover:bg-white/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                  aria-label="Next photo (→)"
-                >
-                  <ChevronRight className="h-6 w-6" />
-                </motion.button>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Metadata Sidebar */}
-      <AnimatePresence>
-        {showMetadata && currentPhoto && (
-          <motion.div
-            initial={{ x: 400, opacity: 0 }}
-            animate={{ x: 0, opacity: 1 }}
-            exit={{ x: 400, opacity: 0 }}
-            transition={{ duration: 0.25, ease: "easeOut" }}
-            className="absolute top-0 right-0 bottom-0 w-80 bg-black/90 backdrop-blur border-l border-white/10 overflow-y-auto z-20"
-          >
-            <div className="p-4 border-b border-white/10 flex items-center justify-between">
-              <h3 className="font-semibold">Information</h3>
-              <button
-                onClick={() => setShowMetadata(false)}
-                className="p-1 rounded hover:bg-white/10 transition-colors"
-                aria-label="Close info"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            <div className="p-4 space-y-4 text-sm">
-              <InfoRow label="File name" value={currentPhoto.name} mono />
-              <InfoRow
-                label="Date taken"
-                value={formatSafeDate(currentPhoto.date_taken)}
-              />
-              {currentPhoto.make && (
-                <InfoRow label="Camera" value={`${currentPhoto.make} ${currentPhoto.model || ""}`.trim()} />
-              )}
-              {currentPhoto.lat != null && currentPhoto.lng != null && (
-                <InfoRow
-                  label="Location"
-                  value={`${currentPhoto.lat.toFixed(6)}, ${currentPhoto.lng.toFixed(6)}`}
-                  mono
-                />
-              )}
-              {currentPhoto.is_favorite && (
-                <div className="flex items-center gap-2 text-yellow-400">
-                  <Star className="h-4 w-4 fill-current" />
-                  Favorite
-                </div>
-              )}
-              {!currentPhoto.make && currentPhoto.lat == null && (
-                <p className="text-content-muted text-xs">
-                  No additional metadata is indexed for this photo yet. The background scanner
-                  extracts EXIF data periodically.
-                </p>
-              )}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Map View */}
-      <AnimatePresence>
-        {showMap && currentPhoto?.lat != null && currentPhoto?.lng != null && (
-          <motion.div
-            initial={{ x: 400, opacity: 0 }}
-            animate={{ x: 0, opacity: 1 }}
-            exit={{ x: 400, opacity: 0 }}
-            transition={{ duration: 0.25, ease: "easeOut" }}
-            className="absolute top-0 right-0 bottom-0 w-96 bg-black/90 backdrop-blur border-l border-white/10 z-20"
-          >
-            <div className="p-4 border-b border-white/10 flex items-center justify-between">
-              <h3 className="font-semibold">Location</h3>
-              <button
-                onClick={() => setShowMap(false)}
-                className="p-1 rounded hover:bg-white/10 transition-colors"
-                aria-label="Close map"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            <div className="h-full relative" style={{ width: "100%", height: "100%" }}>
-              {/* Embedded map via OpenStreetMap static tile viewer */}
-              <div className="flex flex-col items-center justify-center h-full text-content-muted gap-3">
-                <div className="text-xs">
-                  {currentPhoto.lat.toFixed(6)}, {currentPhoto.lng.toFixed(6)}
+                    <MapPin className="h-4 w-4" /> View on OpenStreetMap
+                  </a>
+                )}
+              </>
+            ) : (
+              <>
+                <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-white/50">Location</h3>
+                <div className="aspect-square w-full overflow-hidden rounded-lg bg-black/40">
+                  <iframe
+                    title="Map"
+                    className="h-full w-full border-0"
+                    loading="lazy"
+                    src={`https://www.openstreetmap.org/export/embed.html?bbox=${photo.lng! - 0.01}%2C${photo.lat! - 0.008}%2C${photo.lng! + 0.01}%2C${photo.lat! + 0.008}&layer=mapnik&marker=${photo.lat}%2C${photo.lng}`}
+                  />
                 </div>
                 <a
-                  href={`https://www.openstreetmap.org/?mlat=${currentPhoto.lat}&mlon=${currentPhoto.lng}#map=15/${currentPhoto.lat}/${currentPhoto.lng}`}
+                  href={`https://www.openstreetmap.org/?mlat=${photo.lat}&mlon=${photo.lng}#map=15/${photo.lat}/${photo.lng}`}
                   target="_blank"
                   rel="noreferrer"
-                  className="px-4 py-2 rounded-lg bg-accent/20 text-accent hover:bg-accent/30 text-sm font-medium transition-colors"
+                  className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-white/10 px-3 py-2 text-sm font-medium glass-hover"
                 >
-                  Open in OpenStreetMap
+                  <MapPin className="h-4 w-4" /> Open full map
                 </a>
-                <iframe
-                  title="Photo location map"
-                  src={`https://www.openstreetmap.org/export/embed.html?bbox=${currentPhoto.lng - 0.01}%2C${currentPhoto.lat - 0.01}%2C${currentPhoto.lng + 0.01}%2C${currentPhoto.lat + 0.01}&layer=mapnik&marker=${currentPhoto.lat}%2C${currentPhoto.lng}`}
-                  className="w-full flex-1 border-0"
-                  loading="lazy"
-                />
-              </div>
-            </div>
-          </motion.div>
+              </>
+            )}
+          </motion.aside>
         )}
       </AnimatePresence>
     </motion.div>
   );
-}
-
-function InfoRow({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
-  return (
-    <div>
-      <p className="text-content-muted">{label}</p>
-      <p className={cn(mono && "font-mono break-all")}>{value}</p>
-    </div>
-  );
-}
-
-function formatSafeDate(dateStr: string): string {
-  if (!dateStr) return "Unknown";
-  const d = new Date(dateStr);
-  if (isNaN(d.getTime())) return dateStr;
-  return d.toLocaleString();
 }

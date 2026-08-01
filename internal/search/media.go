@@ -1,8 +1,11 @@
 package search
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
+	"encoding/binary"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -35,12 +38,14 @@ func (s *Service) ScanMediaMetadata(ctx context.Context) {
 		default:
 		}
 
-		// Find up to 100 images that don't have media_metadata yet.
+		// Find up to 100 images that don't have media_metadata yet, or whose
+		// dimensions were never extracted (rows created before width/height
+		// scanning existed).
 		rows, err := s.db.Query(`
 			SELECT s.id, s.root_id, s.path 
 			FROM search_index s
 			LEFT JOIN media_metadata m ON s.id = m.id
-			WHERE s.mime LIKE 'image/%' AND m.id IS NULL
+			WHERE s.mime LIKE 'image/%' AND (m.id IS NULL OR m.width = 0 OR m.height = 0)
 			LIMIT 100
 		`)
 		if err != nil {
@@ -78,6 +83,14 @@ func (s *Service) ScanMediaMetadata(ctx context.Context) {
 		stmt, err := tx.Prepare(`
 			INSERT INTO media_metadata(id, date_taken, lat, lng, make, model, width, height)
 			VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+			ON CONFLICT(id) DO UPDATE SET
+				date_taken = excluded.date_taken,
+				lat = excluded.lat,
+				lng = excluded.lng,
+				make = excluded.make,
+				model = excluded.model,
+				width = excluded.width,
+				height = excluded.height
 		`)
 		if err != nil {
 			tx.Rollback()
@@ -91,13 +104,14 @@ func (s *Service) ScanMediaMetadata(ctx context.Context) {
 			}
 			absPath := filepath.Join(rootPath, p.Path)
 			dateTaken, lat, lng, makeStr, modelStr := extractExif(absPath)
-			
+			width, height := imageDimensions(absPath)
+
 			// We insert even if blank, so we don't keep retrying.
-			_, _ = stmt.Exec(p.ID, dateTaken, lat, lng, makeStr, modelStr, 0, 0)
+			_, _ = stmt.Exec(p.ID, dateTaken, lat, lng, makeStr, modelStr, width, height)
 		}
 		stmt.Close()
 		_ = tx.Commit()
-		
+
 		time.Sleep(100 * time.Millisecond) // Yield
 	}
 }
@@ -134,6 +148,85 @@ func extractExif(path string) (dateTaken string, lat, lng float64, makeStr, mode
 	return
 }
 
+// imageDimensions reads just enough of an image header to return its pixel
+// dimensions. Supports JPEG, PNG, GIF and WebP — the formats the gallery's
+// variable-height tile rows need. Returns 0,0 for anything else (HEIC, RAW…).
+func imageDimensions(path string) (width, height int) {
+	f, err := os.Open(path)
+	if err != nil {
+		return 0, 0
+	}
+	defer f.Close()
+
+	head := make([]byte, 64*1024)
+	n, _ := io.ReadFull(f, head)
+	if n < 10 {
+		return 0, 0
+	}
+	head = head[:n]
+
+	// PNG: 8-byte signature, then IHDR at offset 16: width, height (BE).
+	if n >= 24 && bytes.Equal(head[:8], []byte{0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a}) {
+		return int(binary.BigEndian.Uint32(head[16:20])), int(binary.BigEndian.Uint32(head[20:24]))
+	}
+
+	// GIF: "GIF8x" header, dimensions at offset 6 (LE 16-bit).
+	if n >= 10 && bytes.HasPrefix(head, []byte("GIF8")) {
+		return int(binary.LittleEndian.Uint16(head[6:8])), int(binary.LittleEndian.Uint16(head[8:10]))
+	}
+
+	// WebP: RIFF....WEBP + chunk type. Branch minima are checked per format.
+	if n >= 26 && bytes.HasPrefix(head, []byte("RIFF")) && bytes.HasPrefix(head[8:12], []byte("WEBP")) {
+		switch {
+		case bytes.HasPrefix(head[12:16], []byte("VP8 ")): // lossy
+			w := (int(head[22]) | int(head[23])<<8) & 0x3fff
+			h := (int(head[24]) | int(head[25])<<8) & 0x3fff
+			return w, h
+		case bytes.HasPrefix(head[12:16], []byte("VP8L")) && n >= 26: // lossless
+			b := head[21:26]
+			w := 1 + int(b[0]) | int(b[1])<<8 | (int(b[2])&0x0f)<<16
+			h := 1 + (int(b[2])&0xf0)>>4 | int(b[3])<<4 | int(b[4])<<12
+			return w, h
+		case bytes.HasPrefix(head[12:16], []byte("VP8X")) && n >= 30: // extended
+			w := 1 + int(head[24]) | int(head[25])<<8 | int(head[26])<<16
+			h := 1 + int(head[27]) | int(head[28])<<8 | int(head[29])<<16
+			return w, h
+		}
+	}
+
+	// JPEG: walk segments and stop at the first SOF marker (C0-CF, excluding
+	// C4 DHT, C8 JPG, CC DAC) which carries height then width.
+	isSOF := func(m byte) bool {
+		return m >= 0xC0 && m <= 0xCF && m != 0xC4 && m != 0xC8 && m != 0xCC
+	}
+	i := 2
+	for i+9 <= n {
+		if head[i] != 0xFF {
+			i++
+			continue
+		}
+		marker := head[i+1]
+		if marker == 0xD8 || marker == 0x01 || (marker >= 0xD0 && marker <= 0xD7) {
+			i += 2 // stand-alone markers (SOI, TEM, RSTn)
+			continue
+		}
+		if isSOF(marker) {
+			// Segment layout: FF Cx | len(2) | precision(1) | height(2) | width(2)
+			return int(binary.BigEndian.Uint16(head[i+7 : i+9])), int(binary.BigEndian.Uint16(head[i+5 : i+7]))
+		}
+		if marker == 0xDA || marker == 0xD9 { // SOS / EOI
+			break
+		}
+		segLen := int(binary.BigEndian.Uint16(head[i+2 : i+4]))
+		if segLen < 2 {
+			break
+		}
+		i += 2 + segLen
+	}
+
+	return 0, 0
+}
+
 // PhotoResult represents an image for the timeline view.
 type PhotoResult struct {
 	ID         string  `json:"id"`
@@ -145,6 +238,8 @@ type PhotoResult struct {
 	Lng        float64 `json:"lng,omitempty"`
 	Make       string  `json:"make,omitempty"`
 	Model      string  `json:"model,omitempty"`
+	Width      int     `json:"width,omitempty"`
+	Height     int     `json:"height,omitempty"`
 	IsFavorite bool    `json:"is_favorite"`
 }
 
@@ -231,7 +326,7 @@ func (s *Service) GetPhotosTimeline(ctx context.Context, userID string, rootIDs 
 	sb.WriteString(`
 		SELECT s.id, s.root_id, s.path, s.name,
 		       ` + dateTakenExpr + ` as date_taken,
-		       m.lat, m.lng, m.make, m.model,
+		       m.lat, m.lng, m.make, m.model, m.width, m.height,
 		       CASE WHEN fav.path IS NULL THEN 0 ELSE 1 END AS is_favorite`)
 
 	args := []any{}
@@ -259,8 +354,9 @@ func (s *Service) GetPhotosTimeline(ctx context.Context, userID string, rootIDs 
 		var p PhotoResult
 		var lat, lng sql.NullFloat64
 		var makeStr, modelStr sql.NullString
+		var width, height sql.NullInt64
 
-		if err := rows.Scan(&p.ID, &p.RootID, &p.Path, &p.Name, &p.DateTaken, &lat, &lng, &makeStr, &modelStr, &p.IsFavorite); err != nil {
+		if err := rows.Scan(&p.ID, &p.RootID, &p.Path, &p.Name, &p.DateTaken, &lat, &lng, &makeStr, &modelStr, &width, &height, &p.IsFavorite); err != nil {
 			return nil, err
 		}
 		if lat.Valid {
@@ -274,6 +370,12 @@ func (s *Service) GetPhotosTimeline(ctx context.Context, userID string, rootIDs 
 		}
 		if modelStr.Valid {
 			p.Model = modelStr.String
+		}
+		if width.Valid {
+			p.Width = int(width.Int64)
+		}
+		if height.Valid {
+			p.Height = int(height.Int64)
 		}
 
 		out = append(out, p)

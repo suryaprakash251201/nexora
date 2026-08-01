@@ -3,6 +3,8 @@ package search
 import (
 	"context"
 	"database/sql"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -99,6 +101,17 @@ func TestGetPhotosTimelineAgainstRealSchema(t *testing.T) {
 		t.Errorf("img_1 should not be favorite")
 	}
 
+	// Dimensions must flow through for the variable-height gallery rows.
+	var img1Dim *PhotoResult
+	for _, p := range all {
+		if p.ID == "img_1" {
+			img1Dim = &p
+		}
+	}
+	if img1Dim == nil || img1Dim.Width != 4000 || img1Dim.Height != 3000 {
+		t.Errorf("img_1 dimensions missing or wrong: %+v", img1Dim)
+	}
+
 	// 2. favorites_only filter — must not error.
 	favs, err := svc.GetPhotosTimeline(ctx, "user_1", rootIDs, PhotoQuery{FavoritesOnly: true, Sort: "date_desc"}, 100, 0)
 	if err != nil {
@@ -166,11 +179,112 @@ func TestGetPhotosTimelineAgainstRealSchema(t *testing.T) {
 	}
 
 	// 6. Pagination probe: limit+1 (as the handler uses) must be exact.
-	page, err := svc.GetPhotosTimeline(ctx, "user_1", rootIDs, PhotoQuery{Sort: "date_desc"}, 1, 0)
-	if err != nil {
+	if page, err := svc.GetPhotosTimeline(ctx, "user_1", rootIDs, PhotoQuery{Sort: "date_desc"}, 1, 0); err != nil {
 		t.Fatalf("GetPhotosTimeline (limit 1): %v", err)
-	}
-	if len(page) != 1 {
+	} else if len(page) != 1 {
 		t.Fatalf("expected 1 photo for limit=1, got %d", len(page))
 	}
+}
+
+// TestImageDimensions parses real, minimal file headers for the four formats
+// the gallery tiles rely on.
+func TestImageDimensions(t *testing.T) {
+	cases := []struct {
+		name  string
+		data  []byte
+		wantW int
+		wantH int
+	}{
+		{
+			name:  "jpeg baseline",
+			data:  jpegHeader(4000, 3000),
+			wantW: 4000,
+			wantH: 3000,
+		},
+		{
+			name:  "png",
+			data:  pngHeader(1920, 1080),
+			wantW: 1920,
+			wantH: 1080,
+		},
+		{
+			name:  "gif",
+			data:  gifHeader(640, 480),
+			wantW: 640,
+			wantH: 480,
+		},
+		{
+			name:  "webp lossy",
+			data:  webpHeader(512, 384),
+			wantW: 512,
+			wantH: 384,
+		},
+		{
+			name:  "unknown format",
+			data:  []byte("not an image at all"),
+			wantW: 0,
+			wantH: 0,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "img.bin")
+			if err := os.WriteFile(path, tc.data, 0o644); err != nil {
+				t.Fatalf("write: %v", err)
+			}
+			w, h := imageDimensions(path)
+			if w != tc.wantW || h != tc.wantH {
+				t.Fatalf("imageDimensions = %dx%d, want %dx%d", w, h, tc.wantW, tc.wantH)
+			}
+		})
+	}
+}
+
+func jpegHeader(w, h int) []byte {
+	buf := []byte{0xFF, 0xD8}
+	// APP0 JFIF segment
+	seg := append([]byte("JFIF\x00"), make([]byte, 9)...)
+	buf = append(buf, 0xFF, 0xE0, byte((len(seg)+2)>>8), byte(len(seg)+2))
+	buf = append(buf, seg...)
+	// SOF0
+	sof := make([]byte, 12)
+	sof[0] = 8 // precision
+	sof[1] = byte(h >> 8)
+	sof[2] = byte(h)
+	sof[3] = byte(w >> 8)
+	sof[4] = byte(w)
+	sof[5] = 3 // components
+	sof = append(sof, 0, 0x11, 0, 0, 0x11, 0, 0, 0x11, 0)
+	buf = append(buf, 0xFF, 0xC0, byte((len(sof)+2)>>8), byte(len(sof)+2))
+	buf = append(buf, sof...)
+	buf = append(buf, 0xFF, 0xD9)
+	return buf
+}
+
+func pngHeader(w, h int) []byte {
+	buf := []byte{0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a}
+	buf = append(buf, 0, 0, 0, 13, 'I', 'H', 'D', 'R')
+	buf = append(buf, byte(w>>24), byte(w>>16), byte(w>>8), byte(w))
+	buf = append(buf, byte(h>>24), byte(h>>16), byte(h>>8), byte(h))
+	buf = append(buf, 8, 2, 0, 0, 0) // bit depth, color type, compression, filter, interlace
+	buf = append(buf, 0, 0, 0, 0)    // CRC (ignored by parser)
+	return buf
+}
+
+func gifHeader(w, h int) []byte {
+	buf := []byte("GIF89a")
+	buf = append(buf, byte(w), byte(w>>8), byte(h), byte(h>>8))
+	buf = append(buf, 0, 0, 0) // packed, bg color, aspect
+	return buf
+}
+
+func webpHeader(w, h int) []byte {
+	buf := append([]byte("RIFF"), 0, 0, 0, 0)                   // 0..7
+	buf = append(buf, "WEBP"...)                                // 8..11
+	buf = append(buf, "VP8 "...)                                // 12..15: chunk type
+	buf = append(buf, 0, 0, 0)                                  // frame tag (16..18)
+	buf = append(buf, 0x9D, 0x01, 0x2A)                         // keyframe start code (19..21)
+	buf = append(buf, byte(w), byte(w>>8), byte(h), byte(h>>8)) // dims (22..25)
+	return buf
 }
