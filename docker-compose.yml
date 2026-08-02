@@ -7,11 +7,12 @@ services:
     image: alpine:3.20
     container_name: nexora-init
     restart: "no"
-    command: ["sh", "-c", "chown -R 100:101 /mnt/files /mnt/backups /mnt/shared && chmod -R 775 /mnt/files /mnt/backups /mnt/shared && echo initialized"]
+    command: ["sh", "-c", "chown -R 100:101 /mnt/files /mnt/backups /mnt/shared /app/data && chmod -R 775 /mnt/files /mnt/backups /mnt/shared && chmod -R u+rwX,g+rwX /app/data && echo initialized"]
     volumes:
       - ./data/files:/mnt/files
       - ./data/backups:/mnt/backups
       - ./data/shared:/mnt/shared
+      - nexora-data:/app/data
 
   nexora:
     build:

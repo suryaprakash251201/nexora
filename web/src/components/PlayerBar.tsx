@@ -21,6 +21,7 @@ import { thumbUrl, rawUrl, audioTranscodeUrl, generateSessionId, serverSupportsT
 import type { AudioTranscodeFormat } from "../lib/preview";
 import { AudioInfoPanel, EqualizerBars } from "./LosslessPlayer";
 import MediaPlayer from "./MediaPlayer";
+import { useClickOutside } from "./hooks/useClickOutside";
 
 function fmt(t: number): string {
   if (!isFinite(t) || t < 0) t = 0;
@@ -44,7 +45,7 @@ function Cover({ item }: { item: FileItem | null }) {
 export default function PlayerBar() {
   const audioRef = useRef<HTMLAudioElement>(null);
   const bound = useRef(false);
-  const { current, isPlaying, volume, muted, primaryOpen, currentTime, duration, queueLength, index } = usePlayer(
+  const { current, isPlaying, volume, muted, primaryOpen, currentTime, duration, queueLength, index, shuffle, repeat } = usePlayer(
     useShallow((s) => ({
       current: s.current(),
       isPlaying: s.isPlaying,
@@ -55,9 +56,35 @@ export default function PlayerBar() {
       duration: s.duration,
       queueLength: s.queue.length,
       index: s.index,
+      shuffle: s.shuffle,
+      repeat: s.repeat,
     }))
   );
   const [expanded, setExpanded] = useState(false);
+
+  // Volume popup visibility. Hover opens it; a short delayed close bridges the
+  // gap between the button and the popup so it doesn't vanish mid-interaction.
+  const [volOpen, setVolOpen] = useState(false);
+  const volTimer = useRef<number | null>(null);
+  const volRef = useRef<HTMLDivElement>(null);
+  const openVol = () => {
+    if (volTimer.current) {
+      window.clearTimeout(volTimer.current);
+      volTimer.current = null;
+    }
+    setVolOpen(true);
+  };
+  const closeVolSoon = () => {
+    if (volTimer.current) window.clearTimeout(volTimer.current);
+    volTimer.current = window.setTimeout(() => setVolOpen(false), 250);
+  };
+  useClickOutside(volRef, () => {
+    if (volTimer.current) {
+      window.clearTimeout(volTimer.current);
+      volTimer.current = null;
+    }
+    setVolOpen(false);
+  });
 
   const VolIcon = muted || volume === 0 ? VolumeX : volume < 0.5 ? Volume1 : Volume2;
   const lossless = current ? isLosslessExtension(current.extension) : false;
@@ -66,11 +93,8 @@ export default function PlayerBar() {
   const openExpanded = () => {
     setExpanded(true);
     usePlayer.getState().setPrimaryOpen(true);
-    // Auto-fullscreen the player
-    try {
-      const el = document.documentElement;
-      if (el.requestFullscreen) el.requestFullscreen().catch(() => {});
-    } catch {}
+    // Real fullscreen is requested by the expanded player itself — MediaPlayer
+    // fullscreens only the player overlay, never the whole app.
   };
 
   useEffect(() => {
@@ -199,28 +223,45 @@ export default function PlayerBar() {
                   <SkipForward className="h-4 w-4" />
                 </button>
                 <button
-                  onClick={() => usePlayer.getState().setShuffle(!usePlayer.getState().shuffle)}
-                  className={`p-1.5 rounded-full transition-colors ${usePlayer.getState().shuffle ? "text-accent bg-accent/10" : "text-content-muted hover:text-content hover:bg-white/10"}`}
-                  title="Shuffle"
+                  onClick={() => usePlayer.getState().setShuffle(!shuffle)}
+                  aria-pressed={shuffle}
+                  title={shuffle ? "Shuffle: On" : "Shuffle: Off"}
+                  className={`p-1.5 rounded-full transition-all duration-200 ${shuffle ? "text-accent bg-accent/15 shadow-sm" : "text-content-muted hover:text-content hover:bg-white/10"}`}
                 >
                   <Shuffle className="h-3.5 w-3.5" />
                 </button>
                 <button
                   onClick={() => usePlayer.getState().cycleRepeat()}
-                  className={`p-1.5 rounded-full transition-colors ${usePlayer.getState().repeat !== "off" ? "text-accent bg-accent/10" : "text-content-muted hover:text-content hover:bg-white/10"}`}
-                  title={`Repeat: ${usePlayer.getState().repeat}`}
+                  aria-pressed={repeat !== "off"}
+                  title={`Repeat: ${repeat === "one" ? "One" : repeat === "all" ? "All" : "Off"}`}
+                  className={`relative p-1.5 rounded-full transition-all duration-200 ${repeat !== "off" ? "text-accent bg-accent/15 shadow-sm" : "text-content-muted hover:text-content hover:bg-white/10"}`}
                 >
-                  {usePlayer.getState().repeat === "one" ? <Repeat1 className="h-3.5 w-3.5" /> : <Repeat className="h-3.5 w-3.5" />}
+                  {repeat === "one" ? <Repeat1 className="h-3.5 w-3.5" /> : <Repeat className="h-3.5 w-3.5" />}
+                  {repeat !== "off" && (
+                    <span className="absolute -bottom-px left-1/2 -translate-x-1/2 h-[2px] w-1.5 rounded-full bg-accent" />
+                  )}
                 </button>
-                <div className="group relative flex items-center">
+                <div
+                  ref={volRef}
+                  className="group relative flex items-center"
+                  onMouseEnter={openVol}
+                  onMouseLeave={closeVolSoon}
+                >
                   <button
                     onClick={() => usePlayer.getState().toggleMute()}
+                    onTouchStart={(e) => {
+                      e.preventDefault();
+                      openVol();
+                    }}
                     className={`p-1.5 rounded-full transition-colors ${muted ? "text-danger bg-danger/10" : "text-content-muted hover:text-content hover:bg-white/10"}`}
                     title={muted ? "Unmute" : "Mute"}
                   >
                     <VolIcon className="h-3.5 w-3.5" />
                   </button>
-                  <div className="absolute bottom-full right-0 mb-2 w-28 glass-strong rounded-lg p-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none group-hover:pointer-events-auto">
+                  <div
+                    onMouseEnter={openVol}
+                    className={`absolute bottom-full right-0 mb-2 w-28 glass-strong rounded-lg p-2 transition-opacity duration-150 ${volOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"}`}
+                  >
                     <div className="relative h-1.5 w-full rounded-full bg-white/20">
                       <div className="absolute inset-y-0 left-0" style={{
                         width: `${(muted ? 0 : volume) * 100}%`,
@@ -280,6 +321,8 @@ export default function PlayerBar() {
             onClose={() => {
               setExpanded(false);
               usePlayer.getState().setPrimaryOpen(false);
+              // Defensive: ensure browser fullscreen is exited when closing.
+              if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
             }}
           />
         </div>

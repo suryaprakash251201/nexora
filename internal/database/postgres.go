@@ -46,6 +46,12 @@ func OpenPostgres(databaseURL string) (*sql.DB, error) {
 		return nil, fmt.Errorf("migrate postgres database: %w", err)
 	}
 
+	// Fail fast if the database is not writable (see probeWritable).
+	if err := probeWritable(db); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("postgres database is not writable: %w", err)
+	}
+
 	return db, nil
 }
 

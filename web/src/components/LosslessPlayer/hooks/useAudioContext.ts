@@ -35,6 +35,8 @@ export function useAudioContext(
     const audio: HTMLAudioElement | null = audioEl;
     if (!audio) return;
 
+    if ("__TAURI_INTERNALS__" in window) return;
+
     try {
       const AC: typeof AudioContext | undefined =
         window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;

@@ -141,6 +141,8 @@ function AudioPlayer({
   const [bgFailed, setBgFailed] = useState(false);
   const [showRates, setShowRates] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
+  const [browserFs, setBrowserFs] = useState(false);
+  const suppressFsExitRef = useRef(false);
   const fsWrapRef = useRef<HTMLDivElement>(null);
 
   // Smart format routing: native → lossless FLAC (desktop) → flac24 → AAC.
@@ -277,17 +279,49 @@ function AudioPlayer({
   };
   const openFs = () => {
     setFs(true);
-    // Request real browser fullscreen inside the user gesture so it isn't blocked.
-    requestAnimationFrame(() => fsWrapRef.current?.requestFullscreen?.().catch(() => {}));
   };
 
   const closeFs = (exitFullscreen = true) => {
     setFs(false);
     if (exitFullscreen && document.fullscreenElement) {
+      suppressFsExitRef.current = true;
       document.exitFullscreen?.().catch(() => {});
     }
     onClose?.();
   };
+
+  // Enter real browser fullscreen on the player overlay itself whenever the
+  // fullscreen view opens (click or startFullscreen) — never the whole app.
+  useEffect(() => {
+    if (!fs) return;
+    const id = requestAnimationFrame(() => {
+      const el = fsWrapRef.current;
+      if (el && el.isConnected && !document.fullscreenElement) {
+        el.requestFullscreen?.().catch(() => {});
+      }
+    });
+    return () => cancelAnimationFrame(id);
+  }, [fs]);
+
+  // Sync with browser fullscreen: when the user leaves fullscreen via Esc
+  // (browsers swallow the Esc keydown while fullscreen, so the key handler
+  // alone can't close the overlay), auto-exit the player overlay too.
+  useEffect(() => {
+    if (!fs) return;
+    const onFs = () => {
+      const isFull = !!document.fullscreenElement;
+      setBrowserFs(isFull);
+      if (!isFull) {
+        if (suppressFsExitRef.current) {
+          suppressFsExitRef.current = false; // intentional exit — keep overlay
+        } else {
+          closeFs(false); // Esc / external exit — close overlay too
+        }
+      }
+    };
+    document.addEventListener("fullscreenchange", onFs);
+    return () => document.removeEventListener("fullscreenchange", onFs);
+  }, [fs, closeFs]);
 
   useEffect(() => {
     if (!fs) return;
@@ -330,6 +364,7 @@ function AudioPlayer({
           e.preventDefault();
           // Toggle fullscreen without closing the overlay
           if (document.fullscreenElement) {
+            suppressFsExitRef.current = true;
             document.exitFullscreen?.();
           } else {
             fsWrapRef.current?.requestFullscreen?.();
@@ -366,9 +401,9 @@ function AudioPlayer({
       {/* Top bar */}
       <div className="absolute top-0 inset-x-0 z-30 flex items-center justify-between p-5 sm:p-7">
         <button
-          onClick={(e) => { e.stopPropagation(); closeFs(false); }}
+          onClick={(e) => { e.stopPropagation(); closeFs(true); }}
           className="p-3 rounded-full glass-hover text-white transition-transform hover:scale-110"
-          title="Close overlay (Esc to also exit fullscreen)"
+          title="Close player and exit fullscreen"
         >
           <X className="h-6 w-6" />
         </button>
@@ -376,11 +411,19 @@ function AudioPlayer({
           {multi ? `Track ${qIndex + 1} of ${queue.length}` : "Now Playing"}
         </span>
         <button
-          onClick={(e) => { e.stopPropagation(); document.fullscreenElement ? document.exitFullscreen?.() : fsWrapRef.current?.requestFullscreen?.(); }}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (document.fullscreenElement) {
+              suppressFsExitRef.current = true;
+              document.exitFullscreen?.();
+            } else {
+              fsWrapRef.current?.requestFullscreen?.();
+            }
+          }}
           className="p-3 rounded-full glass-hover text-white transition-transform hover:scale-110"
           title="Toggle fullscreen (F)"
         >
-          {document.fullscreenElement ? <Minimize2 className="h-6 w-6" /> : <Maximize2 className="h-6 w-6" />}
+          {browserFs ? <Minimize2 className="h-6 w-6" /> : <Maximize2 className="h-6 w-6" />}
         </button>
       </div>
 

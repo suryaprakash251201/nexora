@@ -9,6 +9,7 @@ import (
 
 	_ "modernc.org/sqlite"
 
+	"github.com/nexora/nexora/internal/util"
 	"github.com/nexora/nexora/migrations"
 )
 
@@ -47,7 +48,28 @@ func openSQLite(dbPath string) (*sql.DB, error) {
 		db.Close()
 		return nil, fmt.Errorf("migrate database: %w", err)
 	}
+
+	// Fail fast if the DB file is not writable. A read-only file (e.g. wrong
+	// ownership after a volume restore) would otherwise let the server start
+	// and serve reads while silently failing every write — surfacing later as
+	// confusing runtime errors like "could not record trash entry".
+	if err := probeWritable(db); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("database file is not writable (check ownership/permissions on %s): %w", dbPath, err)
+	}
 	return db, nil
+}
+
+// probeWritable performs a tiny self-rolled write against the
+// schema_migrations table to confirm the database file is actually writable.
+// Uses $N placeholders which both SQLite and PostgreSQL accept.
+func probeWritable(db *sql.DB) error {
+	probe := "write-probe-" + util.RandToken(6)
+	if _, err := db.Exec(`INSERT INTO schema_migrations(version, applied_at) VALUES($1, $2)`, probe, util.NowUTC()); err != nil {
+		return err
+	}
+	_, err := db.Exec(`DELETE FROM schema_migrations WHERE version=$1`, probe)
+	return err
 }
 
 // CurrentSchemaVersion returns the number of applied migrations.
