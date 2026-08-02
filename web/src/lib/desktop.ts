@@ -28,19 +28,6 @@ export function getPlatform(): Promise<DesktopPlatform | null> {
   return platformPromise;
 }
 
-/**
- * The custom in-app title bar is used on Windows & Linux (borderless windows).
- * macOS keeps its native traffic lights, so no custom bar is rendered there.
- */
-let customTitleBar: boolean | null = null;
-export function usesCustomTitleBar(): Promise<boolean> {
-  if (customTitleBar !== null) return Promise.resolve(customTitleBar);
-  return getPlatform().then((p) => {
-    customTitleBar = !!p && (p.os === "linux" || p.os === "windows");
-    return customTitleBar;
-  });
-}
-
 /** True when the app is talking to a server on this machine. */
 export function isLocalServer(): boolean {
   const url = localStorage.getItem("nexora-api-url") || "";

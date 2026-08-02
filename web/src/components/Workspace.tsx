@@ -56,7 +56,6 @@ import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import { useClipboard } from "./hooks/useClipboard";
 import { useModals } from "./hooks/useModals";
 import DesktopDragDrop from "./DesktopDragDrop";
-import { useCustomTitleBar } from "./DesktopTitleBar";
 import { isTauri, isLocalServer, revealInFileManager } from "../lib/desktop";
 
 export default function Workspace({ user }: { user: User }) {
@@ -432,19 +431,17 @@ export default function Workspace({ user }: { user: User }) {
 
   const showCommandBar = view === "files" && activeRoot;
 
-  const customTitleBar = useCustomTitleBar();
-
   // Desktop-only: absolute server-side path to reveal in the OS file manager.
   const revealPath =
-    customTitleBar && isTauri() && isLocalServer() && activeRoot?.type === "local" && activeRoot.path && drawerPath
+    isTauri() && isLocalServer() && activeRoot?.type === "local" && activeRoot.path && drawerPath
       ? drawerPath.includes("/")
         ? `${activeRoot.path}/${drawerPath.slice(0, drawerPath.lastIndexOf("/"))}`
         : activeRoot.path
       : null;
 
   return (
-    <div className={`h-screen flex overflow-hidden ${customTitleBar ? "pt-[38px]" : ""}`} {...dragProps}>
-      {customTitleBar && isTauri() && (
+    <div className="h-screen flex overflow-hidden" {...dragProps}>
+      {isTauri() && (
         <DesktopDragDrop rootId={rootId} path={path} canWrite={canWrite} onUpload={(files) => uploadFiles(files)} />
       )}
       <Sidebar

@@ -7,9 +7,7 @@ import Workspace from "./components/Workspace";
 import MouseGlow from "./components/MouseGlow";
 import UpdaterCheck from "./components/UpdaterCheck";
 import TauriShell from "./components/TauriShell";
-import DesktopTitleBar, { useCustomTitleBar } from "./components/DesktopTitleBar";
 import { ErrorBoundary } from "./components/ErrorBoundary";
-import { useUI } from "./store";
 import { openInBrowser, isTauri } from "./lib/desktop";
 import type { User } from "./api/types";
 
@@ -18,7 +16,6 @@ export default function App() {
     <>
       <div className="nexora-bg" aria-hidden="true" />
       <MouseGlow />
-      {isTauri() && <DesktopTitleBar />}
       {isTauri() && <TauriShell />}
       {isTauri() && <UpdaterCheck />}
       <AppInner />
@@ -34,12 +31,8 @@ function AppInner() {
   const [inputUrl, setInputUrl] = useState(apiUrl);
   const [discovering, setDiscovering] = useState("");
   const [discoverDone, setDiscoverDone] = useState(false);
-  const setServerOnline = useUI((s) => s.setServerOnline);
-  const customTitleBar = useCustomTitleBar();
 
   const isTauriEnv = isTauri();
-
-  const topPad = customTitleBar && isTauriEnv ? "pt-[38px]" : "";
 
   // ── Auto-discovery: probe Tailscale hosts when no URL is stored ──
   useEffect(() => {
@@ -69,13 +62,6 @@ function AppInner() {
     enabled: !isTauriEnv || !!apiUrl,
   });
 
-  // Live server-status for the title bar indicator
-  useEffect(() => {
-    if (isTauriEnv && !apiUrl) return;
-    if (!needsSetup.isLoading && !needsSetup.isError) setServerOnline(true);
-    if (needsSetup.isError || session.isError) setServerOnline(false);
-  }, [isTauriEnv, apiUrl, needsSetup.isLoading, needsSetup.isError, session.isError, setServerOnline]);
-
   const quickConnect = (url: string) => {
     localStorage.setItem("nexora-api-url", url);
     setApiUrl(url);
@@ -84,7 +70,7 @@ function AppInner() {
 
   if (isTauriEnv && !apiUrl) {
     return (
-      <div className={`min-h-screen grid place-items-center bg-background ${topPad}`}>
+      <div className="min-h-screen grid place-items-center bg-background">
         <div className="w-full max-w-sm px-6">
           <div className="rounded-2xl border border-glass-border-soft bg-glass-bg-strong/80 backdrop-blur-xl shadow-glass-strong p-8 space-y-5">
             <div className="flex flex-col items-center gap-3 text-center">
@@ -167,7 +153,7 @@ function AppInner() {
 
   if (needsSetup.isLoading || session.isLoading) {
     return (
-      <div className={`min-h-screen grid place-items-center gap-3 flex-col text-content-muted ${topPad}`}>
+      <div className="min-h-screen grid place-items-center gap-3 flex-col text-content-muted">
         <LoaderCircle className="h-7 w-7 animate-spin text-accent" />
         <span className="text-sm">Loading…</span>
       </div>
@@ -176,7 +162,7 @@ function AppInner() {
 
   if (needsSetup.isError || session.isError) {
     return (
-      <div className={`min-h-screen flex items-center justify-center bg-background text-foreground ${topPad}`}>
+      <div className="min-h-screen flex items-center justify-center bg-background text-foreground">
         <div className="max-w-md w-full px-6">
           <div className="rounded-2xl border border-glass-border-soft bg-glass-bg-strong/80 backdrop-blur-xl shadow-glass-strong p-8 text-center space-y-4">
             <span className="mx-auto grid place-items-center h-14 w-14 rounded-2xl bg-red-500/10 text-red-500">
