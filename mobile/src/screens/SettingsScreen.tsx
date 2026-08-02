@@ -42,7 +42,7 @@ export default function SettingsScreen() {
   const initials = (user?.display_name || user?.username || "?").slice(0, 1).toUpperCase();
 
   return (
-    <ScrollView style={styles.root} contentContainerStyle={{ paddingBottom: 56 }}>
+    <ScrollView style={styles.root} contentContainerStyle={{ paddingBottom: 130 }}>
       <LinearGradient colors={[...gradients.hero]} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={styles.heroGrad} pointerEvents="none" />
       <View style={styles.profile}>
         <View style={styles.avatarWrap}>

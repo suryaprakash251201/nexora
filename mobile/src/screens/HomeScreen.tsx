@@ -8,13 +8,14 @@ import {
   Text,
   TouchableOpacity,
   View,
+  TextInput,
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useSession } from "../store/SessionContext";
-import { colors, font, gradients, radius, shadowSm, spacing } from "../theme";
+import { colors, font, gradients, radius, shadowSm, shadow, spacing } from "../theme";
 import { FileRow, EmptyState, SectionLabel, Chevron } from "../components/FileRow";
 import { ListSkeleton } from "../components/Skeletons";
 import { formatBytes } from "../api/client";
@@ -22,6 +23,13 @@ import type { Root, FileItem } from "../api/types";
 import type { RootStackParamList } from "../navigation/types";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
+
+const QUICK_ACTIONS = [
+  { id: "favs", title: "Favorites", icon: "heart-outline", color: colors.danger },
+  { id: "photos", title: "Photos", icon: "image-outline", color: colors.blue },
+  { id: "docs", title: "Documents", icon: "file-document-outline", color: colors.amber },
+  { id: "shared", title: "Shared", icon: "account-group-outline", color: colors.success },
+];
 
 export default function HomeScreen() {
   const navigation = useNavigation<Nav>();
@@ -31,6 +39,7 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const load = useCallback(async (isRefresh = false) => {
     if (!api) return;
@@ -84,7 +93,7 @@ export default function HomeScreen() {
   return (
     <FlatList
       style={styles.root}
-      contentContainerStyle={{ paddingBottom: 32 }}
+      contentContainerStyle={{ paddingBottom: 120 }}
       data={roots}
       keyExtractor={(r) => r.id}
       numColumns={2}
@@ -92,15 +101,22 @@ export default function HomeScreen() {
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={colors.accent} />}
       renderItem={({ item }) => (
         <TouchableOpacity style={styles.rootCard} activeOpacity={0.7} onPress={() => openRoot(item)}>
-          <View style={styles.rootIcon}>
-            <MaterialCommunityIcons name="server" size={22} color={colors.accent} />
+          <LinearGradient colors={[colors.surfaceElevated, colors.surface]} style={[StyleSheet.absoluteFill, { borderRadius: radius.lg }]} />
+          <View style={styles.rootIconWrap}>
+            <View style={styles.rootIcon}>
+              <MaterialCommunityIcons name="server" size={24} color={colors.accent} />
+            </View>
+            <View style={[styles.badge, item.permission === "write" ? styles.badgeWrite : styles.badgeRead]}>
+              <MaterialCommunityIcons 
+                name={item.permission === "write" ? "pencil" : "eye-outline"} 
+                size={12} 
+                color={item.permission === "write" ? colors.success : colors.muted} 
+              />
+            </View>
           </View>
-          <Text style={styles.rootName} numberOfLines={1}>{item.name}</Text>
-          <Text style={styles.rootType}>{item.type}</Text>
-          <View style={[styles.badge, item.permission === "write" ? styles.badgeWrite : styles.badgeRead]}>
-            <Text style={[styles.badgeText, { color: item.permission === "write" ? colors.success : colors.muted }]}>
-              {item.permission === "write" ? "read/write" : "read-only"}
-            </Text>
+          <View style={{ marginTop: 12 }}>
+            <Text style={styles.rootName} numberOfLines={1}>{item.name}</Text>
+            <Text style={styles.rootType}>{item.type} storage</Text>
           </View>
         </TouchableOpacity>
       )}
@@ -108,9 +124,28 @@ export default function HomeScreen() {
         <View>
           <View style={styles.hero}>
             <LinearGradient colors={[...gradients.hero]} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={StyleSheet.absoluteFill} pointerEvents="none" />
-            <Text style={styles.heroGreet}>{greeting}, {firstName || "there"}</Text>
-            <Text style={styles.heroTitle}>Storage</Text>
-            <Text style={styles.heroSub}>{roots.length} root{roots.length === 1 ? "" : "s"} available</Text>
+            
+            <View style={styles.headerTop}>
+              <View>
+                <Text style={styles.heroGreet}>{greeting}, {firstName || "there"}</Text>
+                <Text style={styles.heroTitle}>Storage</Text>
+              </View>
+              <TouchableOpacity style={styles.profileBtn}>
+                <MaterialCommunityIcons name="account-circle" size={36} color={colors.accent} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.searchWrap}>
+              <MaterialCommunityIcons name="magnify" size={22} color={colors.muted} />
+              <TextInput 
+                style={styles.searchInput}
+                placeholder="Search files and folders..."
+                placeholderTextColor={colors.muted}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+              />
+            </View>
+
             {error ? (
               <TouchableOpacity style={styles.errorPill} onPress={() => load(true)}>
                 <MaterialCommunityIcons name="alert-circle-outline" size={14} color={colors.danger} />
@@ -118,6 +153,21 @@ export default function HomeScreen() {
               </TouchableOpacity>
             ) : null}
           </View>
+
+          <View style={styles.quickActionsWrap}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickActionsScroll}>
+              {QUICK_ACTIONS.map(action => (
+                <TouchableOpacity key={action.id} style={styles.quickActionCard} activeOpacity={0.7}>
+                  <View style={[styles.quickActionIcon, { backgroundColor: action.color + "20" }]}>
+                    <MaterialCommunityIcons name={action.icon as any} size={24} color={action.color} />
+                  </View>
+                  <Text style={styles.quickActionText}>{action.title}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+
+          <SectionLabel>Storage Locations</SectionLabel>
         </View>
       }
       ListEmptyComponent={
@@ -131,7 +181,7 @@ export default function HomeScreen() {
       }
       ListFooterComponent={
         recents.length > 0 ? (
-          <View>
+          <View style={{ marginTop: 8 }}>
             <View style={styles.sectionRow}>
               <SectionLabel>Recent files</SectionLabel>
               <TouchableOpacity
@@ -142,9 +192,13 @@ export default function HomeScreen() {
                 <Chevron />
               </TouchableOpacity>
             </View>
-            {recents.map((f) => (
-              <FileRow key={f.root_id + f.path} item={f} onPress={openFile} showDate />
-            ))}
+            <View style={styles.recentsCardContainer}>
+              {recents.map((f, i) => (
+                <View key={f.root_id + f.path} style={[styles.recentItemWrap, i !== recents.length -1 && styles.recentItemBorder]}>
+                  <FileRow item={f} onPress={openFile} showDate />
+                </View>
+              ))}
+            </View>
           </View>
         ) : null
       }
@@ -158,62 +212,144 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.xl,
     paddingBottom: spacing.lg,
-    gap: 4,
     overflow: "hidden",
   },
+  headerTop: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 20,
+  },
   heroGreet: { color: colors.muted, fontSize: font.sm, fontWeight: "600" },
-  heroTitle: { color: colors.content, fontSize: font.xxl, fontWeight: "800", letterSpacing: 0.3 },
+  heroTitle: { color: colors.content, fontSize: font.xxl, fontWeight: "800", letterSpacing: 0.3, marginTop: 4 },
+  profileBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.surfaceElevated,
+    alignItems: "center",
+    justifyContent: "center",
+    ...shadowSm,
+  },
+  searchWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.surfaceElevated,
+    borderRadius: radius.xl,
+    paddingHorizontal: spacing.lg,
+    height: 48,
+    borderWidth: 1,
+    borderColor: colors.borderSoft,
+    ...shadowSm,
+  },
+  searchInput: {
+    flex: 1,
+    marginLeft: 12,
+    color: colors.content,
+    fontSize: font.md,
+  },
   heroSub: { color: colors.muted, fontSize: font.xs, marginTop: 2 },
   heroBar: { height: 14, borderRadius: 7, backgroundColor: colors.card, marginTop: 10 },
   errorPill: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    marginTop: 8,
+    marginTop: 16,
     backgroundColor: "rgba(239,68,68,0.12)",
     borderRadius: radius.pill,
     paddingHorizontal: 12,
     paddingVertical: 7,
   },
   errorText: { color: colors.danger, fontSize: font.xs },
+  
+  quickActionsWrap: {
+    marginTop: 8,
+    marginBottom: 16,
+  },
+  quickActionsScroll: {
+    paddingHorizontal: spacing.lg,
+    gap: spacing.md,
+  },
+  quickActionCard: {
+    alignItems: "center",
+    backgroundColor: colors.surface,
+    padding: spacing.md,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.borderSoft,
+    width: 90,
+    ...shadowSm,
+  },
+  quickActionIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: radius.md,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 8,
+  },
+  quickActionText: {
+    color: colors.content,
+    fontSize: font.xs,
+    fontWeight: "600",
+  },
+
   gridRow: { paddingHorizontal: spacing.lg, gap: spacing.md, marginBottom: spacing.md },
   rootCard: {
     flex: 1,
-    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.borderSoft,
     borderRadius: radius.lg,
     padding: spacing.lg,
-    gap: 6,
-    ...shadowSm,
+    ...shadow,
+  },
+  rootIconWrap: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
   },
   rootIcon: {
-    width: 40,
-    height: 40,
+    width: 48,
+    height: 48,
     borderRadius: radius.md,
     backgroundColor: colors.accentSoft,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 4,
   },
-  rootName: { color: colors.content, fontSize: font.md, fontWeight: "700" },
-  rootType: { color: colors.muted, fontSize: font.xs, textTransform: "capitalize" },
+  rootName: { color: colors.content, fontSize: font.lg, fontWeight: "700" },
+  rootType: { color: colors.muted, fontSize: font.xs, textTransform: "capitalize", marginTop: 4 },
   badge: {
-    alignSelf: "flex-start",
     borderRadius: radius.pill,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    marginTop: 4,
+    padding: 6,
+    backgroundColor: colors.surfaceMuted,
   },
-  badgeWrite: { backgroundColor: "rgba(34,197,94,0.12)" },
-  badgeRead: { backgroundColor: colors.card },
-  badgeText: { fontSize: font.xs, fontWeight: "700" },
+  badgeWrite: { backgroundColor: "rgba(34,197,94,0.15)" },
+  badgeRead: { backgroundColor: "rgba(255,255,255,0.08)" },
+  
   sectionRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingRight: spacing.lg,
+    marginBottom: 8,
   },
-  seeAll: { flexDirection: "row", alignItems: "center", gap: 2, padding: 4 },
+  seeAll: { flexDirection: "row", alignItems: "center", gap: 2, padding: 4, marginTop: spacing.lg },
   seeAllText: { color: colors.accent, fontSize: font.sm, fontWeight: "600" },
+
+  recentsCardContainer: {
+    marginHorizontal: spacing.lg,
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.borderSoft,
+    overflow: "hidden",
+    ...shadowSm,
+  },
+  recentItemWrap: {
+    backgroundColor: "transparent",
+  },
+  recentItemBorder: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.borderSoft,
+  }
 });

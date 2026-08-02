@@ -8,7 +8,7 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { SessionProvider, useSession } from "./src/store/SessionContext";
-import { colors, gradients } from "./src/theme";
+import { colors, gradients, shadow } from "./src/theme";
 import { AppIcon } from "./src/components/AppIcon";
 import { LinearGradient } from "expo-linear-gradient";
 import type { RootStackParamList, MainTabParamList } from "./src/navigation/types";
@@ -48,10 +48,21 @@ function MainTabs() {
         headerTintColor: colors.content,
         headerTitleStyle: { fontWeight: "700" },
         headerShadowVisible: false,
-        tabBarStyle: { backgroundColor: colors.surface, borderTopColor: colors.border, borderTopWidth: StyleSheet.hairlineWidth },
+        tabBarStyle: { 
+          backgroundColor: colors.surfaceElevated, 
+          borderTopWidth: 0, 
+          position: "absolute",
+          bottom: 24,
+          left: 16,
+          right: 16,
+          height: 64,
+          borderRadius: 32,
+          ...shadow,
+        },
         tabBarActiveTintColor: colors.accent,
         tabBarInactiveTintColor: colors.muted,
-        tabBarLabelStyle: { fontWeight: "600", fontSize: 11 },
+        tabBarLabelStyle: { fontWeight: "600", fontSize: 11, marginBottom: 8 },
+        tabBarIconStyle: { marginTop: 8 },
       }}
     >
       <Tabs.Screen

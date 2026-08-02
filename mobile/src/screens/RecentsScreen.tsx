@@ -146,7 +146,7 @@ export default function RecentsScreen() {
         initialNumToRender={16}
         maxToRenderPerBatch={12}
         windowSize={7}
-        contentContainerStyle={{ paddingBottom: 32 }}
+        contentContainerStyle={{ paddingBottom: 120 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={colors.accent} />}
         ListEmptyComponent={
           loading ? (
