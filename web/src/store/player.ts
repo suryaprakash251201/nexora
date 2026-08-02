@@ -8,6 +8,8 @@ interface PlayerState {
   queue: FileItem[];
   index: number;
   isPlaying: boolean;
+  /** True while the engine is waiting for more data (network stall / ffmpeg start). */
+  buffering: boolean;
   shuffle: boolean;
   repeat: Repeat;
   currentTime: number;
@@ -58,20 +60,45 @@ function savePersist(p: Persist) {
 // PlayerEngine owns the single <audio> element so playback survives navigation.
 class PlayerEngine {
   audio: HTMLAudioElement | null = null;
+  /** Displayed-time offset for transcoded streams: the server fast-seeks via
+   *  ?start= (which resets stream timestamps to 0), so we add the seek target
+   *  back on top of the element's currentTime for correct UI time. */
+  timeOffset = 0;
+  /** Registered by PlayerBar: called when a seek targets a transcoded stream
+   *  so the URL can be rebuilt with a ?start= parameter. */
+  onTranscodeSeek: ((t: number) => void) | null = null;
+
   bind(el: HTMLAudioElement) {
     this.audio = el;
     el.volume = usePlayer.getState().volume;
     el.playbackRate = usePlayer.getState().playbackRate;
-    el.addEventListener("play", () => usePlayer.setState({ isPlaying: true }));
-    el.addEventListener("pause", () => usePlayer.setState({ isPlaying: false }));
-    el.addEventListener("timeupdate", () => usePlayer.getState()._syncTime(el.currentTime, el.duration));
-    el.addEventListener("loadedmetadata", () => usePlayer.getState()._syncTime(el.currentTime, el.duration));
+    el.addEventListener("play", () => usePlayer.setState({ isPlaying: true, buffering: false }));
+    el.addEventListener("pause", () => usePlayer.setState({ isPlaying: false, buffering: false }));
+    el.addEventListener("waiting", () => usePlayer.setState({ buffering: true }));
+    el.addEventListener("stalled", () => usePlayer.setState({ buffering: true }));
+    el.addEventListener("playing", () => usePlayer.setState({ buffering: false }));
+    el.addEventListener("canplay", () => usePlayer.setState({ buffering: false }));
+    const sync = () => usePlayer.getState()._syncTime(el.currentTime + this.timeOffset, el.duration);
+    el.addEventListener("timeupdate", sync);
+    el.addEventListener("loadedmetadata", sync);
     el.addEventListener("ended", () => usePlayer.getState().next(true));
   }
   play() { this.audio?.play().catch(() => {}); }
   pause() { this.audio?.pause(); }
   toggle() { if (this.audio?.paused) this.play(); else this.pause(); }
-  seek(t: number) { if (this.audio) this.audio.currentTime = t; }
+  seek(t: number) {
+    const a = this.audio;
+    if (!a) return;
+    // The transcode endpoint does not honor HTTP Range; a plain currentTime
+    // seek would restart the stream from 0. Rebuild the URL with ?start= so
+    // ffmpeg fast-seeks to the target (server kills the old process via the
+    // session id). Raw files support Range and seek natively.
+    if (this.onTranscodeSeek && a.src && a.src.includes("/files/transcode")) {
+      this.onTranscodeSeek(Math.max(0, t));
+      return;
+    }
+    a.currentTime = t;
+  }
   setVolume(v: number) { if (this.audio) { this.audio.volume = v; this.audio.muted = false; } }
   setMuted(m: boolean) { if (this.audio) this.audio.muted = m; }
   setPlaybackRate(r: number) { if (this.audio) this.audio.playbackRate = r; }
@@ -85,6 +112,7 @@ export const usePlayer = create<PlayerState>((set, get) => ({
   queue: persisted.queue,
   index: persisted.index,
   isPlaying: false,
+  buffering: false,
   shuffle: persisted.shuffle,
   repeat: persisted.repeat,
   currentTime: 0,
@@ -101,6 +129,7 @@ export const usePlayer = create<PlayerState>((set, get) => ({
 
   play: (queue, index = 0) => {
     if (!queue.length) return;
+    engine.timeOffset = 0;
     set({ queue, index: Math.max(0, Math.min(index, queue.length - 1)), isPlaying: true, currentTime: 0, duration: 0 });
     persist();
   },
@@ -118,6 +147,7 @@ export const usePlayer = create<PlayerState>((set, get) => ({
       if (repeat === "all" || !auto) ni = 0;
       else { set({ isPlaying: false }); return; }
     }
+    engine.timeOffset = 0;
     set({ index: ni, currentTime: 0, isPlaying: true });
     persist();
   },
@@ -128,11 +158,12 @@ export const usePlayer = create<PlayerState>((set, get) => ({
     if (engine.audio && currentTime > 3) { engine.seek(0); return; }
     let pi = index - 1;
     if (pi < 0) pi = queue.length - 1;
+    engine.timeOffset = 0;
     set({ index: pi, currentTime: 0, isPlaying: true });
     persist();
   },
 
-  setIndex: (i) => { set({ index: i, currentTime: 0, isPlaying: true }); persist(); },
+  setIndex: (i) => { engine.timeOffset = 0; set({ index: i, currentTime: 0, isPlaying: true }); persist(); },
 
   seek: (t) => engine.seek(t),
 

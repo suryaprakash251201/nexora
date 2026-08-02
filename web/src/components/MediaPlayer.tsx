@@ -141,6 +141,8 @@ function AudioPlayer({
   const [bgFailed, setBgFailed] = useState(false);
   const [showRates, setShowRates] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
+  const [lBuffering, setLBuffering] = useState(false);
+  const [bufferedEnd, setBufferedEnd] = useState(0);
   const [browserFs, setBrowserFs] = useState(false);
   const suppressFsExitRef = useRef(false);
   const fsWrapRef = useRef<HTMLDivElement>(null);
@@ -148,18 +150,21 @@ function AudioPlayer({
   // Smart format routing: native → lossless FLAC (desktop) → flac24 → AAC.
   // Browsers default to AAC; FLAC is the last-resort fallback.
   const [fallbackStage, setFallbackStage] = useState(-1);
+  // Transcoded streams are restarted via ?start= (no HTTP Range support).
+  const [seekStart, setSeekStart] = useState(0);
   const fallbackFormats: AudioTranscodeFormat[] = isTauri ? ["flac", "flac24", "aac"] : ["aac", "flac"];
   const sessionIdRef = useRef(generateSessionId());
 
   useEffect(() => {
     setFallbackStage(-1);
+    setSeekStart(0);
   }, [cur?.path]);
 
   const resolvedUrl = cur
     ? fallbackStage >= 0
       ? audioTranscodeUrl(cur.root_id, cur.path, {
           session: sessionIdRef.current,
-          start: 0,
+          start: seekStart > 0 ? seekStart : 0,
           format: fallbackFormats[fallbackStage],
           quality: fallbackStage === 0 && isTauri ? "lossless" : undefined,
         })
@@ -195,17 +200,27 @@ function AudioPlayer({
     const onMeta = () => setLDur(a.duration);
     const onPlay = () => setLPlaying(true);
     const onPause = () => setLPlaying(false);
+    const onWaiting = () => setLBuffering(true);
+    const onReady = () => setLBuffering(false);
     const onEnded = () => step(1);
     a.addEventListener("timeupdate", onTime);
     a.addEventListener("loadedmetadata", onMeta);
     a.addEventListener("play", onPlay);
     a.addEventListener("pause", onPause);
+    a.addEventListener("waiting", onWaiting);
+    a.addEventListener("playing", onReady);
+    a.addEventListener("canplay", onReady);
+    a.addEventListener("stalled", onWaiting);
     a.addEventListener("ended", onEnded);
     return () => {
       a.removeEventListener("timeupdate", onTime);
       a.removeEventListener("loadedmetadata", onMeta);
       a.removeEventListener("play", onPlay);
       a.removeEventListener("pause", onPause);
+      a.removeEventListener("waiting", onWaiting);
+      a.removeEventListener("playing", onReady);
+      a.removeEventListener("canplay", onReady);
+      a.removeEventListener("stalled", onWaiting);
       a.removeEventListener("ended", onEnded);
     };
   }, [url, controlled]);
@@ -238,7 +253,14 @@ function AudioPlayer({
   };
   const seek = (v: number) => {
     if (controlled) { player.seek(v); return; }
-    if (ref.current) ref.current.currentTime = v;
+    // Transcoded streams don't support HTTP Range; restart via ?start= instead.
+    const a = ref.current;
+    if (a && a.src.includes("/files/transcode")) {
+      setSeekStart(Math.max(0, v));
+      setLCur(v);
+      return;
+    }
+    if (a) a.currentTime = v;
     setLCur(v);
   };
   const changeVol = (v: number) => {
@@ -261,12 +283,27 @@ function AudioPlayer({
   };
 
   const playing = controlled ? isPlaying : lPlaying;
+  const buffering = controlled ? player.buffering : lBuffering;
   const curTime = controlled ? curT : lCur;
   const duration = controlled ? durT : lDur;
   const volume = controlled ? volV : lVol;
   const muted = controlled ? mutedV : lMuted;
   const rate = controlled ? rateV : lRate;
   const pct = duration > 0 ? (curTime / duration) * 100 : 0;
+  const bufferedPct = duration > 0 ? Math.min(100, (bufferedEnd / duration) * 100) : 0;
+
+  // Track how much of the stream is buffered (for the seek-bar indicator).
+  useEffect(() => {
+    const a = controlled ? engine.audio : ref.current;
+    if (!a) return;
+    const onProgress = () => {
+      try {
+        if (a.buffered.length > 0) setBufferedEnd(a.buffered.end(a.buffered.length - 1));
+      } catch { /* ignore */ }
+    };
+    a.addEventListener("progress", onProgress);
+    return () => a.removeEventListener("progress", onProgress);
+  }, [controlled, fs, cur?.path]);
 
   const volFillStyle = (v: number, m: boolean) => {
     const pctW = (m ? 0 : v) * 100;
@@ -601,6 +638,9 @@ function AudioPlayer({
                 seek(Math.max(0, Math.min(duration || 0, x * (duration || 0))));
               }}
             >
+              {bufferedPct > 0 && (
+                <div className="absolute inset-y-0 left-0 bg-white/15 transition-all duration-300" style={{ width: `${bufferedPct}%` }} />
+              )}
               <div className="absolute inset-y-0 left-0 progress-fill" style={{ width: `${pct}%` }} />
               <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                 <div className="h-3 w-3 sm:h-4 sm:w-4 rounded-full bg-white shadow-lg" style={{ marginLeft: `${pct}%`, transform: 'translateX(-50%)' }} />
@@ -610,6 +650,15 @@ function AudioPlayer({
               <span>{fmt(curTime)}</span>
               <span>{fmt(duration)}</span>
             </div>
+            {buffering && playing && (
+              <div className="flex items-center justify-center gap-2 pt-1.5 text-[11px] font-medium text-white/60">
+                <span className="relative flex h-1.5 w-1.5">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-75" />
+                  <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-accent" />
+                </span>
+                Buffering…
+              </div>
+            )}
           </div>
 
         {/* Primary Controls */}
@@ -624,12 +673,20 @@ function AudioPlayer({
             </button>
           )}
 
-          <div className="flex items-center gap-3 sm:gap-5">
+          <div className="flex items-center gap-2 sm:gap-4">
             {multi && (
               <button onClick={() => step(-1)} className="p-2 sm:p-3 rounded-full glass-hover text-white transition-transform hover:scale-110" title="Previous">
-                <SkipBack className="h-5 w-5 sm:h-7 sm:w-7" />
+                <SkipBack className="h-5 w-5 sm:h-6 sm:w-6" />
               </button>
             )}
+
+            <button
+              onClick={() => seek(Math.max(0, curTime - 10))}
+              className="p-2 sm:p-3 rounded-full glass-hover text-white transition-transform hover:scale-110"
+              title="Back 10s (←)"
+            >
+              <Rewind className="h-4 w-4 sm:h-5 sm:w-5" />
+            </button>
 
             <button
               onClick={toggle}
@@ -639,9 +696,17 @@ function AudioPlayer({
               {playing ? <Pause className="h-7 w-7 sm:h-9 sm:w-9 fill-current" /> : <Play className="h-7 w-7 sm:h-9 sm:w-9 translate-x-1 fill-current" />}
             </button>
 
+            <button
+              onClick={() => seek(Math.min(duration || 0, curTime + 10))}
+              className="p-2 sm:p-3 rounded-full glass-hover text-white transition-transform hover:scale-110"
+              title="Forward 10s (→)"
+            >
+              <FastForward className="h-4 w-4 sm:h-5 sm:w-5" />
+            </button>
+
             {multi && (
               <button onClick={() => step(1)} className="p-2 sm:p-3 rounded-full glass-hover text-white transition-transform hover:scale-110" title="Next">
-                <SkipForward className="h-5 w-5 sm:h-7 sm:w-7" />
+                <SkipForward className="h-5 w-5 sm:h-6 sm:w-6" />
               </button>
             )}
           </div>
@@ -716,10 +781,47 @@ function AudioPlayer({
           </div>
 
           {cur && (
+            <button
+              onClick={() => startDownload(cur.root_id, cur.path, cur.name)}
+              className="p-2.5 rounded-full glass-hover text-white/80 hover:text-white transition-transform hover:scale-110"
+              title="Download file"
+            >
+              <Download className="h-5 w-5" />
+            </button>
+          )}
+          {isTauri && cur && (
+            <button
+              onClick={async () => {
+                try {
+                  const { open } = await import("@tauri-apps/plugin-shell");
+                  await open(rawUrl(cur.root_id, cur.path));
+                } catch (e) {
+                  console.error("Failed to open externally:", e);
+                }
+              }}
+              className="p-2.5 rounded-full glass-hover text-white/80 hover:text-white transition-transform hover:scale-110"
+              title="Open in native player"
+            >
+              <ExternalLink className="h-5 w-5" />
+            </button>
+          )}
+          {cur && (
             <AddToPlaylistMenu items={[cur]} className="p-2.5 rounded-full glass-hover text-white/80 hover:text-white transition-transform hover:scale-110">
               <Plus className="h-5 w-5" />
             </AddToPlaylistMenu>
           )}
+          </div>
+
+          {/* Keyboard shortcut hints */}
+          <div className="absolute bottom-4 inset-x-0 z-20 flex justify-center px-4">
+            <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 rounded-full bg-black/30 px-4 py-1.5 text-[10px] font-medium tracking-wide text-white/40 backdrop-blur-sm">
+              <span><b className="text-white/60">Space</b> Play</span>
+              <span><b className="text-white/60">←/→</b> Seek</span>
+              <span><b className="text-white/60">↑/↓</b> Vol</span>
+              <span><b className="text-white/60">M</b> Mute</span>
+              <span><b className="text-white/60">F</b> Fullscreen</span>
+              <span><b className="text-white/60">Esc</b> Exit</span>
+            </div>
           </div>
         </div>
       </div>

@@ -17,7 +17,7 @@ import {
 import type { FileItem } from "../api/types";
 import { usePlayer, engine } from "../store/player";
 import { useShallow } from "zustand/react/shallow";
-import { thumbUrl, rawUrl, audioTranscodeUrl, generateSessionId, serverSupportsTranscode, isLosslessExtension, isTauriRuntime } from "../lib/preview";
+import { thumbUrl, rawUrl, audioTranscodeUrl, generateSessionId, serverSupportsTranscode, isLosslessExtension, isTauriRuntime, getAudioQuality } from "../lib/preview";
 import type { AudioTranscodeFormat } from "../lib/preview";
 import { AudioInfoPanel, EqualizerBars } from "./LosslessPlayer";
 import MediaPlayer from "./MediaPlayer";
@@ -45,10 +45,11 @@ function Cover({ item }: { item: FileItem | null }) {
 export default function PlayerBar() {
   const audioRef = useRef<HTMLAudioElement>(null);
   const bound = useRef(false);
-  const { current, isPlaying, volume, muted, primaryOpen, currentTime, duration, queueLength, index, shuffle, repeat } = usePlayer(
+  const { current, isPlaying, buffering, volume, muted, primaryOpen, currentTime, duration, queueLength, index, shuffle, repeat } = usePlayer(
     useShallow((s) => ({
       current: s.current(),
       isPlaying: s.isPlaying,
+      buffering: s.buffering,
       volume: s.volume,
       muted: s.muted,
       primaryOpen: s.primaryOpen,
@@ -108,19 +109,43 @@ export default function PlayerBar() {
   // Browsers stay on the small AAC default and only try FLAC as a last resort
   // (Chromium/WebKit decode FLAC-in-MP4 natively, so it always plays).
   const [fallbackStage, setFallbackStage] = useState(-1);
+  const [seekStart, setSeekStart] = useState(0);
   const fallbackFormats: AudioTranscodeFormat[] = isTauriRuntime() ? ["flac", "flac24", "aac"] : ["aac", "flac"];
   const sessionIdRef = useRef(generateSessionId());
 
-  // Reset fallback when the track changes
+  // Reset fallback + transcode seek state when the track changes, and
+  // pre-route codecs the webview cannot decode natively (ALAC, WMA, …)
+  // straight to the transcode pipeline instead of failing on the raw stream
+  // first — that removes a full error round-trip from start latency.
   useEffect(() => {
     setFallbackStage(-1);
+    setSeekStart(0);
+    engine.timeOffset = 0;
+    if (!current) return;
+    if (getAudioQuality(current).needsTranscode) {
+      serverSupportsTranscode().then((supp) => {
+        if (supp) setFallbackStage(0);
+      });
+    }
   }, [current?.path]);
+
+  // Transcoded streams can't be seeked via HTTP Range; route seeks through a
+  // ?start= URL rebuild so ffmpeg fast-seeks to the target.
+  useEffect(() => {
+    engine.onTranscodeSeek = (t) => {
+      engine.timeOffset = t;
+      setSeekStart(t);
+    };
+    return () => {
+      engine.onTranscodeSeek = null;
+    };
+  }, []);
 
   const url = current
     ? fallbackStage >= 0
       ? audioTranscodeUrl(current.root_id, current.path, {
           session: sessionIdRef.current,
-          start: 0,
+          start: seekStart > 0 ? seekStart : 0,
           format: fallbackFormats[fallbackStage],
           quality: fallbackStage === 0 && isTauriRuntime() ? "lossless" : undefined,
         })
@@ -141,6 +166,9 @@ export default function PlayerBar() {
       return;
     }
     a.src = url;
+    // Preload aggressively only once playing; while paused, metadata alone
+    // warms the connection without downloading a large file in the background.
+    a.preload = usePlayer.getState().isPlaying ? "auto" : "metadata";
     a.load();
     if (usePlayer.getState().isPlaying) a.play().catch(() => {});
   }, [url]);
@@ -148,14 +176,32 @@ export default function PlayerBar() {
   useEffect(() => {
     const a = audioRef.current;
     if (!a) return;
-    if (isPlaying) a.play().catch(() => {});
-    else a.pause();
+    if (isPlaying) {
+      a.preload = "auto";
+      a.play().catch(() => {});
+    } else a.pause();
   }, [isPlaying]);
 
   const stop = () => {
     engine.pause();
+    engine.timeOffset = 0;
     usePlayer.setState({ queue: [], index: -1, isPlaying: false, currentTime: 0, duration: 0 });
   };
+
+  // Buffered-range end (for the progress-bar indicator).
+  const [bufferedEnd, setBufferedEnd] = useState(0);
+  useEffect(() => {
+    const a = audioRef.current;
+    if (!a) return;
+    const onProgress = () => {
+      try {
+        if (a.buffered.length > 0) setBufferedEnd(a.buffered.end(a.buffered.length - 1));
+      } catch { /* ignore */ }
+    };
+    a.addEventListener("progress", onProgress);
+    return () => a.removeEventListener("progress", onProgress);
+  }, []);
+  const bufferedPct = duration > 0 ? Math.min(100, (bufferedEnd / duration) * 100) : 0;
 
   const handleError = (e: React.SyntheticEvent<HTMLAudioElement, Event>) => {
     const target = e.target as HTMLAudioElement;
@@ -178,7 +224,7 @@ export default function PlayerBar() {
 
   return (
     <>
-      <audio ref={audioRef} preload="none" playsInline webkit-playsinline="true" onError={handleError} />
+      <audio ref={audioRef} preload="auto" playsInline webkit-playsinline="true" onError={handleError} />
 
       {hasActivePlayer && showMini && !expanded && (
         <div className="fixed bottom-32 md:bottom-6 left-1/2 -translate-x-1/2 z-[60] w-[calc(100%-2rem)] max-w-lg pointer-events-none">
@@ -200,10 +246,15 @@ export default function PlayerBar() {
                     <EqualizerBars analyser={null} isPlaying={isPlaying} bars={3} className="h-3 w-6" />
                   )}
                 </div>
-                <p className="truncate text-[10px] font-medium text-content-muted mt-0.5">
+                <p className="truncate text-[10px] font-medium text-content-muted mt-0.5 flex items-center gap-1.5">
                   {queueLength > 1 && `Track ${index + 1} / ${queueLength}`}
                   {queueLength > 1 && isPlaying ? ' · ' : ''}
-                  {isPlaying ? 'Now Playing' : 'Paused'}
+                  {isPlaying && buffering ? (
+                    <span className="inline-flex items-center gap-1 text-accent animate-pulse">
+                      <span className="h-1 w-1 rounded-full bg-accent" />
+                      Buffering…
+                    </span>
+                  ) : isPlaying ? 'Now Playing' : 'Paused'}
                 </p>
               </div>
 
@@ -290,6 +341,9 @@ export default function PlayerBar() {
 
             <div className="mt-2">
               <div className="relative h-1.5 rounded-full bg-white/20 overflow-hidden cursor-pointer group">
+                {bufferedPct > 0 && (
+                  <div className="absolute inset-y-0 left-0 bg-white/15 transition-all duration-300" style={{ width: `${bufferedPct}%` }} />
+                )}
                 <div className="absolute inset-y-0 left-0 progress-fill" style={{ width: `${pct}%` }} />
                 <input
                   type="range"
