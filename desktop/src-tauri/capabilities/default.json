@@ -15,6 +15,14 @@
     "window-state:default",
     "shell:allow-open",
     {
+      "identifier": "fs:allow-stat",
+      "allow": [{ "path": "**" }]
+    },
+    {
+      "identifier": "fs:allow-read-file",
+      "allow": [{ "path": "**" }]
+    },
+    {
       "identifier": "shell:allow-execute",
       "allow": [
         {

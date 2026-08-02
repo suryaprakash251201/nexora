@@ -30,9 +30,6 @@
     }
   },
   "plugins": {
-    "fs": {
-      "scope": ["**"]
-    },
     "updater": {
       "endpoints": [
         "https://github.com/suryaprakash251201/nexora/releases/latest/download/updater.json"

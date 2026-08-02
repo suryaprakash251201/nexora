@@ -24,12 +24,21 @@ async function ensurePlugins() {
   initPromise = (async () => {
     try {
       // ── Window state ────────────────────────────────────────
-      // The window-state plugin handles restore+save automatically.
-      // We just call restoreStateCurrent() once on startup.
-      const { restoreStateCurrent } = await import(
+      // Restore size/position/etc. but NEVER restore a hidden window:
+      // if the previous session hid the window to the tray and quit, the
+      // saved state contains visible=false, which would make the app start
+      // with no visible window ("app won't open").
+      const { restoreStateCurrent, StateFlags } = await import(
         "@tauri-apps/plugin-window-state"
       );
-      await restoreStateCurrent().catch(() => {});
+      await restoreStateCurrent(StateFlags.ALL & ~StateFlags.VISIBLE).catch(() => {});
+
+      // Guarantee the window is visible and focused on every launch.
+      const { getCurrentWindow } = await import("@tauri-apps/api/window");
+      const win = getCurrentWindow();
+      await win.show().catch(() => {});
+      await win.unminimize().catch(() => {});
+      await win.setFocus().catch(() => {});
 
       // ── Global shortcuts ────────────────────────────────────
       const { register } = await import(
@@ -67,6 +76,24 @@ async function ensurePlugins() {
       // ── System tray: Play / Pause toggles the audio player ──
       await listen("nexora:tray-play-pause", () => {
         usePlayer.getState().toggle();
+      }).catch(() => {});
+
+      // ── Window hidden to tray: notify once so users know it's still alive ──
+      let trayNotified = false;
+      await listen("nexora:hidden-to-tray", () => {
+        if (trayNotified) return;
+        trayNotified = true;
+        void nativeNotify(
+          "Nexora is still running",
+          "Playback continues in the system tray. Click the tray icon or relaunch the app to bring it back."
+        );
+      }).catch(() => {});
+
+      // ── Safety net: a second launch asked us to show the window ──
+      await listen("nexora:show-window", () => {
+        win.show();
+        win.unminimize();
+        win.setFocus();
       }).catch(() => {});
     } catch (e) {
       // Plugins are only available in Tauri — fail gracefully in browser

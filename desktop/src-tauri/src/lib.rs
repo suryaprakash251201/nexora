@@ -187,10 +187,10 @@ pub fn run() {
         ))
         .plugin(tauri_plugin_window_state::Builder::new().build())
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            // Focus the existing window when a second instance is launched
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.set_focus();
-            }
+            // A second instance was launched (e.g. user clicked the launcher
+            // again). Bring the existing window back to the foreground —
+            // including the case where it is currently hidden in the tray.
+            show_main_window(app);
         }))
 
         // ── Custom commands ──────────────────────────────────────
@@ -214,6 +214,9 @@ pub fn run() {
                     if TRAY_READY.load(Ordering::SeqCst) {
                         // Hide to tray so playback and transfers keep running.
                         let _ = window.hide();
+                        // Tell the frontend to notify the user that the app is
+                        // still alive (avoids the "did it close?" confusion).
+                        let _ = app.emit("nexora:hidden-to-tray", ());
                         api.prevent_close();
                     } else {
                         let _ = app.emit("nexora:app-closing", ());
