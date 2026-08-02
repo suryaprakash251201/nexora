@@ -1,5 +1,8 @@
+import { Platform } from "react-native";
+
 /**
- * Nexora mobile theme — mirrors the web app's dark palette (index.css).
+ * Nexora mobile theme — mirrors the web app's dark palette (index.css)
+ * with a richer token set for depth, elevation and focus states.
  */
 export const colors = {
   bg: "#090B12",
@@ -17,6 +20,24 @@ export const colors = {
   warning: "#FBBF24",
   success: "#22C55E",
   grid: "rgba(255,255,255,0.07)",
+  // Secondary accents used for media kinds / data viz.
+  purple: "#A78BFA",
+  teal: "#2DD4BF",
+  cyan: "#35D3FF",
+  orange: "#F97316",
+  amber: "#FBBF24",
+  green: "#22C55E",
+  blue: "#3B82F6",
+  red: "#EF4444",
+};
+
+/** Gradient stops used across the app (brand, buttons, player). */
+export const gradients = {
+  brand: ["#5B8CFF", "#7C5BFF"] as const,
+  brandDeep: ["#4A6FE0", "#6A4AE0"] as const,
+  hero: ["rgba(91,140,255,0.22)", "rgba(124,91,255,0.10)", "transparent"] as const,
+  player: ["#1B2240", "#11131E"] as const,
+  danger: ["#EF4444", "#B91C1C"] as const,
 };
 
 export const spacing = {
@@ -25,12 +46,14 @@ export const spacing = {
   md: 12,
   lg: 16,
   xl: 24,
+  xxl: 32,
 };
 
 export const radius = {
   sm: 6,
   md: 10,
   lg: 14,
+  xl: 20,
   pill: 999,
 };
 
@@ -40,4 +63,31 @@ export const font = {
   md: 15,
   lg: 17,
   xl: 22,
+  xxl: 28,
 };
+
+export const shadow = Platform.select({
+  ios: {
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 12,
+  },
+  android: {
+    elevation: 6,
+  },
+  default: {},
+}) as Record<string, unknown>;
+
+export const shadowSm = Platform.select({
+  ios: {
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+  },
+  android: {
+    elevation: 3,
+  },
+  default: {},
+}) as Record<string, unknown>;

@@ -1,5 +1,5 @@
 import React from "react";
-import { ActivityIndicator, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { NavigationContainer, DefaultTheme } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
@@ -8,7 +8,9 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { SessionProvider, useSession } from "./src/store/SessionContext";
-import { colors } from "./src/theme";
+import { colors, gradients } from "./src/theme";
+import { AppIcon } from "./src/components/AppIcon";
+import { LinearGradient } from "expo-linear-gradient";
 import type { RootStackParamList, MainTabParamList } from "./src/navigation/types";
 
 import LoginScreen from "./src/screens/LoginScreen";
@@ -33,6 +35,11 @@ const navTheme = {
   },
 };
 
+const tabIcon =
+  (active: string, inactive: string) =>
+  ({ focused, color, size }: { focused: boolean; color: string; size: number }) =>
+    <MaterialCommunityIcons name={(focused ? active : inactive) as any} size={size} color={color} />;
+
 function MainTabs() {
   return (
     <Tabs.Navigator
@@ -40,9 +47,11 @@ function MainTabs() {
         headerStyle: { backgroundColor: colors.surface },
         headerTintColor: colors.content,
         headerTitleStyle: { fontWeight: "700" },
-        tabBarStyle: { backgroundColor: colors.surface, borderTopColor: colors.border },
+        headerShadowVisible: false,
+        tabBarStyle: { backgroundColor: colors.surface, borderTopColor: colors.border, borderTopWidth: StyleSheet.hairlineWidth },
         tabBarActiveTintColor: colors.accent,
         tabBarInactiveTintColor: colors.muted,
+        tabBarLabelStyle: { fontWeight: "600", fontSize: 11 },
       }}
     >
       <Tabs.Screen
@@ -50,15 +59,16 @@ function MainTabs() {
         component={HomeScreen}
         options={{
           title: "Storage",
-          tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="server" size={size} color={color} />,
+          headerShown: false,
+          tabBarIcon: tabIcon("server", "server-outline"),
         }}
       />
       <Tabs.Screen
         name="Recents"
         component={RecentsScreen}
         options={{
-          title: "Recents & Search",
-          tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="clock-outline" size={size} color={color} />,
+          title: "Recents",
+          tabBarIcon: tabIcon("clock", "clock-outline"),
         }}
       />
       <Tabs.Screen
@@ -66,10 +76,26 @@ function MainTabs() {
         component={SettingsScreen}
         options={{
           title: "Settings",
-          tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="cog-outline" size={size} color={color} />,
+          tabBarIcon: tabIcon("cog", "cog-outline"),
         }}
       />
     </Tabs.Navigator>
+  );
+}
+
+function Splash() {
+  return (
+    <LinearGradient colors={[...gradients.brandDeep]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.splash}>
+      <View style={styles.splashInner}>
+        <View style={styles.splashMark}>
+          <MaterialCommunityIcons name="server" size={44} color="#fff" />
+        </View>
+        <View style={styles.splashText}>
+          <View style={styles.splashBar} />
+          <View style={[styles.splashBar, { width: 120 }]} />
+        </View>
+      </View>
+    </LinearGradient>
   );
 }
 
@@ -77,11 +103,7 @@ function Root() {
   const { user, booting, api } = useSession();
 
   if (booting) {
-    return (
-      <View style={styles.splash}>
-        <ActivityIndicator size="large" color={colors.accent} />
-      </View>
-    );
+    return <Splash />;
   }
 
   if (!user || !api) {
@@ -94,6 +116,7 @@ function Root() {
         headerStyle: { backgroundColor: colors.surface },
         headerTintColor: colors.content,
         headerTitleStyle: { fontWeight: "700" },
+        headerShadowVisible: false,
         contentStyle: { backgroundColor: colors.bg },
       }}
     >
@@ -118,5 +141,18 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-  splash: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.bg },
+  splash: { flex: 1, alignItems: "center", justifyContent: "center" },
+  splashInner: { alignItems: "center", gap: 24 },
+  splashMark: {
+    width: 88,
+    height: 88,
+    borderRadius: 24,
+    backgroundColor: "rgba(255,255,255,0.16)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.25)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  splashText: { alignItems: "center", gap: 8 },
+  splashBar: { width: 160, height: 10, borderRadius: 5, backgroundColor: "rgba(255,255,255,0.35)" },
 });
