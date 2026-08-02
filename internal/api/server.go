@@ -70,7 +70,6 @@ func (s *Server) Routes() http.Handler {
 		"/api/v1/auth/forgot-password", "/api/v1/auth/reset-password",
 		"/api/v1/auth/totp/verify-login",
 		"/api/v1/share", "/api/v1/csrf",
-		"/api/v1/files/upload",
 	}
 
 	r.Use(middleware.RequestID)

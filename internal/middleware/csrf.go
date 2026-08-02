@@ -23,7 +23,7 @@ func CSRF(exemptPrefixes []string, secure bool) func(http.Handler) http.Handler 
 				setCSRFCookie(w, token, secure)
 			}
 
-			if isUnsafeMethod(r.Method) && !isExempt(r.URL.Path, exemptPrefixes) {
+			if isUnsafeMethod(r.Method) && !isExempt(r.URL.Path, exemptPrefixes) && !isBearerAuth(r) {
 				header := r.Header.Get("X-CSRF-Token")
 				if header == "" || !constantTimeEqual(header, token) {
 					w.Header().Set("Content-Type", "application/json")
@@ -43,6 +43,16 @@ func isUnsafeMethod(m string) bool {
 		return true
 	}
 	return false
+}
+
+// isBearerAuth reports whether the request carries a token-based credential
+// (Authorization: Bearer ...). Cross-origin requests and desktop/Tailscale
+// clients authenticate with a bearer token instead of a cookie. Because
+// browsers never automatically attach a bearer token to cross-site requests,
+// token-authenticated requests are inherently CSRF-immune and do not need the
+// double-submit cookie check.
+func isBearerAuth(r *http.Request) bool {
+	return strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ")
 }
 
 func isExempt(path string, exempt []string) bool {

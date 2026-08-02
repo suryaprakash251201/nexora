@@ -19,7 +19,7 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        VERSION: "1.7.2"
+        VERSION: "${NEXORA_VERSION:-1.7.2}"
     image: nexora:latest
     container_name: nexora
     restart: unless-stopped
@@ -35,9 +35,11 @@ services:
       NEXORA_THUMBNAIL_CACHE_DIR: /app/data/cache/thumbnails
       NEXORA_WEB_ROOT: /app/web
       NEXORA_LISTEN_ADDR: ":80"
-      NEXORA_CORS_ORIGINS: "http://tauri.localhost,tauri://localhost,https://tauri.localhost,http://localhost:5173,https://pms2.tail58d7ea.ts.net,http://pms2.tail58d7ea.ts.net,http://100.67.251.1:80"
+      # CORS origins come from .env (set NEXORA_CORS_ORIGINS there); compose
+      # falls back to a neutral localhost default.
+      NEXORA_CORS_ORIGINS: "${NEXORA_CORS_ORIGINS:-http://localhost:5173}"
     ports:
-      - "80:80"
+      - "${NEXORA_HTTP_PORT:-80}:80"
     volumes:
       # Persistent application data (SQLite DB, config, cache).
       - nexora-data:/app/data
@@ -46,8 +48,10 @@ services:
       - ./data/media:/mnt/media:ro
       - ./data/backups:/mnt/backups
       - ./data/shared:/mnt/shared
-      - /data:/mnt/data
-      - /home/suryaprakash/Docker/nexora:/mnt/project:ro
+      # Optional machine-specific mounts (override via NEXORA_MOUNT_DATA /
+      # NEXORA_PROJECT_DIR in .env).
+      - ${NEXORA_MOUNT_DATA:-/data}:/mnt/data
+      - ${NEXORA_PROJECT_DIR:-/home/suryaprakash/Docker/nexora}:/mnt/project:ro
     # Read-only root filesystem with tmpfs for scratch space.
     read_only: true
     tmpfs:

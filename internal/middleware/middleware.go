@@ -66,7 +66,12 @@ func SecurityHeaders(cfg *config.Config) func(http.Handler) http.Handler {
 			h.Set("X-Content-Type-Options", "nosniff")
 			h.Set("Referrer-Policy", "same-origin")
 			h.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
-			h.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+			// HSTS is only meaningful over HTTPS. Emitting it on a plain-HTTP
+			// install would instruct browsers to refuse the site, so gate it on
+			// the HTTPS (SecureCookies) deployment flag.
+			if cfg.SecureCookies {
+				h.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+			}
 			if !strings.HasPrefix(p, "/api/") {
 				h.Set("Cache-Control", "no-store")
 			}

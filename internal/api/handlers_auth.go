@@ -170,7 +170,7 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 		Value:    "",
 		Path:     "/",
 		HttpOnly: true,
-		Secure:   true,
+		Secure:   s.Cfg.SecureCookies,
 		SameSite: http.SameSiteStrictMode,
 		MaxAge:   -1,
 	})
