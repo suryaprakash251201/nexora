@@ -1331,3 +1331,10 @@ body {
 .density-compact { --density: compact; }
 .density-comfortable { --density: comfortable; }
 .density-spacious { --density: spacious; }
+
+/* PDF reader backdrop — subtle dotted grid behind the page canvas */
+.bg-grid {
+  background-color: #0d1117;
+  background-image: radial-gradient(circle, rgba(255, 255, 255, 0.07) 1px, transparent 1px);
+  background-size: 22px 22px;
+}

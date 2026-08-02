@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from "react";
-import { X, Download, Pencil, Share2, Copy, Check, ZoomIn, ZoomOut, Maximize, Minimize, ChevronLeft, ChevronRight, Info, File, ExternalLink } from "lucide-react";
+import { X, Download, Pencil, Share2, Copy, Check, ZoomIn, ZoomOut, Maximize, Minimize, ChevronLeft, ChevronRight, Info } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { FileItem } from "../api/types";
 import { previewKind, isEditable, rawUrl, codeLanguage } from "../lib/preview";
@@ -7,9 +7,8 @@ import { startDownload } from "../lib/transfer";
 import { renderMarkdown } from "../lib/markdown";
 import { usePlayer } from "../store/player";
 import MediaPlayer from "./MediaPlayer";
+import PdfViewer from "./PdfViewer";
 import { Button } from "./ui/Button";
-
-const isTauri = "__TAURI_INTERNALS__" in window;
 import { formatBytes, formatDate } from "../lib/format";
 import { cn } from "@/lib/utils";
 
@@ -226,45 +225,8 @@ export default function PreviewModal({
             </div>
           )}
           {kind === "pdf" && (
-            <div className="w-full h-full flex flex-col items-center justify-center bg-white/5 relative">
-              <object
-                data={url}
-                type="application/pdf"
-                className="w-full h-full absolute inset-0"
-                title={current.name}
-              >
-                <div className="flex flex-col items-center justify-center p-10 text-center">
-                  <div className="h-16 w-16 rounded-full bg-surface-muted grid place-items-center mb-4">
-                    <File className="h-8 w-8 text-content-muted" />
-                  </div>
-                  <p className="text-content font-medium mb-2">PDF preview not available in browser</p>
-                  <p className="text-content-muted text-sm mb-6">Download the file to view it locally.</p>
-                  <Button
-                    variant="primary"
-                    onClick={() => startDownload(current.root_id || rootId, current.path, current.name)}
-                    icon={<Download className="h-4 w-4" />}
-                  >
-                    Download PDF
-                  </Button>
-                  {isTauri && (
-                    <Button
-                      variant="secondary"
-                      className="mt-3"
-                      onClick={async () => {
-                        try {
-                          const { open } = await import("@tauri-apps/plugin-shell");
-                          await open(url);
-                        } catch (e) {
-                          console.error("Failed to open PDF externally:", e);
-                        }
-                      }}
-                      icon={<ExternalLink className="h-4 w-4" />}
-                    >
-                      Open in System Viewer
-                    </Button>
-                  )}
-                </div>
-              </object>
+            <div className="w-full h-full flex flex-col bg-black/20">
+              <PdfViewer url={url} name={current.name} />
             </div>
           )}
           {kind === "markdown" && (
