@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -18,23 +18,31 @@ import { File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { LinearGradient } from "expo-linear-gradient";
+
 import { useSession } from "../store/SessionContext";
-import { colors, font, radius, shadow, spacing } from "../theme";
+import { useTheme } from "../store/ThemeContext";
 import { FileRow, EmptyState, ROW_HEIGHT } from "../components/FileRow";
+import { GridCard } from "../components/GridCard";
 import { BottomSheet } from "../components/BottomSheet";
-import { ListSkeleton } from "../components/Skeletons";
+import { ListSkeleton, GridCardSkeleton } from "../components/Skeletons";
+import { previewKind } from "../api/client";
 import type { FileItem, FileListResponse } from "../api/types";
 import type { RootStackParamList } from "../navigation/types";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Browser">;
 
 const PAGE = 100;
+type SortField = "name" | "size" | "modified" | "extension";
+type SortOrder = "asc" | "desc";
+type FilterCategory = "all" | "image" | "document" | "audio" | "video";
 
 const haptic = () => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
 
 export default function BrowserScreen({ route, navigation }: Props) {
   const { rootId, rootName } = route.params;
   const { api } = useSession();
+  const { colors, font, gradients, radius, spacing, shadow, shadowSm, isDark } = useTheme();
   const insets = useSafeAreaInsets();
 
   const [path, setPath] = useState(route.params.path || "");
@@ -47,7 +55,20 @@ export default function BrowserScreen({ route, navigation }: Props) {
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Sheets / dialogs.
+  // View Mode: "list" | "grid"
+  const [viewMode, setViewMode] = useState<"list" | "grid">("list");
+
+  // Selection state
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set());
+
+  // Sort & Filter state
+  const [showSortSheet, setShowSortSheet] = useState(false);
+  const [sortField, setSortField] = useState<SortField>("name");
+  const [sortOrder, setSortOrder] = useState<SortOrder>("asc");
+  const [filterCategory, setFilterCategory] = useState<FilterCategory>("all");
+
+  // Dialog Sheets
   const [actionItem, setActionItem] = useState<FileItem | null>(null);
   const [showNewFolder, setShowNewFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
@@ -55,6 +76,7 @@ export default function BrowserScreen({ route, navigation }: Props) {
   const [renameValue, setRenameValue] = useState("");
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadFilename, setUploadFilename] = useState("");
 
   const loadRef = useRef(0);
 
@@ -86,6 +108,8 @@ export default function BrowserScreen({ route, navigation }: Props) {
   );
 
   useEffect(() => {
+    setSelectMode(false);
+    setSelectedPaths(new Set());
     load(path, 0);
   }, [path, load]);
 
@@ -99,6 +123,50 @@ export default function BrowserScreen({ route, navigation }: Props) {
     setLoadingMore(true);
     load(path, offset, true);
   }, [hasMore, loadingMore, load, path, offset]);
+
+  // Process items with Sort and Category Filter
+  const processedItems = useMemo(() => {
+    let list = [...items];
+
+    // Filter
+    if (filterCategory !== "all") {
+      list = list.filter((item) => {
+        if (item.is_dir) return true; // keep folders
+        const k = previewKind(item);
+        if (filterCategory === "image") return k === "image";
+        if (filterCategory === "video") return k === "video";
+        if (filterCategory === "audio") return k === "audio";
+        if (filterCategory === "document") return ["pdf", "text", "code", "markdown"].includes(k);
+        return true;
+      });
+    }
+
+    // Sort: Folders always first, then by sortField
+    list.sort((a, b) => {
+      if (a.is_dir && !b.is_dir) return -1;
+      if (!a.is_dir && b.is_dir) return 1;
+
+      let valA: any = a.name.toLowerCase();
+      let valB: any = b.name.toLowerCase();
+
+      if (sortField === "size") {
+        valA = a.size;
+        valB = b.size;
+      } else if (sortField === "modified") {
+        valA = new Date(a.modified).getTime();
+        valB = new Date(b.modified).getTime();
+      } else if (sortField === "extension") {
+        valA = (a.extension || "").toLowerCase();
+        valB = (b.extension || "").toLowerCase();
+      }
+
+      if (valA < valB) return sortOrder === "asc" ? -1 : 1;
+      if (valA > valB) return sortOrder === "asc" ? 1 : -1;
+      return 0;
+    });
+
+    return list;
+  }, [items, sortField, sortOrder, filterCategory]);
 
   const openItem = useCallback(
     (item: FileItem) => {
@@ -116,6 +184,56 @@ export default function BrowserScreen({ route, navigation }: Props) {
     setActionItem(item);
   }, []);
 
+  // Multi-Selection Logic
+  const toggleSelect = useCallback((item: FileItem) => {
+    haptic();
+    setSelectedPaths((prev) => {
+      const next = new Set(prev);
+      if (next.has(item.path)) {
+        next.delete(item.path);
+      } else {
+        next.add(item.path);
+      }
+      return next;
+    });
+  }, []);
+
+  const selectAll = useCallback(() => {
+    if (selectedPaths.size === processedItems.length) {
+      setSelectedPaths(new Set());
+    } else {
+      setSelectedPaths(new Set(processedItems.map((i) => i.path)));
+    }
+  }, [processedItems, selectedPaths]);
+
+  // Bulk Delete
+  const handleBulkDelete = useCallback(() => {
+    if (selectedPaths.size === 0 || !api) return;
+    Alert.alert(
+      "Delete Selected",
+      `Delete ${selectedPaths.size} item${selectedPaths.size === 1 ? "" : "s"}?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              for (const itemPath of selectedPaths) {
+                await api.remove(rootId, itemPath);
+              }
+              setSelectedPaths(new Set());
+              setSelectMode(false);
+              load(path, 0);
+            } catch (e: any) {
+              Alert.alert("Delete failed", e?.message || "Something went wrong.");
+            }
+          },
+        },
+      ]
+    );
+  }, [api, path, rootId, selectedPaths, load]);
+
   // ── Upload ──────────────────────────────────────────────────────────
   const handleUpload = async () => {
     if (!api) return;
@@ -127,6 +245,7 @@ export default function BrowserScreen({ route, navigation }: Props) {
       setUploadProgress(0);
       let ok = 0;
       for (const doc of result.assets) {
+        setUploadFilename(doc.name);
         const form = new FormData();
         form.append("files", {
           uri: doc.uri,
@@ -137,17 +256,19 @@ export default function BrowserScreen({ route, navigation }: Props) {
         ok += 1;
       }
       setUploading(false);
-      Alert.alert("Upload complete", `${ok} file${ok === 1 ? "" : "s"} uploaded to ${path || rootName}.`);
+      setUploadFilename("");
+      Alert.alert("Upload complete", `${ok} file${ok === 1 ? "" : "s"} uploaded.`);
       load(path, 0);
     } catch (e: any) {
       setUploading(false);
+      setUploadFilename("");
       Alert.alert("Upload failed", e?.message || "Something went wrong.");
     } finally {
       setUploadProgress(0);
     }
   };
 
-  // ── Create folder ───────────────────────────────────────────────────
+  // ── Create Folder ───────────────────────────────────────────────────
   const handleCreateFolder = async () => {
     if (!api || !newFolderName.trim()) return;
     try {
@@ -160,7 +281,7 @@ export default function BrowserScreen({ route, navigation }: Props) {
     }
   };
 
-  // ── Rename / delete / share ─────────────────────────────────────────
+  // ── Rename / Delete / Share Single ─────────────────────────────────
   const handleRename = async () => {
     if (!api || !renameItem || !renameValue.trim()) return;
     try {
@@ -199,7 +320,7 @@ export default function BrowserScreen({ route, navigation }: Props) {
       if (!api) return;
       try {
         const target = new File(Paths.cache, "nexora-" + item.name.replace(/[^\w.\-]+/g, "_"));
-        await File.downloadFileAsync(api.rawFileUrl(item.root_id, item.path), target);
+        await File.downloadFileAsync(api.rawFileUrl(item.root_id || rootId, item.path), target);
         if (await Sharing.isAvailableAsync()) {
           await Sharing.shareAsync(target.uri);
         } else {
@@ -209,75 +330,165 @@ export default function BrowserScreen({ route, navigation }: Props) {
         Alert.alert("Download failed", e?.message || "Something went wrong.");
       }
     },
-    [api]
+    [api, rootId]
   );
 
   const breadcrumbs = path.split("/").filter(Boolean);
 
-  const renderItem = useCallback(
+  const renderListItem = useCallback(
     ({ item }: { item: FileItem }) => (
-      <FileRow
+      <View style={{ borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.borderSoft }}>
+        <FileRow
+          item={item}
+          onPress={openItem}
+          onLongPress={() => {
+            setSelectMode(true);
+            toggleSelect(item);
+          }}
+          selectMode={selectMode}
+          selected={selectedPaths.has(item.path)}
+          onSelect={toggleSelect}
+          trailing={
+            selectMode ? undefined : item.is_dir ? undefined : (
+              <TouchableOpacity onPress={() => showActions(item)} hitSlop={10} style={[styles.moreHit, { backgroundColor: colors.card }]}>
+                <MaterialCommunityIcons name="dots-vertical" size={20} color={colors.content} />
+              </TouchableOpacity>
+            )
+          }
+        />
+      </View>
+    ),
+    [colors, openItem, selectMode, selectedPaths, showActions, toggleSelect]
+  );
+
+  const renderGridItem = useCallback(
+    ({ item }: { item: FileItem }) => (
+      <GridCard
         item={item}
+        rawUrl={api && previewKind(item) === "image" ? api.rawFileUrl(item.root_id || rootId, item.path) : undefined}
         onPress={openItem}
-        onLongPress={showActions}
-        trailing={
-          item.is_dir ? undefined : (
-            <TouchableOpacity onPress={() => showActions(item)} hitSlop={10} style={styles.moreHit}>
-              <MaterialCommunityIcons name="dots-horizontal" size={22} color={colors.muted} />
-            </TouchableOpacity>
-          )
-        }
+        onLongPress={() => {
+          setSelectMode(true);
+          toggleSelect(item);
+        }}
+        onMorePress={showActions}
+        selectMode={selectMode}
+        selected={selectedPaths.has(item.path)}
+        onSelect={toggleSelect}
       />
     ),
-    [openItem, showActions]
+    [api, openItem, rootId, selectMode, selectedPaths, showActions, toggleSelect]
   );
 
   return (
-    <View style={styles.root}>
-      {/* Breadcrumb */}
-      <View style={styles.crumbs}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.crumbsInner}>
-          <TouchableOpacity onPress={() => setPath("")}>
-            <Text style={[styles.crumb, path === "" && styles.crumbActive]}>{rootName}</Text>
+    <View style={[styles.root, { backgroundColor: colors.bg }]}>
+      {/* Selection Mode Header or Breadcrumb Header */}
+      {selectMode ? (
+        <View style={[styles.selectionBar, { backgroundColor: colors.surfaceElevated, borderColor: colors.borderSoft }, shadowSm]}>
+          <TouchableOpacity onPress={() => { setSelectMode(false); setSelectedPaths(new Set()); }}>
+            <MaterialCommunityIcons name="close" size={24} color={colors.content} />
           </TouchableOpacity>
-          {breadcrumbs.map((seg, i) => {
-            const segPath = breadcrumbs.slice(0, i + 1).join("/");
-            const isLast = i === breadcrumbs.length - 1;
-            return (
-              <React.Fragment key={segPath}>
-                <Text style={styles.crumbSep}>/</Text>
-                <TouchableOpacity onPress={() => !isLast && setPath(segPath)} disabled={isLast}>
-                  <Text style={[styles.crumb, isLast && styles.crumbActive]} numberOfLines={1}>
-                    {seg}
-                  </Text>
-                </TouchableOpacity>
-              </React.Fragment>
-            );
-          })}
-        </ScrollView>
-        {!loading && total > 0 ? <Text style={styles.count}>{total}</Text> : null}
-      </View>
+          <Text style={[styles.selectionTitle, { color: colors.content, fontSize: font.md }]}>
+            {selectedPaths.size} selected
+          </Text>
+          <TouchableOpacity onPress={selectAll} style={[styles.selectionPill, { backgroundColor: colors.card }]}>
+            <Text style={{ color: colors.accent, fontSize: font.xs, fontWeight: "700" }}>
+              {selectedPaths.size === processedItems.length ? "Deselect All" : "Select All"}
+            </Text>
+          </TouchableOpacity>
+          {selectedPaths.size > 0 && (
+            <TouchableOpacity onPress={handleBulkDelete} style={[styles.selectionDeleteBtn, { backgroundColor: "rgba(239,68,68,0.15)" }]}>
+              <MaterialCommunityIcons name="delete" size={18} color={colors.danger} />
+            </TouchableOpacity>
+          )}
+        </View>
+      ) : (
+        <View style={styles.crumbsContainer}>
+          <View style={[styles.crumbsCard, { backgroundColor: colors.surfaceElevated }, shadowSm]}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.crumbsInner}>
+              <TouchableOpacity
+                onPress={() => setPath("")}
+                style={[styles.crumbPill, path === "" && { backgroundColor: colors.card }, shadowSm]}
+              >
+                <MaterialCommunityIcons name="folder-home" size={16} color={path === "" ? colors.accent : colors.muted} />
+                <Text style={[styles.crumb, { color: path === "" ? colors.accent : colors.muted, fontSize: font.sm }]}>
+                  {rootName}
+                </Text>
+              </TouchableOpacity>
 
+              {breadcrumbs.map((seg, i) => {
+                const segPath = breadcrumbs.slice(0, i + 1).join("/");
+                const isLast = i === breadcrumbs.length - 1;
+                return (
+                  <React.Fragment key={segPath}>
+                    <MaterialCommunityIcons name="chevron-right" size={16} color={colors.muted} style={{ opacity: 0.5 }} />
+                    <TouchableOpacity
+                      onPress={() => !isLast && setPath(segPath)}
+                      disabled={isLast}
+                      style={[styles.crumbPill, isLast && { backgroundColor: colors.card }, shadowSm]}
+                    >
+                      <Text style={[styles.crumb, { color: isLast ? colors.accent : colors.muted, fontSize: font.sm }]} numberOfLines={1}>
+                        {seg}
+                      </Text>
+                    </TouchableOpacity>
+                  </React.Fragment>
+                );
+              })}
+            </ScrollView>
+
+            {!loading && total > 0 ? (
+              <View style={[styles.countBadge, { backgroundColor: colors.accentSoft }]}>
+                <MaterialCommunityIcons name="file-multiple" size={12} color={colors.accent} />
+                <Text style={[styles.count, { color: colors.accent, fontSize: font.xs }]}>{processedItems.length}</Text>
+              </View>
+            ) : null}
+          </View>
+        </View>
+      )}
+
+      {/* File List / Grid View */}
       <FlatList
-        data={items}
+        key={viewMode}
+        data={processedItems}
         keyExtractor={(it) => it.path}
-        renderItem={renderItem}
-        getItemLayout={(_, index) => ({ length: ROW_HEIGHT, offset: ROW_HEIGHT * index, index })}
+        numColumns={viewMode === "grid" ? 2 : 1}
+        renderItem={viewMode === "grid" ? renderGridItem : renderListItem}
+        getItemLayout={viewMode === "list" ? (_, index) => ({ length: ROW_HEIGHT, offset: ROW_HEIGHT * index, index }) : undefined}
         initialNumToRender={16}
         maxToRenderPerBatch={12}
         windowSize={7}
-        updateCellsBatchingPeriod={40}
-        contentContainerStyle={{ paddingBottom: 140 }}
+        contentContainerStyle={{ paddingBottom: 140, paddingHorizontal: viewMode === "grid" ? 6 : 0 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={colors.accent} />}
         ListEmptyComponent={
           loading ? (
-            <ListSkeleton rows={9} />
+            viewMode === "grid" ? (
+              <View style={{ flexDirection: "row", flexWrap: "wrap", padding: 6 }}>
+                <GridCardSkeleton />
+                <GridCardSkeleton />
+                <GridCardSkeleton />
+                <GridCardSkeleton />
+              </View>
+            ) : (
+              <ListSkeleton rows={9} />
+            )
           ) : (
-            <EmptyState
-              icon={error ? "alert-circle-outline" : "folder-open-outline"}
-              title={error || "This folder is empty"}
-              hint={error ? "Pull down to retry." : "Use the upload button to add files."}
-            />
+            <View style={styles.emptyContainer}>
+              <View style={[styles.emptyCard, { backgroundColor: colors.surfaceElevated }, shadowSm]}>
+                <EmptyState
+                  icon={error ? "alert-circle-outline" : "folder-open-outline"}
+                  title={error || "This folder is empty"}
+                  hint={error ? "Pull down to retry." : "Use the upload button below to add files."}
+                />
+                {!error && (
+                  <TouchableOpacity onPress={handleUpload} style={styles.emptyUploadBtn}>
+                    <LinearGradient colors={[...gradients.brand]} style={styles.emptyUploadGradient}>
+                      <MaterialCommunityIcons name="upload" size={20} color="#fff" />
+                      <Text style={styles.emptyUploadText}>Upload File</Text>
+                    </LinearGradient>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
           )
         }
         onEndReached={loadMore}
@@ -285,37 +496,136 @@ export default function BrowserScreen({ route, navigation }: Props) {
         ListFooterComponent={loadingMore ? <ActivityIndicator style={{ marginVertical: 16 }} color={colors.accent} /> : null}
       />
 
-      {/* Floating action bar */}
-      <View style={[styles.actions, { bottom: insets.bottom + 18 }]}>
-        <TouchableOpacity style={styles.actionBtn} onPress={() => setShowNewFolder(true)}>
-          <MaterialCommunityIcons name="folder-plus-outline" size={20} color={colors.content} />
-          <Text style={styles.actionText}>Folder</Text>
+      {/* Floating Action Menu Bar */}
+      <View style={[styles.actions, { bottom: insets.bottom + 18, backgroundColor: colors.surfaceElevated, borderColor: colors.border }, shadow]}>
+        {/* View Mode Toggle */}
+        <TouchableOpacity
+          style={[styles.actionCircleBtn, { backgroundColor: colors.card }]}
+          onPress={() => {
+            haptic();
+            setViewMode(viewMode === "list" ? "grid" : "list");
+          }}
+        >
+          <MaterialCommunityIcons name={viewMode === "list" ? "view-grid-outline" : "format-list-bulleted"} size={20} color={colors.content} />
         </TouchableOpacity>
-        <TouchableOpacity style={[styles.actionBtn, styles.actionBtnRefresh]} onPress={refresh}>
-          <MaterialCommunityIcons name="refresh" size={20} color={colors.content} />
-          <Text style={styles.actionText}>Refresh</Text>
+
+        {/* Sort & Filter Trigger */}
+        <TouchableOpacity
+          style={[styles.actionCircleBtn, { backgroundColor: colors.card }]}
+          onPress={() => {
+            haptic();
+            setShowSortSheet(true);
+          }}
+        >
+          <MaterialCommunityIcons name="sort-variant" size={20} color={colors.content} />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.uploadBtn} onPress={handleUpload} disabled={uploading}>
-          {uploading ? (
-            <ActivityIndicator color="#fff" size="small" />
-          ) : (
-            <MaterialCommunityIcons name="upload" size={20} color="#fff" />
-          )}
-          <Text style={styles.uploadText}>Upload</Text>
+
+        {/* New Folder */}
+        <TouchableOpacity style={[styles.actionBtnElevated, { backgroundColor: colors.card }, shadowSm]} onPress={() => setShowNewFolder(true)}>
+          <MaterialCommunityIcons name="folder-plus-outline" size={18} color={colors.content} />
+          <Text style={[styles.actionText, { color: colors.content, fontSize: font.sm }]}>Folder</Text>
+        </TouchableOpacity>
+
+        {/* Primary Upload Button */}
+        <TouchableOpacity style={[styles.uploadBtnContainer, shadowSm]} onPress={handleUpload} disabled={uploading}>
+          <LinearGradient colors={[...gradients.brand]} style={styles.uploadGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+            {uploading ? (
+              <ActivityIndicator color="#fff" size="small" />
+            ) : (
+              <MaterialCommunityIcons name="upload" size={18} color="#fff" />
+            )}
+            <Text style={styles.uploadText}>Upload</Text>
+          </LinearGradient>
         </TouchableOpacity>
       </View>
 
-      {/* Upload progress sheet */}
-      <BottomSheet visible={uploading} onClose={() => {}} title="Uploading…">
-        <View style={styles.progressWrap}>
-          <View style={styles.progressTrack}>
-            <View style={[styles.progressFill, { width: `${uploadProgress}%` }]} />
+      {/* Sort & Filter Sheet */}
+      <BottomSheet visible={showSortSheet} onClose={() => setShowSortSheet(false)} title="Sort & Filter">
+        <View style={styles.sheetSection}>
+          <Text style={[styles.sheetSectionTitle, { color: colors.muted }]}>SORT BY</Text>
+          <View style={styles.chipRow}>
+            {(["name", "size", "modified", "extension"] as SortField[]).map((f) => (
+              <TouchableOpacity
+                key={f}
+                style={[
+                  styles.filterChip,
+                  {
+                    backgroundColor: sortField === f ? colors.accent : colors.card,
+                    borderColor: sortField === f ? colors.accent : colors.borderSoft,
+                  },
+                ]}
+                onPress={() => setSortField(f)}
+              >
+                <Text style={{ color: sortField === f ? "#fff" : colors.content, fontSize: font.xs, fontWeight: "600", textTransform: "capitalize" }}>
+                  {f === "modified" ? "Date" : f === "extension" ? "Type" : f}
+                </Text>
+              </TouchableOpacity>
+            ))}
           </View>
-          <Text style={styles.progressPct}>{uploadProgress}%</Text>
+        </View>
+
+        <View style={styles.sheetSection}>
+          <Text style={[styles.sheetSectionTitle, { color: colors.muted }]}>ORDER</Text>
+          <View style={styles.chipRow}>
+            {(["asc", "desc"] as SortOrder[]).map((o) => (
+              <TouchableOpacity
+                key={o}
+                style={[
+                  styles.filterChip,
+                  {
+                    backgroundColor: sortOrder === o ? colors.accent : colors.card,
+                    borderColor: sortOrder === o ? colors.accent : colors.borderSoft,
+                  },
+                ]}
+                onPress={() => setSortOrder(o)}
+              >
+                <Text style={{ color: sortOrder === o ? "#fff" : colors.content, fontSize: font.xs, fontWeight: "600" }}>
+                  {o === "asc" ? "Ascending A-Z" : "Descending Z-A"}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
+        <View style={styles.sheetSection}>
+          <Text style={[styles.sheetSectionTitle, { color: colors.muted }]}>FILTER CATEGORY</Text>
+          <View style={styles.chipRow}>
+            {(["all", "image", "document", "video", "audio"] as FilterCategory[]).map((c) => (
+              <TouchableOpacity
+                key={c}
+                style={[
+                  styles.filterChip,
+                  {
+                    backgroundColor: filterCategory === c ? colors.accent : colors.card,
+                    borderColor: filterCategory === c ? colors.accent : colors.borderSoft,
+                  },
+                ]}
+                onPress={() => setFilterCategory(c)}
+              >
+                <Text style={{ color: filterCategory === c ? "#fff" : colors.content, fontSize: font.xs, fontWeight: "600", textTransform: "capitalize" }}>
+                  {c}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
         </View>
       </BottomSheet>
 
-      {/* Item actions sheet */}
+      {/* Upload Progress Sheet */}
+      <BottomSheet visible={uploading} onClose={() => {}} title="Uploading…">
+        <View style={styles.progressWrap}>
+          {uploadFilename ? <Text style={[styles.progressFilename, { color: colors.content, fontSize: font.md }]} numberOfLines={1}>{uploadFilename}</Text> : null}
+          <View style={[styles.progressTrack, { backgroundColor: colors.card }]}>
+            <View style={[styles.progressFill, { width: `${uploadProgress}%`, backgroundColor: colors.accent }]} />
+          </View>
+          <View style={styles.progressFooter}>
+            <Text style={[styles.progressPctText, { color: colors.muted, fontSize: font.sm }]}>Uploading file</Text>
+            <Text style={[styles.progressPctValue, { color: colors.content, fontSize: font.sm }]}>{uploadProgress}%</Text>
+          </View>
+        </View>
+      </BottomSheet>
+
+      {/* Item Action Sheet */}
       <BottomSheet
         visible={actionItem !== null}
         onClose={() => setActionItem(null)}
@@ -342,10 +652,10 @@ export default function BrowserScreen({ route, navigation }: Props) {
         ]}
       />
 
-      {/* New folder sheet */}
+      {/* New Folder Sheet */}
       <BottomSheet visible={showNewFolder} onClose={() => setShowNewFolder(false)} title="New folder">
         <TextInput
-          style={styles.input}
+          style={[styles.input, { backgroundColor: colors.surfaceMuted, borderColor: colors.border, color: colors.content, borderRadius: radius.md }]}
           value={newFolderName}
           onChangeText={setNewFolderName}
           placeholder="Folder name"
@@ -355,18 +665,18 @@ export default function BrowserScreen({ route, navigation }: Props) {
           selectionColor={colors.accent}
         />
         <TouchableOpacity
-          style={[styles.sheetPrimary, !newFolderName.trim() && styles.btnDisabled]}
+          style={[styles.sheetPrimary, { backgroundColor: colors.accent, borderRadius: radius.md }, !newFolderName.trim() && { opacity: 0.5 }]}
           disabled={!newFolderName.trim()}
           onPress={handleCreateFolder}
         >
-          <Text style={styles.sheetPrimaryText}>Create</Text>
+          <Text style={styles.sheetPrimaryText}>Create Folder</Text>
         </TouchableOpacity>
       </BottomSheet>
 
-      {/* Rename sheet */}
+      {/* Rename Sheet */}
       <BottomSheet visible={renameItem !== null} onClose={() => setRenameItem(null)} title="Rename">
         <TextInput
-          style={styles.input}
+          style={[styles.input, { backgroundColor: colors.surfaceMuted, borderColor: colors.border, color: colors.content, borderRadius: radius.md }]}
           value={renameValue}
           onChangeText={setRenameValue}
           placeholder="New name"
@@ -376,11 +686,11 @@ export default function BrowserScreen({ route, navigation }: Props) {
           selectionColor={colors.accent}
         />
         <TouchableOpacity
-          style={[styles.sheetPrimary, !renameValue.trim() && styles.btnDisabled]}
+          style={[styles.sheetPrimary, { backgroundColor: colors.accent, borderRadius: radius.md }, !renameValue.trim() && { opacity: 0.5 }]}
           disabled={!renameValue.trim()}
           onPress={handleRename}
         >
-          <Text style={styles.sheetPrimaryText}>Rename</Text>
+          <Text style={styles.sheetPrimaryText}>Rename Item</Text>
         </TouchableOpacity>
       </BottomSheet>
     </View>
@@ -388,29 +698,102 @@ export default function BrowserScreen({ route, navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg },
-  crumbs: {
+  root: { flex: 1 },
+
+  // Selection Bar
+  selectionBar: {
     flexDirection: "row",
     alignItems: "center",
-    paddingLeft: spacing.lg,
-    paddingRight: spacing.md,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.sm,
-    gap: 6,
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
   },
-  crumbsInner: { alignItems: "center", gap: 4, paddingRight: 8 },
-  crumb: { color: colors.muted, fontSize: font.sm, maxWidth: 180 },
-  crumbActive: { color: colors.content, fontWeight: "700" },
-  crumbSep: { color: colors.muted, opacity: 0.5 },
-  count: {
-    color: colors.muted,
-    fontSize: font.xs,
-    backgroundColor: colors.card,
-    borderRadius: radius.pill,
+  selectionTitle: { fontWeight: "700" },
+  selectionPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  selectionDeleteBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  // Crumbs
+  crumbsContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 8,
+  },
+  crumbsCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 20,
     paddingHorizontal: 8,
-    paddingVertical: 3,
+    paddingVertical: 6,
   },
-  moreHit: { padding: 6 },
+  crumbsInner: { alignItems: "center", gap: 4 },
+  crumbPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 16,
+  },
+  crumb: { maxWidth: 120, fontWeight: "600" },
+  countBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    marginLeft: 8,
+  },
+  count: { fontWeight: "700" },
+  moreHit: {
+    padding: 6,
+    borderRadius: 14,
+  },
+
+  // Empty state
+  emptyContainer: {
+    padding: 24,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 32,
+  },
+  emptyCard: {
+    borderRadius: 24,
+    padding: 24,
+    alignItems: "center",
+    width: "100%",
+  },
+  emptyUploadBtn: {
+    marginTop: 16,
+    width: "100%",
+    borderRadius: 14,
+    overflow: "hidden",
+  },
+  emptyUploadGradient: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 14,
+    gap: 8,
+  },
+  emptyUploadText: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "700",
+  },
+
+  // Actions Bar
   actions: {
     position: "absolute",
     left: 16,
@@ -419,58 +802,73 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     gap: 10,
-    backgroundColor: colors.surfaceElevated,
     borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.xl,
+    borderRadius: 24,
     padding: 8,
-    ...shadow,
   },
-  actionBtn: {
+  actionCircleBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  actionBtnElevated: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    borderRadius: radius.lg,
+    borderRadius: 22,
     paddingVertical: 12,
-    backgroundColor: colors.card,
   },
-  actionBtnRefresh: { backgroundColor: colors.surfaceMuted },
-  actionText: { color: colors.content, fontSize: font.sm, fontWeight: "600" },
-  uploadBtn: {
-    flex: 1.2,
+  actionText: { fontWeight: "600" },
+  uploadBtnContainer: {
+    flex: 1.4,
+    borderRadius: 22,
+    overflow: "hidden",
+  },
+  uploadGradient: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    backgroundColor: colors.accent,
-    borderRadius: radius.lg,
     paddingVertical: 12,
   },
-  uploadText: { color: "#fff", fontSize: font.sm, fontWeight: "700" },
-  progressWrap: { gap: 8, paddingVertical: spacing.sm },
-  progressTrack: { height: 6, borderRadius: 3, backgroundColor: colors.card, overflow: "hidden" },
-  progressFill: { height: "100%", backgroundColor: colors.accent, borderRadius: 3 },
-  progressPct: { color: colors.muted, fontSize: font.xs, textAlign: "center" },
-  input: {
-    backgroundColor: colors.surfaceMuted,
+  uploadText: { color: "#fff", fontSize: 13, fontWeight: "700" },
+
+  // Sort Sheet
+  sheetSection: { marginBottom: 16 },
+  sheetSectionTitle: { fontSize: 11, fontWeight: "700", letterSpacing: 1, marginBottom: 8 },
+  chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  filterChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
     borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.md,
+  },
+
+  // Progress Sheet
+  progressWrap: { gap: 12, paddingVertical: 8 },
+  progressFilename: { fontWeight: "600", textAlign: "center" },
+  progressTrack: { height: 8, borderRadius: 4, overflow: "hidden" },
+  progressFill: { height: "100%", borderRadius: 4 },
+  progressFooter: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  progressPctText: {},
+  progressPctValue: { fontWeight: "700" },
+
+  // Inputs & Buttons
+  input: {
+    borderWidth: 1,
     paddingHorizontal: 14,
     paddingVertical: 13,
-    color: colors.content,
-    fontSize: font.md,
-    marginBottom: spacing.md,
+    fontSize: 15,
+    marginBottom: 16,
   },
   sheetPrimary: {
-    backgroundColor: colors.accent,
-    borderRadius: radius.md,
     paddingVertical: 14,
     alignItems: "center",
-    marginBottom: spacing.sm,
+    marginBottom: 8,
   },
-  sheetPrimaryText: { color: "#fff", fontWeight: "700", fontSize: font.md },
-  btnDisabled: { opacity: 0.5 },
+  sheetPrimaryText: { color: "#fff", fontWeight: "700", fontSize: 15 },
 });

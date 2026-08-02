@@ -1,7 +1,7 @@
 import React from "react";
 import { Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { colors, font, radius, spacing } from "../theme";
+import { useTheme } from "../store/ThemeContext";
 
 export interface SheetAction {
   label: string;
@@ -19,34 +19,70 @@ interface Props {
 }
 
 /**
- * Slide-up action sheet / bottom sheet. Used for item actions,
- * upload progress, new-folder and rename dialogs.
+ * Slide-up action sheet / bottom sheet with dynamic theme integration.
  */
 export function BottomSheet({ visible, onClose, title, actions, children }: Props) {
+  const { colors, font, radius, spacing, isDark } = useTheme();
+
   return (
     <Modal transparent visible={visible} animationType="slide" onRequestClose={onClose}>
       <Pressable style={styles.back} onPress={onClose}>
-        <Pressable style={styles.sheet} onPress={() => {}}>
-          <View style={styles.grabber} />
-          {title ? <Text style={styles.title}>{title}</Text> : null}
+        <Pressable
+          style={[
+            styles.sheet,
+            {
+              backgroundColor: colors.surfaceElevated,
+              borderColor: colors.borderSoft,
+              paddingHorizontal: spacing.lg,
+            },
+          ]}
+          onPress={() => {}}
+        >
+          <View style={[styles.grabber, { backgroundColor: isDark ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.15)" }]} />
+          {title ? (
+            <Text style={[styles.title, { color: colors.content, fontSize: font.md, marginBottom: spacing.md }]} numberOfLines={1}>
+              {title}
+            </Text>
+          ) : null}
+
           {actions?.map((a, i) => (
             <TouchableOpacity
               key={i}
-              style={[styles.action, i < (actions.length - 1) && styles.actionBorder]}
+              style={[
+                styles.action,
+                i < actions.length - 1 && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.borderSoft },
+              ]}
               onPress={() => {
-              a.onPress();
-              onClose();
-            }}
+                a.onPress();
+                onClose();
+              }}
+              activeOpacity={0.6}
             >
               {a.icon ? (
-                <MaterialCommunityIcons name={a.icon as any} size={20} color={a.destructive ? colors.danger : colors.muted} />
+                <View
+                  style={[
+                    styles.actionIconWrap,
+                    { backgroundColor: a.destructive ? "rgba(239,68,68,0.12)" : colors.accentSoft },
+                  ]}
+                >
+                  <MaterialCommunityIcons name={a.icon as any} size={18} color={a.destructive ? colors.danger : colors.accent} />
+                </View>
               ) : null}
-              <Text style={[styles.actionText, a.destructive && { color: colors.danger }]}>{a.label}</Text>
+              <Text style={[styles.actionText, { color: a.destructive ? colors.danger : colors.content, fontSize: font.md }]}>
+                {a.label}
+              </Text>
+              <MaterialCommunityIcons name="chevron-right" size={18} color={colors.muted} style={{ opacity: 0.5 }} />
             </TouchableOpacity>
           ))}
+
           {children}
-          <TouchableOpacity style={styles.cancel} onPress={onClose}>
-            <Text style={styles.cancelText}>Cancel</Text>
+
+          <TouchableOpacity
+            style={[styles.cancel, { backgroundColor: colors.card, borderRadius: radius.lg, marginTop: spacing.md }]}
+            onPress={onClose}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.cancelText, { color: colors.muted, fontSize: font.md }]}>Cancel</Text>
           </TouchableOpacity>
         </Pressable>
       </Pressable>
@@ -57,52 +93,51 @@ export function BottomSheet({ visible, onClose, title, actions, children }: Prop
 const styles = StyleSheet.create({
   back: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.6)",
+    backgroundColor: "rgba(0,0,0,0.55)",
     justifyContent: "flex-end",
   },
   sheet: {
-    backgroundColor: colors.surfaceElevated,
-    borderTopLeftRadius: radius.xl,
-    borderTopRightRadius: radius.xl,
+    borderTopLeftRadius: 26,
+    borderTopRightRadius: 26,
     borderWidth: 1,
     borderBottomWidth: 0,
-    borderColor: colors.border,
-    paddingHorizontal: spacing.lg,
-    paddingBottom: 36,
-    paddingTop: 10,
+    paddingBottom: 40,
+    paddingTop: 12,
   },
   grabber: {
     alignSelf: "center",
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: colors.card,
-    marginBottom: spacing.md,
+    width: 42,
+    height: 5,
+    borderRadius: 3,
+    marginBottom: 16,
   },
   title: {
-    color: colors.muted,
-    fontSize: font.xs,
     fontWeight: "700",
-    textTransform: "uppercase",
-    letterSpacing: 1,
-    marginBottom: spacing.sm,
-    paddingHorizontal: spacing.xs,
+    paddingHorizontal: 4,
   },
   action: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.md,
-    paddingVertical: 15,
-    paddingHorizontal: spacing.xs,
-  },
-  actionBorder: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
-  actionText: { color: colors.content, fontSize: font.md, fontWeight: "600" },
-  cancel: {
-    marginTop: spacing.sm,
-    backgroundColor: colors.card,
-    borderRadius: radius.md,
+    gap: 12,
     paddingVertical: 14,
+    paddingHorizontal: 4,
+  },
+  actionIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  actionText: {
+    fontWeight: "600",
+    flex: 1,
+  },
+  cancel: {
+    paddingVertical: 15,
     alignItems: "center",
   },
-  cancelText: { color: colors.content, fontSize: font.md, fontWeight: "600" },
+  cancelText: {
+    fontWeight: "600",
+  },
 });

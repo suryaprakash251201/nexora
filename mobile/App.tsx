@@ -1,16 +1,16 @@
 import React from "react";
-import { StyleSheet, View } from "react-native";
+import { StyleSheet, View, Text } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { NavigationContainer, DefaultTheme } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { LinearGradient } from "expo-linear-gradient";
 
 import { SessionProvider, useSession } from "./src/store/SessionContext";
-import { colors, gradients, shadow } from "./src/theme";
+import { ThemeProvider, useTheme } from "./src/store/ThemeContext";
 import { AppIcon } from "./src/components/AppIcon";
-import { LinearGradient } from "expo-linear-gradient";
 import type { RootStackParamList, MainTabParamList } from "./src/navigation/types";
 
 import LoginScreen from "./src/screens/LoginScreen";
@@ -23,55 +23,61 @@ import PreviewScreen from "./src/screens/PreviewScreen";
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tabs = createBottomTabNavigator<MainTabParamList>();
 
-const navTheme = {
-  ...DefaultTheme,
-  colors: {
-    ...DefaultTheme.colors,
-    background: colors.bg,
-    card: colors.surface,
-    text: colors.content,
-    border: colors.border,
-    primary: colors.accent,
-  },
+const TAB_ICONS: Record<string, { active: string; inactive: string }> = {
+  Home: { active: "view-dashboard", inactive: "view-dashboard-outline" },
+  Recents: { active: "clock", inactive: "clock-outline" },
+  Settings: { active: "cog", inactive: "cog-outline" },
 };
 
-const tabIcon =
-  (active: string, inactive: string) =>
-  ({ focused, color, size }: { focused: boolean; color: string; size: number }) =>
-    <MaterialCommunityIcons name={(focused ? active : inactive) as any} size={size} color={color} />;
+function TabIcon({ routeName, focused, color, size }: { routeName: string; focused: boolean; color: string; size: number }) {
+  const { colors } = useTheme();
+  const icons = TAB_ICONS[routeName] || TAB_ICONS.Home;
+  const name = focused ? icons.active : icons.inactive;
+  return (
+    <View style={focused ? { backgroundColor: colors.accentSoft, borderRadius: 12, padding: 4 } : undefined}>
+      <MaterialCommunityIcons name={name as any} size={size} color={color} />
+    </View>
+  );
+}
 
 function MainTabs() {
+  const { colors, shadow } = useTheme();
+
   return (
     <Tabs.Navigator
-      screenOptions={{
+      screenOptions={({ route }) => ({
         headerStyle: { backgroundColor: colors.surface },
         headerTintColor: colors.content,
         headerTitleStyle: { fontWeight: "700" },
         headerShadowVisible: false,
-        tabBarStyle: { 
-          backgroundColor: colors.surfaceElevated, 
-          borderTopWidth: 0, 
+        tabBarStyle: {
+          backgroundColor: colors.surfaceElevated,
+          borderTopWidth: 0,
           position: "absolute",
           bottom: 24,
-          left: 16,
-          right: 16,
-          height: 64,
-          borderRadius: 32,
+          left: 20,
+          right: 20,
+          height: 66,
+          borderRadius: 22,
+          borderWidth: 1,
+          borderColor: colors.borderSoft,
           ...shadow,
         },
         tabBarActiveTintColor: colors.accent,
         tabBarInactiveTintColor: colors.muted,
-        tabBarLabelStyle: { fontWeight: "600", fontSize: 11, marginBottom: 8 },
-        tabBarIconStyle: { marginTop: 8 },
-      }}
+        tabBarLabelStyle: { fontWeight: "600", fontSize: 11, marginBottom: 10 },
+        tabBarIconStyle: { marginTop: 10 },
+        tabBarIcon: ({ focused, color, size }) => (
+          <TabIcon routeName={route.name} focused={focused} color={color} size={size} />
+        ),
+      })}
     >
       <Tabs.Screen
         name="Home"
         component={HomeScreen}
         options={{
-          title: "Storage",
+          title: "Home",
           headerShown: false,
-          tabBarIcon: tabIcon("server", "server-outline"),
         }}
       />
       <Tabs.Screen
@@ -79,7 +85,6 @@ function MainTabs() {
         component={RecentsScreen}
         options={{
           title: "Recents",
-          tabBarIcon: tabIcon("clock", "clock-outline"),
         }}
       />
       <Tabs.Screen
@@ -87,7 +92,6 @@ function MainTabs() {
         component={SettingsScreen}
         options={{
           title: "Settings",
-          tabBarIcon: tabIcon("cog", "cog-outline"),
         }}
       />
     </Tabs.Navigator>
@@ -95,23 +99,28 @@ function MainTabs() {
 }
 
 function Splash() {
+  const { gradients } = useTheme();
   return (
     <LinearGradient colors={[...gradients.brandDeep]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.splash}>
       <View style={styles.splashInner}>
-        <View style={styles.splashMark}>
-          <MaterialCommunityIcons name="server" size={44} color="#fff" />
-        </View>
+        <AppIcon size={96} />
         <View style={styles.splashText}>
-          <View style={styles.splashBar} />
-          <View style={[styles.splashBar, { width: 120 }]} />
+          <Text style={styles.splashTitle}>Nexora</Text>
+          <Text style={styles.splashSub}>Self-hosted file workspace</Text>
+        </View>
+        <View style={styles.splashLoader}>
+          <View style={styles.splashDot} />
+          <View style={[styles.splashDot, styles.splashDotMid]} />
+          <View style={styles.splashDot} />
         </View>
       </View>
     </LinearGradient>
   );
 }
 
-function Root() {
+function RootNavigation() {
   const { user, booting, api } = useSession();
+  const { colors, isDark } = useTheme();
 
   if (booting) {
     return <Splash />;
@@ -121,49 +130,64 @@ function Root() {
     return <LoginScreen onDone={() => {}} />;
   }
 
+  const dynamicNavTheme = {
+    ...DefaultTheme,
+    colors: {
+      ...DefaultTheme.colors,
+      background: colors.bg,
+      card: colors.surface,
+      text: colors.content,
+      border: colors.borderSoft,
+      primary: colors.accent,
+    },
+  };
+
   return (
-    <Stack.Navigator
-      screenOptions={{
-        headerStyle: { backgroundColor: colors.surface },
-        headerTintColor: colors.content,
-        headerTitleStyle: { fontWeight: "700" },
-        headerShadowVisible: false,
-        contentStyle: { backgroundColor: colors.bg },
-      }}
-    >
-      <Stack.Screen name="Main" component={MainTabs} options={{ headerShown: false }} />
-      <Stack.Screen name="Browser" component={BrowserScreen} options={({ route }) => ({ title: route.params.rootName })} />
-      <Stack.Screen name="Preview" component={PreviewScreen} options={({ route }) => ({ title: route.params.item.name })} />
-    </Stack.Navigator>
+    <NavigationContainer theme={dynamicNavTheme}>
+      <StatusBar style={isDark ? "light" : "dark"} />
+      <Stack.Navigator
+        screenOptions={{
+          headerStyle: { backgroundColor: colors.surface },
+          headerTintColor: colors.content,
+          headerTitleStyle: { fontWeight: "700" },
+          headerShadowVisible: false,
+          contentStyle: { backgroundColor: colors.bg },
+        }}
+      >
+        <Stack.Screen name="Main" component={MainTabs} options={{ headerShown: false }} />
+        <Stack.Screen name="Browser" component={BrowserScreen} options={({ route }) => ({ title: route.params.rootName })} />
+        <Stack.Screen name="Preview" component={PreviewScreen} options={({ route }) => ({ title: route.params.item.name })} />
+      </Stack.Navigator>
+    </NavigationContainer>
   );
 }
 
 export default function App() {
   return (
     <SafeAreaProvider>
-      <SessionProvider>
-        <NavigationContainer theme={navTheme}>
-          <StatusBar style="light" />
-          <Root />
-        </NavigationContainer>
-      </SessionProvider>
+      <ThemeProvider>
+        <SessionProvider>
+          <RootNavigation />
+        </SessionProvider>
+      </ThemeProvider>
     </SafeAreaProvider>
   );
 }
 
 const styles = StyleSheet.create({
   splash: { flex: 1, alignItems: "center", justifyContent: "center" },
-  splashInner: { alignItems: "center", gap: 24 },
-  splashMark: {
-    width: 88,
-    height: 88,
-    borderRadius: 24,
-    backgroundColor: "rgba(255,255,255,0.16)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.25)",
-    alignItems: "center",
-    justifyContent: "center",
+  splashInner: { alignItems: "center", gap: 20 },
+  splashText: { alignItems: "center", gap: 4 },
+  splashTitle: { color: "#fff", fontSize: 32, fontWeight: "800", letterSpacing: 0.5 },
+  splashSub: { color: "rgba(255,255,255,0.6)", fontSize: 14, fontWeight: "500" },
+  splashLoader: { flexDirection: "row", gap: 6, marginTop: 16 },
+  splashDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "rgba(255,255,255,0.3)",
   },
-  splashText: { alignItems: "center", gap: 8 },
-  splashBar: { width: 160, height: 10, borderRadius: 5, backgroundColor: "rgba(255,255,255,0.35)" },
+  splashDotMid: {
+    backgroundColor: "rgba(255,255,255,0.7)",
+  },
 });

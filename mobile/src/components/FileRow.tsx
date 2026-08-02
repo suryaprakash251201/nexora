@@ -1,18 +1,18 @@
 import React, { memo } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { colors, font, radius, spacing } from "../theme";
+import { useTheme } from "../store/ThemeContext";
 import { previewKind, formatBytes, formatDate } from "../api/client";
 import type { FileItem } from "../api/types";
 
 const KIND_ICON: Record<string, [string, string]> = {
-  image: ["file-image-outline", "#5B8CFF"],
-  video: ["video-outline", "#A78BFA"],
-  audio: ["music-note", "#2DD4BF"],
+  image: ["image-outline", "#5B8CFF"],
+  video: ["play-circle-outline", "#A78BFA"],
+  audio: ["music-circle-outline", "#2DD4BF"],
   pdf: ["file-pdf-box", "#EF4444"],
   markdown: ["language-markdown-outline", "#35D3FF"],
   text: ["file-document-outline", "#8892A8"],
-  code: ["code-tags", "#FBBF24"],
+  code: ["code-braces", "#FBBF24"],
   other: ["file-outline", "#8892A8"],
 };
 
@@ -26,10 +26,10 @@ const EXT_COLORS: Record<string, string> = {
   exe: "#A78BFA", app: "#A78BFA", dmg: "#A78BFA", iso: "#A78BFA",
 };
 
-export function fileIconFor(item: FileItem): { name: string; color: string } {
-  if (item.is_dir) return { name: "folder", color: colors.accent };
+export function fileIconFor(item: FileItem, defaultAccent: string = "#5B8CFF"): { name: string; color: string } {
+  if (item.is_dir) return { name: "folder", color: defaultAccent };
   const kind = previewKind(item);
-  const [name, color] = KIND_ICON[kind];
+  const [name, color] = KIND_ICON[kind] || KIND_ICON.other;
   const extColor = EXT_COLORS[(item.extension || "").toLowerCase()];
   return { name, color: extColor || color };
 }
@@ -41,114 +41,184 @@ interface Props {
   trailing?: React.ReactNode;
   subtitle?: string;
   showDate?: boolean;
+  selected?: boolean;
+  selectMode?: boolean;
+  onSelect?: (item: FileItem) => void;
 }
 
 /**
- * Memoized file/dir row. Keep the callback identities stable in parents
- * (useCallback) so FlatList rows don't re-render on scroll.
+ * Memoized file/dir row with dynamic theme support.
  */
-export const FileRow = memo(function FileRow({ item, onPress, onLongPress, trailing, subtitle, showDate }: Props) {
-  const { name, color } = fileIconFor(item);
+export const FileRow = memo(function FileRow({
+  item,
+  onPress,
+  onLongPress,
+  trailing,
+  subtitle,
+  showDate,
+  selected,
+  selectMode,
+  onSelect,
+}: Props) {
+  const { colors, font, spacing } = useTheme();
+  const { name, color } = fileIconFor(item, colors.accent);
   const sub =
     subtitle ??
-    (item.is_dir ? "Folder" : `${formatBytes(item.size)} · ${showDate ? formatDate(item.modified) : ""}`.replace(/ · $/, ""));
+    (item.is_dir ? "Folder" : `${formatBytes(item.size)}${showDate ? " · " + formatDate(item.modified) : ""}`);
 
   return (
     <TouchableOpacity
-      style={styles.row}
-      activeOpacity={0.65}
-      onPress={onPress ? () => onPress(item) : undefined}
+      style={[
+        styles.row,
+        {
+          paddingHorizontal: spacing.lg,
+          backgroundColor: selected ? colors.accentSoft : "transparent",
+        },
+      ]}
+      activeOpacity={0.6}
+      onPress={() => (selectMode && onSelect ? onSelect(item) : onPress ? onPress(item) : undefined)}
       onLongPress={onLongPress ? () => onLongPress(item) : undefined}
-      delayLongPress={400}
+      delayLongPress={350}
     >
-      <View style={[styles.iconWrap, { backgroundColor: item.is_dir ? colors.accentSoft : colors.card }]}>
-        <MaterialCommunityIcons name={name as any} size={20} color={color} />
+      {selectMode && (
+        <TouchableOpacity
+          style={[
+            styles.checkbox,
+            {
+              backgroundColor: selected ? colors.accent : "transparent",
+              borderColor: selected ? colors.accent : colors.muted,
+            },
+          ]}
+          onPress={() => onSelect?.(item)}
+        >
+          {selected && <MaterialCommunityIcons name="check" size={14} color="#fff" />}
+        </TouchableOpacity>
+      )}
+
+      <View style={[styles.iconWrap, { backgroundColor: `${color}18` }]}>
+        <MaterialCommunityIcons name={name as any} size={22} color={color} />
       </View>
+
       <View style={styles.body}>
-        <Text style={styles.title} numberOfLines={1}>{item.name}</Text>
-        <Text style={styles.sub} numberOfLines={1}>{sub}</Text>
+        <Text style={[styles.title, { color: colors.content, fontSize: font.md }]} numberOfLines={1}>
+          {item.name}
+        </Text>
+        <Text style={[styles.sub, { color: colors.muted, fontSize: font.xs }]} numberOfLines={1}>
+          {sub}
+        </Text>
       </View>
+
       {trailing}
     </TouchableOpacity>
   );
 });
 
 export function Chevron() {
+  const { colors } = useTheme();
   return <MaterialCommunityIcons name="chevron-right" size={20} color={colors.muted} />;
 }
 
 export function MoreButton({ onPress }: { onPress: () => void }) {
+  const { colors } = useTheme();
   return (
     <TouchableOpacity onPress={onPress} hitSlop={10} style={styles.more}>
-      <MaterialCommunityIcons name="dots-horizontal" size={22} color={colors.muted} />
+      <MaterialCommunityIcons name="dots-vertical" size={20} color={colors.muted} />
     </TouchableOpacity>
   );
 }
 
 export function EmptyState({ icon = "folder-open-outline", title, hint }: { icon?: string; title: string; hint?: string }) {
+  const { colors, font, shadowSm } = useTheme();
   return (
     <View style={styles.empty}>
-      <View style={styles.emptyIcon}>
-        <MaterialCommunityIcons name={icon as any} size={30} color={colors.muted} />
+      <View style={[styles.emptyIconOuter, { backgroundColor: colors.surface, borderColor: colors.borderSoft }, shadowSm]}>
+        <View style={[styles.emptyIcon, { backgroundColor: colors.card }]}>
+          <MaterialCommunityIcons name={icon as any} size={32} color={colors.muted} />
+        </View>
       </View>
-      <Text style={styles.emptyTitle}>{title}</Text>
-      {hint ? <Text style={styles.emptyHint}>{hint}</Text> : null}
+      <Text style={[styles.emptyTitle, { color: colors.content, fontSize: font.lg }]}>{title}</Text>
+      {hint ? <Text style={[styles.emptyHint, { color: colors.muted, fontSize: font.sm }]}>{hint}</Text> : null}
     </View>
   );
 }
 
 export function SectionLabel({ children }: { children: React.ReactNode }) {
-  return <Text style={styles.section}>{children}</Text>;
+  const { colors, spacing } = useTheme();
+  return (
+    <Text
+      style={[
+        styles.section,
+        {
+          color: colors.muted,
+          paddingHorizontal: spacing.lg,
+          paddingTop: spacing.xl,
+        },
+      ]}
+    >
+      {children}
+    </Text>
+  );
 }
 
-const ROW_HEIGHT = 64;
+const ROW_HEIGHT = 68;
 
 const styles = StyleSheet.create({
   row: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.md,
-    paddingHorizontal: spacing.lg,
+    gap: 12,
     height: ROW_HEIGHT,
   },
-  iconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: radius.xl,
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1.5,
     alignItems: "center",
     justifyContent: "center",
   },
-  body: { flex: 1, marginLeft: 4 },
-  title: { color: colors.content, fontSize: font.md, fontWeight: "600" },
-  sub: { color: colors.muted, fontSize: font.xs, marginTop: 2 },
-  more: { padding: 4 },
+  iconWrap: {
+    width: 46,
+    height: 46,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  body: { flex: 1, marginLeft: 2 },
+  title: { fontWeight: "600", letterSpacing: 0.1 },
+  sub: { marginTop: 3 },
+  more: { padding: 6 },
   empty: {
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 56,
+    paddingVertical: 64,
     paddingHorizontal: 32,
-    gap: 10,
+    gap: 12,
   },
-  emptyIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: 18,
-    backgroundColor: colors.card,
+  emptyIconOuter: {
+    width: 80,
+    height: 80,
+    borderRadius: 24,
+    borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 2,
+    marginBottom: 4,
   },
-  emptyTitle: { color: colors.content, fontSize: font.md, fontWeight: "700" },
-  emptyHint: { color: colors.muted, fontSize: font.sm, textAlign: "center", lineHeight: 19 },
+  emptyIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  emptyTitle: { fontWeight: "700" },
+  emptyHint: { textAlign: "center", lineHeight: 20, maxWidth: 280 },
   section: {
-    color: colors.muted,
     fontSize: 11,
     fontWeight: "700",
     textTransform: "uppercase",
-    letterSpacing: 1.1,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.lg,
-    paddingBottom: 6,
+    letterSpacing: 1.2,
+    paddingBottom: 8,
   },
 });
 
