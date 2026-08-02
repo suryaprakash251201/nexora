@@ -75,25 +75,29 @@ export default function CommandBar({
   const setViewMode = useUI((s) => s.setViewMode);
 
   const [menuOpen, setMenuOpen] = useState(false);
+  const [uploadOpen, setUploadOpen] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
   const [sortOpen, setSortOpen] = useState(false);
   const [searchExpanded, setSearchExpanded] = useState(false);
   const [searchFocused, setSearchFocused] = useState(false);
   const [menuPos, setMenuPos] = useState<{ top: number; right: number }>({ top: 0, right: 0 });
+  const [uploadPos, setUploadPos] = useState<{ top: number; right: number }>({ top: 0, right: 0 });
   const [filterPos, setFilterPos] = useState<{ top: number; right: number }>({ top: 0, right: 0 });
   const [sortPos, setSortPos] = useState<{ top: number; right: number }>({ top: 0, right: 0 });
   const newBtnRef = useRef<HTMLButtonElement>(null);
+  const uploadBtnRef = useRef<HTMLButtonElement>(null);
   const filterBtnRef = useRef<HTMLButtonElement>(null);
   const sortBtnRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const uploadRef = useRef<HTMLDivElement>(null);
   const filterRef = useRef<HTMLDivElement>(null);
   const sortRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
-  const clampMenuPos = (r: DOMRect) => {
+  const clampMenuPos = (r: DOMRect, height = 280) => {
     let top = r.bottom + 6;
     let right = window.innerWidth - r.right;
-    const menuHeight = 280;
+    const menuHeight = height;
     if (top + menuHeight > window.innerHeight - 16) {
       top = Math.max(8, r.top - menuHeight - 6);
     }
@@ -106,6 +110,16 @@ export default function CommandBar({
     const r = newBtnRef.current?.getBoundingClientRect();
     if (r) setMenuPos(clampMenuPos(r));
     setMenuOpen((o) => !o);
+    setUploadOpen(false);
+    setFilterOpen(false);
+    setSortOpen(false);
+  };
+
+  const toggleUpload = () => {
+    const r = uploadBtnRef.current?.getBoundingClientRect();
+    if (r) setUploadPos(clampMenuPos(r, 120));
+    setUploadOpen((o) => !o);
+    setMenuOpen(false);
     setFilterOpen(false);
     setSortOpen(false);
   };
@@ -115,6 +129,7 @@ export default function CommandBar({
     if (r) setFilterPos(clampMenuPos(r));
     setFilterOpen((o) => !o);
     setMenuOpen(false);
+    setUploadOpen(false);
     setSortOpen(false);
   };
 
@@ -123,20 +138,22 @@ export default function CommandBar({
     if (r) setSortPos(clampMenuPos(r));
     setSortOpen((o) => !o);
     setMenuOpen(false);
+    setUploadOpen(false);
     setFilterOpen(false);
   };
 
 
   const closeAllMenus = () => {
     setMenuOpen(false);
+    setUploadOpen(false);
     setFilterOpen(false);
     setSortOpen(false);
   };
 
   useClickOutside(
-    [menuRef, newBtnRef, filterRef, filterBtnRef, sortRef, sortBtnRef],
+    [menuRef, newBtnRef, uploadRef, uploadBtnRef, filterRef, filterBtnRef, sortRef, sortBtnRef],
     closeAllMenus,
-    menuOpen || filterOpen || sortOpen,
+    menuOpen || uploadOpen || filterOpen || sortOpen,
   );
 
 
@@ -303,26 +320,16 @@ export default function CommandBar({
                   <FolderPlus className="h-4 w-4 mr-1" /> New
                   <ChevronDown className="h-4 w-4 ml-1" />
                 </Button>
-                <Button
-                  variant="secondary"
-                  onClick={onUpload}
-                  size="sm"
-                  className="hidden sm:inline-flex"
-                  icon={<Upload className="h-4 w-4" />}
+                <button
+                  ref={uploadBtnRef}
+                  onClick={toggleUpload}
+                  className="p-2 rounded-xl glass-hover text-text-secondary hover:text-accent-tertiary transition-colors min-w-[36px] min-h-[36px]"
+                  title="Upload"
+                  aria-label="Upload"
+                  aria-expanded={uploadOpen}
                 >
-                  Upload files
-                </Button>
-                {onUploadFolder && (
-                  <Button
-                    variant="secondary"
-                    onClick={onUploadFolder}
-                    size="sm"
-                    className="hidden sm:inline-flex"
-                    icon={<FolderUp className="h-4 w-4" />}
-                  >
-                    Upload folder
-                  </Button>
-                )}
+                  <Upload className="h-4 w-4" />
+                </button>
               </>
             )}
 
@@ -402,7 +409,22 @@ export default function CommandBar({
           >
             <FilePlus className="h-4 w-4 text-accent-secondary" /> New text file
           </button>
-          <div className="h-px w-full bg-glass-border-soft my-1" />
+        </motion.div>,
+        document.body,
+      )}
+
+      {/* Upload Menu */}
+      {uploadOpen && createPortal(
+        <motion.div
+          ref={uploadRef}
+          initial={{ opacity: 0, scale: 0.95, y: -4 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.95, y: -4 }}
+          transition={{ duration: 0.15 }}
+          style={{ top: uploadPos.top, right: uploadPos.right }}
+          className="fixed z-50 w-52 menu-surface rounded-xl p-1.5 shadow-2xl"
+          role="menu"
+        >
           <button
             onClick={() => { closeAllMenus(); onUpload(); }}
             className="w-full flex items-center gap-3 px-3 py-2 text-sm rounded-lg hover:bg-accent/10 hover:text-accent font-medium transition-colors"
