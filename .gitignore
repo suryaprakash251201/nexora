@@ -27,7 +27,10 @@ web/test-results/
 
 # Go build artifacts
 /bin/
+/nexora
 *.exe
+nexora-server.err
+nexora-server.log
 
 # Editor / OS
 .DS_Store
