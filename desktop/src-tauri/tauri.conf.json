@@ -6,7 +6,7 @@
     "frontendDist": "../../web/dist"
   },
   "productName": "Nexora",
-  "version": "1.7.6",
+  "version": "1.8.0",
   "identifier": "com.nexora.desktop",
   "app": {
     "withGlobalTauri": true,
@@ -30,6 +30,9 @@
     }
   },
   "plugins": {
+    "fs": {
+      "scope": ["**"]
+    },
     "updater": {
       "endpoints": [
         "https://github.com/suryaprakash251201/nexora/releases/latest/download/updater.json"

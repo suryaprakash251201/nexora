@@ -1,12 +1,13 @@
 import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { X, Download, Eye, Pencil, Trash2, Scissors, Copy, Info, Star, Share2, Activity, FileText, Share, Clock, Link } from "lucide-react";
+import { X, Download, Eye, Pencil, Trash2, Scissors, Copy, Info, Star, Share2, Activity, FileText, Share, Clock, Link, FolderOpen } from "lucide-react";
 import { get, post, del } from "../api/client";
 import { formatBytes, formatDate } from "../lib/format";
 import { useUI } from "../store";
 import { FileThumb, FolderTile } from "./FileThumb";
 import { Button } from "./ui/Button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetClose } from "./ui/sheet";
+import { revealInFileManager } from "../lib/desktop";
 
 type Tab = "details" | "activity" | "shares";
 
@@ -15,6 +16,8 @@ interface DetailsDrawerProps {
   rootId: string;
   path: string;
   canWrite: boolean;
+  /** Absolute path to reveal in the OS file manager (desktop, local roots only). */
+  revealPath?: string | null;
   isFavorite: boolean;
   onClose: () => void;
   onDownload: () => void;
@@ -29,7 +32,7 @@ interface DetailsDrawerProps {
 }
 
 export default function DetailsDrawer({
-  rootName, rootId, path, canWrite, isFavorite, onClose, onDownload, onPreview, onRename, onDelete, onMove, onCopy, onShare, onFavorite, onEdit,
+  rootName, rootId, path, canWrite, isFavorite, revealPath, onClose, onDownload, onPreview, onRename, onDelete, onMove, onCopy, onShare, onFavorite, onEdit,
 }: DetailsDrawerProps) {
   const [activeTab, setActiveTab] = useState<Tab>("details");
   const [renaming, setRenaming] = useState(false);
@@ -196,6 +199,11 @@ export default function DetailsDrawer({
                     <Button variant="danger" size="sm" onClick={handleDelete} icon={<Trash2 className="h-4 w-4" />}>Delete</Button>
                   </div>
                 </div>
+              )}
+              {revealPath && (
+                <Button size="sm" onClick={() => revealInFileManager(revealPath)} icon={<FolderOpen className="h-4 w-4" />}>
+                  Reveal in file manager
+                </Button>
               )}
             </div>
           </div>

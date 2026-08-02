@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useTransfers } from "../store/transfers";
+import { usePlayer } from "../store/player";
 
 /**
  * TauriShell is a headless component that wires up native OS features
@@ -61,6 +62,11 @@ async function ensurePlugins() {
       await listen("nexora:app-closing", () => {
         // Clean up any active downloads before close
         console.log("[tauri] App closing — cleaning up");
+      }).catch(() => {});
+
+      // ── System tray: Play / Pause toggles the audio player ──
+      await listen("nexora:tray-play-pause", () => {
+        usePlayer.getState().toggle();
       }).catch(() => {});
     } catch (e) {
       // Plugins are only available in Tauri — fail gracefully in browser

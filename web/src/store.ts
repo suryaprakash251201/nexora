@@ -21,6 +21,8 @@ interface UIState {
   drawerPath: string | null;
   mobileNavOpen: boolean;
   toasts: Toast[];
+  serverOnline: boolean | null;
+  setServerOnline: (b: boolean) => void;
   setViewMode: (v: ViewMode) => void;
   setDensity: (d: DensityMode) => void;
   toggleColumn: (key: ColumnKey) => void;
@@ -55,6 +57,8 @@ export const useUI = create<UIState>((set, get) => ({
   drawerPath: null,
   mobileNavOpen: false,
   toasts: [],
+  serverOnline: null,
+  setServerOnline: (b) => set({ serverOnline: b }),
   setViewMode: (v) => {
     localStorage.setItem("nexora.view", v);
     set({ viewMode: v });

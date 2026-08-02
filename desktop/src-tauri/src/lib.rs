@@ -2,6 +2,9 @@ use tauri::{Emitter, Manager};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 static SLEEP_INHIBITED: AtomicBool = AtomicBool::new(false);
+/// Set once the system tray was successfully created. When true, closing the
+/// window hides it to the tray instead of quitting (standard media-app UX).
+static TRAY_READY: AtomicBool = AtomicBool::new(false);
 
 /// Returns platform info to the frontend so it can adapt its UI.
 #[tauri::command]
@@ -81,6 +84,64 @@ async fn set_sleep_inhibition(inhibit: bool, app: tauri::AppHandle) -> Result<()
     Ok(())
 }
 
+/// Builds the system tray with Show / Play-Pause / Quit actions.
+/// Left-clicking the tray icon also brings the main window to the foreground.
+fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
+    use tauri::menu::{Menu, MenuItem};
+    use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+
+    let show = MenuItem::with_id(app, "show", "Show Nexora", true, None::<&str>)?;
+    let playpause = MenuItem::with_id(app, "playpause", "Play / Pause", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", "Quit Nexora", true, None::<&str>)?;
+    let menu = Menu::with_items(app, &[&show, &playpause, &quit])?;
+
+    let icon = app
+        .default_window_icon()
+        .cloned()
+        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "no default window icon"))?;
+
+    TrayIconBuilder::with_id("nexora-tray")
+        .icon(icon)
+        .tooltip("Nexora")
+        .menu(&menu)
+        .show_menu_on_left_click(false)
+        .on_menu_event(|app, event| match event.id().as_ref() {
+            "show" => show_main_window(app),
+            "playpause" => {
+                let _ = app.emit("nexora:tray-play-pause", ());
+            }
+            "quit" => {
+                let _ = app.emit("nexora:app-closing", ());
+                app.exit(0);
+            }
+            _ => {}
+        })
+        .on_tray_icon_event(|tray, event| {
+            if let TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            } = event
+            {
+                show_main_window(tray.app_handle());
+            }
+        })
+        .build(app)?;
+
+    TRAY_READY.store(true, Ordering::SeqCst);
+    eprintln!("[nexora] System tray ready (close-to-tray enabled)");
+    Ok(())
+}
+
+/// Shows, unminimizes and focuses the main window.
+fn show_main_window(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.unminimize();
+        let _ = window.set_focus();
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Log startup info to stderr for debugging when running from terminal
@@ -110,6 +171,7 @@ pub fn run() {
 
     let builder = tauri::Builder::default()
         // ── Plugins ──────────────────────────────────────────────
+        .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_upload::init())
@@ -134,12 +196,30 @@ pub fn run() {
         // ── Custom commands ──────────────────────────────────────
         .invoke_handler(tauri::generate_handler![get_platform, set_sleep_inhibition])
 
+        // ── System tray (created after the event loop starts) ────
+        .setup(|app| {
+            if let Err(e) = setup_tray(app.handle()) {
+                // Tray unsupported (e.g. some Wayland setups): the window close
+                // button then quits the app normally instead of hiding to tray.
+                eprintln!("[nexora] Tray unavailable, closing window will quit: {}", e);
+            }
+            Ok(())
+        })
+
         // ── App event handling ───────────────────────────────────
         .on_window_event(|window, event| {
-            // Save window state before closing
-            if let tauri::WindowEvent::CloseRequested { .. } = event {
-                let app = window.app_handle();
-                let _ = app.emit("nexora:app-closing", ());
+            match event {
+                tauri::WindowEvent::CloseRequested { api, .. } => {
+                    let app = window.app_handle();
+                    if TRAY_READY.load(Ordering::SeqCst) {
+                        // Hide to tray so playback and transfers keep running.
+                        let _ = window.hide();
+                        api.prevent_close();
+                    } else {
+                        let _ = app.emit("nexora:app-closing", ());
+                    }
+                }
+                _ => {}
             }
         });
 

@@ -55,6 +55,9 @@ import { useDragAndDrop } from "./hooks/useDragAndDrop";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import { useClipboard } from "./hooks/useClipboard";
 import { useModals } from "./hooks/useModals";
+import DesktopDragDrop from "./DesktopDragDrop";
+import { useCustomTitleBar } from "./DesktopTitleBar";
+import { isTauri, isLocalServer, revealInFileManager } from "../lib/desktop";
 
 export default function Workspace({ user }: { user: User }) {
   const qc = useQueryClient();
@@ -370,6 +373,16 @@ export default function Workspace({ user }: { user: User }) {
       { label: "Select", icon: <CheckSquare className="h-4 w-4" />, onClick: () => { toggleSelect(item.path); useUI.getState().setSelectMode(true); } },
       { label: "Properties", icon: <Info className="h-4 w-4" />, onClick: () => openDrawer(item.path) },
     );
+    // Desktop-only: open the file's folder in the OS file manager.
+    if (isTauri() && isLocalServer() && activeRoot?.type === "local" && activeRoot.path) {
+      const parentDir = item.path.includes("/") ? item.path.slice(0, item.path.lastIndexOf("/")) : "";
+      const abs = parentDir ? `${activeRoot.path}/${parentDir}` : activeRoot.path;
+      menuItems.push({
+        label: item.is_dir ? "Reveal in folder" : "Reveal in file manager",
+        icon: <FolderOpen className="h-4 w-4" />,
+        onClick: () => revealInFileManager(abs),
+      });
+    }
     return menuItems;
   };
 
@@ -419,8 +432,21 @@ export default function Workspace({ user }: { user: User }) {
 
   const showCommandBar = view === "files" && activeRoot;
 
+  const customTitleBar = useCustomTitleBar();
+
+  // Desktop-only: absolute server-side path to reveal in the OS file manager.
+  const revealPath =
+    customTitleBar && isTauri() && isLocalServer() && activeRoot?.type === "local" && activeRoot.path && drawerPath
+      ? drawerPath.includes("/")
+        ? `${activeRoot.path}/${drawerPath.slice(0, drawerPath.lastIndexOf("/"))}`
+        : activeRoot.path
+      : null;
+
   return (
-    <div className="h-screen flex overflow-hidden" {...dragProps}>
+    <div className={`h-screen flex overflow-hidden ${customTitleBar ? "pt-[38px]" : ""}`} {...dragProps}>
+      {customTitleBar && isTauri() && (
+        <DesktopDragDrop rootId={rootId} path={path} canWrite={canWrite} onUpload={(files) => uploadFiles(files)} />
+      )}
       <Sidebar
         roots={roots.data?.roots || []}
         activeRoot={rootId}
@@ -696,6 +722,7 @@ export default function Workspace({ user }: { user: User }) {
           rootId={rootId!}
           path={drawerPath}
           canWrite={canWrite}
+          revealPath={revealPath}
           isFavorite={!!favSet.data?.items.some((f) => f.root_id === rootId && f.path === drawerPath)}
           onClose={() => openDrawer(null)}
           onDownload={() => { const it = items.find((i) => i.path === drawerPath); if (it) downloadItem(it); }}

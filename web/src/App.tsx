@@ -1,4 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Sparkles, RotateCcw, ExternalLink, LoaderCircle, PlugZap, WifiOff } from "lucide-react";
 import { get, post, discoverServerUrl } from "./api/client";
 import Login from "./components/Login";
 import Setup from "./components/Setup";
@@ -6,37 +7,44 @@ import Workspace from "./components/Workspace";
 import MouseGlow from "./components/MouseGlow";
 import UpdaterCheck from "./components/UpdaterCheck";
 import TauriShell from "./components/TauriShell";
+import DesktopTitleBar, { useCustomTitleBar } from "./components/DesktopTitleBar";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { useUI } from "./store";
+import { openInBrowser, isTauri } from "./lib/desktop";
 import type { User } from "./api/types";
 
 export default function App() {
-  const isTauri = "__TAURI_INTERNALS__" in window;
   return (
     <>
       <div className="nexora-bg" aria-hidden="true" />
       <MouseGlow />
-      {isTauri && <TauriShell />}
-      {isTauri && <UpdaterCheck />}
+      {isTauri() && <DesktopTitleBar />}
+      {isTauri() && <TauriShell />}
+      {isTauri() && <UpdaterCheck />}
       <AppInner />
     </>
   );
 }
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 
 function AppInner() {
   const qc = useQueryClient();
   const [apiUrl, setApiUrl] = useState(localStorage.getItem("nexora-api-url") || "");
   const [inputUrl, setInputUrl] = useState(apiUrl);
   const [discovering, setDiscovering] = useState("");
-  const discoverDone = useRef(false);
-  
-  const isTauri = "__TAURI_INTERNALS__" in window;
+  const [discoverDone, setDiscoverDone] = useState(false);
+  const setServerOnline = useUI((s) => s.setServerOnline);
+  const customTitleBar = useCustomTitleBar();
+
+  const isTauriEnv = isTauri();
+
+  const topPad = customTitleBar && isTauriEnv ? "pt-[38px]" : "";
 
   // ── Auto-discovery: probe Tailscale hosts when no URL is stored ──
   useEffect(() => {
-    if (!isTauri || apiUrl || discoverDone.current) return;
-    discoverDone.current = true;
+    if (!isTauriEnv || apiUrl || discoverDone) return;
+    setDiscoverDone(true);
     setDiscovering("Probing Tailscale hosts…");
     discoverServerUrl()
       .then((url) => {
@@ -47,56 +55,110 @@ function AppInner() {
         setDiscovering("");
       })
       .catch(() => setDiscovering(""));
-  }, [isTauri, apiUrl]);
+  }, [isTauriEnv, apiUrl, discoverDone]);
 
-  const needsSetup = useQuery({ 
-    queryKey: ["needs-setup"], 
+  const needsSetup = useQuery({
+    queryKey: ["needs-setup"],
     queryFn: () => get<{ configured: boolean }>("/auth/needs-setup"),
-    enabled: !isTauri || !!apiUrl
-  });
-  
-  const session = useQuery({ 
-    queryKey: ["session"], 
-    queryFn: () => get<{ user: User }>("/auth/session"),
-    enabled: !isTauri || !!apiUrl
+    enabled: !isTauriEnv || !!apiUrl,
   });
 
-  if (isTauri && !apiUrl) {
+  const session = useQuery({
+    queryKey: ["session"],
+    queryFn: () => get<{ user: User }>("/auth/session"),
+    enabled: !isTauriEnv || !!apiUrl,
+  });
+
+  // Live server-status for the title bar indicator
+  useEffect(() => {
+    if (isTauriEnv && !apiUrl) return;
+    if (!needsSetup.isLoading && !needsSetup.isError) setServerOnline(true);
+    if (needsSetup.isError || session.isError) setServerOnline(false);
+  }, [isTauriEnv, apiUrl, needsSetup.isLoading, needsSetup.isError, session.isError, setServerOnline]);
+
+  const quickConnect = (url: string) => {
+    localStorage.setItem("nexora-api-url", url);
+    setApiUrl(url);
+    setInputUrl(url);
+  };
+
+  if (isTauriEnv && !apiUrl) {
     return (
-      <div className="min-h-screen grid place-items-center bg-background">
-        <div className="w-full max-w-sm p-6 bg-surface border rounded-xl shadow-lg space-y-4">
-          <h2 className="text-xl font-bold">Connect to Nexora</h2>
-          {discovering ? (
-            <div className="flex flex-col items-center gap-3 py-6">
-              <div className="h-8 w-8 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-              <p className="text-sm text-content-muted">{discovering}</p>
-              <p className="text-xs text-content-muted/50">Trying Tailscale MagicDNS…</p>
+      <div className={`min-h-screen grid place-items-center bg-background ${topPad}`}>
+        <div className="w-full max-w-sm px-6">
+          <div className="rounded-2xl border border-glass-border-soft bg-glass-bg-strong/80 backdrop-blur-xl shadow-glass-strong p-8 space-y-5">
+            <div className="flex flex-col items-center gap-3 text-center">
+              <span className="grid place-items-center h-14 w-14 rounded-2xl bg-gradient-to-br from-accent via-accent-secondary to-accent-tertiary text-white shadow-lg shadow-accent/25">
+                <Sparkles className="h-7 w-7" />
+              </span>
+              <div>
+                <h2 className="text-xl font-bold tracking-tight">Connect to Nexora</h2>
+                <p className="text-sm text-content-muted mt-1">Find your server on this network or enter its address.</p>
+              </div>
             </div>
-          ) : (
-            <>
-              <p className="text-sm text-content-muted">
-                No Nexora server found on your Tailscale network. Enter the URL manually:
-              </p>
-              <input 
-                type="url" 
-                className="w-full px-3 py-2 bg-background border rounded-lg focus:ring-2 focus:ring-primary focus:outline-none" 
-                placeholder="http://localhost:8080"
-                value={inputUrl}
-                onChange={(e) => setInputUrl(e.target.value)}
-                autoFocus
-              />
-              <button 
-                className="w-full py-2 bg-primary text-primary-foreground font-medium rounded-lg hover:bg-primary/90 transition"
-                onClick={() => {
-                  if (inputUrl) {
-                    localStorage.setItem("nexora-api-url", inputUrl);
-                    setApiUrl(inputUrl);
-                  }
-                }}
-              >
-                Connect
-              </button>
-            </>
+
+            {discovering ? (
+              <div className="flex flex-col items-center gap-3 py-4">
+                <LoaderCircle className="h-8 w-8 animate-spin text-accent" />
+                <p className="text-sm text-content-muted">{discovering}</p>
+                <p className="text-xs text-content-muted/60">Checking localhost and Tailscale MagicDNS…</p>
+              </div>
+            ) : (
+              <>
+                <input
+                  type="url"
+                  className="w-full px-3.5 py-2.5 bg-background border border-border rounded-xl focus:ring-2 focus:ring-accent focus:outline-none text-sm"
+                  placeholder="http://localhost:8080"
+                  value={inputUrl}
+                  onChange={(e) => setInputUrl(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && inputUrl.trim()) {
+                      localStorage.setItem("nexora-api-url", inputUrl.trim());
+                      setApiUrl(inputUrl.trim());
+                    }
+                  }}
+                  autoFocus
+                />
+                <button
+                  className="w-full py-2.5 bg-gradient-to-r from-accent via-accent-secondary to-accent-tertiary text-white font-medium rounded-xl hover:opacity-90 active:scale-[0.99] transition"
+                  onClick={() => {
+                    if (inputUrl.trim()) {
+                      localStorage.setItem("nexora-api-url", inputUrl.trim());
+                      setApiUrl(inputUrl.trim());
+                    }
+                  }}
+                >
+                  Connect
+                </button>
+
+                <div className="space-y-1.5">
+                  <p className="text-[11px] font-medium uppercase tracking-wide text-content-muted/60">Quick connect</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {["http://localhost:8080", "http://127.0.0.1:8080", "http://nexora.local"].map((u) => (
+                      <button
+                        key={u}
+                        onClick={() => quickConnect(u)}
+                        className="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-glass-bg-subtle border border-glass-border-soft text-content-muted hover:text-foreground hover:border-accent/50 transition-colors font-mono"
+                      >
+                        {u}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+
+          {!discovering && (
+            <button
+              onClick={() => {
+                setDiscoverDone(false);
+              }}
+              className="mt-4 w-full flex items-center justify-center gap-2 text-xs text-content-muted hover:text-content transition-colors"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              Scan the network again
+            </button>
           )}
         </div>
       </div>
@@ -104,27 +166,56 @@ function AppInner() {
   }
 
   if (needsSetup.isLoading || session.isLoading) {
-    return <div className="min-h-screen grid place-items-center text-content-muted">Loading…</div>;
+    return (
+      <div className={`min-h-screen grid place-items-center gap-3 flex-col text-content-muted ${topPad}`}>
+        <LoaderCircle className="h-7 w-7 animate-spin text-accent" />
+        <span className="text-sm">Loading…</span>
+      </div>
+    );
   }
 
   if (needsSetup.isError || session.isError) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background text-foreground">
-        <div className="max-w-md w-full p-6 bg-card border rounded-lg shadow-lg text-center">
-          <h2 className="text-xl font-semibold mb-2 text-destructive">Connection Error</h2>
-          <p className="text-content-muted text-sm mb-4">
-            Could not connect to the backend server. If using Tauri, ensure the URL is correct and the server allows CORS.
-          </p>
-          <button
-            className="px-4 py-2 bg-primary text-primary-foreground rounded hover:bg-primary/90"
-            onClick={() => {
-              localStorage.removeItem("nexora-api-url");
-              setApiUrl("");
-              qc.clear();
-            }}
-          >
-            Reset URL
-          </button>
+      <div className={`min-h-screen flex items-center justify-center bg-background text-foreground ${topPad}`}>
+        <div className="max-w-md w-full px-6">
+          <div className="rounded-2xl border border-glass-border-soft bg-glass-bg-strong/80 backdrop-blur-xl shadow-glass-strong p-8 text-center space-y-4">
+            <span className="mx-auto grid place-items-center h-14 w-14 rounded-2xl bg-red-500/10 text-red-500">
+              <WifiOff className="h-7 w-7" />
+            </span>
+            <div>
+              <h2 className="text-lg font-semibold text-destructive">Connection Error</h2>
+              <p className="text-sm text-content-muted mt-2">
+                Could not reach the Nexora server{isTauriEnv && apiUrl ? ` at ${apiUrl}` : ""}. Make sure it is running and reachable.
+              </p>
+            </div>
+            <div className="flex flex-col gap-2 pt-1">
+              <button
+                className="w-full py-2.5 bg-primary text-primary-foreground font-medium rounded-xl hover:bg-primary/90 transition"
+                onClick={() => {
+                  localStorage.removeItem("nexora-api-url");
+                  setApiUrl("");
+                  setDiscoverDone(false);
+                  qc.clear();
+                }}
+              >
+                <span className="flex items-center justify-center gap-2">
+                  <PlugZap className="h-4 w-4" />
+                  Reconfigure connection
+                </span>
+              </button>
+              {isTauriEnv && (
+                <button
+                  className="w-full py-2.5 rounded-xl border border-glass-border-soft text-sm text-content-muted hover:text-foreground hover:bg-glass-bg-subtle transition"
+                  onClick={() => openInBrowser()}
+                >
+                  <span className="flex items-center justify-center gap-2">
+                    <ExternalLink className="h-4 w-4" />
+                    Open server in browser
+                  </span>
+                </button>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     );
