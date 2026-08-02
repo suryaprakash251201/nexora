@@ -2,22 +2,16 @@ package api
 
 import (
 	"database/sql"
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
-	"net/url"
-	"os"
-	"path"
-	"path/filepath"
-	"strconv"
-	"strings"
-	"sort"
-
 	"github.com/nexora/nexora/internal/auth"
 	"github.com/nexora/nexora/internal/middleware"
 	"github.com/nexora/nexora/internal/storage"
-	"github.com/nexora/nexora/internal/util"
+	"net/http"
+	"net/url"
+	"os"
+	"sort"
+	"strconv"
+	"strings"
 )
 
 // access bundles a resolved root and its provider after permission checks.
@@ -28,6 +22,7 @@ type access struct {
 
 // resolveAccess validates the request user can access rootID with the required
 // permission. write=true requires write access and a non-read-only root.
+
 func (s *Server) resolveAccess(r *http.Request, rootID string, write bool) (access, error) {
 	user, ok := auth.UserFromContext(r.Context())
 	if !ok {
@@ -279,387 +274,6 @@ func (s *Server) handleCreateDir(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, map[string]any{"ok": true, "path": rel})
 }
 
-func (s *Server) handleRename(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Root string `json:"root"`
-		Path string `json:"path"`
-		Name string `json:"name"`
-	}
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_body", err.Error(), middleware.GetRequestID(r.Context()))
-		return
-	}
-	rel, err := storage.CleanRelative(req.Path)
-	if err != nil || rel == "" {
-		writeError(w, http.StatusBadRequest, "invalid_path", "invalid source path", middleware.GetRequestID(r.Context()))
-		return
-	}
-	newName := strings.TrimSpace(req.Name)
-	if newName == "" || strings.ContainsAny(newName, "/\\") {
-		writeError(w, http.StatusBadRequest, "invalid_name", "name must not be empty or contain slashes", middleware.GetRequestID(r.Context()))
-		return
-	}
-	acc, err := s.resolveAccess(r, req.Root, true)
-	if err != nil {
-		s.writeAccessError(w, r, err)
-		return
-	}
-	parent := path.Dir(rel)
-	if parent == "." {
-		parent = ""
-	}
-	dest := parent
-	if dest != "" {
-		dest += "/"
-	}
-	dest += newName
-	if _, err := storage.CleanRelative(dest); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_path", err.Error(), middleware.GetRequestID(r.Context()))
-		return
-	}
-	if err := acc.provider.Move(rel, dest); err != nil {
-		s.writeProviderError(w, r, err)
-		return
-	}
-	s.indexRemove(req.Root, rel)
-	s.indexUpsert(req.Root, acc.provider, dest)
-	s.audit(r, "rename", rel+" -> "+dest, "")
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "path": dest})
-}
-
-func (s *Server) handleMove(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Root        string `json:"root"`
-		Source      string `json:"source"`
-		Destination string `json:"destination"`
-	}
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_body", err.Error(), middleware.GetRequestID(r.Context()))
-		return
-	}
-	src, err := storage.CleanRelative(req.Source)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_path", "invalid source", middleware.GetRequestID(r.Context()))
-		return
-	}
-	dst, err := storage.CleanRelative(req.Destination)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_path", "invalid destination", middleware.GetRequestID(r.Context()))
-		return
-	}
-	acc, err := s.resolveAccess(r, req.Root, true)
-	if err != nil {
-		s.writeAccessError(w, r, err)
-		return
-	}
-	if err := acc.provider.Move(src, dst); err != nil {
-		s.writeProviderError(w, r, err)
-		return
-	}
-	s.indexRemove(req.Root, src)
-	s.indexUpsert(req.Root, acc.provider, dst)
-	s.audit(r, "move", src+" -> "+dst, "")
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
-}
-
-func (s *Server) handleCopy(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Root        string `json:"root"`
-		Source      string `json:"source"`
-		Destination string `json:"destination"`
-	}
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_body", err.Error(), middleware.GetRequestID(r.Context()))
-		return
-	}
-	src, err := storage.CleanRelative(req.Source)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_path", "invalid source", middleware.GetRequestID(r.Context()))
-		return
-	}
-	dst, err := storage.CleanRelative(req.Destination)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_path", "invalid destination", middleware.GetRequestID(r.Context()))
-		return
-	}
-	acc, err := s.resolveAccess(r, req.Root, true)
-	if err != nil {
-		s.writeAccessError(w, r, err)
-		return
-	}
-	if err := acc.provider.Copy(src, dst); err != nil {
-		s.writeProviderError(w, r, err)
-		return
-	}
-	s.indexUpsert(req.Root, acc.provider, dst)
-	s.audit(r, "copy", src+" -> "+dst, "")
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
-}
-
-func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
-	rootID := queryParam(r, "root", "")
-	rel, err := storage.CleanRelative(queryParam(r, "path", ""))
-	if err != nil || rel == "" {
-		writeError(w, http.StatusBadRequest, "invalid_path", "invalid path", middleware.GetRequestID(r.Context()))
-		return
-	}
-	acc, err := s.resolveAccess(r, rootID, true)
-	if err != nil {
-		s.writeAccessError(w, r, err)
-		return
-	}
-	permanent := queryParam(r, "permanent", "0") == "1"
-
-	user, _ := auth.UserFromContext(r.Context())
-	if permanent {
-		if err := acc.provider.Delete(rel); err != nil {
-			s.writeProviderError(w, r, err)
-			return
-		}
-		s.indexRemove(rootID, rel)
-		s.audit(r, "delete_permanent", rel, "")
-		writeJSON(w, http.StatusOK, map[string]any{"ok": true})
-		return
-	}
-
-	// Move into per-root trash.
-	info, err := acc.provider.Stat(rel)
-	if err != nil {
-		s.writeProviderError(w, r, err)
-		return
-	}
-	trashName := util.NewID("", 12) + "__" + info.Name
-	trashRel := ".nexora-trash/" + trashName
-	if err := acc.provider.Move(rel, trashRel); err != nil {
-		s.writeProviderError(w, r, err)
-		return
-	}
-	_, err = s.DB.Exec(
-		`INSERT INTO trash(id, user_id, root_id, original_path, trash_path, name, size, is_dir, deleted_at)
-		 VALUES(?,?,?,?,?,?,?,?,?)`,
-		util.NewID("tr_", 12), user.ID, rootID, rel, trashRel, info.Name, info.Size, boolToInt(info.IsDir), util.NowUTC())
-	if err != nil {
-		// Best-effort: try to undo the move.
-		_ = acc.provider.Move(trashRel, rel)
-		writeError(w, http.StatusInternalServerError, "internal_error", "could not record trash entry", middleware.GetRequestID(r.Context()))
-		return
-	}
-	s.audit(r, "delete", rel, "moved to trash")
-	s.indexRemove(rootID, rel)
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "trashed": true})
-}
-
-func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
-	rootID := queryParam(r, "root", "")
-	target := queryParam(r, "path", "")
-	target, err := storage.CleanRelative(target)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_path", err.Error(), middleware.GetRequestID(r.Context()))
-		return
-	}
-	acc, err := s.resolveAccess(r, rootID, true)
-	if err != nil {
-		s.writeAccessError(w, r, err)
-		return
-	}
-
-	if err := r.ParseMultipartForm(s.Cfg.MaxUploadSize); err != nil {
-		writeError(w, http.StatusBadRequest, "upload_too_large", "request body exceeds max upload size", middleware.GetRequestID(r.Context()))
-		return
-	}
-	files := r.MultipartForm.File["files"]
-	if len(files) == 0 {
-		// Single-file field fallback.
-		if f, ok := r.MultipartForm.File["file"]; ok {
-			files = f
-		}
-	}
-	if len(files) == 0 {
-		writeError(w, http.StatusBadRequest, "no_files", "no files provided", middleware.GetRequestID(r.Context()))
-		return
-	}
-
-	var uploaded []string
-	for _, fh := range files {
-		name := filepath.Base(fh.Filename)
-		if name == "" || strings.ContainsAny(name, "/\\") {
-			writeError(w, http.StatusBadRequest, "invalid_name", "invalid file name", middleware.GetRequestID(r.Context()))
-			return
-		}
-		dest := target
-		if dest != "" {
-			dest += "/"
-		}
-		dest += name
-		if _, err := storage.CleanRelative(dest); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_path", err.Error(), middleware.GetRequestID(r.Context()))
-			return
-		}
-		if err := s.checkAllowedMime(fh.Filename, fh.Header.Get("Content-Type")); err != nil {
-			writeError(w, http.StatusBadRequest, "mime_not_allowed", err.Error(), middleware.GetRequestID(r.Context()))
-			return
-		}
-		src, err := fh.Open()
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "internal_error", "could not read upload", middleware.GetRequestID(r.Context()))
-			return
-		}
-		if err := acc.provider.Write(dest, src, fh.Size); err != nil {
-			src.Close()
-			s.writeProviderError(w, r, err)
-			return
-		}
-		src.Close()
-		uploaded = append(uploaded, dest)
-		s.indexUpsert(rootID, acc.provider, dest)
-		if s.Metrics != nil {
-			s.Metrics.AddUpload(fh.Size)
-		}
-		s.audit(r, "upload", dest, "")
-		s.recordRecent(r, rootID, dest, "add")
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "uploaded": uploaded})
-}
-
-func (s *Server) checkAllowedMime(filename, contentType string) error {
-	if len(s.Cfg.AllowedMimeTypes) == 0 {
-		return nil
-	}
-	mime := storage.MimeFor(filename, false)
-	for _, allowed := range s.Cfg.AllowedMimeTypes {
-		if allowed == mime || strings.HasPrefix(mime, strings.TrimSuffix(allowed, "*")+"") {
-			return nil
-		}
-		if allowed == "*/*" || allowed == mime {
-			return nil
-		}
-	}
-	return os.ErrPermission
-}
-
-func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
-	rootID := queryParam(r, "root", "")
-	rel, err := storage.CleanRelative(queryParam(r, "path", ""))
-	if err != nil || rel == "" {
-		writeError(w, http.StatusBadRequest, "invalid_path", "invalid path", middleware.GetRequestID(r.Context()))
-		return
-	}
-	acc, err := s.resolveAccess(r, rootID, false)
-	if err != nil {
-		s.writeAccessError(w, r, err)
-		return
-	}
-	info, err := acc.provider.Stat(rel)
-	if err != nil {
-		s.writeProviderError(w, r, err)
-		return
-	}
-	if info.IsDir {
-		writeError(w, http.StatusBadRequest, "is_directory", "use archive download for directories", middleware.GetRequestID(r.Context()))
-		return
-	}
-	rc, err := acc.provider.Read(rel)
-	if err != nil {
-		s.writeProviderError(w, r, err)
-		return
-	}
-	defer rc.Close()
-	w.Header().Set("Content-Type", storage.MimeFor(info.Name, false))
-	w.Header().Set("Content-Disposition", "attachment; filename*=UTF-8''"+ urlEncode(info.Name))
-	w.Header().Set("Content-Length", strconv.FormatInt(info.Size, 10))
-	w.WriteHeader(http.StatusOK)
-	_, _ = io.Copy(w, rc)
-	s.audit(r, "download", rel, "")
-	s.recordRecent(r, rootID, rel, "access")
-}
-
-func (s *Server) handleRaw(w http.ResponseWriter, r *http.Request) {
-	rootID := queryParam(r, "root", "")
-	rel, err := storage.CleanRelative(queryParam(r, "path", ""))
-	if err != nil || rel == "" {
-		writeError(w, http.StatusBadRequest, "invalid_path", "invalid path", middleware.GetRequestID(r.Context()))
-		return
-	}
-	acc, err := s.resolveAccess(r, rootID, false)
-	if err != nil {
-		s.writeAccessError(w, r, err)
-		return
-	}
-	info, err := acc.provider.Stat(rel)
-	if err != nil {
-		s.writeProviderError(w, r, err)
-		return
-	}
-	if info.IsDir {
-		writeError(w, http.StatusBadRequest, "is_directory", "cannot preview a directory", middleware.GetRequestID(r.Context()))
-		return
-	}
-	if r.Header.Get("Range") == "" {
-		s.recordRecent(r, rootID, rel, "access")
-	}
-	total := info.Size
-	start, end := parseRange(r.Header.Get("Range"), total)
-	rc, _, err := acc.provider.OpenRange(rel, start, end)
-	if err != nil {
-		s.writeProviderError(w, r, err)
-		return
-	}
-	defer rc.Close()
-
-	mime := storage.MimeFor(info.Name, false)
-	w.Header().Set("Content-Type", mime)
-	w.Header().Set("Accept-Ranges", "bytes")
-	if r.URL.Query().Get("download") == "1" {
-		w.Header().Set("Content-Disposition", "attachment; filename*=UTF-8''"+ urlEncode(info.Name))
-	} else {
-		w.Header().Set("Content-Disposition", "inline; filename*=UTF-8''"+ urlEncode(info.Name))
-	}
-
-	rangeHeader := r.Header.Get("Range")
-	if rangeHeader == "" {
-		w.Header().Set("Content-Length", strconv.FormatInt(total, 10))
-		w.WriteHeader(http.StatusOK)
-		_, _ = io.Copy(w, rc)
-		return
-	}
-	w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", start, end, total))
-	w.Header().Set("Content-Length", strconv.FormatInt(end-start+1, 10))
-	w.WriteHeader(http.StatusPartialContent)
-	_, _ = io.Copy(w, rc)
-}
-
-func parseRange(rangeHeader string, total int64) (int64, int64) {
-	start, end := int64(0), total-1
-	if rangeHeader == "" || !strings.HasPrefix(rangeHeader, "bytes=") {
-		return start, end
-	}
-	spec := strings.TrimPrefix(rangeHeader, "bytes=")
-	parts := strings.SplitN(spec, "-", 2)
-	if len(parts) != 2 {
-		return start, end
-	}
-	if parts[0] != "" {
-		if v, err := strconv.ParseInt(parts[0], 10, 64); err == nil {
-			start = v
-		}
-	}
-	if parts[1] != "" {
-		if v, err := strconv.ParseInt(parts[1], 10, 64); err == nil {
-			end = v
-		}
-	}
-	if start < 0 {
-		start = 0
-	}
-	if end >= total {
-		end = total - 1
-	}
-	if start > end {
-		start, end = 0, total-1
-	}
-	return start, end
-}
-
 func (s *Server) writeAccessError(w http.ResponseWriter, r *http.Request, err error) {
 	rid := middleware.GetRequestID(r.Context())
 	switch err {
@@ -715,63 +329,12 @@ func fileToMap(f storage.FileInfo, rootID string) map[string]any {
 	}
 }
 
-func (s *Server) handleCreateFile(w http.ResponseWriter, r *http.Request) {
-	r.Body = http.MaxBytesReader(w, r.Body, 10<<20) // 10 MB limit
-	var req struct {
-		Root    string `json:"root"`
-		Path    string `json:"path"`
-		Content string `json:"content"`
-	}
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_body", err.Error(), middleware.GetRequestID(r.Context()))
-		return
-	}
-	rel, err := storage.CleanRelative(req.Path)
-	if err != nil || rel == "" {
-		writeError(w, http.StatusBadRequest, "invalid_path", "invalid file path", middleware.GetRequestID(r.Context()))
-		return
-	}
-	if storage.Ext(rel) == "" {
-		writeError(w, http.StatusBadRequest, "invalid_name", "a file extension is required", middleware.GetRequestID(r.Context()))
-		return
-	}
-	acc, err := s.resolveAccess(r, req.Root, true)
-	if err != nil {
-		s.writeAccessError(w, r, err)
-		return
-	}
-	if err := s.checkAllowedMime(rel, ""); err != nil {
-		writeError(w, http.StatusBadRequest, "mime_not_allowed", err.Error(), middleware.GetRequestID(r.Context()))
-		return
-	}
-	if err := acc.provider.Write(rel, strings.NewReader(req.Content), int64(len(req.Content))); err != nil {
-		s.writeProviderError(w, r, err)
-		return
-	}
-	s.indexUpsert(req.Root, acc.provider, rel)
-	s.audit(r, "create_file", rel, "")
-	s.recordRecent(r, req.Root, rel, "add")
-	writeJSON(w, http.StatusCreated, map[string]any{"ok": true, "path": rel})
-}
-
-func decodeJSON(r *http.Request, v any) error {
-	defer r.Body.Close()
-	return json.NewDecoder(r.Body).Decode(v)
-}
-
-func boolToInt(b bool) int {
-	if b {
-		return 1
-	}
-	return 0
-}
-
-// errUnauthorized signals a missing session in resolveAccess.
 var errUnauthorized = fmt.Errorf("unauthorized")
 
 func urlEncode(name string) string { return url.QueryEscape(name) }
 
 // indexUpsert refreshes the search index for a single path (best effort).
+
 func (s *Server) indexUpsert(rootID string, provider storage.StorageProvider, rel string) {
 	if s.Search == nil {
 		return
@@ -782,6 +345,7 @@ func (s *Server) indexUpsert(rootID string, provider storage.StorageProvider, re
 }
 
 // indexRemove removes a path (and its subtree) from the search index.
+
 func (s *Server) indexRemove(rootID, rel string) {
 	if s.Search == nil {
 		return
