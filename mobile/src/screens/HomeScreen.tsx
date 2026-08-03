@@ -20,8 +20,10 @@ import { useSession } from "../store/SessionContext";
 import { useTheme } from "../store/ThemeContext";
 import { FileRow, EmptyState, SectionLabel, Chevron } from "../components/FileRow";
 import { ListSkeleton, GridCardSkeleton } from "../components/Skeletons";
+import { previewKind } from "../api/client";
 import type { Root, FileItem } from "../api/types";
 import type { RootStackParamList, MainTabParamList } from "../navigation/types";
+import { useAudio } from "../store/AudioContext";
 
 type Nav = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, "Home">,
@@ -29,10 +31,10 @@ type Nav = CompositeNavigationProp<
 >;
 
 const QUICK_CATEGORIES = [
-  { id: "photos", title: "Photos", icon: "image-multiple", filter: "image" as const, gradient: ["#5B8CFF", "#7C5BFF"] as const },
-  { id: "docs", title: "Documents", icon: "file-document", filter: "document" as const, gradient: ["#F97316", "#FBBF24"] as const },
-  { id: "music", title: "Audio", icon: "music-note", filter: "audio" as const, gradient: ["#2DD4BF", "#22C55E"] as const },
-  { id: "videos", title: "Videos", icon: "play-circle", filter: "video" as const, gradient: ["#A78BFA", "#EF4444"] as const },
+  { id: "photos", title: "Photos", icon: "image-multiple", filter: "image" as const, gradient: ["#4F46E5", "#8B5CF6"] as const },
+  { id: "docs", title: "Documents", icon: "file-document", filter: "document" as const, gradient: ["#F59E0B", "#F97316"] as const },
+  { id: "music", title: "Audio", icon: "music-note", filter: "audio" as const, gradient: ["#14B8A6", "#10B981"] as const },
+  { id: "videos", title: "Videos", icon: "play-circle", filter: "video" as const, gradient: ["#F43F5E", "#E11D48"] as const },
 ];
 
 const ROOT_ICONS: Record<string, string> = {
@@ -49,6 +51,7 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const { api, user } = useSession();
   const { colors, font, gradients, radius, spacing, shadow, shadowSm, isDark } = useTheme();
+  const { playTrack } = useAudio();
 
   const [roots, setRoots] = useState<Root[]>([]);
   const [recents, setRecents] = useState<FileItem[]>([]);
@@ -81,16 +84,20 @@ export default function HomeScreen() {
     (root: Root) => navigation.navigate("Browser", { rootId: root.id, rootName: root.name }),
     [navigation]
   );
-  const openSearch = useCallback(() => {
-    navigation.navigate("Recents", { focusSearch: true });
-  }, [navigation]);
+
   const openCategory = useCallback(
     (filter: string) => navigation.navigate("Recents", { filter }),
     [navigation]
   );
   const openFile = useCallback(
-    (item: FileItem) => navigation.navigate("Preview", { item, rootId: item.root_id }),
-    [navigation]
+    (item: FileItem) => {
+      if (previewKind(item) === "audio") {
+        playTrack(item, recents.filter((x) => previewKind(x) === "audio"));
+      } else {
+        navigation.navigate("Preview", { item, rootId: item.root_id });
+      }
+    },
+    [navigation, playTrack, recents]
   );
 
   const greeting = useMemo(() => {
@@ -107,17 +114,17 @@ export default function HomeScreen() {
   if (loading) {
     return (
       <View style={[styles.root, { backgroundColor: colors.bg }]}>
-        <View style={[styles.hero, { paddingTop: insets.top + 12 }]}>
+        <View style={[styles.hero, { paddingTop: insets.top + 20 }]}>
           <LinearGradient colors={[...gradients.hero]} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={StyleSheet.absoluteFill} pointerEvents="none" />
           <View style={styles.headerRow}>
             <View>
-              <View style={{ width: 120, height: 14, borderRadius: 6, backgroundColor: colors.card }} />
-              <View style={{ width: 140, height: 26, borderRadius: 8, backgroundColor: colors.card, marginTop: 8 }} />
+              <View style={{ width: 120, height: 16, borderRadius: 8, backgroundColor: colors.card }} />
+              <View style={{ width: 160, height: 32, borderRadius: 8, backgroundColor: colors.card, marginTop: 10 }} />
             </View>
-            <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: colors.card }} />
+            <View style={{ width: 52, height: 52, borderRadius: 26, backgroundColor: colors.card }} />
           </View>
         </View>
-        <View style={{ paddingHorizontal: spacing.lg, gap: spacing.md, flexDirection: "row", marginTop: spacing.lg }}>
+        <View style={{ paddingHorizontal: spacing.xl, gap: spacing.md, flexDirection: "row", marginTop: spacing.xl }}>
           <GridCardSkeleton />
           <GridCardSkeleton />
         </View>
@@ -129,7 +136,7 @@ export default function HomeScreen() {
   return (
     <FlatList
       style={[styles.root, { backgroundColor: colors.bg }]}
-      contentContainerStyle={{ paddingBottom: 130 }}
+      contentContainerStyle={{ paddingBottom: 140 }}
       data={roots}
       keyExtractor={(r) => r.id}
       numColumns={2}
@@ -144,14 +151,20 @@ export default function HomeScreen() {
               {
                 backgroundColor: colors.surface,
                 borderColor: colors.borderSoft,
-                borderRadius: radius.lg,
+                borderRadius: radius.xl,
                 padding: spacing.lg,
               },
-              shadowSm,
+              shadow,
             ]}
-            activeOpacity={0.75}
+            activeOpacity={0.8}
             onPress={() => openRoot(item)}
           >
+            <LinearGradient
+              colors={["rgba(255,255,255,0.05)", "transparent"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.glassHighlight}
+            />
             <View style={styles.rootCardTop}>
               <View style={styles.rootIconWrap}>
                 <LinearGradient
@@ -160,36 +173,36 @@ export default function HomeScreen() {
                   end={{ x: 1, y: 1 }}
                   style={StyleSheet.absoluteFill}
                 />
-                <MaterialCommunityIcons name={iconName as any} size={22} color="#fff" />
+                <MaterialCommunityIcons name={iconName as any} size={24} color="#fff" />
               </View>
 
               <View
                 style={[
                   styles.permBadge,
-                  { backgroundColor: item.permission === "write" ? "rgba(34,197,94,0.15)" : colors.card },
+                  { backgroundColor: item.permission === "write" ? "rgba(16,185,129,0.15)" : colors.card },
                 ]}
               >
                 <MaterialCommunityIcons
                   name={item.permission === "write" ? "pencil" : "eye"}
-                  size={12}
+                  size={14}
                   color={item.permission === "write" ? colors.success : colors.muted}
                 />
               </View>
             </View>
 
-            <View style={{ marginTop: 14 }}>
-              <Text style={[styles.rootName, { color: colors.content, fontSize: font.md }]} numberOfLines={1}>
+            <View style={{ marginTop: 20 }}>
+              <Text style={[styles.rootName, { color: colors.content, fontSize: font.lg }]} numberOfLines={1}>
                 {item.name}
               </Text>
-              <Text style={[styles.rootType, { color: colors.muted, fontSize: font.xs }]}>
-                {item.type.toUpperCase()} storage
+              <Text style={[styles.rootType, { color: colors.muted, fontSize: font.sm }]}>
+                {item.type.toUpperCase()} Storage
               </Text>
             </View>
 
             <View style={styles.rootCardFooter}>
-              <Text style={[styles.rootActionLabel, { color: colors.accent, fontSize: font.xs }]}>Browse</Text>
+              <Text style={[styles.rootActionLabel, { color: colors.accent, fontSize: font.sm }]}>Browse</Text>
               <View style={[styles.rootArrowWrap, { backgroundColor: colors.accentSoft }]}>
-                <MaterialCommunityIcons name="arrow-right" size={14} color={colors.accent} />
+                <MaterialCommunityIcons name="arrow-right" size={16} color={colors.accent} />
               </View>
             </View>
           </TouchableOpacity>
@@ -198,12 +211,12 @@ export default function HomeScreen() {
       ListHeaderComponent={
         <View>
           {/* Dashboard Header */}
-          <View style={[styles.hero, { paddingTop: insets.top + 12 }]}>
+          <View style={[styles.hero, { paddingTop: insets.top + 24 }]}>
             <LinearGradient colors={[...gradients.hero]} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={StyleSheet.absoluteFill} pointerEvents="none" />
 
             <View style={styles.headerRow}>
               <View style={{ flex: 1 }}>
-                <Text style={[styles.greeting, { color: colors.muted, fontSize: font.sm }]}>{greeting}</Text>
+                <Text style={[styles.greeting, { color: colors.muted, fontSize: font.md }]}>{greeting}</Text>
                 <Text style={[styles.heroName, { color: colors.content }]}>{firstName || "Explorer"}</Text>
               </View>
               <TouchableOpacity
@@ -216,43 +229,24 @@ export default function HomeScreen() {
               </TouchableOpacity>
             </View>
 
-            {/* Quick Search trigger */}
-            <TouchableOpacity
-              style={[
-                styles.searchBar,
-                {
-                  backgroundColor: colors.surfaceElevated,
-                  borderColor: colors.borderSoft,
-                  borderRadius: radius.xl,
-                },
-                shadowSm,
-              ]}
-              activeOpacity={0.8}
-              onPress={openSearch}
-            >
-              <MaterialCommunityIcons name="magnify" size={22} color={colors.accent} />
-              <Text style={[styles.searchPlaceholder, { color: colors.muted, fontSize: font.md }]}>Search files, tags or storage…</Text>
-              <View style={[styles.searchPill, { backgroundColor: colors.card }]}>
-                <Text style={{ color: colors.muted, fontSize: 10, fontWeight: "700" }}>SEARCH</Text>
-              </View>
-            </TouchableOpacity>
+
 
             {error ? (
-              <TouchableOpacity style={[styles.errorPill, { borderColor: "rgba(239,68,68,0.3)" }]} onPress={() => load(true)}>
-                <MaterialCommunityIcons name="alert-circle-outline" size={14} color={colors.danger} />
-                <Text style={[styles.errorText, { color: colors.danger, fontSize: font.xs }]}>{error} — Tap to retry</Text>
+              <TouchableOpacity style={[styles.errorPill, { borderColor: "rgba(244,63,94,0.3)" }]} onPress={() => load(true)}>
+                <MaterialCommunityIcons name="alert-circle-outline" size={16} color={colors.danger} />
+                <Text style={[styles.errorText, { color: colors.danger, fontSize: font.sm }]}>{error} — Tap to retry</Text>
               </TouchableOpacity>
             ) : null}
           </View>
 
           {/* Quick Categories Bar */}
           <View style={styles.quickWrap}>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: spacing.lg, gap: 12 }}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: spacing.lg, gap: 16 }}>
               {QUICK_CATEGORIES.map((cat) => (
                 <TouchableOpacity
                   key={cat.id}
                   style={styles.quickCard}
-                  activeOpacity={0.7}
+                  activeOpacity={0.75}
                   onPress={() => openCategory(cat.filter)}
                 >
                   <View style={[styles.quickIconWrap, shadowSm]}>
@@ -262,9 +256,9 @@ export default function HomeScreen() {
                       end={{ x: 1, y: 1 }}
                       style={StyleSheet.absoluteFill}
                     />
-                    <MaterialCommunityIcons name={cat.icon as any} size={24} color="#fff" />
+                    <MaterialCommunityIcons name={cat.icon as any} size={28} color="#fff" />
                   </View>
-                  <Text style={[styles.quickLabel, { color: colors.content, fontSize: font.xs }]}>{cat.title}</Text>
+                  <Text style={[styles.quickLabel, { color: colors.content, fontSize: font.sm }]}>{cat.title}</Text>
                 </TouchableOpacity>
               ))}
             </ScrollView>
@@ -280,31 +274,37 @@ export default function HomeScreen() {
                 borderRadius: radius.xl,
                 marginHorizontal: spacing.lg,
               },
-              shadowSm,
+              shadow,
             ]}
           >
+            <LinearGradient
+              colors={["rgba(255,255,255,0.03)", "transparent"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.glassHighlight}
+            />
             <View style={styles.statItem}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-                <MaterialCommunityIcons name="server" size={16} color={colors.accent} />
-                <Text style={[styles.statValue, { color: colors.content, fontSize: font.lg }]}>{roots.length}</Text>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                <MaterialCommunityIcons name="server" size={18} color={colors.accent} />
+                <Text style={[styles.statValue, { color: colors.content, fontSize: font.xl }]}>{roots.length}</Text>
               </View>
-              <Text style={[styles.statLabel, { color: colors.muted, fontSize: font.xs }]}>Active Roots</Text>
+              <Text style={[styles.statLabel, { color: colors.muted, fontSize: font.sm }]}>Active Roots</Text>
             </View>
             <View style={[styles.statDivider, { backgroundColor: colors.borderSoft }]} />
             <View style={styles.statItem}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-                <MaterialCommunityIcons name="clock-outline" size={16} color={colors.purple} />
-                <Text style={[styles.statValue, { color: colors.content, fontSize: font.lg }]}>{recents.length}</Text>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                <MaterialCommunityIcons name="clock-outline" size={18} color={colors.purple} />
+                <Text style={[styles.statValue, { color: colors.content, fontSize: font.xl }]}>{recents.length}</Text>
               </View>
-              <Text style={[styles.statLabel, { color: colors.muted, fontSize: font.xs }]}>Recent Files</Text>
+              <Text style={[styles.statLabel, { color: colors.muted, fontSize: font.sm }]}>Recent Files</Text>
             </View>
             <View style={[styles.statDivider, { backgroundColor: colors.borderSoft }]} />
             <View style={styles.statItem}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-                <MaterialCommunityIcons name="shield-check" size={16} color={colors.success} />
-                <Text style={[styles.statValue, { color: colors.success, fontSize: font.sm }]}>Connected</Text>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                <MaterialCommunityIcons name="shield-check" size={18} color={colors.success} />
+                <Text style={[styles.statValue, { color: colors.success, fontSize: font.md }]}>Secure</Text>
               </View>
-              <Text style={[styles.statLabel, { color: colors.muted, fontSize: font.xs }]}>Connected</Text>
+              <Text style={[styles.statLabel, { color: colors.muted, fontSize: font.sm }]}>Connection</Text>
             </View>
           </View>
 
@@ -321,41 +321,74 @@ export default function HomeScreen() {
         ) : null
       }
       ListFooterComponent={
-        recents.length > 0 ? (
-          <View style={{ marginTop: 8 }}>
-            <View style={styles.sectionRow}>
-              <SectionLabel>Recent files</SectionLabel>
-              <TouchableOpacity
-                style={styles.seeAll}
-                onPress={() => navigation.navigate("Recents")}
-              >
-                <Text style={[styles.seeAllText, { color: colors.accent, fontSize: font.sm }]}>See all</Text>
-                <Chevron />
-              </TouchableOpacity>
+        <View style={{ marginTop: 12 }}>
+          {recents.filter(f => previewKind(f) === "audio").length > 0 && (
+            <View style={{ marginBottom: 24 }}>
+              <View style={styles.sectionRow}>
+                <SectionLabel>Recently Played Songs</SectionLabel>
+              </View>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: spacing.lg, gap: 12 }}>
+                {recents.filter(f => previewKind(f) === "audio").slice(0, 5).map(f => (
+                  <TouchableOpacity
+                    key={f.root_id + f.path}
+                    style={[styles.audioCard, { backgroundColor: colors.surface, borderColor: colors.borderSoft, borderRadius: radius.xl }, shadowSm]}
+                    activeOpacity={0.8}
+                    onPress={() => openFile(f)}
+                  >
+                    <LinearGradient colors={["rgba(255,255,255,0.06)", "transparent"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+                    <View style={styles.audioIcon}>
+                      <MaterialCommunityIcons name="music-circle" size={32} color={colors.accent} />
+                    </View>
+                    <Text style={[styles.audioTitle, { color: colors.content, fontSize: font.sm }]} numberOfLines={1}>{f.name}</Text>
+                    <Text style={[styles.audioSub, { color: colors.muted, fontSize: font.xs }]}>Music</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
             </View>
-            <View
-              style={[
-                styles.recentsCard,
-                {
-                  backgroundColor: colors.surface,
-                  borderColor: colors.borderSoft,
-                  borderRadius: radius.xl,
-                  marginHorizontal: spacing.lg,
-                },
-                shadowSm,
-              ]}
-            >
-              {recents.map((f, i) => (
-                <View
-                  key={f.root_id + f.path}
-                  style={i < recents.length - 1 ? { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.borderSoft } : undefined}
+          )}
+
+          {recents.length > 0 && (
+            <View>
+              <View style={styles.sectionRow}>
+                <SectionLabel>Last Opened Files</SectionLabel>
+                <TouchableOpacity
+                  style={styles.seeAll}
+                  onPress={() => navigation.navigate("Recents")}
                 >
-                  <FileRow item={f} onPress={openFile} showDate />
-                </View>
-              ))}
+                  <Text style={[styles.seeAllText, { color: colors.accent, fontSize: font.md }]}>See all</Text>
+                  <Chevron />
+                </TouchableOpacity>
+              </View>
+              <View
+                style={[
+                  styles.recentsCard,
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: colors.borderSoft,
+                    borderRadius: radius.xxl,
+                    marginHorizontal: spacing.lg,
+                  },
+                  shadow,
+                ]}
+              >
+                <LinearGradient
+                  colors={["rgba(255,255,255,0.03)", "transparent"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.glassHighlight}
+                />
+                {recents.slice(0, 5).map((f, i, arr) => (
+                  <View
+                    key={f.root_id + f.path}
+                    style={i < arr.length - 1 ? { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.borderSoft } : undefined}
+                  >
+                    <FileRow item={f} onPress={openFile} showDate />
+                  </View>
+                ))}
+              </View>
             </View>
-          </View>
-        ) : null
+          )}
+        </View>
       }
     />
   );
@@ -363,45 +396,55 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+  glassHighlight: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: 24,
+    pointerEvents: "none",
+  },
 
   // ── Hero Header ──
   hero: {
-    paddingHorizontal: 20,
-    paddingBottom: 20,
+    paddingHorizontal: 24,
+    paddingBottom: 28,
     overflow: "hidden",
   },
   headerRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 18,
+    marginBottom: 24,
   },
-  greeting: { fontWeight: "600" },
-  heroName: { fontSize: 30, fontWeight: "800", letterSpacing: 0.2, marginTop: 2 },
+  greeting: { fontWeight: "600", letterSpacing: 0.5 },
+  heroName: { fontSize: 34, fontWeight: "800", letterSpacing: 0.2, marginTop: 4 },
   avatarBtn: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
   },
-  avatarText: { color: "#fff", fontSize: 18, fontWeight: "800" },
+  avatarText: { color: "#fff", fontSize: 20, fontWeight: "800" },
 
   // ── Search Trigger ──
   searchBar: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 16,
-    height: 52,
-    gap: 12,
+    paddingHorizontal: 18,
+    height: 58,
+    gap: 14,
     borderWidth: 1,
+    overflow: "hidden",
   },
   searchPlaceholder: { flex: 1, fontWeight: "500" },
   searchPill: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
   },
 
   // ── Error Pill ──
@@ -409,26 +452,26 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    marginTop: 14,
-    backgroundColor: "rgba(239,68,68,0.10)",
+    marginTop: 16,
+    backgroundColor: "rgba(244,63,94,0.12)",
     borderRadius: 20,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
     borderWidth: 1,
   },
   errorText: { fontWeight: "600" },
 
   // ── Quick Categories ──
-  quickWrap: { marginTop: 12, marginBottom: 8 },
+  quickWrap: { marginTop: 16, marginBottom: 16 },
   quickCard: {
     alignItems: "center",
-    width: 78,
-    gap: 8,
+    width: 84,
+    gap: 10,
   },
   quickIconWrap: {
-    width: 56,
-    height: 56,
-    borderRadius: 18,
+    width: 64,
+    height: 64,
+    borderRadius: 22,
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
@@ -438,12 +481,13 @@ const styles = StyleSheet.create({
   // ── Stats Bar ──
   statsBar: {
     flexDirection: "row",
-    marginTop: 14,
-    marginBottom: 8,
+    marginTop: 16,
+    marginBottom: 16,
     borderWidth: 1,
-    paddingVertical: 14,
+    paddingVertical: 18,
+    overflow: "hidden",
   },
-  statItem: { flex: 1, alignItems: "center", gap: 3 },
+  statItem: { flex: 1, alignItems: "center", gap: 4 },
   statValue: { fontWeight: "800" },
   statLabel: { fontWeight: "600" },
   statDivider: { width: 1, marginVertical: 4 },
@@ -452,6 +496,7 @@ const styles = StyleSheet.create({
   rootCard: {
     flex: 1,
     borderWidth: 1,
+    overflow: "hidden",
   },
   rootCardTop: {
     flexDirection: "row",
@@ -459,33 +504,33 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
   },
   rootIconWrap: {
-    width: 46,
-    height: 46,
-    borderRadius: 14,
+    width: 52,
+    height: 52,
+    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
   },
   permBadge: {
-    width: 26,
-    height: 26,
-    borderRadius: 8,
+    width: 28,
+    height: 28,
+    borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
   },
   rootName: { fontWeight: "700" },
-  rootType: { marginTop: 2, fontWeight: "600" },
+  rootType: { marginTop: 4, fontWeight: "600" },
   rootCardFooter: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginTop: 14,
+    marginTop: 18,
   },
   rootActionLabel: { fontWeight: "700" },
   rootArrowWrap: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -495,8 +540,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingRight: 20,
-    marginBottom: 2,
+    paddingRight: 24,
+    marginBottom: 8,
   },
   seeAll: { flexDirection: "row", alignItems: "center", gap: 2, padding: 4, marginTop: 18 },
   seeAllText: { fontWeight: "700" },
@@ -504,4 +549,22 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     overflow: "hidden",
   },
+  audioCard: {
+    width: 140,
+    padding: 16,
+    borderWidth: 1,
+    overflow: "hidden",
+    alignItems: "flex-start",
+  },
+  audioIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "rgba(255,255,255,0.05)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 12,
+  },
+  audioTitle: { fontWeight: "700", marginBottom: 2 },
+  audioSub: { fontWeight: "600" },
 });

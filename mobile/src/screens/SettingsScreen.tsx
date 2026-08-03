@@ -16,10 +16,21 @@ import Constants from "expo-constants";
 import { useSession } from "../store/SessionContext";
 import { useTheme } from "../store/ThemeContext";
 import { AppIcon } from "../components/AppIcon";
+import { useNavigation } from "@react-navigation/native";
+import type { CompositeNavigationProp } from "@react-navigation/native";
+import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import type { RootStackParamList, MainTabParamList } from "../navigation/types";
+
+type SettingsNav = CompositeNavigationProp<
+  BottomTabNavigationProp<MainTabParamList, "Settings">,
+  NativeStackNavigationProp<RootStackParamList>
+>;
 
 export default function SettingsScreen() {
   const { serverUrl, user, api, connect, logout } = useSession();
-  const { colors, font, gradients, radius, spacing, shadowSm, isDark, setTheme } = useTheme();
+  const { colors, font, gradients, radius, spacing, shadow, shadowSm, isDark, setTheme } = useTheme();
+  const navigation = useNavigation<SettingsNav>();
 
   const [urlDraft, setUrlDraft] = useState(serverUrl || "");
   const [saving, setSaving] = useState(false);
@@ -95,7 +106,13 @@ export default function SettingsScreen() {
 
       {/* Appearance Section */}
       <Text style={[styles.section, { color: colors.muted }]}>Appearance</Text>
-      <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.borderSoft, borderRadius: radius.lg }, shadowSm]}>
+      <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.borderSoft, borderRadius: radius.xl }, shadow]}>
+        <LinearGradient
+          colors={["rgba(255,255,255,0.04)", "transparent"]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.glassHighlight}
+        />
         <View style={styles.row}>
           <View style={[styles.rowIcon, { backgroundColor: colors.accentSoft }]}>
             <MaterialCommunityIcons name={isDark ? "moon-waning-crescent" : "white-balance-sunny"} size={17} color={colors.accent} />
@@ -110,9 +127,31 @@ export default function SettingsScreen() {
         </View>
       </View>
 
+      {/* Preferences Section */}
+      <Text style={[styles.section, { color: colors.muted }]}>Preferences</Text>
+      <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.borderSoft, borderRadius: radius.xl }, shadow]}>
+        <LinearGradient
+          colors={["rgba(255,255,255,0.04)", "transparent"]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.glassHighlight}
+        />
+        <Row icon="harddisk" label="Storage Management" value="24.5 GB used" iconColor="#F59E0B" iconBg="rgba(245,158,11,0.15)" />
+        <View style={[styles.divider, { backgroundColor: colors.borderSoft }]} />
+        <Row icon="wifi" label="Use Cellular Data" value="Wi-Fi Only" iconColor="#3B82F6" iconBg="rgba(59,130,246,0.15)" />
+        <View style={[styles.divider, { backgroundColor: colors.borderSoft }]} />
+        <Row icon="fingerprint" label="Face ID / Touch ID" value="Enabled" iconColor="#10B981" iconBg="rgba(16,185,129,0.15)" />
+      </View>
+
       {/* Server Section */}
       <Text style={[styles.section, { color: colors.muted }]}>Server Settings</Text>
-      <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.borderSoft, borderRadius: radius.lg }, shadowSm]}>
+      <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.borderSoft, borderRadius: radius.xl }, shadow]}>
+        <LinearGradient
+          colors={["rgba(255,255,255,0.04)", "transparent"]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.glassHighlight}
+        />
         <Text style={[styles.label, { color: colors.muted, fontSize: font.sm }]}>Server endpoint URL</Text>
         <TextInput
           style={[styles.input, { backgroundColor: colors.surfaceMuted, borderColor: colors.borderSoft, color: colors.content, borderRadius: radius.md }]}
@@ -140,9 +179,40 @@ export default function SettingsScreen() {
         </View>
       </View>
 
+      {/* Administration — visible to admin accounts only. */}
+      {user?.role === "admin" ? (
+        <>
+          <Text style={[styles.section, { color: colors.muted }]}>Administration</Text>
+          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.borderSoft, borderRadius: radius.lg }, shadowSm]}>
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => navigation.navigate("Admin")}
+              style={[styles.adminRow, { backgroundColor: colors.accentSoft, borderRadius: radius.md }]}
+            >
+              <View style={[styles.adminIcon, { backgroundColor: colors.accent }]}>
+                <MaterialCommunityIcons name="shield-lock-outline" size={18} color="#fff" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.adminTitle, { color: colors.content, fontSize: font.md }]}>Admin Dashboard</Text>
+                <Text style={[styles.adminSub, { color: colors.muted, fontSize: font.xs }]}>
+                  Users, storage roots, permissions & audit log
+                </Text>
+              </View>
+              <MaterialCommunityIcons name="chevron-right" size={20} color={colors.accent} />
+            </TouchableOpacity>
+          </View>
+        </>
+      ) : null}
+
       {/* About Section */}
       <Text style={[styles.section, { color: colors.muted }]}>About</Text>
-      <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.borderSoft, borderRadius: radius.lg }, shadowSm]}>
+      <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.borderSoft, borderRadius: radius.xl }, shadow]}>
+        <LinearGradient
+          colors={["rgba(255,255,255,0.04)", "transparent"]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.glassHighlight}
+        />
         <Row icon="server" label="Storage Mode" value="Self-hosted" iconColor="#10b981" iconBg="rgba(16,185,129,0.15)" />
         <View style={[styles.divider, { backgroundColor: colors.borderSoft }]} />
         <Row icon="scale-balance" label="License" value="MIT License" iconColor="#f59e0b" iconBg="rgba(245,158,11,0.15)" />
@@ -151,7 +221,13 @@ export default function SettingsScreen() {
       </View>
 
       {/* App Branding Card */}
-      <View style={[styles.brandRow, { backgroundColor: colors.surface, borderColor: colors.borderSoft, borderRadius: radius.lg }, shadowSm]}>
+      <View style={[styles.brandRow, { backgroundColor: colors.surface, borderColor: colors.borderSoft, borderRadius: radius.xl }, shadow]}>
+        <LinearGradient
+          colors={["rgba(255,255,255,0.04)", "transparent"]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.glassHighlight}
+        />
         <AppIcon size={40} />
         <View style={{ flex: 1 }}>
           <Text style={[styles.brandName, { color: colors.content, fontSize: font.md }]}>Nexora Mobile</Text>
@@ -244,8 +320,18 @@ const styles = StyleSheet.create({
   card: {
     marginHorizontal: 20,
     borderWidth: 1,
-    padding: 16,
+    padding: 20,
     gap: 12,
+    overflow: "hidden",
+  },
+  glassHighlight: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: 24,
+    pointerEvents: "none",
   },
   label: { fontWeight: "600" },
   input: {
@@ -281,8 +367,9 @@ const styles = StyleSheet.create({
     gap: 12,
     marginHorizontal: 20,
     marginTop: 24,
-    padding: 14,
+    padding: 16,
     borderWidth: 1,
+    overflow: "hidden",
   },
   brandName: { fontWeight: "700" },
   brandTag: { marginTop: 2 },
@@ -320,4 +407,20 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
   },
   logoutText: { fontWeight: "700" },
+
+  adminRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 12,
+  },
+  adminIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  adminTitle: { fontWeight: "700" },
+  adminSub: { marginTop: 2, fontWeight: "500" },
 });

@@ -1,6 +1,7 @@
 import React, { memo } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import { useTheme } from "../store/ThemeContext";
 import { previewKind, formatBytes, formatDate } from "../api/client";
 import type { FileItem } from "../api/types";
@@ -75,11 +76,19 @@ export const FileRow = memo(function FileRow({
           backgroundColor: selected ? colors.accentSoft : "transparent",
         },
       ]}
-      activeOpacity={0.6}
+      activeOpacity={0.8}
       onPress={() => (selectMode && onSelect ? onSelect(item) : onPress ? onPress(item) : undefined)}
       onLongPress={onLongPress ? () => onLongPress(item) : undefined}
       delayLongPress={350}
     >
+      {selected && (
+        <LinearGradient
+          colors={["rgba(255,255,255,0.06)", "transparent"]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
+      )}
       {selectMode && (
         <TouchableOpacity
           style={[
@@ -132,6 +141,12 @@ export function EmptyState({ icon = "folder-open-outline", title, hint }: { icon
   return (
     <View style={styles.empty}>
       <View style={[styles.emptyIconOuter, { backgroundColor: colors.surface, borderColor: colors.borderSoft }, shadowSm]}>
+        <LinearGradient
+          colors={["rgba(255,255,255,0.04)", "transparent"]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={{ borderRadius: 24, position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
+        />
         <View style={[styles.emptyIcon, { backgroundColor: colors.card }]}>
           <MaterialCommunityIcons name={icon as any} size={32} color={colors.muted} />
         </View>

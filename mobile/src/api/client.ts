@@ -1,4 +1,15 @@
-import type { FileListResponse, FileItem, Root, SearchResponse, User, ApiError } from "./types";
+import type {
+  FileListResponse,
+  FileItem,
+  Root,
+  SearchResponse,
+  User,
+  ApiError,
+  AdminUser,
+  AdminRoot,
+  AdminUsage,
+  AuditEntry,
+} from "./types";
 
 /**
  * Nexora mobile API client.
@@ -241,6 +252,75 @@ export class Api {
         }
       },
     };
+  }
+
+  // ── Admin ────────────────────────────────────────────────────────────
+  listAdminUsers(): Promise<{ users: AdminUser[] }> {
+    return this.get("/admin/users");
+  }
+
+  createAdminUser(body: {
+    username: string;
+    email?: string;
+    password: string;
+    display_name?: string;
+    role?: string;
+  }): Promise<{ user: AdminUser }> {
+    return this.post("/admin/users", body);
+  }
+
+  updateAdminUser(id: string, body: { role?: string; status?: string; password?: string }): Promise<{ ok: boolean }> {
+    return this.put(`/admin/users/${id}`, body);
+  }
+
+  deleteAdminUser(id: string): Promise<{ ok: boolean }> {
+    return this.del(`/admin/users/${id}`);
+  }
+
+  listAdminRoots(): Promise<{ roots: AdminRoot[] }> {
+    return this.get("/admin/roots");
+  }
+
+  createAdminRoot(body: {
+    name: string;
+    path: string;
+    type?: string;
+    config?: string;
+    read_only?: boolean;
+    indexed?: boolean;
+  }): Promise<{ ok: boolean; id: string }> {
+    return this.post("/admin/roots", body);
+  }
+
+  updateAdminRoot(
+    id: string,
+    body: { name?: string; path?: string; read_only?: boolean; enabled?: boolean; indexed?: boolean; config?: string }
+  ): Promise<{ ok: boolean }> {
+    return this.put(`/admin/roots/${id}`, body);
+  }
+
+  deleteAdminRoot(id: string): Promise<{ ok: boolean }> {
+    return this.del(`/admin/roots/${id}`);
+  }
+
+  listAdminUsage(): Promise<AdminUsage> {
+    return this.get("/admin/usage");
+  }
+
+  listAdminAudit(limit = 60): Promise<{ items: AuditEntry[] }> {
+    return this.get("/admin/audit", { limit });
+  }
+
+  listUserRoots(id: string): Promise<{ roots: { id: string; name: string; read_only: boolean; granted: boolean; permission: string }[] }> {
+    return this.get(`/admin/users/${id}/roots`);
+  }
+
+  grantUserRoot(id: string, rootId: string, permission: string): Promise<{ ok: boolean }> {
+    return this.post(`/admin/users/${id}/roots`, { root_id: rootId, permission });
+  }
+
+  revokeUserRoot(id: string, rootId: string): Promise<{ ok: boolean }> {
+    return this.del(`/admin/users/${id}/roots/${rootId}`);
   }
 }
 

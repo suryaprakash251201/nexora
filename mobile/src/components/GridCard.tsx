@@ -1,6 +1,7 @@
 import React, { memo } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import { Image } from "expo-image";
 import { useTheme } from "../store/ThemeContext";
 import { fileIconFor } from "./FileRow";
@@ -40,28 +41,33 @@ export const GridCard = memo(function GridCard({
         {
           backgroundColor: selected ? colors.accentSoft : colors.surface,
           borderColor: selected ? colors.accent : colors.borderSoft,
-          borderRadius: radius.lg,
-          padding: spacing.md,
+          borderRadius: 20,
         },
         shadowSm,
       ]}
-      activeOpacity={0.7}
+      activeOpacity={0.8}
       onPress={() => (selectMode && onSelect ? onSelect(item) : onPress(item))}
       onLongPress={() => onLongPress(item)}
       delayLongPress={350}
     >
+      <LinearGradient
+        colors={["rgba(255,255,255,0.06)", "transparent"]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.glassHighlight}
+      />
       {/* Thumbnail or File Icon area */}
-      <View style={[styles.previewArea, { borderRadius: radius.md, backgroundColor: isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)" }]}>
+      <View style={[styles.previewArea, { backgroundColor: isDark ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)" }]}>
         {isImage ? (
           <Image
             source={{ uri: rawUrl }}
-            style={[styles.imageThumb, { borderRadius: radius.md }]}
+            style={styles.imageThumb}
             contentFit="cover"
             transition={150}
           />
         ) : (
-          <View style={[styles.iconBox, { backgroundColor: `${iconColor}18`, borderRadius: radius.md }]}>
-            <MaterialCommunityIcons name={iconName as any} size={32} color={iconColor} />
+          <View style={[styles.iconBox, { backgroundColor: `${iconColor}18`, borderRadius: 18 }]}>
+            <MaterialCommunityIcons name={iconName as any} size={36} color={iconColor} />
           </View>
         )}
 
@@ -112,9 +118,19 @@ const styles = StyleSheet.create({
     margin: 6,
     borderWidth: 1,
     minHeight: 140,
+    overflow: "hidden",
+  },
+  glassHighlight: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: 18,
+    pointerEvents: "none",
   },
   previewArea: {
-    height: 90,
+    height: 110,
     width: "100%",
     alignItems: "center",
     justifyContent: "center",
@@ -126,8 +142,8 @@ const styles = StyleSheet.create({
     height: "100%",
   },
   iconBox: {
-    width: 54,
-    height: 54,
+    width: 60,
+    height: 60,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -153,7 +169,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   info: {
-    marginTop: 8,
+    padding: 12,
+    paddingTop: 8,
     gap: 2,
   },
   title: {

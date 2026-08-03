@@ -64,7 +64,57 @@ export interface SearchResult {
 }
 
 export interface SearchResponse {
-  results: SearchResult[];
+  items: SearchResult[];
+  has_more: boolean;
+}
+
+// ── Admin ────────────────────────────────────────────────────────────
+
+export interface AdminUser {
+  id: string;
+  username: string;
+  email?: string;
+  display_name?: string;
+  role: string;
+  status: string;
+  totp_enabled: boolean;
+  created_at: string;
+}
+
+export interface AdminRoot {
+  id: string;
+  name: string;
+  path: string;
+  icon?: string;
+  type: string;
+  config?: string;
+  read_only: boolean;
+  enabled: boolean;
+  indexed: boolean;
+  created_at?: string;
+}
+
+export interface UsageInfo {
+  id: string;
+  name: string;
   total: number;
-  query: string;
+  available: number;
+  used: number;
+}
+
+export interface AdminUsage {
+  roots: UsageInfo[];
+  total: number;
+  available: number;
+  used: number;
+}
+
+export interface AuditEntry {
+  id: string;
+  user_id?: string;
+  action: string;
+  target?: string;
+  ip?: string;
+  detail?: string;
+  created_at: string;
 }

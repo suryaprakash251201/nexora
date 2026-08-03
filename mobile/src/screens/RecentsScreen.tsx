@@ -10,6 +10,7 @@ import {
   View,
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RouteProp } from "@react-navigation/native";
@@ -20,6 +21,7 @@ import { ListSkeleton } from "../components/Skeletons";
 import { previewKind } from "../api/client";
 import type { FileItem } from "../api/types";
 import type { RootStackParamList, MainTabParamList } from "../navigation/types";
+import { useAudio } from "../store/AudioContext";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 type TabRoute = RouteProp<MainTabParamList, "Recents">;
@@ -31,7 +33,8 @@ export default function RecentsScreen() {
   const navigation = useNavigation<Nav>();
   const route = useRoute<TabRoute>();
   const { api } = useSession();
-  const { colors, font, radius, spacing, shadowSm } = useTheme();
+  const { colors, font, radius, spacing, shadow, shadowSm } = useTheme();
+  const { playTrack } = useAudio();
   const searchRef = useRef<TextInput>(null);
 
   const [items, setItems] = useState<FileItem[]>([]);
@@ -75,6 +78,11 @@ export default function RecentsScreen() {
   useEffect(() => {
     if (route.params?.filter && VALID_FILTERS.includes(route.params.filter as FilterTag)) {
       setActiveFilter(route.params.filter as FilterTag);
+      // Auto-trigger a search to fetch all matching files from the server, 
+      // rather than just filtering the limited "recents" list.
+      if (!query.trim()) {
+        onChangeQuery(".");
+      }
     }
   }, [route.params?.filter]);
 
@@ -93,7 +101,7 @@ export default function RecentsScreen() {
       setSearchError(null);
       try {
         const res = await api.search(q.trim());
-        if (seq === searchSeq.current) setSearchResults(res.results);
+        if (seq === searchSeq.current) setSearchResults(res.items || []);
       } catch (e: any) {
         if (seq === searchSeq.current) setSearchError(e?.message || "Search failed.");
       } finally {
@@ -133,8 +141,14 @@ export default function RecentsScreen() {
   }, [baseItems, activeFilter]);
 
   const openFile = useCallback(
-    (item: FileItem) => navigation.navigate("Preview", { item, rootId: item.root_id }),
-    [navigation]
+    (item: FileItem) => {
+      if (previewKind(item) === "audio") {
+        playTrack(item, displayItems.filter(x => previewKind(x) === "audio"));
+      } else {
+        navigation.navigate("Preview", { item, rootId: item.root_id });
+      }
+    },
+    [navigation, playTrack, displayItems]
   );
 
   const renderRow = useCallback(
@@ -155,7 +169,13 @@ export default function RecentsScreen() {
     <View style={[styles.root, { backgroundColor: colors.bg }]}>
       {/* Search Input Bar */}
       <View style={styles.searchContainer}>
-        <View style={[styles.searchWrap, { backgroundColor: colors.surfaceElevated, borderColor: query ? colors.accent : colors.borderSoft }, shadowSm]}>
+        <View style={[styles.searchWrap, { backgroundColor: colors.surfaceElevated, borderColor: query ? colors.accent : colors.borderSoft, borderRadius: radius.xl }, shadow]}>
+          <LinearGradient
+            colors={["rgba(255,255,255,0.06)", "transparent"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.glassHighlight}
+          />
           <MaterialCommunityIcons name="magnify" size={20} color={query ? colors.accent : colors.muted} />
           <TextInput
             ref={searchRef}
@@ -280,5 +300,14 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     paddingLeft: 4,
     marginTop: 2,
+  },
+  glassHighlight: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: 24,
+    pointerEvents: "none",
   },
 });

@@ -10,7 +10,9 @@ import { LinearGradient } from "expo-linear-gradient";
 
 import { SessionProvider, useSession } from "./src/store/SessionContext";
 import { ThemeProvider, useTheme } from "./src/store/ThemeContext";
+import { AudioProvider } from "./src/store/AudioContext";
 import { AppIcon } from "./src/components/AppIcon";
+import { MiniPlayer } from "./src/components/MiniPlayer";
 import type { RootStackParamList, MainTabParamList } from "./src/navigation/types";
 
 import LoginScreen from "./src/screens/LoginScreen";
@@ -19,12 +21,14 @@ import RecentsScreen from "./src/screens/RecentsScreen";
 import SettingsScreen from "./src/screens/SettingsScreen";
 import BrowserScreen from "./src/screens/BrowserScreen";
 import PreviewScreen from "./src/screens/PreviewScreen";
+import AdminScreen from "./src/screens/AdminScreen";
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tabs = createBottomTabNavigator<MainTabParamList>();
 
 const TAB_ICONS: Record<string, { active: string; inactive: string }> = {
   Home: { active: "view-dashboard", inactive: "view-dashboard-outline" },
+  Search: { active: "magnify", inactive: "magnify" },
   Recents: { active: "clock", inactive: "clock-outline" },
   Settings: { active: "cog", inactive: "cog-outline" },
 };
@@ -63,9 +67,10 @@ function MainTabs() {
           left: 20,
           right: 20,
           height: 66,
-          borderRadius: 22,
+          borderRadius: 33,
           borderWidth: 1,
           borderColor: colors.borderSoft,
+          overflow: "hidden",
           ...shadow,
         },
         tabBarActiveTintColor: colors.accent,
@@ -83,6 +88,13 @@ function MainTabs() {
         options={{
           title: "Home",
           headerShown: false,
+        }}
+      />
+      <Tabs.Screen
+        name="Search"
+        component={RecentsScreen}
+        options={{
+          title: "Search",
         }}
       />
       <Tabs.Screen
@@ -172,7 +184,9 @@ function RootNavigation() {
         <Stack.Screen name="Main" component={MainTabs} options={{ headerShown: false }} />
         <Stack.Screen name="Browser" component={BrowserScreen} options={({ route }) => ({ title: route.params.rootName })} />
         <Stack.Screen name="Preview" component={PreviewScreen} options={({ route }) => ({ title: route.params.item.name })} />
+        <Stack.Screen name="Admin" component={AdminScreen} options={{ title: "Administration" }} />
       </Stack.Navigator>
+      <MiniPlayer />
     </NavigationContainer>
   );
 }
@@ -182,7 +196,9 @@ export default function App() {
     <SafeAreaProvider>
       <ThemeProvider>
         <SessionProvider>
-          <RootNavigation />
+          <AudioProvider>
+            <RootNavigation />
+          </AudioProvider>
         </SessionProvider>
       </ThemeProvider>
     </SafeAreaProvider>

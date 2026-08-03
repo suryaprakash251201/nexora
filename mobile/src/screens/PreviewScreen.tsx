@@ -41,7 +41,7 @@ function fmtTime(sec: number): string {
 export default function PreviewScreen({ route }: Props) {
   const { item, rootId } = route.params;
   const { api } = useSession();
-  const { colors, font, gradients, radius, shadowSm } = useTheme();
+  const { colors, font, gradients, radius, shadow, shadowSm } = useTheme();
   const kind = previewKind(item);
 
   const [text, setText] = useState<string | null>(null);
@@ -142,7 +142,13 @@ export default function PreviewScreen({ route }: Props) {
       {(kind === "text" || kind === "code" || kind === "markdown") && (
         <View style={[styles.textRoot, { backgroundColor: colors.bg }]}>
           <ScrollView style={styles.textScroll} contentContainerStyle={styles.textContent}>
-            <View style={[styles.docHeader, { borderBottomColor: colors.borderSoft }]}>
+            <View style={[styles.docHeader, { backgroundColor: colors.surfaceElevated, borderColor: colors.borderSoft, borderRadius: radius.xl }, shadow]}>
+              <LinearGradient
+                colors={["rgba(255,255,255,0.04)", "transparent"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.glassHighlight}
+              />
               <View style={styles.docHeaderInfo}>
                 <Text style={[styles.docFileName, { color: colors.content, fontSize: font.md }]} numberOfLines={1}>{item.name}</Text>
                 <View style={styles.docBadges}>
@@ -238,7 +244,13 @@ export default function PreviewScreen({ route }: Props) {
 
       {(kind === "pdf" || kind === "other") && (
         <View style={styles.center}>
-          <View style={[styles.fileCard, { backgroundColor: colors.surface, borderRadius: radius.xl, ...shadowSm, borderColor: colors.borderSoft }]}>
+          <View style={[styles.fileCard, { backgroundColor: colors.surface, borderRadius: radius.xxl, borderColor: colors.borderSoft }, shadow]}>
+            <LinearGradient
+              colors={["rgba(255,255,255,0.04)", "transparent"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.glassHighlight}
+            />
             <View style={styles.fileCardIconWrap}>
               <GlyphTile icon={kind === "pdf" ? "file-pdf-box" : "file-outline"} color={kind === "pdf" ? colors.red : colors.muted} size={56} />
             </View>
@@ -263,12 +275,12 @@ export default function PreviewScreen({ route }: Props) {
             </View>
 
             <View style={styles.fileCardButtons}>
-              <TouchableOpacity style={[styles.fileCardBtnPrimary, { borderRadius: radius.md }]} onPress={downloadAndOpen} activeOpacity={0.85}>
+              <TouchableOpacity style={[styles.fileCardBtnPrimary, { borderRadius: radius.lg }]} onPress={downloadAndOpen} activeOpacity={0.85}>
                 <LinearGradient colors={[...gradients.brand]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={StyleSheet.absoluteFill} />
                 <MaterialCommunityIcons name="open-in-new" size={18} color="#fff" />
                 <Text style={[styles.primaryBtnText, { fontSize: font.md }]}>Open with…</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.fileCardBtnOutline, { borderRadius: radius.md, borderColor: colors.borderSoft }]} onPress={downloadAndOpen} activeOpacity={0.7}>
+              <TouchableOpacity style={[styles.fileCardBtnOutline, { borderRadius: radius.lg, borderColor: colors.borderSoft }]} onPress={downloadAndOpen} activeOpacity={0.7}>
                 <MaterialCommunityIcons name="share-variant" size={18} color={colors.content} />
                 <Text style={[styles.outlineBtnText, { color: colors.content, fontSize: font.md }]}>Share</Text>
               </TouchableOpacity>
@@ -608,7 +620,7 @@ const styles = StyleSheet.create({
 
   // Text / Code / Markdown
   textRoot: { flex: 1 },
-  docHeader: { flexDirection: "row", alignItems: "center", paddingBottom: 16, marginBottom: 16, borderBottomWidth: 1 },
+  docHeader: { flexDirection: "row", alignItems: "center", padding: 20, marginBottom: 16, borderWidth: 1, overflow: "hidden" },
   docHeaderInfo: { flex: 1, marginRight: 16 },
   docFileName: { fontWeight: "700", marginBottom: 6 },
   docBadges: { flexDirection: "row", alignItems: "center", gap: 8 },
@@ -650,9 +662,18 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   floatingCopyText: { color: "#fff", fontWeight: "600", marginLeft: 8 },
+  glassHighlight: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: 24,
+    pointerEvents: "none",
+  },
 
   // PDF / Other File Card
-  fileCard: { width: "100%", maxWidth: 400, padding: 24, alignItems: "center", borderWidth: 1 },
+  fileCard: { width: "100%", maxWidth: 400, padding: 32, alignItems: "center", borderWidth: 1, overflow: "hidden" },
   fileCardIconWrap: { marginBottom: 16 },
   fileCardTitle: { fontWeight: "700", textAlign: "center", marginBottom: 4 },
   fileCardSub: { marginBottom: 24 },

@@ -22,7 +22,7 @@ type Stage = "server" | "login" | "totp";
 
 export default function LoginScreen({ onDone }: { onDone: () => void }) {
   const { connect, setSession, api } = useSession();
-  const { colors, font, gradients, radius, spacing } = useTheme();
+  const { colors, font, gradients, radius, spacing, shadow } = useTheme();
   const [stage, setStage] = useState<Stage>("server");
   const [serverUrl, setServerUrl] = useState("");
   const [login, setLogin] = useState("");
@@ -196,7 +196,13 @@ export default function LoginScreen({ onDone }: { onDone: () => void }) {
           <Text style={[styles.version, { color: colors.muted, fontSize: font.xs }]}>v{Constants.expoConfig?.version || "1.0.0"}</Text>
         </View>
 
-        <View style={styles.card}>
+        <View style={[styles.card, shadow, { backgroundColor: colors.surfaceElevated, borderColor: colors.borderSoft, borderRadius: radius.xl }]}>
+          <LinearGradient
+            colors={["rgba(255,255,255,0.06)", "transparent"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.glassHighlight}
+          />
           {renderStageIndicator()}
 
           {stage === "server" && (
@@ -366,17 +372,18 @@ const styles = StyleSheet.create({
   },
   version: { marginTop: -4 },
   card: {
-    backgroundColor: "rgba(25, 25, 30, 0.6)", // pseudo-glassmorphic effect
-    borderWidth: 1.5,
-    borderColor: "rgba(255, 255, 255, 0.1)", // more visible border
-    borderRadius: 20,
-    padding: 16,
-    gap: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.2,
-    shadowRadius: 15,
-    elevation: 5,
+    padding: 24,
+    gap: 16,
+    overflow: "hidden",
+  },
+  glassHighlight: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: 24,
+    pointerEvents: "none",
   },
   stageIndicator: {
     flexDirection: "row",
