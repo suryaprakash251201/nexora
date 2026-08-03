@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAudio } from "../store/AudioContext";
 import { useTheme } from "../store/ThemeContext";
 import { useSession } from "../store/SessionContext";
+import { EqBars } from "./EqBars";
 
 const { height } = Dimensions.get("window");
 
@@ -43,10 +44,21 @@ export function MiniPlayer() {
     const subPlaying = player.addListener("playingChange", ({ isPlaying }) => setPlaying(isPlaying));
     const subStatus = player.addListener("statusChange", ({ status }) => setStatus(status));
     setStatus(player.status);
-    
+
+    let lastT = -1;
+    let lastD = -1;
     const interval = setInterval(() => {
-      setCurrentTime(player.currentTime);
-      setDuration(player.duration || 0);
+      const t = player.currentTime;
+      const d = player.duration || 0;
+      // Only re-render when something actually changed.
+      if (Math.abs(t - lastT) > 0.25) {
+        setCurrentTime(t);
+        lastT = t;
+      }
+      if (d !== lastD) {
+        setDuration(d);
+        lastD = d;
+      }
     }, 500);
 
     return () => {
@@ -55,6 +67,12 @@ export function MiniPlayer() {
       clearInterval(interval);
     };
   }, [player]);
+
+  // Wire repeat "one" to the native loop; "all" lets the queue auto-advance.
+  useEffect(() => {
+    if (!player) return;
+    player.loop = repeat === "one";
+  }, [player, repeat]);
 
   // Artwork scale animation in modal
   useEffect(() => {
@@ -135,7 +153,7 @@ export function MiniPlayer() {
       <View style={[styles.miniContainer, shadow]}>
         <TouchableOpacity style={[styles.miniInner, { backgroundColor: colors.surfaceElevated, borderColor: colors.borderSoft }]} activeOpacity={0.9} onPress={openModal}>
           <LinearGradient colors={["rgba(255,255,255,0.06)", "transparent"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.glassHighlight} />
-          
+
           <View style={[styles.miniIconWrap, { backgroundColor: colors.surfaceMuted, overflow: "hidden" }]}>
             {coverUrl ? (
               <Image source={{ uri: coverUrl }} style={{ width: "100%", height: "100%" }} contentFit="cover" transition={300} />
@@ -146,7 +164,7 @@ export function MiniPlayer() {
 
           <View style={styles.miniTextWrap}>
             <Text style={[styles.miniTitle, { color: colors.content, fontSize: font.sm }]} numberOfLines={1}>{currentTrack.name}</Text>
-            <Text style={[styles.miniSub, { color: colors.muted, fontSize: font.xs }]} numberOfLines={1}>Unknown Artist</Text>
+            <Text style={[styles.miniSub, { color: colors.muted, fontSize: font.xs }]} numberOfLines={1}>{currentTrack.extension?.toUpperCase() || "AUDIO"} · Nexora</Text>
           </View>
 
           <TouchableOpacity style={styles.miniBtn} onPress={togglePlay}>
@@ -160,6 +178,10 @@ export function MiniPlayer() {
             <MaterialCommunityIcons name="close" size={28} color={colors.content} />
           </TouchableOpacity>
         </TouchableOpacity>
+        {/* Live progress bar along the bottom edge of the mini card */}
+        <View style={[styles.miniProgressTrack, { backgroundColor: colors.borderSoft }]}>
+          <LinearGradient colors={[...gradients.brand]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={[styles.miniProgressFill, { width: `${progressPct}%` }]} />
+        </View>
       </View>
 
       {/* Full Screen Modal */}
@@ -203,8 +225,11 @@ export function MiniPlayer() {
 
               {/* Title & Artist */}
               <View style={styles.trackInfo}>
-                <Text style={[styles.trackName, { fontSize: font.xxl }]} numberOfLines={2}>{currentTrack.name}</Text>
-                <Text style={[styles.trackArtist, { fontSize: font.lg }]} numberOfLines={1}>Unknown Artist</Text>
+                <View style={styles.trackNameRow}>
+                  <Text style={[styles.trackName, { fontSize: font.xxl }]} numberOfLines={2}>{currentTrack.name}</Text>
+                  <EqBars playing={playing && status !== "loading"} tint={gradients.brand[0]} barCount={6} />
+                </View>
+                <Text style={[styles.trackArtist, { fontSize: font.lg }]} numberOfLines={1}>{currentTrack.extension?.toUpperCase() || "AUDIO"} · Nexora</Text>
                 
                 {formatBadge && (
                   <View style={styles.formatBadge}>
@@ -215,13 +240,20 @@ export function MiniPlayer() {
 
               {/* Scrubber */}
               <View style={styles.scrubberWrap}>
-                <TouchableOpacity
-                  activeOpacity={1}
+                <View
                   style={styles.scrubberHitbox}
                   onLayout={(e) => setScrubberWidth(e.nativeEvent.layout.width)}
-                  onPress={(e) => {
-                    if (player && duration > 0) {
-                      const pct = e.nativeEvent.locationX / scrubberWidth;
+                  onStartShouldSetResponder={() => true}
+                  onMoveShouldSetResponder={() => true}
+                  onResponderGrant={(e) => {
+                    if (player && duration > 0 && e.nativeEvent.locationX != null) {
+                      const pct = Math.max(0, Math.min(1, e.nativeEvent.locationX / scrubberWidth));
+                      player.currentTime = pct * duration;
+                    }
+                  }}
+                  onResponderMove={(e) => {
+                    if (player && duration > 0 && e.nativeEvent.locationX != null) {
+                      const pct = Math.max(0, Math.min(1, e.nativeEvent.locationX / scrubberWidth));
                       player.currentTime = pct * duration;
                     }
                   }}
@@ -230,7 +262,7 @@ export function MiniPlayer() {
                     <View style={[styles.scrubberFill, { width: `${progressPct}%` }]} />
                     <View style={[styles.scrubberThumb, { left: `${progressPct}%` }]} />
                   </View>
-                </TouchableOpacity>
+                </View>
                 <View style={styles.timeRow}>
                   <Text style={styles.timeText}>{formatTime(currentTime)}</Text>
                   <Text style={styles.timeText}>{duration > 0 ? `-${formatTime(duration - currentTime)}` : "-:-"}</Text>
@@ -319,6 +351,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  miniProgressTrack: {
+    position: "absolute",
+    left: 12,
+    right: 12,
+    bottom: -3,
+    height: 3,
+    borderRadius: 2,
+    overflow: "hidden",
+  },
+  miniProgressFill: { height: "100%", borderRadius: 2 },
 
   // Modal
   modalRoot: { flex: 1 },
@@ -363,7 +405,8 @@ const styles = StyleSheet.create({
   },
 
   trackInfo: { alignItems: "flex-start", marginBottom: 30 },
-  trackName: { color: "#fff", fontWeight: "800", marginBottom: 8 },
+  trackNameRow: { flexDirection: "row", alignItems: "center", width: "100%", justifyContent: "space-between", gap: 12 },
+  trackName: { color: "#fff", fontWeight: "800", marginBottom: 8, flex: 1 },
   trackArtist: { color: "rgba(255,255,255,0.7)", fontWeight: "600" },
   formatBadge: {
     marginTop: 12,

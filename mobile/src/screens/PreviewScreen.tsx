@@ -24,6 +24,7 @@ import { useTheme } from "../store/ThemeContext";
 import { GlyphTile } from "../components/AppIcon";
 import { previewKind, formatBytes, formatDate } from "../api/client";
 import { copyShareLink } from "../lib/shareLink";
+import { EqBars } from "../components/EqBars";
 import type { RootStackParamList } from "../navigation/types";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Preview">;
@@ -351,7 +352,6 @@ function AudioPlayer({ uri, name, size, ext, rootId, path, onShare }: { uri: str
   const [error, setError] = useState(false);
 
   const [loop, setLoop] = useState(false);
-  const [shuffle, setShuffle] = useState(false);
   const [isEnded, setIsEnded] = useState(false);
 
   // Scrubbing state.
@@ -529,9 +529,12 @@ function AudioPlayer({ uri, name, size, ext, rootId, path, onShare }: { uri: str
           ) : (
             <>
               <Text style={[styles.trackName, { fontSize: font.xl }]} numberOfLines={2}>{name}</Text>
-              <Text style={[styles.trackMeta, { color: colors.muted, fontSize: font.sm }]}>
-                {formatBytes(size)} · {ext.toUpperCase()} · Nexora
-              </Text>
+              <View style={styles.trackMetaRow}>
+                <Text style={[styles.trackMeta, { color: colors.muted, fontSize: font.sm }]}>
+                  {formatBytes(size)} · {ext.toUpperCase()} · Nexora
+                </Text>
+                <EqBars playing={playing && !error} tint={colors.accent} />
+              </View>
             </>
           )}
         </View>
@@ -567,10 +570,6 @@ function AudioPlayer({ uri, name, size, ext, rootId, path, onShare }: { uri: str
 
         {/* Controls Row */}
         <View style={styles.controlsRow}>
-          <TouchableOpacity style={styles.sideBtn} activeOpacity={0.7} onPress={() => setShuffle(!shuffle)}>
-            <MaterialCommunityIcons name="shuffle-variant" size={28} color={shuffle ? colors.accent : colors.muted} />
-          </TouchableOpacity>
-
           <TouchableOpacity style={styles.skipBtn} onPress={() => skip(-15)} hitSlop={8}>
             <MaterialCommunityIcons name="rewind-15" size={28} color={colors.content} />
           </TouchableOpacity>
@@ -587,10 +586,6 @@ function AudioPlayer({ uri, name, size, ext, rootId, path, onShare }: { uri: str
 
           <TouchableOpacity style={styles.skipBtn} onPress={() => skip(15)} hitSlop={8}>
             <MaterialCommunityIcons name="fast-forward-15" size={28} color={colors.content} />
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.sideBtn} activeOpacity={0.7} onPress={() => setLoop(!loop)}>
-            <MaterialCommunityIcons name="repeat" size={28} color={loop ? colors.accent : colors.muted} />
           </TouchableOpacity>
         </View>
 
@@ -617,8 +612,8 @@ function AudioPlayer({ uri, name, size, ext, rootId, path, onShare }: { uri: str
           <TouchableOpacity style={styles.actionBtn} onPress={onShare}>
             <MaterialCommunityIcons name="share-variant" size={24} color={colors.muted} />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.actionBtn}>
-            <MaterialCommunityIcons name="playlist-music-outline" size={24} color={colors.muted} />
+          <TouchableOpacity style={styles.actionBtn} onPress={() => setLoop(!loop)}>
+            <MaterialCommunityIcons name={loop ? "repeat-once" : "repeat"} size={24} color={loop ? colors.accent : colors.muted} />
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -773,6 +768,7 @@ const styles = StyleSheet.create({
   infoWrap: { alignItems: "center", marginTop: 10, marginBottom: 30, paddingHorizontal: 16 },
   trackName: { color: "#fff", fontWeight: "700", textAlign: "center", marginBottom: 6 },
   trackMeta: {},
+  trackMetaRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   playerError: { marginTop: 4 },
 
   // Seek bar
@@ -796,8 +792,7 @@ const styles = StyleSheet.create({
   timeText: { fontSize: 11, fontVariant: ["tabular-nums"] },
 
   // Controls Row
-  controlsRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 30, paddingHorizontal: 10 },
-  sideBtn: { padding: 10 },
+  controlsRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 28, marginBottom: 30, paddingHorizontal: 10 },
   skipBtn: { width: 56, height: 56, borderRadius: 28, backgroundColor: "rgba(255,255,255,0.05)", alignItems: "center", justifyContent: "center" },
   playBtnWrap: {
     width: 80,
@@ -813,7 +808,7 @@ const styles = StyleSheet.create({
   },
 
   // Bottom Actions
-  actionsRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 40 },
+  actionsRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 48 },
   actionBtn: { padding: 10 },
 
   hiddenVideo: { position: "absolute", width: 1, height: 1 },
