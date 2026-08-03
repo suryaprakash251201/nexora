@@ -30,11 +30,17 @@ type Nav = CompositeNavigationProp<
   NativeStackNavigationProp<RootStackParamList>
 >;
 
-const QUICK_CATEGORIES = [
+type QuickAction =
+  | { id: string; title: string; icon: string; filter: string; gradient: readonly [string, string] }
+  | { id: string; title: string; icon: string; screen: "Favorites" | "Trash"; gradient: readonly [string, string] };
+
+const QUICK_CATEGORIES: QuickAction[] = [
   { id: "photos", title: "Photos", icon: "image-multiple", filter: "image" as const, gradient: ["#4F46E5", "#8B5CF6"] as const },
   { id: "docs", title: "Documents", icon: "file-document", filter: "document" as const, gradient: ["#F59E0B", "#F97316"] as const },
   { id: "music", title: "Audio", icon: "music-note", filter: "audio" as const, gradient: ["#14B8A6", "#10B981"] as const },
   { id: "videos", title: "Videos", icon: "play-circle", filter: "video" as const, gradient: ["#F43F5E", "#E11D48"] as const },
+  { id: "favorites", title: "Favorites", icon: "heart", screen: "Favorites" as const, gradient: ["#EF4444", "#F97316"] as const },
+  { id: "trash", title: "Trash", icon: "delete-restore", screen: "Trash" as const, gradient: ["#64748B", "#475569"] as const },
 ];
 
 const ROOT_ICONS: Record<string, string> = {
@@ -247,7 +253,7 @@ export default function HomeScreen() {
                   key={cat.id}
                   style={styles.quickCard}
                   activeOpacity={0.75}
-                  onPress={() => openCategory(cat.filter)}
+                  onPress={() => ("screen" in cat ? navigation.navigate(cat.screen) : openCategory(cat.filter))}
                 >
                   <View style={[styles.quickIconWrap, shadowSm]}>
                     <LinearGradient

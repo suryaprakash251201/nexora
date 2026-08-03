@@ -27,6 +27,7 @@ import { GridCard } from "../components/GridCard";
 import { BottomSheet } from "../components/BottomSheet";
 import { ListSkeleton, GridCardSkeleton } from "../components/Skeletons";
 import { previewKind } from "../api/client";
+import { copyShareLink } from "../lib/shareLink";
 import type { FileItem, FileListResponse } from "../api/types";
 import type { RootStackParamList } from "../navigation/types";
 import { useAudio } from "../store/AudioContext";
@@ -683,6 +684,31 @@ export default function BrowserScreen({ route, navigation }: Props) {
         actions={[
           ...(actionItem && !actionItem.is_dir
             ? [{ label: "Download & share", icon: "share-variant", onPress: () => actionItem && downloadAndShare(actionItem) }]
+            : []),
+          ...(!actionItem?.is_dir
+            ? [
+                {
+                  label: "Add to favorites",
+                  icon: "heart-outline",
+                  onPress: () => {
+                    if (!actionItem || !api) return;
+                    api.addFavorite(actionItem.root_id || rootId, actionItem.path).then(() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                      Alert.alert("Favorited", `"${actionItem.name}" added to favorites.`);
+                    }).catch((e: any) => Alert.alert("Could not favorite", e?.message || "Something went wrong."));
+                  },
+                },
+                {
+                  label: "Copy share link",
+                  icon: "link-variant",
+                  onPress: () => {
+                    if (!actionItem || !api) return;
+                    copyShareLink(api, actionItem.root_id || rootId, actionItem.path).then((url) => {
+                      if (url) Alert.alert("Link copied", url);
+                    });
+                  },
+                },
+              ]
             : []),
           {
             label: "Rename",

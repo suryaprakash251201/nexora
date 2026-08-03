@@ -9,6 +9,9 @@ import type {
   AdminRoot,
   AdminUsage,
   AuditEntry,
+  FavoriteItem,
+  TrashItem,
+  ShareInfo,
 } from "./types";
 
 /**
@@ -321,6 +324,45 @@ export class Api {
 
   revokeUserRoot(id: string, rootId: string): Promise<{ ok: boolean }> {
     return this.del(`/admin/users/${id}/roots/${rootId}`);
+  }
+
+  // ── Favorites ─────────────────────────────────────────────────────────
+  listFavorites(): Promise<{ items: FavoriteItem[] }> {
+    return this.get("/favorites");
+  }
+
+  addFavorite(root: string, path: string): Promise<{ ok: boolean }> {
+    return this.post("/favorites", { root, path });
+  }
+
+  removeFavorite(root: string, path: string): Promise<{ ok: boolean }> {
+    return this.del("/favorites", { root, path });
+  }
+
+  // ── Trash ────────────────────────────────────────────────────────────
+  listTrash(): Promise<{ items: TrashItem[] }> {
+    return this.get("/trash");
+  }
+
+  restoreTrash(id: string): Promise<{ ok: boolean }> {
+    return this.post("/trash/restore", { id });
+  }
+
+  deleteTrash(id: string): Promise<{ ok: boolean }> {
+    return this.del("/trash", { id });
+  }
+
+  // ── Share links ──────────────────────────────────────────────────────
+  createShare(root: string, path: string, scope: "preview" | "download" = "preview"): Promise<{ share: ShareInfo }> {
+    return this.post("/shares", { root, path, scope });
+  }
+
+  listShares(): Promise<{ items: ShareInfo[] }> {
+    return this.get("/shares");
+  }
+
+  revokeShare(id: string): Promise<{ ok: boolean }> {
+    return this.del(`/shares/${id}`);
   }
 }
 

@@ -22,6 +22,8 @@ import SettingsScreen from "./src/screens/SettingsScreen";
 import BrowserScreen from "./src/screens/BrowserScreen";
 import PreviewScreen from "./src/screens/PreviewScreen";
 import AdminScreen from "./src/screens/AdminScreen";
+import FavoritesScreen from "./src/screens/FavoritesScreen";
+import TrashScreen from "./src/screens/TrashScreen";
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tabs = createBottomTabNavigator<MainTabParamList>();
@@ -185,6 +187,8 @@ function RootNavigation() {
         <Stack.Screen name="Browser" component={BrowserScreen} options={({ route }) => ({ title: route.params.rootName })} />
         <Stack.Screen name="Preview" component={PreviewScreen} options={({ route }) => ({ title: route.params.item.name })} />
         <Stack.Screen name="Admin" component={AdminScreen} options={{ title: "Administration" }} />
+        <Stack.Screen name="Favorites" component={FavoritesScreen} options={{ title: "Favorites" }} />
+        <Stack.Screen name="Trash" component={TrashScreen} options={{ title: "Trash" }} />
       </Stack.Navigator>
       <MiniPlayer />
     </NavigationContainer>

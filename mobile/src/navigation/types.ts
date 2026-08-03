@@ -5,6 +5,8 @@ export type RootStackParamList = {
   Browser: { rootId: string; rootName: string; path?: string; initialItem?: FileItem };
   Preview: { item: FileItem; rootId: string };
   Admin: undefined;
+  Favorites: undefined;
+  Trash: undefined;
 };
 
 export type MainTabParamList = {

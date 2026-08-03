@@ -23,6 +23,7 @@ import { useSession } from "../store/SessionContext";
 import { useTheme } from "../store/ThemeContext";
 import { GlyphTile } from "../components/AppIcon";
 import { previewKind, formatBytes, formatDate } from "../api/client";
+import { copyShareLink } from "../lib/shareLink";
 import type { RootStackParamList } from "../navigation/types";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Preview">;
@@ -77,6 +78,12 @@ export default function PreviewScreen({ route }: Props) {
     await Clipboard.setStringAsync(text);
     Alert.alert("Copied", "File content copied to clipboard.");
   }, [text]);
+
+  const handleShareLink = async () => {
+    if (!api) return;
+    const url = await copyShareLink(api, item.root_id || rootId, item.path);
+    if (url) Alert.alert("Link copied", url);
+  };
 
   // ── Download & open with system app ─────────────────────────────────
   const downloadAndOpen = async () => {
@@ -136,7 +143,15 @@ export default function PreviewScreen({ route }: Props) {
       )}
 
       {kind === "audio" && (
-        <AudioPlayer uri={rawUrl} name={item.name} size={item.size} ext={item.extension || ""} onShare={downloadAndOpen} />
+        <AudioPlayer
+          uri={rawUrl}
+          name={item.name}
+          size={item.size}
+          ext={item.extension || ""}
+          rootId={item.root_id || rootId}
+          path={item.path}
+          onShare={downloadAndOpen}
+        />
       )}
 
       {(kind === "text" || kind === "code" || kind === "markdown") && (
@@ -284,6 +299,10 @@ export default function PreviewScreen({ route }: Props) {
                 <MaterialCommunityIcons name="share-variant" size={18} color={colors.content} />
                 <Text style={[styles.outlineBtnText, { color: colors.content, fontSize: font.md }]}>Share</Text>
               </TouchableOpacity>
+              <TouchableOpacity style={[styles.fileCardBtnOutline, { borderRadius: radius.lg, borderColor: colors.borderSoft }]} onPress={handleShareLink} activeOpacity={0.7}>
+                <MaterialCommunityIcons name="link-variant" size={18} color={colors.content} />
+                <Text style={[styles.outlineBtnText, { color: colors.content, fontSize: font.md }]}>Link</Text>
+              </TouchableOpacity>
             </View>
           </View>
         </View>
@@ -320,8 +339,10 @@ function VideoPlayer({ uri }: { uri: string }) {
 }
 
 // ── Immersive Vinyl Audio Player ────────────────────────────────────────────
-function AudioPlayer({ uri, name, size, ext, onShare }: { uri: string; name: string; size: number; ext: string; onShare: () => void }) {
+function AudioPlayer({ uri, name, size, ext, rootId, path, onShare }: { uri: string; name: string; size: number; ext: string; rootId: string; path: string; onShare: () => void }) {
   const { colors, font, gradients } = useTheme();
+  const { api } = useSession();
+  const [favorited, setFavorited] = useState(false);
   const player = useVideoPlayer(uri);
   const [playing, setPlaying] = useState(false);
   const [duration, setDuration] = useState(0);
@@ -575,8 +596,23 @@ function AudioPlayer({ uri, name, size, ext, onShare }: { uri: string; name: str
 
         {/* Bottom Actions */}
         <View style={styles.actionsRow}>
-          <TouchableOpacity style={styles.actionBtn}>
-            <MaterialCommunityIcons name="heart-outline" size={24} color={colors.muted} />
+          <TouchableOpacity
+            style={styles.actionBtn}
+            onPress={() => {
+              if (!api) return;
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+              if (favorited) {
+                api.removeFavorite(rootId, path)
+                  .then(() => setFavorited(false))
+                  .catch(() => {});
+              } else {
+                api.addFavorite(rootId, path)
+                  .then(() => setFavorited(true))
+                  .catch(() => {});
+              }
+            }}
+          >
+            <MaterialCommunityIcons name={favorited ? "heart" : "heart-outline"} size={24} color={favorited ? colors.danger : colors.muted} />
           </TouchableOpacity>
           <TouchableOpacity style={styles.actionBtn} onPress={onShare}>
             <MaterialCommunityIcons name="share-variant" size={24} color={colors.muted} />
