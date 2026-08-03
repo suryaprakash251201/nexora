@@ -50,6 +50,24 @@ function buildQuery(query?: Record<string, string | number | undefined>): string
   return parts.length ? `?${parts.join("&")}` : "";
 }
 
+// ── Module-level media auth (kept in sync with the active Api instance) ────
+// Row/grid components build raw/thumbnail URLs directly from these so cover
+// art (e.g. embedded album art for audio) can render without prop-drilling
+// the Api instance everywhere.
+let mediaBaseUrl = "";
+let mediaToken: string | null = null;
+
+export function syncMediaAuth(baseUrl: string, token: string | null) {
+  mediaBaseUrl = baseUrl.replace(/\/+$/, "");
+  mediaToken = token;
+}
+
+export function mediaThumbnailUrl(rootId: string, path: string, size = 256): string {
+  const q: Record<string, string | number | undefined> = { root: rootId, path, size };
+  if (mediaToken) q.token = mediaToken;
+  return `${mediaBaseUrl}/api/v1/files/thumbnail${buildQuery(q)}`;
+}
+
 export class Api {
   baseUrl: string;
   token: string | null;
@@ -59,10 +77,12 @@ export class Api {
   constructor(baseUrl: string, token: string | null) {
     this.baseUrl = baseUrl.replace(/\/+$/, "");
     this.token = token;
+    syncMediaAuth(baseUrl, token);
   }
 
   setToken(token: string | null) {
     this.token = token;
+    syncMediaAuth(this.baseUrl, token);
   }
 
   /** Register a hook fired when any request gets a 401 (expired/invalid token). */

@@ -4,7 +4,8 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { Image } from "expo-image";
 import { useTheme } from "../store/ThemeContext";
-import { fileIconFor } from "./FileRow";
+import { fileIconFor, isAudioFile } from "../lib/fileMeta";
+import { AudioCover } from "./AudioCover";
 import { previewKind, formatBytes, formatDate } from "../api/client";
 import type { FileItem } from "../api/types";
 
@@ -65,6 +66,14 @@ export const GridCard = memo(function GridCard({
             contentFit="cover"
             transition={150}
           />
+        ) : isAudioFile(item) ? (
+          <View style={styles.audioCoverWrap}>
+            <AudioCover item={item} size={384} iconSize={40} />
+            {/* Music badge so audio is recognizable even when cover art is subtle */}
+            <View style={[styles.audioBadge, { backgroundColor: "rgba(0,0,0,0.55)" }]}>
+              <MaterialCommunityIcons name="music-note" size={14} color="#fff" />
+            </View>
+          </View>
         ) : (
           <View style={[styles.iconBox, { backgroundColor: `${iconColor}18`, borderRadius: 18 }]}>
             <MaterialCommunityIcons name={iconName as any} size={36} color={iconColor} />
@@ -144,6 +153,21 @@ const styles = StyleSheet.create({
   iconBox: {
     width: 60,
     height: 60,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  audioCoverWrap: {
+    width: "100%",
+    height: "100%",
+    position: "relative",
+  },
+  audioBadge: {
+    position: "absolute",
+    bottom: 6,
+    left: 6,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
   },

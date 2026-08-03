@@ -13,7 +13,9 @@ import * as Haptics from "expo-haptics";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useSession } from "../store/SessionContext";
 import { useTheme } from "../store/ThemeContext";
-import { EmptyState, fileIconFor } from "../components/FileRow";
+import { EmptyState } from "../components/FileRow";
+import { AudioCover } from "../components/AudioCover";
+import { fileIconFor, isAudioFile } from "../lib/fileMeta";
 import { BottomSheet } from "../components/BottomSheet";
 import { ListSkeleton } from "../components/Skeletons";
 import { formatDate } from "../api/client";
@@ -95,7 +97,8 @@ export default function FavoritesScreen({ navigation }: Props) {
   });
 
   const renderRow = ({ item }: { item: FavoriteItem }) => {
-    const { name, color } = fileIconFor(toFileItem(item), colors.accent);    return (
+    const { name, color } = fileIconFor(toFileItem(item), colors.accent);
+    return (
       <View style={{ borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.borderSoft }}>
         <TouchableOpacity
           style={[styles.row, { paddingHorizontal: spacing.lg }]}
@@ -105,7 +108,11 @@ export default function FavoritesScreen({ navigation }: Props) {
           delayLongPress={350}
         >
           <View style={[styles.iconWrap, { backgroundColor: `${color}18`, borderRadius: radius.md }]}>
-            <MaterialCommunityIcons name={name as any} size={22} color={color} />
+            {isAudioFile(toFileItem(item)) ? (
+              <AudioCover item={toFileItem(item)} size={160} />
+            ) : (
+              <MaterialCommunityIcons name={name as any} size={22} color={color} />
+            )}
           </View>
           <View style={styles.body}>
             <Text style={[styles.title, { color: colors.content, fontSize: font.md }]} numberOfLines={1}>{item.name}</Text>
@@ -181,6 +188,7 @@ const styles = StyleSheet.create({
     height: 46,
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
   },
   body: { flex: 1, marginLeft: 2 },
   title: { fontWeight: "600", letterSpacing: 0.1 },

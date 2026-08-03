@@ -3,37 +3,10 @@ import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useTheme } from "../store/ThemeContext";
-import { previewKind, formatBytes, formatDate } from "../api/client";
+import { formatBytes, formatDate } from "../api/client";
+import { fileIconFor, isAudioFile } from "../lib/fileMeta";
+import { AudioCover } from "./AudioCover";
 import type { FileItem } from "../api/types";
-
-const KIND_ICON: Record<string, [string, string]> = {
-  image: ["image-outline", "#5B8CFF"],
-  video: ["play-circle-outline", "#A78BFA"],
-  audio: ["music-circle-outline", "#2DD4BF"],
-  pdf: ["file-pdf-box", "#EF4444"],
-  markdown: ["language-markdown-outline", "#35D3FF"],
-  text: ["file-document-outline", "#8892A8"],
-  code: ["code-braces", "#FBBF24"],
-  other: ["file-outline", "#8892A8"],
-};
-
-const EXT_COLORS: Record<string, string> = {
-  zip: "#F59E0B", rar: "#F59E0B", "7z": "#F59E0B", tar: "#F59E0B", gz: "#F59E0B",
-  xlsx: "#22C55E", xls: "#22C55E", csv: "#22C55E",
-  docx: "#3B82F6", doc: "#3B82F6", rtf: "#3B82F6",
-  pptx: "#F97316", ppt: "#F97316",
-  json: "#FBBF24", yaml: "#FBBF24", yml: "#FBBF24", xml: "#FBBF24",
-  go: "#35D3FF", py: "#35D3FF", js: "#FBBF24", ts: "#5B8CFF", rs: "#F97316",
-  exe: "#A78BFA", app: "#A78BFA", dmg: "#A78BFA", iso: "#A78BFA",
-};
-
-export function fileIconFor(item: FileItem, defaultAccent: string = "#5B8CFF"): { name: string; color: string } {
-  if (item.is_dir) return { name: "folder", color: defaultAccent };
-  const kind = previewKind(item);
-  const [name, color] = KIND_ICON[kind] || KIND_ICON.other;
-  const extColor = EXT_COLORS[(item.extension || "").toLowerCase()];
-  return { name, color: extColor || color };
-}
 
 interface Props {
   item: FileItem;
@@ -105,7 +78,11 @@ export const FileRow = memo(function FileRow({
       )}
 
       <View style={[styles.iconWrap, { backgroundColor: `${color}18` }]}>
-        <MaterialCommunityIcons name={name as any} size={22} color={color} />
+        {isAudioFile(item) ? (
+          <AudioCover item={item} size={160} />
+        ) : (
+          <MaterialCommunityIcons name={name as any} size={22} color={color} />
+        )}
       </View>
 
       <View style={styles.body}>
@@ -198,6 +175,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
   },
   body: { flex: 1, marginLeft: 2 },
   title: { fontWeight: "600", letterSpacing: 0.1 },
