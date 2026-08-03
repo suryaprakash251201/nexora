@@ -1,6 +1,7 @@
 import React from "react";
-import { Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "../store/ThemeContext";
 
 export interface SheetAction {
@@ -23,21 +24,24 @@ interface Props {
  */
 export function BottomSheet({ visible, onClose, title, actions, children }: Props) {
   const { colors, font, radius, spacing, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
 
   return (
-    <Modal transparent visible={visible} animationType="slide" onRequestClose={onClose}>
+    <Modal transparent visible={visible} animationType="slide" onRequestClose={onClose} statusBarTranslucent>
       <Pressable style={styles.back} onPress={onClose}>
-        <Pressable
-          style={[
-            styles.sheet,
-            {
-              backgroundColor: colors.surfaceElevated,
-              borderColor: colors.borderSoft,
-              paddingHorizontal: spacing.lg,
-            },
-          ]}
-          onPress={() => {}}
-        >
+        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined}>
+          <Pressable
+            style={[
+              styles.sheet,
+              {
+                backgroundColor: colors.surfaceElevated,
+                borderColor: colors.borderSoft,
+                paddingHorizontal: spacing.lg,
+                paddingBottom: insets.bottom + 24,
+              },
+            ]}
+            onPress={() => {}}
+          >
           <View style={[styles.grabber, { backgroundColor: isDark ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.15)" }]} />
           {title ? (
             <Text style={[styles.title, { color: colors.content, fontSize: font.md, marginBottom: spacing.md }]} numberOfLines={1}>
@@ -84,7 +88,8 @@ export function BottomSheet({ visible, onClose, title, actions, children }: Prop
           >
             <Text style={[styles.cancelText, { color: colors.muted, fontSize: font.md }]}>Cancel</Text>
           </TouchableOpacity>
-        </Pressable>
+          </Pressable>
+        </KeyboardAvoidingView>
       </Pressable>
     </Modal>
   );
@@ -101,7 +106,6 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 26,
     borderWidth: 1,
     borderBottomWidth: 0,
-    paddingBottom: 40,
     paddingTop: 12,
   },
   grabber: {

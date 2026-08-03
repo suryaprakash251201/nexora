@@ -16,6 +16,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useSession } from "../store/SessionContext";
 import { useTheme } from "../store/ThemeContext";
 import { AppIcon } from "../components/AppIcon";
+import Constants from "expo-constants";
 
 type Stage = "server" | "login" | "totp";
 
@@ -62,7 +63,14 @@ export default function LoginScreen({ onDone }: { onDone: () => void }) {
     setError(null);
     try {
       const url = serverUrl.trim().replace(/\/+$/, "");
-      const probe = await fetch(`${url}/api/v1/auth/needs-setup`);
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 8000);
+      let probe: Response;
+      try {
+        probe = await fetch(`${url}/api/v1/auth/needs-setup`, { signal: ctrl.signal });
+      } finally {
+        clearTimeout(timer);
+      }
       let configured = false;
       try {
         const d = await probe.json();
@@ -76,8 +84,12 @@ export default function LoginScreen({ onDone }: { onDone: () => void }) {
       }
       await connect(url);
       setStage("login");
-    } catch (e) {
-      setError(`Cannot reach the server at ${serverUrl.trim()}. Check the URL and that Nexora is running.`);
+    } catch (e: any) {
+      if (e?.name === "AbortError") {
+        setError(`Timed out reaching ${serverUrl.trim()}. Check the URL and that Nexora is running.`);
+      } else {
+        setError(`Cannot reach the server at ${serverUrl.trim()}. Check the URL and that Nexora is running.`);
+      }
     } finally {
       setBusy(false);
     }
@@ -181,7 +193,7 @@ export default function LoginScreen({ onDone }: { onDone: () => void }) {
           </View>
           <Text style={[styles.brandTitle, { color: colors.content, fontSize: font.xxl }]}>Nexora</Text>
           <Text style={[styles.brandSub, { color: colors.muted, fontSize: font.sm }]}>Self-hosted file workspace</Text>
-          <Text style={[styles.version, { color: colors.muted, fontSize: font.xs }]}>v1.1.0</Text>
+          <Text style={[styles.version, { color: colors.muted, fontSize: font.xs }]}>v{Constants.expoConfig?.version || "1.0.0"}</Text>
         </View>
 
         <View style={styles.card}>
@@ -348,10 +360,9 @@ const styles = StyleSheet.create({
   },
   orb: {
     position: "absolute",
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    filter: "blur(20px)",
+    width: 112,
+    height: 112,
+    borderRadius: 56,
   },
   version: { marginTop: -4 },
   card: {

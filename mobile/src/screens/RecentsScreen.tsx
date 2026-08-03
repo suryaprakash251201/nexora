@@ -10,23 +10,29 @@ import {
   View,
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useRoute } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import type { RouteProp } from "@react-navigation/native";
 import { useSession } from "../store/SessionContext";
 import { useTheme } from "../store/ThemeContext";
 import { FileRow, EmptyState, ROW_HEIGHT } from "../components/FileRow";
 import { ListSkeleton } from "../components/Skeletons";
 import { previewKind } from "../api/client";
 import type { FileItem } from "../api/types";
-import type { RootStackParamList } from "../navigation/types";
+import type { RootStackParamList, MainTabParamList } from "../navigation/types";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
+type TabRoute = RouteProp<MainTabParamList, "Recents">;
 type FilterTag = "all" | "image" | "document" | "video" | "audio";
+
+const VALID_FILTERS: FilterTag[] = ["all", "image", "document", "video", "audio"];
 
 export default function RecentsScreen() {
   const navigation = useNavigation<Nav>();
+  const route = useRoute<TabRoute>();
   const { api } = useSession();
   const { colors, font, radius, spacing, shadowSm } = useTheme();
+  const searchRef = useRef<TextInput>(null);
 
   const [items, setItems] = useState<FileItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -64,6 +70,20 @@ export default function RecentsScreen() {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
   }, [load]);
+
+  // Consume params sent from Home (search bar tap → focus; quick category → filter).
+  useEffect(() => {
+    if (route.params?.filter && VALID_FILTERS.includes(route.params.filter as FilterTag)) {
+      setActiveFilter(route.params.filter as FilterTag);
+    }
+  }, [route.params?.filter]);
+
+  useEffect(() => {
+    if (route.params?.focusSearch) {
+      const t = setTimeout(() => searchRef.current?.focus(), 350);
+      return () => clearTimeout(t);
+    }
+  }, [route.params?.focusSearch]);
 
   const runSearch = useCallback(
     async (q: string) => {
@@ -138,6 +158,7 @@ export default function RecentsScreen() {
         <View style={[styles.searchWrap, { backgroundColor: colors.surfaceElevated, borderColor: query ? colors.accent : colors.borderSoft }, shadowSm]}>
           <MaterialCommunityIcons name="magnify" size={20} color={query ? colors.accent : colors.muted} />
           <TextInput
+            ref={searchRef}
             style={[styles.searchInput, { color: colors.content, fontSize: font.md }]}
             value={query}
             onChangeText={onChangeQuery}
@@ -199,6 +220,8 @@ export default function RecentsScreen() {
         initialNumToRender={16}
         maxToRenderPerBatch={12}
         windowSize={7}
+        removeClippedSubviews
+        keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ paddingBottom: 130 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={colors.accent} />}
         ListEmptyComponent={

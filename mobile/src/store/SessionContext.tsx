@@ -52,7 +52,17 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     })();
   }, []);
 
-  const api = useMemo(() => (serverUrl ? new Api(serverUrl, token) : null), [serverUrl, token]);
+  const api = useMemo(() => {
+    if (!serverUrl) return null;
+    const a = new Api(serverUrl, token);
+    a.setUnauthorizedHandler(() => {
+      // Token rejected by the server — sign out so the user can log back in.
+      AsyncStorage.multiRemove([KEY_TOKEN, KEY_USER]).catch(() => {});
+      setToken(null);
+      setUser(null);
+    });
+    return a;
+  }, [serverUrl, token]);
 
   const connect = useCallback(async (url: string) => {
     const clean = url.trim().replace(/\/+$/, "");

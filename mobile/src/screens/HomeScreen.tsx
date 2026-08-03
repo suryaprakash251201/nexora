@@ -12,6 +12,8 @@ import {
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useNavigation } from "@react-navigation/native";
+import type { CompositeNavigationProp } from "@react-navigation/native";
+import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useSession } from "../store/SessionContext";
@@ -19,15 +21,18 @@ import { useTheme } from "../store/ThemeContext";
 import { FileRow, EmptyState, SectionLabel, Chevron } from "../components/FileRow";
 import { ListSkeleton, GridCardSkeleton } from "../components/Skeletons";
 import type { Root, FileItem } from "../api/types";
-import type { RootStackParamList } from "../navigation/types";
+import type { RootStackParamList, MainTabParamList } from "../navigation/types";
 
-type Nav = NativeStackNavigationProp<RootStackParamList>;
+type Nav = CompositeNavigationProp<
+  BottomTabNavigationProp<MainTabParamList, "Home">,
+  NativeStackNavigationProp<RootStackParamList>
+>;
 
 const QUICK_CATEGORIES = [
-  { id: "photos", title: "Photos", icon: "image-multiple", gradient: ["#5B8CFF", "#7C5BFF"] as const },
-  { id: "docs", title: "Documents", icon: "file-document", gradient: ["#F97316", "#FBBF24"] as const },
-  { id: "music", title: "Audio", icon: "music-note", gradient: ["#2DD4BF", "#22C55E"] as const },
-  { id: "videos", title: "Videos", icon: "play-circle", gradient: ["#A78BFA", "#EF4444"] as const },
+  { id: "photos", title: "Photos", icon: "image-multiple", filter: "image" as const, gradient: ["#5B8CFF", "#7C5BFF"] as const },
+  { id: "docs", title: "Documents", icon: "file-document", filter: "document" as const, gradient: ["#F97316", "#FBBF24"] as const },
+  { id: "music", title: "Audio", icon: "music-note", filter: "audio" as const, gradient: ["#2DD4BF", "#22C55E"] as const },
+  { id: "videos", title: "Videos", icon: "play-circle", filter: "video" as const, gradient: ["#A78BFA", "#EF4444"] as const },
 ];
 
 const ROOT_ICONS: Record<string, string> = {
@@ -74,6 +79,13 @@ export default function HomeScreen() {
 
   const openRoot = useCallback(
     (root: Root) => navigation.navigate("Browser", { rootId: root.id, rootName: root.name }),
+    [navigation]
+  );
+  const openSearch = useCallback(() => {
+    navigation.navigate("Recents", { focusSearch: true });
+  }, [navigation]);
+  const openCategory = useCallback(
+    (filter: string) => navigation.navigate("Recents", { filter }),
     [navigation]
   );
   const openFile = useCallback(
@@ -197,7 +209,7 @@ export default function HomeScreen() {
               <TouchableOpacity
                 style={[styles.avatarBtn, shadowSm]}
                 activeOpacity={0.85}
-                onPress={() => navigation.navigate("Settings" as never)}
+                onPress={() => navigation.navigate("Settings")}
               >
                 <LinearGradient colors={[...gradients.brand]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
                 <Text style={styles.avatarText}>{initials}</Text>
@@ -216,7 +228,7 @@ export default function HomeScreen() {
                 shadowSm,
               ]}
               activeOpacity={0.8}
-              onPress={() => navigation.navigate("Recents" as never)}
+              onPress={openSearch}
             >
               <MaterialCommunityIcons name="magnify" size={22} color={colors.accent} />
               <Text style={[styles.searchPlaceholder, { color: colors.muted, fontSize: font.md }]}>Search files, tags or storage…</Text>
@@ -241,7 +253,7 @@ export default function HomeScreen() {
                   key={cat.id}
                   style={styles.quickCard}
                   activeOpacity={0.7}
-                  onPress={() => navigation.navigate("Recents" as never)}
+                  onPress={() => openCategory(cat.filter)}
                 >
                   <View style={[styles.quickIconWrap, shadowSm]}>
                     <LinearGradient
@@ -292,7 +304,7 @@ export default function HomeScreen() {
                 <MaterialCommunityIcons name="shield-check" size={16} color={colors.success} />
                 <Text style={[styles.statValue, { color: colors.success, fontSize: font.sm }]}>Connected</Text>
               </View>
-              <Text style={[styles.statLabel, { color: colors.muted, fontSize: font.xs }]}>Encrypted API</Text>
+              <Text style={[styles.statLabel, { color: colors.muted, fontSize: font.xs }]}>Connected</Text>
             </View>
           </View>
 
@@ -315,7 +327,7 @@ export default function HomeScreen() {
               <SectionLabel>Recent files</SectionLabel>
               <TouchableOpacity
                 style={styles.seeAll}
-                onPress={() => navigation.navigate("Recents" as never)}
+                onPress={() => navigation.navigate("Recents")}
               >
                 <Text style={[styles.seeAllText, { color: colors.accent, fontSize: font.sm }]}>See all</Text>
                 <Chevron />

@@ -11,6 +11,8 @@ import {
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import * as Haptics from "expo-haptics";
+import Constants from "expo-constants";
 import { useSession } from "../store/SessionContext";
 import { useTheme } from "../store/ThemeContext";
 import { AppIcon } from "../components/AppIcon";
@@ -34,6 +36,7 @@ export default function SettingsScreen() {
   const toggleTheme = () => {
     const nextDark = !isDark;
     setTheme(nextDark ? "dark" : "light");
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
   };
 
   const saveUrl = async () => {
@@ -144,7 +147,7 @@ export default function SettingsScreen() {
         <View style={[styles.divider, { backgroundColor: colors.borderSoft }]} />
         <Row icon="scale-balance" label="License" value="MIT License" iconColor="#f59e0b" iconBg="rgba(245,158,11,0.15)" />
         <View style={[styles.divider, { backgroundColor: colors.borderSoft }]} />
-        <Row icon="cellphone" label="App Version" value="v1.3.0" iconColor="#3b82f6" iconBg="rgba(59,130,246,0.15)" />
+        <Row icon="cellphone" label="App Version" value={`v${Constants.expoConfig?.version || "1.0.0"}`} iconColor="#3b82f6" iconBg="rgba(59,130,246,0.15)" />
       </View>
 
       {/* App Branding Card */}

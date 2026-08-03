@@ -8,6 +8,6 @@ export type RootStackParamList = {
 
 export type MainTabParamList = {
   Home: undefined;
-  Recents: undefined;
+  Recents: { focusSearch?: boolean; filter?: string } | undefined;
   Settings: undefined;
 };

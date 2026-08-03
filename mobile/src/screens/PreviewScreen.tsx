@@ -15,6 +15,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 import { Image } from "expo-image";
 import { useVideoPlayer, VideoView } from "expo-video";
+import * as Clipboard from "expo-clipboard";
 import { File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -40,7 +41,7 @@ function fmtTime(sec: number): string {
 export default function PreviewScreen({ route }: Props) {
   const { item, rootId } = route.params;
   const { api } = useSession();
-  const { colors, font, gradients, radius, shadowSm, spacing } = useTheme();
+  const { colors, font, gradients, radius, shadowSm } = useTheme();
   const kind = previewKind(item);
 
   const [text, setText] = useState<string | null>(null);
@@ -70,6 +71,12 @@ export default function PreviewScreen({ route }: Props) {
   useEffect(() => {
     if (kind === "text" || kind === "code" || kind === "markdown") loadText();
   }, [kind, loadText]);
+
+  const copyContent = useCallback(async () => {
+    if (!text) return;
+    await Clipboard.setStringAsync(text);
+    Alert.alert("Copied", "File content copied to clipboard.");
+  }, [text]);
 
   // ── Download & open with system app ─────────────────────────────────
   const downloadAndOpen = async () => {
@@ -112,9 +119,6 @@ export default function PreviewScreen({ route }: Props) {
               <Text style={styles.imageInfoText}>{formatBytes(item.size)} · {(item.mime || item.extension || "").toUpperCase()}</Text>
             </View>
             <View style={{ flex: 1 }} />
-            <TouchableOpacity style={styles.imageToolBtn}>
-              <MaterialCommunityIcons name="fullscreen" size={24} color="#fff" />
-            </TouchableOpacity>
             <TouchableOpacity style={styles.imageToolBtn} onPress={downloadAndOpen}>
               <MaterialCommunityIcons name="download" size={24} color="#fff" />
             </TouchableOpacity>
@@ -149,7 +153,7 @@ export default function PreviewScreen({ route }: Props) {
                 </View>
               </View>
               <View style={styles.docHeaderActions}>
-                <TouchableOpacity style={[styles.docActionBtn, { backgroundColor: colors.surfaceMuted }]} onPress={() => Alert.alert("Copied", "Content copied to clipboard")}>
+                <TouchableOpacity style={[styles.docActionBtn, { backgroundColor: colors.surfaceMuted }]} onPress={copyContent}>
                   <MaterialCommunityIcons name="content-copy" size={20} color={colors.content} />
                 </TouchableOpacity>
                 <TouchableOpacity style={[styles.docActionBtn, { backgroundColor: colors.surfaceMuted }]} onPress={downloadAndOpen}>
@@ -223,7 +227,7 @@ export default function PreviewScreen({ route }: Props) {
 
           <TouchableOpacity
             style={[styles.floatingCopyBtn, { backgroundColor: colors.accent, borderRadius: radius.pill }]}
-            onPress={() => Alert.alert("Copied", "Content copied to clipboard")}
+            onPress={copyContent}
             activeOpacity={0.8}
           >
             <MaterialCommunityIcons name="content-copy" size={20} color="#fff" />
@@ -286,7 +290,10 @@ function VideoPlayer({ uri }: { uri: string }) {
   const [ready, setReady] = useState(false);
   useEffect(() => {
     const sub = player.addListener("statusChange", ({ status }) => setReady(status === "readyToPlay"));
-    return () => sub.remove();
+    return () => {
+      sub.remove();
+      player.pause();
+    };
   }, [player]);
   return (
     <View style={styles.videoWrap}>
@@ -360,7 +367,10 @@ function AudioPlayer({ uri, name, size, ext, onShare }: { uri: string; name: str
         }
       }),
     ];
-    return () => subs.forEach((s) => s.remove());
+    return () => {
+      subs.forEach((s) => s.remove());
+      player.pause();
+    };
   }, [player]);
 
   // Handle Disc Rotation

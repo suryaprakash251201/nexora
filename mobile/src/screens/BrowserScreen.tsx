@@ -77,6 +77,10 @@ export default function BrowserScreen({ route, navigation }: Props) {
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadFilename, setUploadFilename] = useState("");
+  const [uploadTotal, setUploadTotal] = useState(0);
+  const [uploadDone, setUploadDone] = useState(0);
+  const uploadAbortRef = useRef<(() => void) | null>(null);
+  const uploadCancelRef = useRef(false);
 
   const loadRef = useRef(0);
 
@@ -241,32 +245,60 @@ export default function BrowserScreen({ route, navigation }: Props) {
       const result = await DocumentPicker.getDocumentAsync({ multiple: true, copyToCacheDirectory: true });
       if (result.canceled) return;
       haptic();
+      const assets = result.assets;
+      uploadCancelRef.current = false;
       setUploading(true);
       setUploadProgress(0);
+      setUploadTotal(assets.length);
+      setUploadDone(0);
       let ok = 0;
-      for (const doc of result.assets) {
-        setUploadFilename(doc.name);
-        const form = new FormData();
-        form.append("files", {
-          uri: doc.uri,
-          name: doc.name,
-          type: doc.mimeType || "application/octet-stream",
-        } as any);
-        await api.upload(rootId, path, form, (pct) => setUploadProgress(pct));
-        ok += 1;
+      try {
+        for (let i = 0; i < assets.length; i++) {
+          if (uploadCancelRef.current) break;
+          const doc = assets[i];
+          setUploadFilename(doc.name);
+          setUploadDone(i);
+          const form = new FormData();
+          form.append("files", {
+            uri: doc.uri,
+            name: doc.name,
+            type: doc.mimeType || "application/octet-stream",
+          } as any);
+          const { promise, abort } = api.upload(rootId, path, form, (pct) => setUploadProgress(pct));
+          uploadAbortRef.current = abort;
+          await promise;
+          uploadAbortRef.current = null;
+          ok += 1;
+        }
+        setUploadDone(ok);
+        if (!uploadCancelRef.current) {
+          Alert.alert("Upload complete", `${ok} file${ok === 1 ? "" : "s"} uploaded.`);
+        }
+        load(path, 0);
+      } finally {
+        setUploading(false);
+        setUploadFilename("");
+        uploadAbortRef.current = null;
       }
-      setUploading(false);
-      setUploadFilename("");
-      Alert.alert("Upload complete", `${ok} file${ok === 1 ? "" : "s"} uploaded.`);
-      load(path, 0);
     } catch (e: any) {
       setUploading(false);
       setUploadFilename("");
-      Alert.alert("Upload failed", e?.message || "Something went wrong.");
+      uploadAbortRef.current = null;
+      if (!uploadCancelRef.current) {
+        Alert.alert("Upload failed", e?.message || "Something went wrong.");
+      }
     } finally {
       setUploadProgress(0);
     }
   };
+
+  const cancelUpload = useCallback(() => {
+    uploadCancelRef.current = true;
+    uploadAbortRef.current?.();
+    uploadAbortRef.current = null;
+    setUploading(false);
+    setUploadFilename("");
+  }, []);
 
   // ── Create Folder ───────────────────────────────────────────────────
   const handleCreateFolder = async () => {
@@ -349,7 +381,7 @@ export default function BrowserScreen({ route, navigation }: Props) {
           selected={selectedPaths.has(item.path)}
           onSelect={toggleSelect}
           trailing={
-            selectMode ? undefined : item.is_dir ? undefined : (
+            selectMode ? undefined : (
               <TouchableOpacity onPress={() => showActions(item)} hitSlop={10} style={[styles.moreHit, { backgroundColor: colors.card }]}>
                 <MaterialCommunityIcons name="dots-vertical" size={20} color={colors.content} />
               </TouchableOpacity>
@@ -365,7 +397,7 @@ export default function BrowserScreen({ route, navigation }: Props) {
     ({ item }: { item: FileItem }) => (
       <GridCard
         item={item}
-        rawUrl={api && previewKind(item) === "image" ? api.rawFileUrl(item.root_id || rootId, item.path) : undefined}
+        rawUrl={api && previewKind(item) === "image" ? api.thumbnailUrl(item.root_id || rootId, item.path, 512) : undefined}
         onPress={openItem}
         onLongPress={() => {
           setSelectMode(true);
@@ -457,6 +489,7 @@ export default function BrowserScreen({ route, navigation }: Props) {
         initialNumToRender={16}
         maxToRenderPerBatch={12}
         windowSize={7}
+        removeClippedSubviews={viewMode === "list"}
         contentContainerStyle={{ paddingBottom: 140, paddingHorizontal: viewMode === "grid" ? 6 : 0 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={colors.accent} />}
         ListEmptyComponent={
@@ -517,7 +550,10 @@ export default function BrowserScreen({ route, navigation }: Props) {
             setShowSortSheet(true);
           }}
         >
-          <MaterialCommunityIcons name="sort-variant" size={20} color={colors.content} />
+          <MaterialCommunityIcons name="sort-variant" size={20} color={sortField !== "name" || sortOrder !== "asc" || filterCategory !== "all" ? colors.accent : colors.content} />
+          {(sortField !== "name" || sortOrder !== "asc" || filterCategory !== "all") && (
+            <View style={[styles.sortDot, { backgroundColor: colors.accent }]} />
+          )}
         </TouchableOpacity>
 
         {/* New Folder */}
@@ -612,16 +648,30 @@ export default function BrowserScreen({ route, navigation }: Props) {
       </BottomSheet>
 
       {/* Upload Progress Sheet */}
-      <BottomSheet visible={uploading} onClose={() => {}} title="Uploading…">
+      <BottomSheet
+        visible={uploading}
+        onClose={() => {}}
+        title={uploadTotal > 1 ? `Uploading ${Math.min(uploadDone + 1, uploadTotal)} of ${uploadTotal}` : "Uploading…"}
+      >
         <View style={styles.progressWrap}>
           {uploadFilename ? <Text style={[styles.progressFilename, { color: colors.content, fontSize: font.md }]} numberOfLines={1}>{uploadFilename}</Text> : null}
           <View style={[styles.progressTrack, { backgroundColor: colors.card }]}>
             <View style={[styles.progressFill, { width: `${uploadProgress}%`, backgroundColor: colors.accent }]} />
           </View>
           <View style={styles.progressFooter}>
-            <Text style={[styles.progressPctText, { color: colors.muted, fontSize: font.sm }]}>Uploading file</Text>
+            <Text style={[styles.progressPctText, { color: colors.muted, fontSize: font.sm }]}>
+              {uploadTotal > 1 ? `${uploadDone} of ${uploadTotal} complete` : "Uploading file"}
+            </Text>
             <Text style={[styles.progressPctValue, { color: colors.content, fontSize: font.sm }]}>{uploadProgress}%</Text>
           </View>
+          <TouchableOpacity
+            style={[styles.uploadCancelBtn, { borderColor: colors.borderSoft }]}
+            onPress={cancelUpload}
+            activeOpacity={0.7}
+          >
+            <MaterialCommunityIcons name="close" size={16} color={colors.danger} />
+            <Text style={[styles.uploadCancelText, { color: colors.danger, fontSize: font.sm }]}>Cancel upload</Text>
+          </TouchableOpacity>
         </View>
       </BottomSheet>
 
@@ -856,6 +906,25 @@ const styles = StyleSheet.create({
   progressFooter: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   progressPctText: {},
   progressPctValue: { fontWeight: "700" },
+  uploadCancelBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingVertical: 11,
+    marginTop: 4,
+  },
+  uploadCancelText: { fontWeight: "700" },
+  sortDot: {
+    position: "absolute",
+    top: 6,
+    right: 6,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
 
   // Inputs & Buttons
   input: {

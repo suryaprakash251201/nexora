@@ -39,6 +39,8 @@ function buildQuery(query?: Record<string, string | number | undefined>): string
 export class Api {
   baseUrl: string;
   token: string | null;
+  /** Called when the server rejects the token (401) so the app can sign out. */
+  onUnauthorized?: () => void;
 
   constructor(baseUrl: string, token: string | null) {
     this.baseUrl = baseUrl.replace(/\/+$/, "");
@@ -47,6 +49,11 @@ export class Api {
 
   setToken(token: string | null) {
     this.token = token;
+  }
+
+  /** Register a hook fired when any request gets a 401 (expired/invalid token). */
+  setUnauthorizedHandler(handler: () => void) {
+    this.onUnauthorized = handler;
   }
 
   /** Absolute URL for a raw media/thumbnail endpoint, with token appended. */
@@ -93,6 +100,10 @@ export class Api {
       } catch {
         data = text;
       }
+    }
+
+    if (res.status === 401 && this.onUnauthorized) {
+      this.onUnauthorized();
     }
 
     if (!res.ok) {
@@ -168,15 +179,29 @@ export class Api {
     return this.del("/files", { root, path });
   }
 
-  upload(root: string, path: string, form: FormData, onProgress?: (pct: number) => void): Promise<{ uploaded: number }> {
+  /**
+   * Upload one or more files. Returns an object exposing `abort()` so the UI
+   * can cancel mid-flight. Reports per-call progress via onProgress.
+   */
+  upload(
+    root: string,
+    path: string,
+    form: FormData,
+    onProgress?: (pct: number) => void,
+    timeoutMs = 0
+  ): { promise: Promise<{ uploaded: number }>; abort: () => void } {
     const xhr = new XMLHttpRequest();
-    return new Promise((resolve, reject) => {
+    const promise = new Promise<{ uploaded: number }>((resolve, reject) => {
+      let settled = false;
       xhr.open("POST", `${this.baseUrl}/api/v1/files/upload?root=${encodeURIComponent(root)}&path=${encodeURIComponent(path)}`);
       if (this.token) xhr.setRequestHeader("Authorization", `Bearer ${this.token}`);
+      if (timeoutMs > 0) xhr.timeout = timeoutMs;
       xhr.upload.onprogress = (e) => {
         if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100));
       };
       xhr.onload = () => {
+        if (settled) return;
+        settled = true;
         if (xhr.status >= 200 && xhr.status < 300) {
           try {
             resolve(JSON.parse(xhr.responseText));
@@ -194,9 +219,28 @@ export class Api {
           reject(new NexoraError("upload_failed", message, xhr.status));
         }
       };
-      xhr.onerror = () => reject(new NexoraError("network_error", "Network error during upload"));
+      xhr.onerror = () => {
+        if (settled) return;
+        settled = true;
+        reject(new NexoraError("network_error", "Network error during upload"));
+      };
+      xhr.ontimeout = () => {
+        if (settled) return;
+        settled = true;
+        reject(new NexoraError("upload_timeout", "Upload timed out — check your connection."));
+      };
       xhr.send(form);
     });
+    return {
+      promise,
+      abort: () => {
+        try {
+          xhr.abort();
+        } catch {
+          /* ignore */
+        }
+      },
+    };
   }
 }
 

@@ -34,7 +34,12 @@ function TabIcon({ routeName, focused, color, size }: { routeName: string; focus
   const icons = TAB_ICONS[routeName] || TAB_ICONS.Home;
   const name = focused ? icons.active : icons.inactive;
   return (
-    <View style={focused ? { backgroundColor: colors.accentSoft, borderRadius: 12, padding: 4 } : undefined}>
+    <View
+      style={[
+        styles.tabIconWrap,
+        focused ? { backgroundColor: colors.accentSoft } : undefined,
+      ]}
+    >
       <MaterialCommunityIcons name={name as any} size={size} color={color} />
     </View>
   );
@@ -123,11 +128,21 @@ function RootNavigation() {
   const { colors, isDark } = useTheme();
 
   if (booting) {
-    return <Splash />;
+    return (
+      <>
+        <StatusBar style="light" />
+        <Splash />
+      </>
+    );
   }
 
   if (!user || !api) {
-    return <LoginScreen onDone={() => {}} />;
+    return (
+      <>
+        <StatusBar style="light" />
+        <LoginScreen onDone={() => {}} />
+      </>
+    );
   }
 
   const dynamicNavTheme = {
@@ -175,6 +190,13 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
+  tabIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   splash: { flex: 1, alignItems: "center", justifyContent: "center" },
   splashInner: { alignItems: "center", gap: 20 },
   splashText: { alignItems: "center", gap: 4 },
