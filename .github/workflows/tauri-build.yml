@@ -14,7 +14,7 @@ permissions: {}
 jobs:
   build-tauri:
     permissions:
-      contents: write    # needed by tauri-action to create releases
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -64,19 +64,19 @@ jobs:
           npx --yes @tauri-apps/cli icon src-tauri/icons/app-icon.svg -o src-tauri/icons
         working-directory: ./desktop
 
+      # Build-only: tagName/releaseName/releaseId are intentionally omitted so
+      # tauri-action never touches GitHub Releases. Publishing happens exactly
+      # once, in the dedicated `release` job below — this avoids the upstream
+      # race where parallel matrix legs delete/upload the same release assets
+      # concurrently (sporadic "Not Found - delete-a-release-asset" 404s).
       - name: build tauri app
         uses: tauri-apps/tauri-action@v1
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
           TAURI_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
         with:
           projectPath: './desktop'
-          tagName: v__VERSION__
-          releaseName: 'Nexora Desktop v__VERSION__'
-          releaseBody: 'See the assets to download this version and install.'
-          releaseDraft: false
-          prerelease: false
+          args: ${{ matrix.args }}
 
       - name: upload linux bundles
         if: startsWith(matrix.platform, 'ubuntu')
@@ -100,3 +100,32 @@ jobs:
             desktop/src-tauri/target/release/bundle/msi/*.msi
           if-no-files-found: warn
           retention-days: 7
+
+  # Publish a GitHub release from the built bundles, once, when a v* tag is pushed.
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build-tauri
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: bundles
+          merge-multiple: true
+
+      - name: publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Nexora Desktop ${{ github.ref_name }}
+          body: 'See the assets to download this version and install.'
+          draft: false
+          prerelease: false
+          files: |
+            bundles/*.deb
+            bundles/*.rpm
+            bundles/*.AppImage
+            bundles/*.exe
+            bundles/*.msi
+            bundles/*.sig
