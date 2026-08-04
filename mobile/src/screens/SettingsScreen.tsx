@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   View,
   Animated,
+  Switch,
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -35,14 +36,26 @@ export default function SettingsScreen() {
   const [urlDraft, setUrlDraft] = useState(serverUrl || "");
   const [saving, setSaving] = useState(false);
 
-  const thumbAnim = useRef(new Animated.Value(isDark ? 1 : 0)).current;
+  const [crossfade, setCrossfade] = useState(4);
+  const [volumeBooster, setVolumeBooster] = useState(true);
+  const [eqPreset, setEqPreset] = useState("Bass Booster");
 
-  useEffect(() => {
-    Animated.spring(thumbAnim, {
-      toValue: isDark ? 1 : 0,
-      useNativeDriver: false,
-    }).start();
-  }, [isDark, thumbAnim]);
+  const cycleCrossfade = () => {
+    setCrossfade((c) => (c >= 12 ? 0 : c + 2));
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+  };
+
+  const cycleEq = () => {
+    const presets = ["Flat", "Acoustic", "Bass Booster", "Classical", "Electronic", "Rock"];
+    const idx = presets.indexOf(eqPreset);
+    setEqPreset(presets[(idx + 1) % presets.length]);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+  };
+
+  const toggleBooster = () => {
+    setVolumeBooster((v) => !v);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+  };
 
   const toggleTheme = () => {
     const nextDark = !isDark;
@@ -71,16 +84,6 @@ export default function SettingsScreen() {
   };
 
   const initials = (user?.display_name || user?.username || "?").slice(0, 1).toUpperCase();
-
-  const toggleBg = thumbAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [colors.surfaceMuted || "rgba(0,0,0,0.1)", colors.accent],
-  });
-
-  const thumbPos = thumbAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [3, 27],
-  });
 
   return (
     <ScrollView style={[styles.root, { backgroundColor: colors.bg }]} contentContainerStyle={{ paddingBottom: 130 }}>
@@ -119,11 +122,7 @@ export default function SettingsScreen() {
           </View>
           <Text style={[styles.rowLabel, { color: colors.content, fontSize: font.sm }]}>Theme Mode</Text>
           <Text style={[styles.rowValue, { color: colors.muted, fontSize: font.sm }]}>{isDark ? "Dark Mode" : "Light Mode"}</Text>
-          <TouchableOpacity activeOpacity={0.8} onPress={toggleTheme}>
-            <Animated.View style={[styles.toggleTrack, { backgroundColor: toggleBg }]}>
-              <Animated.View style={[styles.toggleThumb, { transform: [{ translateX: thumbPos }] }]} />
-            </Animated.View>
-          </TouchableOpacity>
+          <CustomSwitch value={isDark} onValueChange={toggleTheme} />
         </View>
       </View>
 
@@ -141,6 +140,29 @@ export default function SettingsScreen() {
         <Row icon="wifi" label="Use Cellular Data" value="Wi-Fi Only" iconColor="#3B82F6" iconBg="rgba(59,130,246,0.15)" />
         <View style={[styles.divider, { backgroundColor: colors.borderSoft }]} />
         <Row icon="fingerprint" label="Face ID / Touch ID" value="Enabled" iconColor="#10B981" iconBg="rgba(16,185,129,0.15)" />
+      </View>
+
+      {/* Music Section */}
+      <Text style={[styles.section, { color: colors.muted }]}>Music</Text>
+      <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.borderSoft, borderRadius: radius.xl }, shadow]}>
+        <LinearGradient
+          colors={["rgba(255,255,255,0.04)", "transparent"]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.glassHighlight}
+        />
+        <Row onPress={cycleCrossfade} icon="camera-iris" label="Crossfade" value={crossfade === 0 ? "Off" : `${crossfade}s`} iconColor="#8b5cf6" iconBg="rgba(139,92,246,0.15)" />
+        <View style={[styles.divider, { backgroundColor: colors.borderSoft }]} />
+        <Row 
+          icon="volume-high" 
+          label="Volume Booster" 
+          value={volumeBooster ? "Enabled" : "Disabled"} 
+          iconColor="#ef4444" 
+          iconBg="rgba(239,68,68,0.15)" 
+          rightElement={<CustomSwitch value={volumeBooster} onValueChange={toggleBooster} />}
+        />
+        <View style={[styles.divider, { backgroundColor: colors.borderSoft }]} />
+        <Row onPress={cycleEq} icon="equalizer" label="Equalizer Preset" value={eqPreset} iconColor="#14b8a6" iconBg="rgba(20,184,166,0.15)" />
       </View>
 
       {/* Server Section */}
@@ -259,22 +281,66 @@ function Row({
   value,
   iconColor = "#5B8CFF",
   iconBg = "rgba(91,140,255,0.15)",
+  onPress,
+  rightElement,
 }: {
   icon: string;
   label: string;
   value?: string;
   iconColor?: string;
   iconBg?: string;
+  onPress?: () => void;
+  rightElement?: React.ReactNode;
 }) {
   const { colors, font } = useTheme();
-  return (
+  const content = (
     <View style={styles.row}>
       <View style={[styles.rowIcon, { backgroundColor: iconBg }]}>
         <MaterialCommunityIcons name={icon as any} size={17} color={iconColor} />
       </View>
       <Text style={[styles.rowLabel, { color: colors.content, fontSize: font.sm }]}>{label}</Text>
-      {value ? <Text style={[styles.rowValue, { color: colors.muted, fontSize: font.sm }]}>{value}</Text> : null}
+      {value ? <Text style={[styles.rowValue, { color: colors.muted, fontSize: font.sm, marginRight: rightElement ? 8 : 0 }]}>{value}</Text> : null}
+      {rightElement}
     </View>
+  );
+
+  if (onPress) {
+    return (
+      <TouchableOpacity activeOpacity={0.7} onPress={onPress}>
+        {content}
+      </TouchableOpacity>
+    );
+  }
+  return content;
+}
+
+function CustomSwitch({ value, onValueChange }: { value: boolean; onValueChange: () => void }) {
+  const { colors } = useTheme();
+  const anim = useRef(new Animated.Value(value ? 1 : 0)).current;
+
+  useEffect(() => {
+    Animated.spring(anim, {
+      toValue: value ? 1 : 0,
+      useNativeDriver: false,
+    }).start();
+  }, [value, anim]);
+
+  const toggleBg = anim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [colors.border, colors.accent],
+  });
+
+  const thumbPos = anim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [3, 27],
+  });
+
+  return (
+    <TouchableOpacity activeOpacity={0.8} onPress={onValueChange}>
+      <Animated.View style={[styles.toggleTrack, { backgroundColor: toggleBg }]}>
+        <Animated.View style={[styles.toggleThumb, { transform: [{ translateX: thumbPos }] }]} />
+      </Animated.View>
+    </TouchableOpacity>
   );
 }
 

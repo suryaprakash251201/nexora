@@ -116,7 +116,10 @@ export async function api<T>(path: string, opts: RequestOptions = {}): Promise<T
 
   // CSRF protection for state-changing requests.
   if (method !== "GET" && method !== "HEAD") {
-    headers["X-CSRF-Token"] = getCsrfToken();
+    const csrf = getCsrfToken();
+    if (csrf) {
+      headers["X-CSRF-Token"] = csrf;
+    }
   }
 
   const isTauri = "__TAURI_INTERNALS__" in window;

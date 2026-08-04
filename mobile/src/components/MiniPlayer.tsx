@@ -13,17 +13,20 @@ import {
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { Image } from "expo-image";
+import { BlurView } from "expo-blur";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAudio } from "../store/AudioContext";
 import { useTheme } from "../store/ThemeContext";
 import { useSession } from "../store/SessionContext";
 import { EqBars } from "./EqBars";
+import { AudioQualityPill } from "./AudioQualityBadge";
+import { AudioQualityDetail } from "./AudioQualityDetail";
 
 const { height } = Dimensions.get("window");
 
 export function MiniPlayer() {
   const { currentTrack, player, nextTrack, prevTrack, closePlayer } = useAudio();
-  const { colors, font, gradients, radius, shadow } = useTheme();
+  const { colors, font, gradients, radius, shadow, isDark } = useTheme();
   const { api } = useSession();
   const insets = useSafeAreaInsets();
 
@@ -120,17 +123,7 @@ export function MiniPlayer() {
 
   const coverUrl = api ? api.thumbnailUrl(currentTrack.root_id, currentTrack.path, 512) : null;
 
-  let formatBadge = null;
-  const ext = (currentTrack.extension || "").toLowerCase();
-  if (ext === ".flac" || ext === ".alac" || ext === ".wav") {
-    formatBadge = "High-Res Lossless 24-bit";
-  } else if (ext === ".mp3") {
-    formatBadge = "High-Quality 320kbps";
-  } else if (ext === ".aac" || ext === ".m4a") {
-    formatBadge = "Lossless 16-bit";
-  } else {
-    formatBadge = "Standard Quality";
-  }
+  const ext = currentTrack.extension || "";
 
   const formatTime = (s: number) => {
     if (!s || isNaN(s)) return "0:00";
@@ -164,7 +157,10 @@ export function MiniPlayer() {
 
           <View style={styles.miniTextWrap}>
             <Text style={[styles.miniTitle, { color: colors.content, fontSize: font.sm }]} numberOfLines={1}>{currentTrack.name}</Text>
-            <Text style={[styles.miniSub, { color: colors.muted, fontSize: font.xs }]} numberOfLines={1}>{currentTrack.extension?.toUpperCase() || "AUDIO"} · Nexora</Text>
+            <View style={styles.miniSubRow}>
+              <AudioQualityPill extension={ext} mime={currentTrack.mime} fileSize={currentTrack.size} />
+              <Text style={[styles.miniSub, { color: colors.muted, fontSize: font.xs }]} numberOfLines={1}>{currentTrack.extension?.toUpperCase() || "AUDIO"} · Nexora</Text>
+            </View>
           </View>
 
           <TouchableOpacity style={styles.miniBtn} onPress={togglePlay}>
@@ -188,36 +184,37 @@ export function MiniPlayer() {
       {modalVisible && (
         <Modal transparent visible={modalVisible} animationType="none" onRequestClose={closeModal}>
           <Animated.View style={[styles.modalRoot, { transform: [{ translateY: slideAnim }] }]}>
-            <LinearGradient colors={["#0F1729", "#040508"]} style={StyleSheet.absoluteFill} />
-            <LinearGradient colors={[gradients.brand[0] + "33", "transparent"]} style={StyleSheet.absoluteFill} />
+            {/* Background Blur */}
+            {coverUrl ? (
+              <Image source={{ uri: coverUrl }} style={StyleSheet.absoluteFill} contentFit="cover" blurRadius={90} />
+            ) : (
+              <LinearGradient colors={[...gradients.player]} style={StyleSheet.absoluteFill} />
+            )}
+            <View style={[StyleSheet.absoluteFill, { backgroundColor: isDark ? "rgba(0,0,0,0.5)" : "rgba(255,255,255,0.4)" }]} />
+            <BlurView intensity={isDark ? 50 : 80} tint={isDark ? "dark" : "light"} style={StyleSheet.absoluteFill} />
             
-            <View style={[styles.modalHeader, { paddingTop: insets.top + 20 }]}>
-              <TouchableOpacity style={styles.closeBtn} onPress={closeModal}>
-                <MaterialCommunityIcons name="chevron-down" size={36} color="#fff" />
-              </TouchableOpacity>
-              <View style={styles.headerTitleWrap}>
-                <Text style={[styles.headerSub, { fontSize: font.xs }]}>PLAYING FROM</Text>
-                <Text style={[styles.headerTitle, { fontSize: font.sm }]}>Nexora Music</Text>
+            <TouchableOpacity activeOpacity={0.9} onPress={closeModal} style={[styles.modalHeader, { paddingTop: insets.top + 10 }]}>
+              <View style={styles.pullDownWrap}>
+                <View style={[styles.pullDownIndicator, { backgroundColor: colors.muted }]} />
               </View>
-              <View style={{ width: 36 }} />
-            </View>
+            </TouchableOpacity>
 
             <View style={styles.modalContent}>
-              {/* Artwork / Box Shape */}
-              <View style={[styles.artworkContainer, shadow]}>
-                <Animated.View style={[styles.artworkBox, { transform: [{ scale: artworkScale }], backgroundColor: colors.surfaceMuted }]}>
+              {/* Artwork */}
+              <View style={styles.artworkContainer}>
+                <Animated.View style={[styles.artworkBox, { transform: [{ scale: artworkScale }] }]}>
                   {coverUrl ? (
                     <Image source={{ uri: coverUrl }} style={{ width: "100%", height: "100%", position: "absolute" }} contentFit="cover" transition={300} />
                   ) : (
                     <LinearGradient colors={[...gradients.brand]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill}>
                       <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-                        <MaterialCommunityIcons name="music-note" size={80} color="#fff" />
+                        <MaterialCommunityIcons name="music-note" size={100} color="#fff" />
                       </View>
                     </LinearGradient>
                   )}
                   {status === "loading" && (
-                    <View style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(0,0,0,0.5)", alignItems: "center", justifyContent: "center" }]}>
-                      <ActivityIndicator size="large" color="#fff" />
+                    <View style={[StyleSheet.absoluteFill, { backgroundColor: isDark ? "rgba(0,0,0,0.5)" : "rgba(255,255,255,0.5)", alignItems: "center", justifyContent: "center" }]}>
+                      <ActivityIndicator size="large" color={colors.content} />
                     </View>
                   )}
                 </Animated.View>
@@ -225,17 +222,22 @@ export function MiniPlayer() {
 
               {/* Title & Artist */}
               <View style={styles.trackInfo}>
-                <View style={styles.trackNameRow}>
-                  <Text style={[styles.trackName, { fontSize: font.xxl }]} numberOfLines={2}>{currentTrack.name}</Text>
-                  <EqBars playing={playing && status !== "loading"} tint={gradients.brand[0]} barCount={6} />
+                <View style={styles.trackTextCol}>
+                  <Text style={[styles.trackName, { fontSize: font.xxxl, color: colors.content }]} numberOfLines={1}>{currentTrack.name}</Text>
+                  <Text style={[styles.trackArtist, { fontSize: font.xl, color: colors.content, opacity: 0.7 }]} numberOfLines={1}>{currentTrack.extension?.toUpperCase() || "AUDIO"} · Nexora</Text>
                 </View>
-                <Text style={[styles.trackArtist, { fontSize: font.lg }]} numberOfLines={1}>{currentTrack.extension?.toUpperCase() || "AUDIO"} · Nexora</Text>
-                
-                {formatBadge && (
-                  <View style={styles.formatBadge}>
-                    <Text style={styles.formatBadgeText}>{formatBadge}</Text>
-                  </View>
-                )}
+                <TouchableOpacity style={[styles.moreBtn, { backgroundColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.05)" }]}>
+                  <MaterialCommunityIcons name="dots-horizontal" size={24} color={colors.content} />
+                </TouchableOpacity>
+              </View>
+              
+              <View style={{ marginBottom: 16 }}>
+                <AudioQualityDetail
+                  extension={ext}
+                  mime={currentTrack.mime}
+                  fileSize={currentTrack.size}
+                  duration={duration > 0 ? duration : undefined}
+                />
               </View>
 
               {/* Scrubber */}
@@ -258,45 +260,47 @@ export function MiniPlayer() {
                     }
                   }}
                 >
-                  <View style={styles.scrubberTrack}>
-                    <View style={[styles.scrubberFill, { width: `${progressPct}%` }]} />
-                    <View style={[styles.scrubberThumb, { left: `${progressPct}%` }]} />
+                  <View style={[styles.scrubberTrack, { backgroundColor: isDark ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.1)" }]}>
+                    <View style={[styles.scrubberFill, { width: `${progressPct}%`, backgroundColor: colors.content }]} />
+                    <View style={[styles.scrubberThumb, { left: `${progressPct}%`, backgroundColor: colors.content }]} />
                   </View>
                 </View>
                 <View style={styles.timeRow}>
-                  <Text style={styles.timeText}>{formatTime(currentTime)}</Text>
-                  <Text style={styles.timeText}>{duration > 0 ? `-${formatTime(duration - currentTime)}` : "-:-"}</Text>
+                  <Text style={[styles.timeText, { color: colors.content, opacity: 0.6 }]}>{formatTime(currentTime)}</Text>
+                  <Text style={[styles.timeText, { color: colors.content, opacity: 0.6 }]}>{duration > 0 ? `-${formatTime(duration - currentTime)}` : "-:-"}</Text>
                 </View>
               </View>
 
               {/* Controls */}
               <View style={styles.controlsRow}>
-                <TouchableOpacity style={styles.controlBtnSmall} onPress={() => setShuffle(!shuffle)}>
-                  <MaterialCommunityIcons name="shuffle" size={24} color={shuffle ? gradients.brand[0] : "rgba(255,255,255,0.5)"} />
-                </TouchableOpacity>
-                
-                <TouchableOpacity style={styles.controlBtn} onPress={prevTrack}>
-                  <MaterialCommunityIcons name="skip-backward" size={38} color="#fff" />
-                </TouchableOpacity>
-                
-                <TouchableOpacity style={styles.playBtn} onPress={togglePlay}>
-                  {status === "loading" ? (
-                    <ActivityIndicator color="#000" size="large" />
-                  ) : (
-                    <MaterialCommunityIcons name={playing ? "pause" : "play"} size={44} color="#000" />
-                  )}
-                </TouchableOpacity>
-                
-                <TouchableOpacity style={styles.controlBtn} onPress={nextTrack}>
-                  <MaterialCommunityIcons name="skip-forward" size={38} color="#fff" />
-                </TouchableOpacity>
-
                 <TouchableOpacity style={styles.controlBtnSmall} onPress={toggleRepeat}>
                   <MaterialCommunityIcons 
                     name={repeat === "one" ? "repeat-once" : "repeat"} 
                     size={24} 
-                    color={repeat !== "off" ? gradients.brand[0] : "rgba(255,255,255,0.5)"} 
+                    color={repeat !== "off" ? colors.content : colors.muted} 
                   />
+                </TouchableOpacity>
+                
+                <View style={styles.mainControls}>
+                  <TouchableOpacity style={styles.controlBtn} onPress={prevTrack}>
+                    <MaterialCommunityIcons name="skip-backward" size={48} color={colors.content} />
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity style={styles.playBtn} onPress={togglePlay}>
+                    {status === "loading" ? (
+                      <ActivityIndicator color={colors.content} size="large" />
+                    ) : (
+                      <MaterialCommunityIcons name={playing ? "pause" : "play"} size={64} color={colors.content} />
+                    )}
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity style={styles.controlBtn} onPress={nextTrack}>
+                    <MaterialCommunityIcons name="skip-forward" size={48} color={colors.content} />
+                  </TouchableOpacity>
+                </View>
+
+                <TouchableOpacity style={styles.controlBtnSmall} onPress={() => setShuffle(!shuffle)}>
+                  <MaterialCommunityIcons name="shuffle" size={24} color={shuffle ? colors.content : colors.muted} />
                 </TouchableOpacity>
               </View>
             </View>
@@ -343,6 +347,12 @@ const styles = StyleSheet.create({
     marginLeft: 12,
     justifyContent: "center",
   },
+  miniSubRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 2,
+  },
   miniTitle: { fontWeight: "700" },
   miniSub: {},
   miniBtn: {
@@ -365,77 +375,67 @@ const styles = StyleSheet.create({
   // Modal
   modalRoot: { flex: 1 },
   modalHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
     paddingHorizontal: 16,
+    paddingBottom: 16,
   },
-  closeBtn: {
-    width: 40,
-    height: 40,
+  pullDownWrap: {
     alignItems: "center",
     justifyContent: "center",
+    width: "100%",
+    paddingVertical: 12,
   },
-  headerTitleWrap: { alignItems: "center" },
-  headerSub: { color: "rgba(255,255,255,0.6)", fontWeight: "700", letterSpacing: 1 },
-  headerTitle: { color: "#fff", fontWeight: "600", marginTop: 2 },
+  pullDownIndicator: {
+    width: 40,
+    height: 5,
+    borderRadius: 2.5,
+    opacity: 0.5,
+  },
   modalContent: {
     flex: 1,
     paddingHorizontal: 32,
-    justifyContent: "center",
-    paddingBottom: 40,
+    paddingBottom: 60,
   },
   artworkContainer: {
     aspectRatio: 1,
     width: "100%",
     alignItems: "center",
     justifyContent: "center",
+    marginTop: 20,
     marginBottom: 40,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.4,
+    shadowRadius: 24,
+    elevation: 20,
   },
   artworkBox: {
     width: "100%",
     aspectRatio: 1,
-    borderRadius: 24,
+    borderRadius: 16,
     overflow: "hidden",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 20 },
-    shadowOpacity: 0.6,
-    shadowRadius: 30,
-    elevation: 20,
   },
-
-  trackInfo: { alignItems: "flex-start", marginBottom: 30 },
-  trackNameRow: { flexDirection: "row", alignItems: "center", width: "100%", justifyContent: "space-between", gap: 12 },
-  trackName: { color: "#fff", fontWeight: "800", marginBottom: 8, flex: 1 },
-  trackArtist: { color: "rgba(255,255,255,0.7)", fontWeight: "600" },
-  formatBadge: {
-    marginTop: 12,
-    backgroundColor: "rgba(255,255,255,0.1)",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.15)",
+  trackInfo: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 16 },
+  trackTextCol: { flex: 1, paddingRight: 16 },
+  trackName: { fontWeight: "800", marginBottom: 4 },
+  trackArtist: { fontWeight: "600" },
+  moreBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  formatBadgeText: {
-    color: "rgba(255,255,255,0.8)",
-    fontSize: 10,
-    fontWeight: "700",
-    textTransform: "uppercase",
-    letterSpacing: 1,
-  },
-
+  
   scrubberWrap: { marginBottom: 40 },
   scrubberHitbox: { height: 30, justifyContent: "center" },
-  scrubberTrack: { height: 6, backgroundColor: "rgba(255,255,255,0.2)", borderRadius: 3, position: "relative" },
-  scrubberFill: { height: "100%", backgroundColor: "#fff", borderRadius: 3 },
+  scrubberTrack: { height: 6, borderRadius: 3, position: "relative" },
+  scrubberFill: { height: "100%", borderRadius: 3 },
   scrubberThumb: {
     position: "absolute",
     top: -4,
     width: 14,
     height: 14,
     borderRadius: 7,
-    backgroundColor: "#fff",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
@@ -443,17 +443,14 @@ const styles = StyleSheet.create({
     elevation: 3,
     marginLeft: -7,
   },
-  timeRow: { flexDirection: "row", justifyContent: "space-between" },
-  timeText: { color: "rgba(255,255,255,0.5)", fontSize: 12, fontVariant: ["tabular-nums"] },
+  timeRow: { flexDirection: "row", justifyContent: "space-between", marginTop: 4 },
+  timeText: { fontSize: 12, fontVariant: ["tabular-nums"], fontWeight: "600" },
 
   controlsRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  controlBtn: { padding: 10 },
-  controlBtnSmall: { padding: 10 },
+  mainControls: { flexDirection: "row", alignItems: "center", gap: 32 },
+  controlBtn: { padding: 4 },
+  controlBtnSmall: { padding: 8 },
   playBtn: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: "#fff",
     alignItems: "center",
     justifyContent: "center",
   },

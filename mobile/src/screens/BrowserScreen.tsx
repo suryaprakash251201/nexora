@@ -441,30 +441,36 @@ export default function BrowserScreen({ route, navigation }: Props) {
         </View>
       ) : (
         <View style={styles.crumbsContainer}>
-          <View style={{ flexDirection: "row", alignItems: "center" }}>
-            {path !== "" && (
-              <TouchableOpacity
-                onPress={() => {
-                  const segs = path.split("/").filter(Boolean);
-                  segs.pop();
-                  setPath(segs.join("/"));
-                }}
-                style={[styles.crumbPill, { backgroundColor: colors.surfaceElevated, marginRight: 12 }, shadowSm]}
-              >
-                <MaterialCommunityIcons name="arrow-left" size={20} color={colors.content} />
-                <Text style={{ color: colors.content, fontWeight: "600", fontSize: font.sm }}>Back</Text>
-              </TouchableOpacity>
-            )}
-            <Text style={{ color: colors.content, fontSize: font.xl, fontWeight: "800", flex: 1 }} numberOfLines={1}>
-              {path === "" ? rootName : breadcrumbs[breadcrumbs.length - 1]}
-            </Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ alignItems: "center", paddingRight: 16 }}>
+            <TouchableOpacity onPress={() => setPath("")} style={{ flexDirection: "row", alignItems: "center" }} activeOpacity={0.7}>
+              <MaterialCommunityIcons name={path === "" ? "home" : "home-outline"} size={path === "" ? 24 : 22} color={path === "" ? colors.content : colors.muted} />
+              {path === "" && (
+                <Text style={{ color: colors.content, fontSize: font.xl, fontWeight: "800", marginLeft: 8 }}>{rootName}</Text>
+              )}
+            </TouchableOpacity>
+            
+            {breadcrumbs.map((segment, idx) => {
+              const isLast = idx === breadcrumbs.length - 1;
+              const targetPath = breadcrumbs.slice(0, idx + 1).join("/");
+              return (
+                <React.Fragment key={targetPath}>
+                  <MaterialCommunityIcons name="chevron-right" size={20} color={colors.muted} style={{ marginHorizontal: 4 }} />
+                  <TouchableOpacity onPress={() => !isLast && setPath(targetPath)} disabled={isLast} activeOpacity={0.7}>
+                    <Text style={{ color: isLast ? colors.content : colors.muted, fontSize: isLast ? font.xl : font.lg, fontWeight: isLast ? "800" : "600" }}>
+                      {segment}
+                    </Text>
+                  </TouchableOpacity>
+                </React.Fragment>
+              );
+            })}
+            
             {!loading && total > 0 ? (
-              <View style={[styles.countBadge, { backgroundColor: colors.accentSoft }]}>
+              <View style={[styles.countBadge, { backgroundColor: colors.accentSoft, marginLeft: 12 }]}>
                 <MaterialCommunityIcons name="file-multiple" size={12} color={colors.accent} />
                 <Text style={[styles.count, { color: colors.accent, fontSize: font.xs }]}>{processedItems.length}</Text>
               </View>
             ) : null}
-          </View>
+          </ScrollView>
         </View>
       )}
 

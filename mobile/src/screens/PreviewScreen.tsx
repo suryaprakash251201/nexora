@@ -15,6 +15,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 import { Image } from "expo-image";
 import { useVideoPlayer, VideoView } from "expo-video";
+import Markdown from "react-native-markdown-display";
 import * as Clipboard from "expo-clipboard";
 import { File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
@@ -209,38 +210,23 @@ export default function PreviewScreen({ route }: Props) {
                 )}
                 {kind === "markdown" && text && (
                   <View style={styles.markdownContainer}>
-                    {text.split("\n").map((line, idx) => {
-                      if (line.trim() === "") {
-                        return <Text key={idx} style={styles.mdText}>{" "}</Text>;
-                      }
-                      if (line.startsWith("#")) {
-                        const level = line.match(/^#+/)?.[0].length || 1;
-                        const content = line.replace(/^#+\s*/, "");
-                        const mdFontSize = level === 1 ? font.xl : level === 2 ? font.lg : font.md;
-                        return <Text key={idx} style={[styles.mdHeader, { color: colors.content, fontSize: mdFontSize }]} selectable>{content}</Text>;
-                      }
-                      if (line.startsWith("```")) {
-                        return <Text key={idx} style={[styles.mdCodeBlockDelim, { color: colors.muted }]} selectable>{line}</Text>;
-                      }
-                      const parts = line.split(/(\*\*.*?\*\*|`.*?`)/g);
-                      return (
-                        <Text key={idx} style={[styles.mdText, { color: colors.content, fontSize: font.md }]} selectable>
-                          {parts.map((part, i) => {
-                            if (part.startsWith("**") && part.endsWith("**")) {
-                              return <Text key={i} style={styles.mdBold}>{part.slice(2, -2)}</Text>;
-                            }
-                            if (part.startsWith("`") && part.endsWith("`")) {
-                              return (
-                                <Text key={i} style={[styles.mdCodeInline, { backgroundColor: colors.surfaceMuted, color: colors.accent }]}>
-                                  {part.slice(1, -1)}
-                                </Text>
-                              );
-                            }
-                            return part;
-                          })}
-                        </Text>
-                      );
-                    })}
+                    <Markdown
+                      style={{
+                        body: { color: colors.content, fontSize: font.md, lineHeight: 24 },
+                        heading1: { color: colors.content, fontSize: font.xl, fontWeight: '700', marginTop: 16, marginBottom: 8 },
+                        heading2: { color: colors.content, fontSize: font.lg, fontWeight: '700', marginTop: 16, marginBottom: 8 },
+                        heading3: { color: colors.content, fontSize: font.md, fontWeight: '700', marginTop: 16, marginBottom: 8 },
+                        code_inline: { backgroundColor: colors.surfaceMuted, color: colors.accent, fontFamily: "monospace", borderRadius: radius.xs, paddingHorizontal: 4 },
+                        fence: { backgroundColor: colors.surfaceMuted, color: colors.content, fontFamily: "monospace", padding: 12, borderRadius: radius.md, marginVertical: 8, overflow: 'hidden' },
+                        link: { color: colors.accent, textDecorationLine: 'underline' },
+                        blockquote: { borderLeftWidth: 4, borderLeftColor: colors.accent, paddingLeft: 12, opacity: 0.8 },
+                        list_item: { marginVertical: 4 },
+                        bullet_list: { marginBottom: 12 },
+                        ordered_list: { marginBottom: 12 },
+                      }}
+                    >
+                      {text}
+                    </Markdown>
                   </View>
                 )}
               </>
@@ -493,25 +479,27 @@ function AudioPlayer({ uri, name, size, ext, rootId, path, onShare }: { uri: str
   });
 
   return (
-    <LinearGradient colors={["#0F1729", "#090B12"]} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={styles.player}>
+    <View style={styles.playerRoot}>
+      <LinearGradient colors={["#0F172A", "#060E20"]} style={StyleSheet.absoluteFill} />
+
       <ScrollView contentContainerStyle={styles.playerInner} bounces={false}>
         {/* Vinyl Disc Component */}
         <View style={styles.vinylWrap}>
-          {!ready && !error ? (
-            <Animated.View style={[styles.vinylGlow, { transform: [{ scale: pulseAnim }] }]} />
-          ) : (
-            <View style={styles.vinylGlowStatic} />
-          )}
-
-          <Animated.View style={[styles.vinylDisc, { transform: [{ rotate: spinInterpolate }] }, error && { opacity: 0.5 }]}>
-            <View style={styles.groove1} />
-            <View style={styles.groove2} />
-            <View style={styles.groove3} />
-            <LinearGradient colors={[...gradients.brand]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.vinylLabel}>
-              <MaterialCommunityIcons name="music-note" size={32} color="#fff" />
-              <View style={styles.vinylHole} />
-            </LinearGradient>
-          </Animated.View>
+          {/* Glass Overlay Container */}
+          <View style={styles.glassContainer}>
+            <LinearGradient colors={["rgba(255,255,255,0.15)", "rgba(255,255,255,0)"]} style={[StyleSheet.absoluteFill, { borderRadius: 150 }]} />
+            <View style={styles.glassInner}>
+              <Animated.View style={[styles.vinylDisc, { transform: [{ rotate: spinInterpolate }] }, error && { opacity: 0.5 }]}>
+                <View style={styles.groove1} />
+                <View style={styles.groove2} />
+                <View style={styles.groove3} />
+                <LinearGradient colors={[...gradients.brand]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.vinylLabel}>
+                  <MaterialCommunityIcons name="music-note" size={32} color="#fff" />
+                  <View style={styles.vinylHole} />
+                </LinearGradient>
+              </Animated.View>
+            </View>
+          </View>
         </View>
 
         {/* Track Info */}
@@ -524,14 +512,14 @@ function AudioPlayer({ uri, name, size, ext, rootId, path, onShare }: { uri: str
           ) : !ready ? (
             <>
               <Text style={[styles.trackName, { fontSize: font.xl }]} numberOfLines={2}>Loading...</Text>
-              <Text style={[styles.trackMeta, { color: colors.muted, fontSize: font.sm }]}>Preparing audio track</Text>
+              <Text style={[styles.trackMeta, { color: "rgba(218, 226, 253, 0.7)", fontSize: font.sm }]}>Preparing audio track</Text>
             </>
           ) : (
             <>
               <Text style={[styles.trackName, { fontSize: font.xl }]} numberOfLines={2}>{name}</Text>
               <View style={styles.trackMetaRow}>
-                <Text style={[styles.trackMeta, { color: colors.muted, fontSize: font.sm }]}>
-                  {formatBytes(size)} · {ext.toUpperCase()} · Nexora
+                <Text style={[styles.trackMeta, { color: "rgba(218, 226, 253, 0.7)", fontSize: font.sm, textTransform: "uppercase", letterSpacing: 2 }]}>
+                  {ext.toUpperCase()} AUDIO
                 </Text>
                 <EqBars playing={playing && !error} tint={colors.accent} />
               </View>
@@ -543,6 +531,10 @@ function AudioPlayer({ uri, name, size, ext, rootId, path, onShare }: { uri: str
 
         {/* Seek Bar */}
         <View style={styles.seekWrap}>
+          <View style={styles.timeRow}>
+            <Text style={[styles.timeText, { color: "rgba(218, 226, 253, 0.7)" }]}>{fmtTime(shown)}</Text>
+            <Text style={[styles.timeText, { color: "rgba(218, 226, 253, 0.7)" }]}>{ready ? fmtTime(duration) : "—:—"}</Text>
+          </View>
           <View
             ref={barRef}
             style={styles.seekTrack}
@@ -555,37 +547,33 @@ function AudioPlayer({ uri, name, size, ext, rootId, path, onShare }: { uri: str
           >
             <View style={styles.seekBg} />
             <View style={[styles.seekFill, { width: `${pct * 100}%` }]}>
-              <LinearGradient colors={[...gradients.brand]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={StyleSheet.absoluteFill} />
+              <LinearGradient colors={["#a6c8ff", "#6366F1"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={StyleSheet.absoluteFill} />
             </View>
             <View style={[styles.seekThumbWrap, { left: `${pct * 100}%` }]}>
-              <View style={[styles.seekThumbGlow, { backgroundColor: colors.accent }]} />
+              <View style={[styles.seekThumbGlow, { backgroundColor: "#a6c8ff" }]} />
               <View style={styles.seekThumb} />
             </View>
-          </View>
-          <View style={styles.timeRow}>
-            <Text style={[styles.timeText, { color: colors.muted }]}>{fmtTime(shown)}</Text>
-            <Text style={[styles.timeText, { color: colors.muted }]}>{ready ? fmtTime(duration) : "—:—"}</Text>
           </View>
         </View>
 
         {/* Controls Row */}
         <View style={styles.controlsRow}>
           <TouchableOpacity style={styles.skipBtn} onPress={() => skip(-15)} hitSlop={8}>
-            <MaterialCommunityIcons name="rewind-15" size={28} color={colors.content} />
+            <MaterialCommunityIcons name="rewind-15" size={32} color="#dae2fd" />
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.playBtnWrap} onPress={error ? onShare : togglePlay} activeOpacity={0.85}>
-            <LinearGradient colors={[...gradients.brand]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+            <View style={[StyleSheet.absoluteFill, styles.playBtnGlass]} />
             <MaterialCommunityIcons
               name={error ? "download" : isEnded ? "replay" : playing ? "pause" : "play"}
-              size={38}
-              color="#fff"
+              size={44}
+              color="#c0c1ff"
               style={!playing && !isEnded && !error ? { marginLeft: 4 } : {}}
             />
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.skipBtn} onPress={() => skip(15)} hitSlop={8}>
-            <MaterialCommunityIcons name="fast-forward-15" size={28} color={colors.content} />
+            <MaterialCommunityIcons name="fast-forward-15" size={32} color="#dae2fd" />
           </TouchableOpacity>
         </View>
 
@@ -607,19 +595,19 @@ function AudioPlayer({ uri, name, size, ext, rootId, path, onShare }: { uri: str
               }
             }}
           >
-            <MaterialCommunityIcons name={favorited ? "heart" : "heart-outline"} size={24} color={favorited ? colors.danger : colors.muted} />
+            <MaterialCommunityIcons name={favorited ? "heart" : "heart-outline"} size={24} color={favorited ? colors.danger : "rgba(255,255,255,0.5)"} />
           </TouchableOpacity>
           <TouchableOpacity style={styles.actionBtn} onPress={onShare}>
-            <MaterialCommunityIcons name="share-variant" size={24} color={colors.muted} />
+            <MaterialCommunityIcons name="share-variant" size={24} color="rgba(255,255,255,0.5)" />
           </TouchableOpacity>
           <TouchableOpacity style={styles.actionBtn} onPress={() => setLoop(!loop)}>
-            <MaterialCommunityIcons name={loop ? "repeat-once" : "repeat"} size={24} color={loop ? colors.accent : colors.muted} />
+            <MaterialCommunityIcons name={loop ? "repeat-once" : "repeat"} size={24} color={loop ? "#c0c1ff" : "rgba(255,255,255,0.5)"} />
           </TouchableOpacity>
         </View>
       </ScrollView>
       {/* Hidden view keeps the native player alive */}
       <VideoView player={player} style={styles.hiddenVideo} />
-    </LinearGradient>
+    </View>
   );
 }
 
@@ -718,93 +706,85 @@ const styles = StyleSheet.create({
   primaryBtnText: { color: "#fff", fontWeight: "700" },
   outlineBtnText: { fontWeight: "600" },
 
-  // --- Audio Player Styles (vinyl stays dark in both themes) ---
-  player: { flex: 1 },
+  // --- Audio Player Styles (Digital Sanctuary) ---
+  playerRoot: { flex: 1, overflow: "hidden", backgroundColor: "#060E20" },
   playerInner: { flexGrow: 1, padding: 24, paddingTop: 40, paddingBottom: 48 },
 
-  // Vinyl Disc
-  vinylWrap: { alignItems: "center", justifyContent: "center", height: 280, marginVertical: 20 },
-  vinylGlow: {
-    position: "absolute",
-    width: 220,
-    height: 220,
-    borderRadius: 110,
-    backgroundColor: "rgba(92, 107, 192, 0.4)",
-    shadowColor: "#5B8CFF",
-    shadowOpacity: 0.8,
-    shadowRadius: 30,
-  },
-  vinylGlowStatic: {
-    position: "absolute",
-    width: 220,
-    height: 220,
-    borderRadius: 110,
-    backgroundColor: "rgba(92, 107, 192, 0.15)",
-    shadowColor: "#5B8CFF",
+  // Vinyl Glass Container
+  vinylWrap: { alignItems: "center", justifyContent: "center", marginVertical: 40 },
+  glassContainer: {
+    padding: 12,
+    borderRadius: 150,
+    backgroundColor: "rgba(255, 255, 255, 0.05)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.1)",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 20 },
     shadowOpacity: 0.5,
     shadowRadius: 30,
+    elevation: 10,
+  },
+  glassInner: {
+    borderRadius: 138,
+    overflow: "hidden",
   },
   vinylDisc: {
     width: 260,
     height: 260,
     borderRadius: 130,
-    backgroundColor: "#1A1D2E",
+    backgroundColor: "#111",
     alignItems: "center",
     justifyContent: "center",
-    borderColor: "#11131E",
-    borderWidth: 1,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.8,
-    shadowRadius: 20,
   },
-  groove1: { position: "absolute", width: 220, height: 220, borderRadius: 110, borderWidth: 1, borderColor: "rgba(255,255,255,0.03)" },
-  groove2: { position: "absolute", width: 170, height: 170, borderRadius: 85, borderWidth: 1, borderColor: "rgba(255,255,255,0.04)" },
-  groove3: { position: "absolute", width: 120, height: 120, borderRadius: 60, borderWidth: 1, borderColor: "rgba(255,255,255,0.05)" },
-  vinylLabel: { width: 90, height: 90, borderRadius: 45, alignItems: "center", justifyContent: "center" },
-  vinylHole: { position: "absolute", width: 10, height: 10, borderRadius: 5, backgroundColor: "#090B12" },
+  groove1: { position: "absolute", width: 220, height: 220, borderRadius: 110, borderWidth: 1, borderColor: "rgba(255,255,255,0.05)" },
+  groove2: { position: "absolute", width: 170, height: 170, borderRadius: 85, borderWidth: 1, borderColor: "rgba(255,255,255,0.08)" },
+  groove3: { position: "absolute", width: 120, height: 120, borderRadius: 60, borderWidth: 1, borderColor: "rgba(255,255,255,0.1)" },
+  vinylLabel: { width: 90, height: 90, borderRadius: 45, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: "rgba(255,255,255,0.2)" },
+  vinylHole: { position: "absolute", width: 12, height: 12, borderRadius: 6, backgroundColor: "#111", borderWidth: 1, borderColor: "rgba(255,255,255,0.2)" },
 
   // Track Info
-  infoWrap: { alignItems: "center", marginTop: 10, marginBottom: 30, paddingHorizontal: 16 },
+  infoWrap: { alignItems: "center", marginTop: 10, marginBottom: 40, paddingHorizontal: 16 },
   trackName: { color: "#fff", fontWeight: "700", textAlign: "center", marginBottom: 6 },
   trackMeta: {},
-  trackMetaRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  trackMetaRow: { flexDirection: "row", alignItems: "center", gap: 12, opacity: 0.7 },
   playerError: { marginTop: 4 },
 
   // Seek bar
-  seekWrap: { width: "100%", marginBottom: 30 },
-  seekTrack: { height: 30, justifyContent: "center" },
-  seekBg: { position: "absolute", left: 0, right: 0, height: 6, borderRadius: 3, backgroundColor: "rgba(255,255,255,0.08)" },
-  seekFill: { height: 6, borderRadius: 3, overflow: "hidden" },
-  seekThumbWrap: { position: "absolute", width: 18, height: 18, marginLeft: -9, alignItems: "center", justifyContent: "center" },
+  seekWrap: { width: "100%", marginBottom: 40 },
+  timeRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 12, paddingHorizontal: 4 },
+  timeText: { fontSize: 12, fontVariant: ["tabular-nums"], fontWeight: "500", opacity: 0.7 },
+  seekTrack: { height: 30, justifyContent: "center", marginHorizontal: 4 },
+  seekBg: { position: "absolute", left: 0, right: 0, height: 4, borderRadius: 2, backgroundColor: "rgba(255,255,255,0.1)" },
+  seekFill: { height: 4, borderRadius: 2, overflow: "hidden" },
+  seekThumbWrap: { position: "absolute", width: 24, height: 24, marginLeft: -12, alignItems: "center", justifyContent: "center" },
   seekThumbGlow: { position: "absolute", width: 36, height: 36, borderRadius: 18, opacity: 0.2 },
   seekThumb: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
     backgroundColor: "#fff",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 3,
+    shadowColor: "#fff",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 1,
+    shadowRadius: 6,
   },
-  timeRow: { flexDirection: "row", justifyContent: "space-between", marginTop: 8 },
-  timeText: { fontSize: 11, fontVariant: ["tabular-nums"] },
 
   // Controls Row
-  controlsRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 28, marginBottom: 30, paddingHorizontal: 10 },
-  skipBtn: { width: 56, height: 56, borderRadius: 28, backgroundColor: "rgba(255,255,255,0.05)", alignItems: "center", justifyContent: "center" },
+  controlsRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 32, marginBottom: 40 },
+  skipBtn: { width: 56, height: 56, borderRadius: 28, alignItems: "center", justifyContent: "center" },
   playBtnWrap: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 88,
+    height: 88,
+    borderRadius: 44,
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.5,
-    shadowRadius: 15,
+  },
+  playBtnGlass: {
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.2)",
+    borderRadius: 44,
   },
 
   // Bottom Actions

@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Nexora Audio Player</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-tertiary-fixed-variant": "#703700",
+                        "secondary-container": "#2f3aa3",
+                        "surface-container-highest": "#2d3449",
+                        "secondary": "#bdc2ff",
+                        "on-secondary-container": "#a8afff",
+                        "inverse-surface": "#dae2fd",
+                        "primary": "#c0c1ff",
+                        "on-surface": "#dae2fd",
+                        "primary-fixed": "#e1e0ff",
+                        "surface-container-high": "#222a3d",
+                        "on-tertiary-container": "#452000",
+                        "on-tertiary": "#4f2500",
+                        "on-background": "#dae2fd",
+                        "on-primary": "#1000a9",
+                        "surface-dim": "#0b1326",
+                        "outline-variant": "#464554",
+                        "tertiary-container": "#d97721",
+                        "on-error": "#690005",
+                        "primary-container": "#8083ff",
+                        "on-primary-container": "#0d0096",
+                        "on-primary-fixed-variant": "#2f2ebe",
+                        "primary-fixed-dim": "#c0c1ff",
+                        "on-tertiary-fixed": "#301400",
+                        "surface-container-lowest": "#060e20",
+                        "on-secondary-fixed-variant": "#2f3aa3",
+                        "surface-bright": "#31394d",
+                        "tertiary-fixed-dim": "#ffb783",
+                        "surface-container": "#171f33",
+                        "inverse-on-surface": "#283044",
+                        "tertiary-fixed": "#ffdcc5",
+                        "surface": "#0b1326",
+                        "outline": "#908fa0",
+                        "surface-tint": "#c0c1ff",
+                        "on-surface-variant": "#c7c4d7",
+                        "on-secondary": "#131e8c",
+                        "error-container": "#93000a",
+                        "secondary-fixed": "#e0e0ff",
+                        "secondary-fixed-dim": "#bdc2ff",
+                        "tertiary": "#ffb783",
+                        "inverse-primary": "#494bd6",
+                        "surface-container-low": "#131b2e",
+                        "error": "#ffb4ab",
+                        "on-primary-fixed": "#07006c",
+                        "surface-variant": "#2d3449",
+                        "background": "#0b1326",
+                        "on-error-container": "#ffdad6",
+                        "on-secondary-fixed": "#000767"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "gutter": "24px",
+                        "unit": "8px",
+                        "container-padding": "32px",
+                        "glass-padding": "24px"
+                    },
+                    "fontFamily": {
+                        "headline-lg": ["Manrope"],
+                        "headline-xl": ["Manrope"],
+                        "headline-lg-mobile": ["Manrope"],
+                        "label-sm": ["JetBrains Mono"],
+                        "body-md": ["Manrope"]
+                    },
+                    "fontSize": {
+                        "headline-lg": ["32px", { "lineHeight": "1.2", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+                        "headline-xl": ["48px", { "lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+                        "headline-lg-mobile": ["24px", { "lineHeight": "1.2", "fontWeight": "600" }],
+                        "label-sm": ["12px", { "lineHeight": "1", "letterSpacing": "0.1em", "fontWeight": "500" }],
+                        "body-md": ["16px", { "lineHeight": "1.6", "letterSpacing": "0", "fontWeight": "400" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .glass-active {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(40px);
+            -webkit-backdrop-filter: blur(40px);
+            box-shadow: 0 0 20px rgba(99, 102, 241, 0.15);
+        }
+        .glass-button {
+            transition: all 0.3s ease;
+        }
+        .glass-button:hover {
+            border-color: rgba(255, 255, 255, 0.2);
+            box-shadow: inset 0 0 10px rgba(255, 255, 255, 0.05);
+        }
+        
+        .spin-slow {
+            animation: spin 12s linear infinite;
+        }
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        .gradient-bg {
+            background: radial-gradient(circle at 50% 50%, #1a2344 0%, #0F172A 100%);
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-surface text-on-surface min-h-screen flex flex-col font-body-md overflow-hidden gradient-bg relative">
+<!-- Ambient Light Leaks -->
+<div class="absolute inset-0 pointer-events-none overflow-hidden">
+<div class="absolute -top-40 -left-40 w-96 h-96 bg-primary-container rounded-full mix-blend-screen filter blur-[120px] opacity-20"></div>
+<div class="absolute top-1/2 -right-40 w-80 h-80 bg-secondary rounded-full mix-blend-screen filter blur-[100px] opacity-10"></div>
+</div>
+<!-- Top App Bar -->
+<header class="fixed top-0 w-full z-50 flex items-center justify-between px-gutter h-16 shadow-none">
+<button class="text-on-surface-variant hover:text-on-surface transition-colors">
+<span class="material-symbols-outlined text-[28px]">expand_more</span>
+</button>
+<div class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface tracking-tight">
+            Digital Sanctuary
+        </div>
+<button class="text-on-surface-variant hover:text-on-surface transition-colors">
+<span class="material-symbols-outlined text-[24px]">more_vert</span>
+</button>
+</header>
+<!-- Main Content -->
+<main class="flex-grow flex flex-col items-center justify-center pt-20 pb-32 px-gutter relative z-10 w-full max-w-md mx-auto">
+<!-- Album Art / Vinyl -->
+<div class="relative w-72 h-72 mb-12">
+<!-- Glass Overlay Layer -->
+<div class="absolute inset-0 rounded-full glass-panel flex items-center justify-center p-2 z-10 shadow-2xl">
+<!-- Record -->
+<div class="w-full h-full rounded-full bg-surface-container-lowest border-4 border-[#111] shadow-inner relative overflow-hidden spin-slow flex items-center justify-center">
+<!-- Vinyl Grooves -->
+<div class="absolute inset-2 rounded-full border border-white/5"></div>
+<div class="absolute inset-6 rounded-full border border-white/5"></div>
+<div class="absolute inset-10 rounded-full border border-white/5"></div>
+<div class="absolute inset-14 rounded-full border border-white/5"></div>
+<!-- Inner Label / Artwork Placeholder -->
+<div class="w-24 h-24 rounded-full overflow-hidden relative z-20 border-2 border-white/10" data-alt="Abstract deep blue and indigo liquid simulation artwork, high fidelity, macro photography style, deep obsidian background, bioluminescent light accents, perfect for a modern ambient music album cover." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuAl70uJkveJYUnF_s_7VTENz-EtvKQrQD1Y_izsxZRVsPFl6QPey8vo4T4mQ5CfU4g_tP40iXrzTzF4JY3Kxm0Ir2t0ZQzuHq68JlsBNbOshP1nPRNC6ofNLNLwhkqa0oexYdxr0nRaVZ9Zxh7GeA9g0AZRfyKPTlDK7Mb-GNVG9i96L_l2EThCOYhef29bSyi1BMoBq7Qvp4MoDt_OhVj4VO3gHPtz-SV4Bfqe-w0snLjdRFO-nC8yx6eYC9I9iSxUSwklJu59TSTM')">
+<div class="absolute inset-0 bg-black/30"></div>
+<!-- Center Spindle Hole -->
+<div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-3 h-3 bg-surface-container-lowest rounded-full border border-white/20"></div>
+</div>
+</div>
+</div>
+<!-- Glow Effect Behind -->
+<div class="absolute inset-0 rounded-full bg-primary-container blur-[60px] opacity-30 z-0 scale-90"></div>
+</div>
+<!-- Track Info -->
+<div class="text-center w-full mb-10 px-4">
+<h1 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface mb-2 truncate">Echoes of the Obsidian</h1>
+<p class="font-label-sm text-label-sm text-on-surface-variant opacity-80 uppercase tracking-widest">Aura Sync</p>
+</div>
+<!-- Progress Scrubber -->
+<div class="w-full mb-10">
+<div class="flex justify-between items-center font-label-sm text-label-sm text-on-surface-variant mb-4 px-2 opacity-70">
+<span>02:14</span>
+<span>06:48</span>
+</div>
+<!-- Custom Slider -->
+<div class="relative h-2 bg-surface-container-highest rounded-full overflow-hidden cursor-pointer group glass-panel border-none">
+<!-- Track Progress -->
+<div class="absolute top-0 left-0 h-full w-[35%] bg-primary shadow-[0_0_10px_rgba(192,193,255,0.8)] relative">
+<div class="absolute right-0 top-1/2 -translate-y-1/2 w-4 h-4 bg-white rounded-full shadow-[0_0_12px_rgba(255,255,255,1)] opacity-0 group-hover:opacity-100 transition-opacity transform translate-x-1/2"></div>
+</div>
+</div>
+</div>
+<!-- Playback Controls -->
+<div class="flex items-center justify-between w-full max-w-[280px]">
+<button class="text-on-surface-variant hover:text-primary transition-colors p-3 active:scale-90">
+<span class="material-symbols-outlined text-[28px]">shuffle</span>
+</button>
+<button class="text-on-surface hover:text-white transition-colors p-3 active:scale-90">
+<span class="material-symbols-outlined text-[40px]" style="font-variation-settings: 'FILL' 1;">skip_previous</span>
+</button>
+<!-- Play Button -->
+<button class="w-20 h-20 rounded-full glass-active flex items-center justify-center text-primary hover:bg-primary-container/20 hover:text-white transition-all active:scale-95 shadow-[0_0_30px_rgba(99,102,241,0.2)]">
+<span class="material-symbols-outlined text-[48px]" style="font-variation-settings: 'FILL' 1;">play_arrow</span>
+</button>
+<button class="text-on-surface hover:text-white transition-colors p-3 active:scale-90">
+<span class="material-symbols-outlined text-[40px]" style="font-variation-settings: 'FILL' 1;">skip_next</span>
+</button>
+<button class="text-on-surface-variant hover:text-primary transition-colors p-3 active:scale-90">
+<span class="material-symbols-outlined text-[28px]">repeat</span>
+</button>
+</div>
+</main>
+<!-- Bottom Nav Bar (Action Bar for Player Context) -->
+<nav class="fixed bottom-0 w-full z-50 pb-safe bg-surface/5 backdrop-blur-3xl shadow-none">
+<div class="flex justify-around items-center h-20 px-gutter w-full max-w-md mx-auto">
+<!-- Queue -->
+<button class="flex flex-col items-center justify-center text-on-surface-variant p-2 hover:bg-white/5 transition-colors active:scale-90 rounded-xl">
+<span class="material-symbols-outlined text-[24px]">queue_music</span>
+</button>
+<!-- Lyrics -->
+<button class="flex flex-col items-center justify-center text-on-surface-variant p-2 hover:bg-white/5 transition-colors active:scale-90 rounded-xl">
+<span class="material-symbols-outlined text-[24px]">lyrics</span>
+</button>
+<!-- Share -->
+<button class="flex flex-col items-center justify-center text-on-surface-variant p-2 hover:bg-white/5 transition-colors active:scale-90 rounded-xl">
+<span class="material-symbols-outlined text-[24px]">share</span>
+</button>
+<!-- Output -->
+<button class="flex flex-col items-center justify-center text-primary bg-primary-container/20 rounded-xl p-2 hover:bg-white/5 transition-colors active:scale-90">
+<span class="material-symbols-outlined text-[24px]">airplay</span>
+</button>
+</div>
+</nav>
+</body></html>

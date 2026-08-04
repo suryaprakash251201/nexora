@@ -41,9 +41,9 @@ export function MobileNav({
   return (
     <>
       {/* Bottom Navigation Bar */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 pb-safe">
-        <nav className="glass-strong border-t border-white/[0.06] backdrop-blur-2xl">
-          <div className="flex items-center justify-around px-1 py-1.5">
+      <div className="md:hidden fixed bottom-4 left-0 right-0 z-40 pb-safe flex justify-center px-4 pointer-events-none">
+        <nav className="glass-strong border border-white/[0.1] backdrop-blur-2xl rounded-full shadow-2xl pointer-events-auto w-full max-w-[380px]">
+          <div className="flex items-center justify-around px-2 py-1">
             {primaryTabs.map((tab) => {
               const Icon = tab.icon;
               const isActive = tab.id === "search" ? view === "search" : tab.id === "files" ? view === "files" : view === tab.id;
@@ -56,7 +56,7 @@ export function MobileNav({
                     else onSelectView(tab.id);
                   }}
                   className={cn(
-                    "relative flex flex-col items-center justify-center gap-0.5 min-w-[56px] h-14 rounded-2xl transition-all duration-200",
+                    "relative flex flex-col items-center justify-center gap-0.5 min-w-[50px] h-12 rounded-full transition-all duration-200",
                     isActive ? "text-accent" : "text-text-tertiary"
                   )}
                   aria-label={tab.label}
@@ -72,7 +72,7 @@ export function MobileNav({
                     animate={{ scale: isActive ? 1.15 : 1, y: isActive ? -2 : 0 }}
                     transition={{ duration: 0.2 }}
                   >
-                    <Icon className="h-[22px] w-[22px]" strokeWidth={isActive ? 2.5 : 2} />
+                    <Icon className="h-[20px] w-[20px]" strokeWidth={isActive ? 2.5 : 2} />
                   </motion.div>
                   <span className={cn(
                     "text-[10px] font-semibold transition-all duration-200",
@@ -88,13 +88,13 @@ export function MobileNav({
             {isFilesView && canWrite && (
               <button
                 onClick={onUpload}
-                className="relative flex flex-col items-center justify-center gap-0.5 min-w-[56px] h-14 rounded-2xl transition-all duration-200 text-text-tertiary active:scale-95"
+                className="relative flex flex-col items-center justify-center gap-0.5 min-w-[50px] h-12 rounded-full transition-all duration-200 text-text-tertiary active:scale-95"
                 aria-label="Upload"
               >
-                <div className="h-[42px] w-[42px] rounded-full bg-accent text-white grid place-items-center shadow-lg shadow-accent/30 -mt-4">
-                  <Upload className="h-[20px] w-[20px]" />
+                <div className="h-[38px] w-[38px] rounded-full bg-accent text-white grid place-items-center shadow-lg shadow-accent/30 -mt-3">
+                  <Upload className="h-[18px] w-[18px]" />
                 </div>
-                <span className="text-[10px] font-semibold opacity-70">Upload</span>
+                <span className="text-[9px] font-semibold opacity-70">Upload</span>
               </button>
             )}
 
@@ -102,13 +102,13 @@ export function MobileNav({
             <button
               onClick={() => setMoreOpen(true)}
               className={cn(
-                "relative flex flex-col items-center justify-center gap-0.5 min-w-[56px] h-14 rounded-2xl transition-all duration-200",
+                "relative flex flex-col items-center justify-center gap-0.5 min-w-[50px] h-12 rounded-full transition-all duration-200",
                 moreOpen ? "text-accent" : "text-text-tertiary"
               )}
               aria-label="More"
             >
-              <div className="h-[42px] w-[42px] rounded-full grid place-items-center">
-                <Ellipsis className="h-[22px] w-[22px]" />
+              <div className="h-[38px] w-[38px] rounded-full grid place-items-center">
+                <Ellipsis className="h-[20px] w-[20px]" />
               </div>
               <span className="text-[10px] font-semibold opacity-70">More</span>
             </button>

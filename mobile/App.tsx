@@ -13,6 +13,7 @@ import { ThemeProvider, useTheme } from "./src/store/ThemeContext";
 import { AudioProvider } from "./src/store/AudioContext";
 import { AppIcon } from "./src/components/AppIcon";
 import { MiniPlayer } from "./src/components/MiniPlayer";
+import { PremiumTabBar } from "./src/components/PremiumTabBar";
 import type { RootStackParamList, MainTabParamList } from "./src/navigation/types";
 
 import LoginScreen from "./src/screens/LoginScreen";
@@ -28,60 +29,17 @@ import TrashScreen from "./src/screens/TrashScreen";
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tabs = createBottomTabNavigator<MainTabParamList>();
 
-const TAB_ICONS: Record<string, { active: string; inactive: string }> = {
-  Home: { active: "view-dashboard", inactive: "view-dashboard-outline" },
-  Search: { active: "magnify", inactive: "magnify" },
-  Recents: { active: "clock", inactive: "clock-outline" },
-  Settings: { active: "cog", inactive: "cog-outline" },
-};
-
-function TabIcon({ routeName, focused, color, size }: { routeName: string; focused: boolean; color: string; size: number }) {
-  const { colors } = useTheme();
-  const icons = TAB_ICONS[routeName] || TAB_ICONS.Home;
-  const name = focused ? icons.active : icons.inactive;
-  return (
-    <View
-      style={[
-        styles.tabIconWrap,
-        focused ? { backgroundColor: colors.accentSoft } : undefined,
-      ]}
-    >
-      <MaterialCommunityIcons name={name as any} size={size} color={color} />
-    </View>
-  );
-}
-
 function MainTabs() {
-  const { colors, shadow } = useTheme();
+  const { colors } = useTheme();
 
   return (
     <Tabs.Navigator
+      tabBar={(props) => <PremiumTabBar {...props} />}
       screenOptions={({ route }) => ({
         headerStyle: { backgroundColor: colors.surface },
         headerTintColor: colors.content,
         headerTitleStyle: { fontWeight: "700" },
         headerShadowVisible: false,
-        tabBarStyle: {
-          backgroundColor: colors.surfaceElevated,
-          borderTopWidth: 0,
-          position: "absolute",
-          bottom: 24,
-          left: 20,
-          right: 20,
-          height: 66,
-          borderRadius: 33,
-          borderWidth: 1,
-          borderColor: colors.borderSoft,
-          overflow: "hidden",
-          ...shadow,
-        },
-        tabBarActiveTintColor: colors.accent,
-        tabBarInactiveTintColor: colors.muted,
-        tabBarLabelStyle: { fontWeight: "600", fontSize: 11, marginBottom: 10 },
-        tabBarIconStyle: { marginTop: 10 },
-        tabBarIcon: ({ focused, color, size }) => (
-          <TabIcon routeName={route.name} focused={focused} color={color} size={size} />
-        ),
       })}
     >
       <Tabs.Screen
@@ -210,13 +168,6 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-  tabIconWrap: {
-    width: 34,
-    height: 34,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-  },
   splash: { flex: 1, alignItems: "center", justifyContent: "center" },
   splashInner: { alignItems: "center", gap: 20 },
   splashText: { alignItems: "center", gap: 4 },
