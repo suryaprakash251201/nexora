@@ -134,7 +134,7 @@ export async function api<T>(path: string, opts: RequestOptions = {}): Promise<T
     method,
     headers,
     body,
-    credentials: "include",
+    credentials: isTauri ? "omit" : "include",
     signal: opts.signal,
   });
 

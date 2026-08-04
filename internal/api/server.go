@@ -93,10 +93,7 @@ func (s *Server) Routes() http.Handler {
 	if wildcard {
 		corsOrigins = []string{"*"}
 	}
-	allowedHeaders := []string{"Accept", "Content-Type", "X-CSRF-Token", "X-Request-ID"}
-	if !wildcard {
-		allowedHeaders = append(allowedHeaders, "Authorization")
-	}
+	allowedHeaders := []string{"Accept", "Content-Type", "X-CSRF-Token", "X-Request-ID", "Authorization"}
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   corsOrigins,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
