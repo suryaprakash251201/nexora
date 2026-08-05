@@ -87,7 +87,6 @@ func (s *Server) Routes() http.Handler {
 	// so AllowCredentials is false unless specific origins are configured.
 	// When using wildcard origins, the Authorization header is NOT exposed to
 	// prevent cross-origin token theft from arbitrary websites.
-	corsOrigins := s.Cfg.CORSOrigins
 	allowedHeaders := []string{"Accept", "Content-Type", "X-CSRF-Token", "X-Request-ID", "Authorization"}
 
 	// Use AllowOriginFunc to echo the exact Origin header.
