@@ -25,7 +25,7 @@ import { AudioQualityDetail } from "./AudioQualityDetail";
 const { height } = Dimensions.get("window");
 
 export function MiniPlayer() {
-  const { currentTrack, player, nextTrack, prevTrack, closePlayer } = useAudio();
+  const { currentTrack, player, nextTrack, prevTrack, closePlayer, shuffle, setShuffle } = useAudio();
   const { colors, font, gradients, radius, shadow, isDark } = useTheme();
   const { api } = useSession();
   const insets = useSafeAreaInsets();
@@ -34,7 +34,6 @@ export function MiniPlayer() {
   const [status, setStatus] = useState("idle");
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [shuffle, setShuffle] = useState(false);
   const [repeat, setRepeat] = useState<"off" | "all" | "one">("off");
   const [modalVisible, setModalVisible] = useState(false);
   const [scrubberWidth, setScrubberWidth] = useState(1);

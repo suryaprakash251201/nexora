@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useRef } from "react";
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from "react";
 import { useVideoPlayer, VideoPlayer } from "expo-video";
 import type { FileItem } from "../api/types";
 import { useSession } from "./SessionContext";
@@ -13,6 +13,8 @@ type AudioContextType = {
   closePlayer: () => void;
   showPlayer: boolean;
   setShowPlayer: (s: boolean) => void;
+  shuffle: boolean;
+  setShuffle: (s: boolean) => void;
 };
 
 const AudioContext = createContext<AudioContextType | null>(null);
@@ -22,6 +24,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   const [currentTrack, setCurrentTrack] = useState<FileItem | null>(null);
   const [playlist, setPlaylist] = useState<FileItem[]>([]);
   const [showPlayer, setShowPlayer] = useState(false);
+  const [shuffle, setShuffle] = useState(false);
 
   // Start with no source — expo-video treats null as “no media loaded”.
   // (An empty string is an invalid URI on both iOS and Android and logs errors.)
@@ -51,19 +54,35 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     stateRef.current = { currentTrack, playlist };
   }, [currentTrack, playlist]);
 
+  const shuffleRef = useRef(shuffle);
+  useEffect(() => {
+    shuffleRef.current = shuffle;
+  }, [shuffle]);
+
+  // Pick the next/prev track, honouring shuffle. Returns the track to play.
+  const step = useCallback((pl: FileItem[], cur: FileItem | null, _dir: 1 | -1): FileItem | null => {
+    if (!pl.length) return null;
+    if (pl.length === 1) return cur ?? pl[0];
+    if (shuffleRef.current) {
+      const idx = cur ? pl.findIndex((x) => x.path === cur.path) : -1;
+      let ri = Math.floor(Math.random() * pl.length);
+      if (pl.length > 1 && ri === idx) ri = (ri + 1) % pl.length;
+      return pl[ri];
+    }
+    const idx = cur ? pl.findIndex((x) => x.path === cur.path) : -1;
+    if (idx >= 0 && idx + _dir >= 0 && idx + _dir < pl.length) return pl[idx + _dir];
+    return _dir > 0 ? pl[0] : pl[pl.length - 1];
+  }, []);
+
   useEffect(() => {
     const sub = player.addListener("playToEnd", () => {
       const { currentTrack: ct, playlist: pl } = stateRef.current;
       if (!ct || pl.length <= 1) return;
-      const idx = pl.findIndex((x) => x.path === ct.path);
-      if (idx >= 0 && idx < pl.length - 1) {
-        setCurrentTrack(pl[idx + 1]);
-      } else if (pl.length > 0) {
-        setCurrentTrack(pl[0]);
-      }
+      const next = step(pl, ct, 1);
+      if (next) setCurrentTrack(next);
     });
     return () => sub.remove();
-  }, [player]);
+  }, [player, step]);
 
   const playTrack = (item: FileItem, list?: FileItem[]) => {
     setCurrentTrack(item);
@@ -76,22 +95,14 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
 
   const nextTrack = () => {
     if (!currentTrack || playlist.length <= 1) return;
-    const idx = playlist.findIndex((x) => x.path === currentTrack.path);
-    if (idx >= 0 && idx < playlist.length - 1) {
-      setCurrentTrack(playlist[idx + 1]);
-    } else if (playlist.length > 0) {
-      setCurrentTrack(playlist[0]);
-    }
+    const next = step(playlist, currentTrack, 1);
+    if (next) setCurrentTrack(next);
   };
 
   const prevTrack = () => {
     if (!currentTrack || playlist.length <= 1) return;
-    const idx = playlist.findIndex((x) => x.path === currentTrack.path);
-    if (idx > 0) {
-      setCurrentTrack(playlist[idx - 1]);
-    } else if (playlist.length > 0) {
-      setCurrentTrack(playlist[playlist.length - 1]);
-    }
+    const prev = step(playlist, currentTrack, -1);
+    if (prev) setCurrentTrack(prev);
   };
 
   const closePlayer = () => {
@@ -112,6 +123,8 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
         closePlayer,
         showPlayer,
         setShowPlayer,
+        shuffle,
+        setShuffle,
       }}
     >
       {children}
