@@ -118,6 +118,7 @@ export default function PreviewScreen({ route }: Props) {
             contentFit="contain"
             transition={180}
             onLoadEnd={() => setImageLoading(false)}
+            onError={() => setImageLoading(false)}
             cachePolicy="memory-disk"
           />
           <LinearGradient colors={["rgba(0,0,0,0.6)", "transparent"]} style={styles.imageGradientTop} pointerEvents="none" />
@@ -216,7 +217,7 @@ export default function PreviewScreen({ route }: Props) {
                         heading1: { color: colors.content, fontSize: font.xl, fontWeight: '700', marginTop: 16, marginBottom: 8 },
                         heading2: { color: colors.content, fontSize: font.lg, fontWeight: '700', marginTop: 16, marginBottom: 8 },
                         heading3: { color: colors.content, fontSize: font.md, fontWeight: '700', marginTop: 16, marginBottom: 8 },
-                        code_inline: { backgroundColor: colors.surfaceMuted, color: colors.accent, fontFamily: "monospace", borderRadius: radius.xs, paddingHorizontal: 4 },
+                        code_inline: { backgroundColor: colors.surfaceMuted, color: colors.accent, fontFamily: "monospace", borderRadius: radius.sm, paddingHorizontal: 4 },
                         fence: { backgroundColor: colors.surfaceMuted, color: colors.content, fontFamily: "monospace", padding: 12, borderRadius: radius.md, marginVertical: 8, overflow: 'hidden' },
                         link: { color: colors.accent, textDecorationLine: 'underline' },
                         blockquote: { borderLeftWidth: 4, borderLeftColor: colors.accent, paddingLeft: 12, opacity: 0.8 },

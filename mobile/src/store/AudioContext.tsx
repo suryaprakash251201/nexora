@@ -23,8 +23,9 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   const [playlist, setPlaylist] = useState<FileItem[]>([]);
   const [showPlayer, setShowPlayer] = useState(false);
 
-  // We initialize with a dummy URL, useVideoPlayer handles updates if we replace.
-  const player = useVideoPlayer("");
+  // Start with no source — expo-video treats null as “no media loaded”.
+  // (An empty string is an invalid URI on both iOS and Android and logs errors.)
+  const player = useVideoPlayer(null);
 
   useEffect(() => {
     if (currentTrack && api) {
@@ -33,6 +34,17 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       player.play();
     }
   }, [currentTrack, api]);
+
+  // If the session ends (logout / token expiry), stop playback so audio
+  // doesn't keep playing behind the login screen.
+  useEffect(() => {
+    if (!api) {
+      player.pause();
+      setCurrentTrack(null);
+      setPlaylist([]);
+      setShowPlayer(false);
+    }
+  }, [api, player]);
 
   const stateRef = useRef({ currentTrack, playlist });
   useEffect(() => {

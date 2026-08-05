@@ -1,29 +1,35 @@
 import React from "react";
 import { StyleSheet, View } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { Image } from "expo-image";
 import { useTheme } from "../store/ThemeContext";
 
 /**
- * Nexora brand mark — a rounded gradient tile with a layered
- * server/stack glyph. Used on the splash, login hero and settings.
+ * Nexora brand mark — the official logo (assets/logo.svg): gradient shield
+ * with the white “N”. Rendered as a vector SVG so it stays crisp at any size.
+ *
+ * Matches web/public/logo.svg (source of truth, same file as the web favicon).
  */
 export function AppIcon({ size = 68, style }: { size?: number; style?: object }) {
-  const { gradients, shadow } = useTheme();
-  const icon = size * 0.44;
+  const { shadow } = useTheme();
   return (
     <View
       style={[
         styles.wrap,
-        { width: size, height: size, borderRadius: size * 0.26, ...shadow },
+        {
+          width: size,
+          height: size,
+          ...shadow,
+        },
         style,
       ]}
     >
-      <LinearGradient colors={[...gradients.brand]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
-      <View style={[styles.glow, { borderRadius: size * 0.3 }]} />
-      <View style={styles.iconRing}>
-        <MaterialCommunityIcons name="cloud-outline" size={icon} color="#fff" style={{ opacity: 0.95 }} />
-      </View>
+      <Image
+        source={require("../../assets/logo.svg")}
+        style={StyleSheet.absoluteFill}
+        contentFit="contain"
+        transition={150}
+      />
     </View>
   );
 }
@@ -33,18 +39,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
-  },
-  glow: {
-    position: "absolute",
-    top: "-40%",
-    left: "-20%",
-    right: "-20%",
-    height: "85%",
-    backgroundColor: "rgba(255,255,255,0.16)",
-  },
-  iconRing: {
-    alignItems: "center",
-    justifyContent: "center",
   },
 });
 

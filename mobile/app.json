@@ -7,6 +7,21 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "scheme": "nexora",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "cover",
+      "backgroundColor": "#8B5CF6"
+    },
+    "plugins": [
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "resizeMode": "cover",
+          "backgroundColor": "#8B5CF6"
+        }
+      ]
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "dev.suryaprakash.nexora",
@@ -19,7 +34,7 @@
     "android": {
       "package": "dev.suryaprakash.nexora",
       "adaptiveIcon": {
-        "backgroundColor": "#090B12",
+        "backgroundColor": "#8B5CF6",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"

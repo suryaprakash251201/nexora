@@ -110,6 +110,7 @@ export const font = {
   lg: 18,
   xl: 24,
   xxl: 32,
+  xxxl: 40,
 };
 
 export const shadow = Platform.select({

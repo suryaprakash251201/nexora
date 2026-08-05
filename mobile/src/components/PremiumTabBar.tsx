@@ -96,7 +96,7 @@ export function PremiumTabBar({ state, descriptors, navigation }: BottomTabBarPr
               accessibilityRole="button"
               accessibilityState={isFocused ? { selected: true } : {}}
               accessibilityLabel={options.tabBarAccessibilityLabel}
-              testID={options.tabBarTestID}
+              testID={options.tabBarButtonTestID}
               onPress={onPress}
               style={styles.tabButton}
               activeOpacity={0.8}
