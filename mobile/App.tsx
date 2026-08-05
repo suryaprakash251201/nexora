@@ -19,6 +19,7 @@ import type { RootStackParamList, MainTabParamList } from "./src/navigation/type
 import LoginScreen from "./src/screens/LoginScreen";
 import HomeScreen from "./src/screens/HomeScreen";
 import RecentsScreen from "./src/screens/RecentsScreen";
+import SearchScreen from "./src/screens/SearchScreen";
 import SettingsScreen from "./src/screens/SettingsScreen";
 import BrowserScreen from "./src/screens/BrowserScreen";
 import PreviewScreen from "./src/screens/PreviewScreen";
@@ -52,7 +53,7 @@ function MainTabs() {
       />
       <Tabs.Screen
         name="Search"
-        component={RecentsScreen}
+        component={SearchScreen}
         options={{
           title: "Search",
         }}

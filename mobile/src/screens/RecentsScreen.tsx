@@ -29,7 +29,7 @@ type FilterTag = "all" | "image" | "document" | "video" | "audio";
 
 const VALID_FILTERS: FilterTag[] = ["all", "image", "document", "video", "audio"];
 
-export default function RecentsScreen() {
+export default function RecentsScreen({ variant = "recents" }: { variant?: "recents" | "search" }) {
   const navigation = useNavigation<Nav>();
   const route = useRoute<TabRoute>();
   const { api } = useSession();
@@ -38,7 +38,7 @@ export default function RecentsScreen() {
   const searchRef = useRef<TextInput>(null);
 
   const [items, setItems] = useState<FileItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(variant !== "search");
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -68,11 +68,12 @@ export default function RecentsScreen() {
   }, [api]);
 
   useEffect(() => {
+    if (variant === "search") return; // search tab is search-first — no recents list
     load();
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [load]);
+  }, [load, variant]);
 
   // Consume params sent from Home (search bar tap → focus; quick category → filter).
   useEffect(() => {
@@ -87,11 +88,11 @@ export default function RecentsScreen() {
   }, [route.params?.filter]);
 
   useEffect(() => {
-    if (route.params?.focusSearch) {
-      const t = setTimeout(() => searchRef.current?.focus(), 350);
+    if (route.params?.focusSearch || variant === "search") {
+      const t = setTimeout(() => searchRef.current?.focus(), variant === "search" ? 450 : 350);
       return () => clearTimeout(t);
     }
-  }, [route.params?.focusSearch]);
+  }, [route.params?.focusSearch, variant]);
 
   const runSearch = useCallback(
     async (q: string) => {
@@ -124,6 +125,18 @@ export default function RecentsScreen() {
       debounceRef.current = setTimeout(() => runSearch(q), 300);
     },
     [runSearch]
+  );
+
+  const selectFilter = useCallback(
+    (tag: FilterTag) => {
+      setActiveFilter(tag);
+      // In search mode a chip tap should fetch matching files from the server,
+      // not just filter an empty (no-query) list.
+      if (variant === "search" && !query.trim()) {
+        onChangeQuery(".");
+      }
+    },
+    [variant, query, onChangeQuery]
   );
 
   const baseItems = useMemo(() => (query.trim() ? searchResults : items), [query, searchResults, items]);
@@ -164,6 +177,15 @@ export default function RecentsScreen() {
     ),
     [colors.borderSoft, openFile, query]
   );
+
+  const emptyState =
+    variant === "search" && !query.trim() ? (
+      <EmptyState
+        icon="magnify"
+        title={searchError || "Search your files"}
+        hint={searchError ? "Try again in a moment." : "Find files by name, type, or content across all your storage."}
+      />
+    ) : undefined;
 
   return (
     <View style={[styles.root, { backgroundColor: colors.bg }]}>
@@ -209,7 +231,7 @@ export default function RecentsScreen() {
                   borderColor: activeFilter === tag ? colors.accent : colors.borderSoft,
                 },
               ]}
-              onPress={() => setActiveFilter(tag)}
+              onPress={() => selectFilter(tag)}
             >
               <Text
                 style={{
@@ -243,9 +265,23 @@ export default function RecentsScreen() {
         removeClippedSubviews
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ paddingBottom: 130 }}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={colors.accent} />}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => {
+              if (variant === "search") {
+                if (query.trim()) runSearch(query);
+              } else {
+                load(true);
+              }
+            }}
+            tintColor={colors.accent}
+          />
+        }
         ListEmptyComponent={
-          loading ? (
+          emptyState
+            ? emptyState
+            : loading ? (
             <ListSkeleton rows={8} />
           ) : query.trim() ? (
             <EmptyState

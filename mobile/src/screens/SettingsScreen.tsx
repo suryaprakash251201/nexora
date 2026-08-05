@@ -8,7 +8,6 @@ import {
   TouchableOpacity,
   View,
   Animated,
-  Switch,
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -36,26 +35,29 @@ export default function SettingsScreen() {
   const [urlDraft, setUrlDraft] = useState(serverUrl || "");
   const [saving, setSaving] = useState(false);
 
-  const [crossfade, setCrossfade] = useState(4);
-  const [volumeBooster, setVolumeBooster] = useState(true);
-  const [eqPreset, setEqPreset] = useState("Bass Booster");
+  // Real storage usage (admin-only endpoint). Hidden for non-admins.
+  const [storageUsed, setStorageUsed] = useState<number>(0);
+  const [storageLoaded, setStorageLoaded] = useState(false);
 
-  const cycleCrossfade = () => {
-    setCrossfade((c) => (c >= 12 ? 0 : c + 2));
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-  };
-
-  const cycleEq = () => {
-    const presets = ["Flat", "Acoustic", "Bass Booster", "Classical", "Electronic", "Rock"];
-    const idx = presets.indexOf(eqPreset);
-    setEqPreset(presets[(idx + 1) % presets.length]);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-  };
-
-  const toggleBooster = () => {
-    setVolumeBooster((v) => !v);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-  };
+  useEffect(() => {
+    let alive = true;
+    if (user?.role === "admin" && api) {
+      api
+        .listAdminUsage()
+        .then((u) => {
+          if (alive) {
+            setStorageUsed(u.used);
+            setStorageLoaded(true);
+          }
+        })
+        .catch(() => {
+          if (alive) setStorageLoaded(true);
+        });
+    }
+    return () => {
+      alive = false;
+    };
+  }, [api, user?.role]);
 
   const toggleTheme = () => {
     const nextDark = !isDark;
@@ -126,44 +128,27 @@ export default function SettingsScreen() {
         </View>
       </View>
 
-      {/* Preferences Section */}
-      <Text style={[styles.section, { color: colors.muted }]}>Preferences</Text>
-      <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.borderSoft, borderRadius: radius.xl }, shadow]}>
-        <LinearGradient
-          colors={["rgba(255,255,255,0.04)", "transparent"]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.glassHighlight}
-        />
-        <Row icon="harddisk" label="Storage Management" value="24.5 GB used" iconColor="#F59E0B" iconBg="rgba(245,158,11,0.15)" />
-        <View style={[styles.divider, { backgroundColor: colors.borderSoft }]} />
-        <Row icon="wifi" label="Use Cellular Data" value="Wi-Fi Only" iconColor="#3B82F6" iconBg="rgba(59,130,246,0.15)" />
-        <View style={[styles.divider, { backgroundColor: colors.borderSoft }]} />
-        <Row icon="fingerprint" label="Face ID / Touch ID" value="Enabled" iconColor="#10B981" iconBg="rgba(16,185,129,0.15)" />
-      </View>
-
-      {/* Music Section */}
-      <Text style={[styles.section, { color: colors.muted }]}>Music</Text>
-      <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.borderSoft, borderRadius: radius.xl }, shadow]}>
-        <LinearGradient
-          colors={["rgba(255,255,255,0.04)", "transparent"]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.glassHighlight}
-        />
-        <Row onPress={cycleCrossfade} icon="camera-iris" label="Crossfade" value={crossfade === 0 ? "Off" : `${crossfade}s`} iconColor="#8b5cf6" iconBg="rgba(139,92,246,0.15)" />
-        <View style={[styles.divider, { backgroundColor: colors.borderSoft }]} />
-        <Row 
-          icon="volume-high" 
-          label="Volume Booster" 
-          value={volumeBooster ? "Enabled" : "Disabled"} 
-          iconColor="#ef4444" 
-          iconBg="rgba(239,68,68,0.15)" 
-          rightElement={<CustomSwitch value={volumeBooster} onValueChange={toggleBooster} />}
-        />
-        <View style={[styles.divider, { backgroundColor: colors.borderSoft }]} />
-        <Row onPress={cycleEq} icon="equalizer" label="Equalizer Preset" value={eqPreset} iconColor="#14b8a6" iconBg="rgba(20,184,166,0.15)" />
-      </View>
+      {/* Preferences — admins see real server storage usage. */}
+      {user?.role === "admin" ? (
+        <>
+          <Text style={[styles.section, { color: colors.muted }]}>Preferences</Text>
+          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.borderSoft, borderRadius: radius.xl }, shadow]}>
+            <LinearGradient
+              colors={["rgba(255,255,255,0.04)", "transparent"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.glassHighlight}
+            />
+            <Row
+              icon="harddisk"
+              label="Storage Usage"
+              value={storageLoaded ? `${formatBytes(storageUsed)} used` : "Loading…"}
+              iconColor="#F59E0B"
+              iconBg="rgba(245,158,11,0.15)"
+            />
+          </View>
+        </>
+      ) : null}
 
       {/* Server Section */}
       <Text style={[styles.section, { color: colors.muted }]}>Server Settings</Text>
@@ -273,6 +258,17 @@ export default function SettingsScreen() {
       </TouchableOpacity>
     </ScrollView>
   );
+}
+
+function formatBytes(n: number): string {
+  if (!isFinite(n) || n < 0) return "—";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let i = 0;
+  while (n >= 1024 && i < units.length - 1) {
+    n /= 1024;
+    i++;
+  }
+  return `${n >= 100 ? Math.round(n) : n.toFixed(1)} ${units[i]}`;
 }
 
 function Row({
