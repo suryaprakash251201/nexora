@@ -4,7 +4,7 @@
  */
 
 export function isTauri(): boolean {
-  return "__TAURI_INTERNALS__" in window;
+  return typeof window !== "undefined" && (!!(window as any).__TAURI_INTERNALS__ || !!(window as any).isTauri);
 }
 
 let platformPromise: Promise<{ os: string; arch: string; family: string } | null> | null = null;

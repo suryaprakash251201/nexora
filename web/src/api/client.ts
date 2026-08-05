@@ -17,7 +17,7 @@ const TAILSCALE_HOSTS = [
  * In Tauri desktop environment, defaults to http://localhost:8080 if nexora-api-url is not set.
  */
 export function getBaseUrl(): string {
-  const isTauri = "__TAURI_INTERNALS__" in window;
+  const isTauri = typeof window !== "undefined" && (!!(window as any).__TAURI_INTERNALS__ || !!(window as any).isTauri);
   const storedUrl = localStorage.getItem("nexora-api-url") || "";
   if (isTauri) {
     return (storedUrl || "http://localhost:8080").replace(/\/$/, "");
@@ -83,7 +83,7 @@ function buildQuery(query?: Record<string, string | number | undefined>): string
 }
 
 export function getMediaUrl(path: string, query?: Record<string, string | number | undefined | boolean>): string {
-  const isTauri = "__TAURI_INTERNALS__" in window;
+  const isTauri = typeof window !== "undefined" && (!!(window as any).__TAURI_INTERNALS__ || !!(window as any).isTauri);
   const baseUrl = getBaseUrl();
 
   const params = new URLSearchParams();
@@ -122,7 +122,7 @@ export async function api<T>(path: string, opts: RequestOptions = {}): Promise<T
     }
   }
 
-  const isTauri = "__TAURI_INTERNALS__" in window;
+  const isTauri = typeof window !== "undefined" && (!!(window as any).__TAURI_INTERNALS__ || !!(window as any).isTauri);
   const baseUrl = getBaseUrl();
 
   const storedToken = localStorage.getItem("nexora-token");
@@ -134,7 +134,7 @@ export async function api<T>(path: string, opts: RequestOptions = {}): Promise<T
     method,
     headers,
     body,
-    credentials: isTauri ? "omit" : "include",
+    credentials: "include",
     signal: opts.signal,
   });
 

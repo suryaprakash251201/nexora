@@ -113,7 +113,7 @@ export function transcodeUrl(rootId: string, path: string, opts?: { start?: numb
 // isTauriRuntime reports whether the frontend is running inside the Tauri
 // desktop shell (as opposed to a plain web browser).
 export function isTauriRuntime(): boolean {
-  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+  return typeof window !== "undefined" && (!!(window as any).__TAURI_INTERNALS__ || !!(window as any).isTauri);
 }
 
 export function audioTranscodeUrl(rootId: string, path: string, opts?: { start?: number; session?: string; format?: AudioTranscodeFormat; quality?: AudioTranscodeQuality }): string {

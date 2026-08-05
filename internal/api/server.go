@@ -88,17 +88,16 @@ func (s *Server) Routes() http.Handler {
 	// When using wildcard origins, the Authorization header is NOT exposed to
 	// prevent cross-origin token theft from arbitrary websites.
 	corsOrigins := s.Cfg.CORSOrigins
-	allowCredentials := len(corsOrigins) > 0
-	wildcard := len(corsOrigins) == 0
-	if wildcard {
-		corsOrigins = []string{"*"}
-	}
 	allowedHeaders := []string{"Accept", "Content-Type", "X-CSRF-Token", "X-Request-ID", "Authorization"}
+
+	// Use AllowOriginFunc to echo the exact Origin header.
+	// This avoids issues with wildcard origins (*) and credentials,
+	// especially on restrictive environments like WebKit (Tauri macOS).
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   corsOrigins,
+		AllowOriginFunc:  func(r *http.Request, origin string) bool { return true },
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowedHeaders:   allowedHeaders,
-		AllowCredentials: allowCredentials,
+		AllowCredentials: true,
 		MaxAge:           300,
 	}))
 
