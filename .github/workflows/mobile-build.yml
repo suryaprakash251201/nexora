@@ -1,0 +1,78 @@
+name: 'Build Mobile App'
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Tag to create a release for (leave empty for build-only)'
+        required: false
+        type: string
+
+permissions: {}
+
+jobs:
+  build-android:
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: install dependencies
+        run: npm install
+        working-directory: ./mobile
+
+      - name: expo prebuild
+        run: npx expo prebuild -p android --no-install
+        working-directory: ./mobile
+
+      - name: build APK
+        run: ./gradlew assembleRelease
+        working-directory: ./mobile/android
+
+      - name: upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexora-mobile-android
+          path: mobile/android/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: warn
+          retention-days: 7
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/') || github.event.inputs.release_tag != ''
+    needs: build-android
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: bundles
+          merge-multiple: true
+
+      - name: publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.release_tag || github.ref_name }}
+          name: Nexora Mobile ${{ github.event.inputs.release_tag || github.ref_name }}
+          body: 'See the assets to download this version and install.'
+          draft: false
+          prerelease: false
+          files: |
+            bundles/**/*.apk

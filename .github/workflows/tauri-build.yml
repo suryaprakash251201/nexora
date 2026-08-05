@@ -7,6 +7,11 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Tag to create a release for (leave empty for build-only)'
+        required: false
+        type: string
 
 # Default permissions: none — each job declares only what it needs.
 permissions: {}
@@ -80,7 +85,7 @@ jobs:
 
       - name: upload linux bundles
         if: startsWith(matrix.platform, 'ubuntu')
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: nexora-desktop-${{ matrix.platform }}
           path: |
@@ -92,7 +97,7 @@ jobs:
 
       - name: upload windows bundles
         if: matrix.platform == 'windows-latest'
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: nexora-desktop-${{ matrix.platform }}
           path: |
@@ -103,7 +108,7 @@ jobs:
 
   # Publish a GitHub release from the built bundles, once, when a v* tag is pushed.
   release:
-    if: startsWith(github.ref, 'refs/tags/')
+    if: startsWith(github.ref, 'refs/tags/') || github.event.inputs.release_tag != ''
     needs: build-tauri
     permissions:
       contents: write
@@ -117,15 +122,15 @@ jobs:
       - name: publish release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
-          name: Nexora Desktop ${{ github.ref_name }}
+          tag_name: ${{ github.event.inputs.release_tag || github.ref_name }}
+          name: Nexora Desktop ${{ github.event.inputs.release_tag || github.ref_name }}
           body: 'See the assets to download this version and install.'
           draft: false
           prerelease: false
           files: |
-            bundles/*.deb
-            bundles/*.rpm
-            bundles/*.AppImage
-            bundles/*.exe
-            bundles/*.msi
-            bundles/*.sig
+            bundles/**/*.deb
+            bundles/**/*.rpm
+            bundles/**/*.AppImage
+            bundles/**/*.exe
+            bundles/**/*.msi
+            bundles/**/*.sig
