@@ -133,7 +133,12 @@ func (s *Server) streamShared(w http.ResponseWriter, r *http.Request, sh sharing
 	}
 
 	// Inline preview with Range support.
-	start, end := parseRange(r.Header.Get("Range"), total)
+	start, end, ok := parseRange(r.Header.Get("Range"), total)
+	if !ok {
+		w.Header().Set("Content-Range", fmt.Sprintf("bytes */%d", total))
+		writeError(w, http.StatusRequestedRangeNotSatisfiable, "range_not_satisfiable", "requested range not satisfiable", middleware.GetRequestID(r.Context()))
+		return
+	}
 	rc, _, rerr := provider.OpenRange(sh.Path, start, end)
 	if rerr != nil {
 		writeError(w, http.StatusNotFound, "not_found", "This link is no longer available", middleware.GetRequestID(r.Context()))

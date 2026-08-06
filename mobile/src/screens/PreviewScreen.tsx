@@ -141,7 +141,7 @@ export default function PreviewScreen({ route }: Props) {
 
       {kind === "video" && (
         <View style={styles.center}>
-          <VideoPlayer uri={rawUrl} />
+          <VideoPlayer uri={rawUrl} onFallback={downloadAndOpen} />
         </View>
       )}
 
@@ -300,22 +300,56 @@ export default function PreviewScreen({ route }: Props) {
 }
 
 // ── Video ─────────────────────────────────────────────────────────────
-function VideoPlayer({ uri }: { uri: string }) {
-  const { colors } = useTheme();
+function VideoPlayer({ uri, onFallback }: { uri: string; onFallback?: () => void }) {
+  const { colors, font, radius } = useTheme();
   const player = useVideoPlayer(uri, (p) => {
     p.loop = true;
     p.play();
   });
   const [ready, setReady] = useState(false);
+  const [failed, setFailed] = useState(false);
   useEffect(() => {
-    const sub = player.addListener("statusChange", ({ status }) => setReady(status === "readyToPlay"));
+    const sub = player.addListener("statusChange", ({ status }) => {
+      setReady(status === "readyToPlay");
+      setFailed(status === "error");
+      if (status === "readyToPlay") {
+        // Belt & braces: ensure playback starts even if play() in the
+        // setup callback fired before the player was ready.
+        player.play();
+      }
+    });
     return () => {
       sub.remove();
       player.pause();
     };
   }, [player]);
+
+  if (failed) {
+    return (
+      <View style={styles.videoErrorWrap}>
+        <MaterialCommunityIcons name="video-off-outline" size={44} color={colors.muted} />
+        <Text style={[styles.videoErrorTitle, { color: colors.content, fontSize: font.md }]}>Could not play this video</Text>
+        <Text style={[styles.videoErrorSub, { color: colors.muted, fontSize: font.sm }]}>
+          The format may be unsupported on this device, or the connection was interrupted.
+        </Text>
+        {onFallback ? (
+          <TouchableOpacity
+            style={[styles.videoErrorBtn, { backgroundColor: colors.accent, borderRadius: radius.pill }]}
+            onPress={onFallback}
+            activeOpacity={0.8}
+          >
+            <MaterialCommunityIcons name="download" size={16} color="#fff" />
+            <Text style={[styles.videoErrorBtnText, { fontSize: font.sm }]}>Download / Open with…</Text>
+          </TouchableOpacity>
+        ) : null}
+      </View>
+    );
+  }
+
   return (
-    <View style={styles.videoWrap}>
+    // collapsable={false}: on Android, native views inside react-native-screens
+    // can be flattened away and render black — this keeps VideoView alive.
+    <View style={styles.videoWrap} collapsable={false}>
       <VideoView player={player} style={styles.video} contentFit="contain" nativeControls />
       {!ready ? (
         <View style={styles.videoLoading} pointerEvents="none">
@@ -634,9 +668,21 @@ const styles = StyleSheet.create({
   imageToolBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: "rgba(255,255,255,0.15)", alignItems: "center", justifyContent: "center", marginLeft: 12 },
 
   // Video
-  videoWrap: { flex: 1, alignItems: "center", justifyContent: "center" },
+  videoWrap: { flex: 1, alignItems: "center", justifyContent: "center", width: "100%" },
   video: { width: "100%", height: "100%", backgroundColor: "#000" },
   videoLoading: { position: "absolute", alignSelf: "center" },
+  videoErrorWrap: { flex: 1, alignItems: "center", justifyContent: "center", gap: 8, padding: 32 },
+  videoErrorTitle: { fontWeight: "700", marginTop: 8 },
+  videoErrorSub: { textAlign: "center", lineHeight: 20 },
+  videoErrorBtn: {
+    marginTop: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 18,
+    paddingVertical: 11,
+  },
+  videoErrorBtnText: { color: "#fff", fontWeight: "700" },
 
   // Text / Code / Markdown
   textRoot: { flex: 1 },

@@ -161,7 +161,12 @@ func (s *Server) handleRaw(w http.ResponseWriter, r *http.Request) {
 		s.recordRecent(r, rootID, rel, "access")
 	}
 	total := info.Size
-	start, end := parseRange(r.Header.Get("Range"), total)
+	start, end, ok := parseRange(r.Header.Get("Range"), total)
+	if !ok {
+		w.Header().Set("Content-Range", fmt.Sprintf("bytes */%d", total))
+		writeError(w, http.StatusRequestedRangeNotSatisfiable, "range_not_satisfiable", "requested range not satisfiable", middleware.GetRequestID(r.Context()))
+		return
+	}
 	rc, _, err := acc.provider.OpenRange(rel, start, end)
 	if err != nil {
 		s.writeProviderError(w, r, err)
@@ -191,28 +196,48 @@ func (s *Server) handleRaw(w http.ResponseWriter, r *http.Request) {
 	_, _ = io.Copy(w, rc)
 }
 
-func parseRange(rangeHeader string, total int64) (int64, int64) {
+// parseRange returns the byte range for a Range header, or (0, 0, false) when
+// the request cannot be satisfied (RFC 9110 §14.1.2 — server should reply 416).
+// Suffix ranges ("bytes=-N") mean the final N bytes.
+func parseRange(rangeHeader string, total int64) (int64, int64, bool) {
+	if total <= 0 {
+		return 0, 0, false
+	}
 	start, end := int64(0), total-1
 	if rangeHeader == "" || !strings.HasPrefix(rangeHeader, "bytes=") {
-		return start, end
+		return start, end, true
 	}
 	spec := strings.TrimPrefix(rangeHeader, "bytes=")
 	parts := strings.SplitN(spec, "-", 2)
 	if len(parts) != 2 {
-		return start, end
+		return start, end, true
 	}
-	if parts[0] != "" {
-		if v, err := strconv.ParseInt(parts[0], 10, 64); err == nil {
-			start = v
+	// Suffix range: "bytes=-N" → final N bytes. Players use this to read the
+	// MP4 moov atom when it sits at the end of the file; returning the wrong
+	// bytes breaks playback on iOS AVPlayer / Android ExoPlayer.
+	if parts[0] == "" && parts[1] != "" {
+		if n, err := strconv.ParseInt(parts[1], 10, 64); err == nil && n > 0 {
+			if n < total {
+				start = total - n
+			}
 		}
+		return start, end, true // end already = total-1
+	}
+	if v, err := strconv.ParseInt(parts[0], 10, 64); err == nil {
+		start = v
 	}
 	if parts[1] != "" {
 		if v, err := strconv.ParseInt(parts[1], 10, 64); err == nil {
 			end = v
 		}
+	} else {
+		end = total - 1 // "bytes=N-" → from N to EOF
 	}
 	if start < 0 {
 		start = 0
+	}
+	if start >= total {
+		return 0, 0, false // starts past EOF → 416
 	}
 	if end >= total {
 		end = total - 1
@@ -220,5 +245,5 @@ func parseRange(rangeHeader string, total int64) (int64, int64) {
 	if start > end {
 		start, end = 0, total-1
 	}
-	return start, end
+	return start, end, true
 }
