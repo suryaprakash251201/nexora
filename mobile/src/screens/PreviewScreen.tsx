@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -41,6 +41,21 @@ function fmtTime(sec: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
+// Containers the native players (iOS AVPlayer / Android ExoPlayer) cannot
+// play at all — route straight to server-side transcoding (like the web app).
+const TRANSCODE_EXT = new Set(["mkv", "avi", "wmv", "flv", "asf", "vob", "mts", "m2ts", "ts", "rm", "divx", "3gp"]);
+
+// generateSessionId creates a UUID v4 used to track the ffmpeg session server-
+// side (lets the server kill stale processes when the source is re-requested).
+function generateSessionId(): string {
+  const g = (globalThis as any)?.crypto;
+  if (g && typeof g.randomUUID === "function") return g.randomUUID();
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
+  });
+}
+
 export default function PreviewScreen({ route }: Props) {
   const { item, rootId } = route.params;
   const { api } = useSession();
@@ -52,6 +67,13 @@ export default function PreviewScreen({ route }: Props) {
   const [imageLoading, setImageLoading] = useState(true);
 
   const rawUrl = api ? api.rawFileUrl(item.root_id || rootId, item.path) : "";
+
+  // One transcode session per preview: the server uses it to kill the previous
+  // ffmpeg process when the client re-requests the stream (seek/retry).
+  const transcodeSession = useMemo(() => generateSessionId(), []);
+  const transcodeUri = api
+    ? api.transcodeUrl(item.root_id || rootId, item.path, { session: transcodeSession })
+    : "";
 
   // ── Text / code preview ─────────────────────────────────────────────
   const loadText = useCallback(async () => {
@@ -141,7 +163,7 @@ export default function PreviewScreen({ route }: Props) {
 
       {kind === "video" && (
         <View style={styles.center}>
-          <VideoPlayer uri={rawUrl} onFallback={downloadAndOpen} />
+          <VideoPlayer uri={rawUrl} transcodeUri={transcodeUri} ext={item.extension} onFallback={downloadAndOpen} />
         </View>
       )}
 
@@ -300,7 +322,11 @@ export default function PreviewScreen({ route }: Props) {
 }
 
 // ── Video ─────────────────────────────────────────────────────────────
-function VideoPlayer({ uri, onFallback }: { uri: string; onFallback?: () => void }) {
+// Plays the raw file natively where possible; for containers the native
+// players can't handle (MKV, AVI, WMV, …) — or when native playback errors —
+// it swaps to the server's transcode endpoint, which pipes a streamable
+// fragmented MP4 (ffmpeg) that both platforms can play.
+function VideoPlayer({ uri, transcodeUri, ext, onFallback }: { uri: string; transcodeUri: string; ext?: string; onFallback?: () => void }) {
   const { colors, font, radius } = useTheme();
   const player = useVideoPlayer(uri, (p) => {
     p.loop = true;
@@ -308,13 +334,38 @@ function VideoPlayer({ uri, onFallback }: { uri: string; onFallback?: () => void
   });
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [switching, setSwitching] = useState(false);
+  const switched = useRef(false);
+
+  const extNorm = (ext || "").toLowerCase().replace(/^\./, "");
+  const needsTranscode = TRANSCODE_EXT.has(extNorm);
+
+  // Hard-unsupported container → skip the doomed native attempt entirely.
+  useEffect(() => {
+    if (needsTranscode && transcodeUri && !switched.current) {
+      switched.current = true;
+      setSwitching(true);
+      player.replace(transcodeUri);
+      player.play();
+    }
+  }, [needsTranscode, transcodeUri, player]);
+
   useEffect(() => {
     const sub = player.addListener("statusChange", ({ status }) => {
       setReady(status === "readyToPlay");
+      setSwitching(false);
       setFailed(status === "error");
       if (status === "readyToPlay") {
         // Belt & braces: ensure playback starts even if play() in the
         // setup callback fired before the player was ready.
+        player.play();
+      }
+      // Native playback failed → fall back to the transcoded stream.
+      if (status === "error" && !switched.current && transcodeUri) {
+        switched.current = true;
+        setSwitching(true);
+        setFailed(false);
+        player.replace(transcodeUri);
         player.play();
       }
     });
@@ -322,7 +373,7 @@ function VideoPlayer({ uri, onFallback }: { uri: string; onFallback?: () => void
       sub.remove();
       player.pause();
     };
-  }, [player]);
+  }, [player, transcodeUri]);
 
   if (failed) {
     return (
@@ -351,7 +402,7 @@ function VideoPlayer({ uri, onFallback }: { uri: string; onFallback?: () => void
     // can be flattened away and render black — this keeps VideoView alive.
     <View style={styles.videoWrap} collapsable={false}>
       <VideoView player={player} style={styles.video} contentFit="contain" nativeControls />
-      {!ready ? (
+      {!ready || switching ? (
         <View style={styles.videoLoading} pointerEvents="none">
           <ActivityIndicator size="large" color={colors.accent} />
         </View>

@@ -101,6 +101,40 @@ export class Api {
     return this.mediaUrl("/files/raw", { root: rootId, path });
   }
 
+  /**
+   * URL for the server-side transcode endpoint — converts containers the
+   * native players cannot handle (MKV, AVI, WMV, …) into a streamable
+   * fragmented MP4 with AAC audio via ffmpeg. `session` lets the server kill
+   * the previous ffmpeg process on seek; keep it stable per playback session.
+   */
+  transcodeUrl(
+    rootId: string,
+    path: string,
+    opts?: { start?: number; session?: string; quality?: string }
+  ): string {
+    return this.mediaUrl("/files/transcode", {
+      root: rootId,
+      path,
+      start: opts?.start && opts.start > 0 ? opts.start : undefined,
+      session: opts?.session,
+      quality: opts?.quality || "medium",
+    });
+  }
+
+  private transcodeSupport: boolean | null = null;
+
+  /** Whether the server has ffmpeg available for on-the-fly transcoding. */
+  async serverSupportsTranscode(): Promise<boolean> {
+    if (this.transcodeSupport !== null) return this.transcodeSupport;
+    try {
+      const v = await this.get<{ transcode?: boolean }>("/version");
+      this.transcodeSupport = !!v.transcode;
+    } catch {
+      this.transcodeSupport = false;
+    }
+    return this.transcodeSupport;
+  }
+
   thumbnailUrl(rootId: string, path: string, size = 256): string {
     return this.mediaUrl("/files/thumbnail", { root: rootId, path, size });
   }
