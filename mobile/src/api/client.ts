@@ -121,6 +121,14 @@ export class Api {
     });
   }
 
+  hlsPlaylistUrl(rootId: string, path: string, session: string): string {
+    return this.mediaUrl("/files/hls/playlist.m3u8", {
+      root: rootId,
+      path,
+      session,
+    });
+  }
+
   private transcodeSupport: boolean | null = null;
 
   /** Whether the server has ffmpeg available for on-the-fly transcoding. */

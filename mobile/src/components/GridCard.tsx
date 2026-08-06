@@ -9,6 +9,8 @@ import { AudioCover } from "./AudioCover";
 import { previewKind, formatBytes, formatDate } from "../api/client";
 import type { FileItem } from "../api/types";
 
+const folderImage = require("../../assets/folder.png");
+
 interface Props {
   item: FileItem;
   rawUrl?: string;
@@ -73,6 +75,10 @@ export const GridCard = memo(function GridCard({
             <View style={[styles.audioBadge, { backgroundColor: "rgba(0,0,0,0.55)" }]}>
               <MaterialCommunityIcons name="music-note" size={14} color="#fff" />
             </View>
+          </View>
+        ) : item.is_dir ? (
+          <View style={[styles.iconBox, { backgroundColor: "transparent" }]}>
+            <Image source={folderImage} style={{ width: "120%", height: "120%" }} contentFit="contain" />
           </View>
         ) : (
           <View style={[styles.iconBox, { backgroundColor: `${iconColor}18`, borderRadius: 18 }]}>

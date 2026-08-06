@@ -71,8 +71,8 @@ export default function PreviewScreen({ route }: Props) {
   // One transcode session per preview: the server uses it to kill the previous
   // ffmpeg process when the client re-requests the stream (seek/retry).
   const transcodeSession = useMemo(() => generateSessionId(), []);
-  const transcodeUri = api
-    ? api.transcodeUrl(item.root_id || rootId, item.path, { session: transcodeSession })
+  const hlsUri = api
+    ? api.hlsPlaylistUrl(item.root_id || rootId, item.path, transcodeSession)
     : "";
 
   // ── Text / code preview ─────────────────────────────────────────────
@@ -163,7 +163,7 @@ export default function PreviewScreen({ route }: Props) {
 
       {kind === "video" && (
         <View style={styles.center}>
-          <VideoPlayer uri={rawUrl} transcodeUri={transcodeUri} ext={item.extension} onFallback={downloadAndOpen} />
+          <VideoPlayer uri={rawUrl} hlsUri={hlsUri} ext={item.extension} onFallback={downloadAndOpen} />
         </View>
       )}
 
@@ -326,29 +326,20 @@ export default function PreviewScreen({ route }: Props) {
 // players can't handle (MKV, AVI, WMV, …) — or when native playback errors —
 // it swaps to the server's transcode endpoint, which pipes a streamable
 // fragmented MP4 (ffmpeg) that both platforms can play.
-function VideoPlayer({ uri, transcodeUri, ext, onFallback }: { uri: string; transcodeUri: string; ext?: string; onFallback?: () => void }) {
+function VideoPlayer({ uri, hlsUri, ext, onFallback }: { uri: string; hlsUri: string; ext?: string; onFallback?: () => void }) {
   const { colors, font, radius } = useTheme();
-  const player = useVideoPlayer(uri, (p) => {
+  const extNorm = (ext || "").toLowerCase().replace(/^\./, "");
+  const needsTranscode = TRANSCODE_EXT.has(extNorm);
+  const initialUri = needsTranscode && hlsUri ? hlsUri : uri;
+
+  const player = useVideoPlayer(initialUri, (p) => {
     p.loop = true;
     p.play();
   });
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState(false);
   const [switching, setSwitching] = useState(false);
-  const switched = useRef(false);
-
-  const extNorm = (ext || "").toLowerCase().replace(/^\./, "");
-  const needsTranscode = TRANSCODE_EXT.has(extNorm);
-
-  // Hard-unsupported container → skip the doomed native attempt entirely.
-  useEffect(() => {
-    if (needsTranscode && transcodeUri && !switched.current) {
-      switched.current = true;
-      setSwitching(true);
-      player.replace(transcodeUri);
-      player.play();
-    }
-  }, [needsTranscode, transcodeUri, player]);
+  const switched = useRef(needsTranscode && !!hlsUri);
 
   useEffect(() => {
     const sub = player.addListener("statusChange", ({ status }) => {
@@ -360,12 +351,12 @@ function VideoPlayer({ uri, transcodeUri, ext, onFallback }: { uri: string; tran
         // setup callback fired before the player was ready.
         player.play();
       }
-      // Native playback failed → fall back to the transcoded stream.
-      if (status === "error" && !switched.current && transcodeUri) {
+      // Native playback failed → fall back to the HLS stream.
+      if (status === "error" && !switched.current && hlsUri) {
         switched.current = true;
         setSwitching(true);
         setFailed(false);
-        player.replace(transcodeUri);
+        player.replace(hlsUri);
         player.play();
       }
     });
@@ -373,7 +364,7 @@ function VideoPlayer({ uri, transcodeUri, ext, onFallback }: { uri: string; tran
       sub.remove();
       player.pause();
     };
-  }, [player, transcodeUri]);
+  }, [player, hlsUri]);
 
   if (failed) {
     return (

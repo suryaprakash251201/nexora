@@ -2,11 +2,14 @@ import React, { memo } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import { Image } from "expo-image";
 import { useTheme } from "../store/ThemeContext";
 import { formatBytes, formatDate } from "../api/client";
 import { fileIconFor, isAudioFile } from "../lib/fileMeta";
 import { AudioCover } from "./AudioCover";
 import type { FileItem } from "../api/types";
+
+const folderImage = require("../../assets/folder.png");
 
 interface Props {
   item: FileItem;
@@ -77,8 +80,10 @@ export const FileRow = memo(function FileRow({
         </TouchableOpacity>
       )}
 
-      <View style={[styles.iconWrap, { backgroundColor: `${color}18` }]}>
-        {isAudioFile(item) ? (
+      <View style={[styles.iconWrap, { backgroundColor: item.is_dir ? "transparent" : `${color}18` }]}>
+        {item.is_dir ? (
+          <Image source={folderImage} style={{ width: 38, height: 38 }} contentFit="contain" />
+        ) : isAudioFile(item) ? (
           <AudioCover item={item} size={160} />
         ) : (
           <MaterialCommunityIcons name={name as any} size={22} color={color} />

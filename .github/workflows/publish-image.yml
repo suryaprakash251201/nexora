@@ -111,28 +111,18 @@ jobs:
           flavor: |
             latest=auto
 
-      - name: Build and publish image (GHCR)
+      - name: Build and publish image
         uses: docker/build-push-action@v7
         with:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          build-args: |
-            VERSION=${{ steps.version.outputs.VERSION }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Build and publish image (Docker Hub)
-        if: env.DOCKERHUB_TOKEN != ''
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta-hub.outputs.tags }}
-          labels: ${{ steps.meta-hub.outputs.labels }}
+          tags: |
+            ${{ steps.meta.outputs.tags }}
+            ${{ steps.meta-hub.outputs.tags }}
+          labels: |
+            ${{ steps.meta.outputs.labels }}
+            ${{ steps.meta-hub.outputs.labels }}
           build-args: |
             VERSION=${{ steps.version.outputs.VERSION }}
           cache-from: type=gha

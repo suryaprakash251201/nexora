@@ -7,7 +7,6 @@ import {
   Animated,
   Modal,
   Dimensions,
-  Easing,
   ActivityIndicator,
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -22,7 +21,7 @@ import { EqBars } from "./EqBars";
 import { AudioQualityPill } from "./AudioQualityBadge";
 import { AudioQualityDetail } from "./AudioQualityDetail";
 
-const { height } = Dimensions.get("window");
+const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 
 export function MiniPlayer() {
   const { currentTrack, player, nextTrack, prevTrack, closePlayer, shuffle, setShuffle } = useAudio();
@@ -37,14 +36,18 @@ export function MiniPlayer() {
   const [repeat, setRepeat] = useState<"off" | "all" | "one">("off");
   const [modalVisible, setModalVisible] = useState(false);
   const [scrubberWidth, setScrubberWidth] = useState(1);
-  const slideAnim = useRef(new Animated.Value(height)).current;
-  const spinAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
+  const artworkScaleAnim = useRef(new Animated.Value(0.92)).current;
 
-  // Listen to player state & sync timeline
+  // ─── Listen to player state & sync timeline ──────────────────────────
   useEffect(() => {
     if (!player) return;
-    const subPlaying = player.addListener("playingChange", ({ isPlaying }) => setPlaying(isPlaying));
-    const subStatus = player.addListener("statusChange", ({ status }) => setStatus(status));
+    const subPlaying = player.addListener("playingChange", ({ isPlaying }: { isPlaying: boolean }) =>
+      setPlaying(isPlaying)
+    );
+    const subStatus = player.addListener("statusChange", ({ status: s }: { status: string }) =>
+      setStatus(s)
+    );
     setStatus(player.status);
 
     let lastT = -1;
@@ -52,7 +55,6 @@ export function MiniPlayer() {
     const interval = setInterval(() => {
       const t = player.currentTime;
       const d = player.duration || 0;
-      // Only re-render when something actually changed.
       if (Math.abs(t - lastT) > 0.25) {
         setCurrentTime(t);
         lastT = t;
@@ -76,16 +78,22 @@ export function MiniPlayer() {
     player.loop = repeat === "one";
   }, [player, repeat]);
 
-  // Artwork scale animation in modal
+  // ─── Artwork scale animation (Apple Music style) ─────────────────────
   useEffect(() => {
     if (playing && modalVisible) {
-      Animated.spring(spinAnim, {
-        toValue: 1,
+      Animated.spring(artworkScaleAnim, {
+        toValue: 1.0,
+        damping: 15,
+        stiffness: 150,
+        mass: 1,
         useNativeDriver: true,
       }).start();
     } else {
-      Animated.spring(spinAnim, {
-        toValue: 0.9,
+      Animated.spring(artworkScaleAnim, {
+        toValue: 0.92,
+        damping: 15,
+        stiffness: 150,
+        mass: 1,
         useNativeDriver: true,
       }).start();
     }
@@ -93,6 +101,7 @@ export function MiniPlayer() {
 
   if (!currentTrack) return null;
 
+  // ─── Helpers ─────────────────────────────────────────────────────────
   const togglePlay = () => {
     if (!player) return;
     if (playing) player.pause();
@@ -111,17 +120,13 @@ export function MiniPlayer() {
 
   const closeModal = () => {
     Animated.timing(slideAnim, {
-      toValue: height,
+      toValue: SCREEN_HEIGHT,
       duration: 300,
       useNativeDriver: true,
     }).start(() => setModalVisible(false));
   };
 
-  // Not actually spin anymore, it's a subtle scale effect
-  const artworkScale = spinAnim;
-
   const coverUrl = api ? api.thumbnailUrl(currentTrack.root_id, currentTrack.path, 512) : null;
-
   const ext = currentTrack.extension || "";
 
   const formatTime = (s: number) => {
@@ -139,26 +144,67 @@ export function MiniPlayer() {
     else setRepeat("off");
   };
 
+  const handleScrub = (locationX: number) => {
+    if (player && duration > 0 && locationX != null) {
+      const pct = Math.max(0, Math.min(1, locationX / scrubberWidth));
+      player.currentTime = pct * duration;
+    }
+  };
+
+  // ─── RENDER ──────────────────────────────────────────────────────────
   return (
     <>
-      {/* Mini Player */}
+      {/* ═══════════════════════════════════════════════════════════════
+          MINI PLAYER (bottom bar)
+          ═══════════════════════════════════════════════════════════════ */}
       <View style={[styles.miniContainer, shadow]}>
-        <TouchableOpacity style={[styles.miniInner, { backgroundColor: colors.surfaceElevated, borderColor: colors.borderSoft }]} activeOpacity={0.9} onPress={openModal}>
-          <LinearGradient colors={["rgba(255,255,255,0.06)", "transparent"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.glassHighlight} />
+        <TouchableOpacity
+          style={[
+            styles.miniInner,
+            { backgroundColor: colors.surfaceElevated, borderColor: colors.borderSoft },
+          ]}
+          activeOpacity={0.9}
+          onPress={openModal}
+        >
+          <LinearGradient
+            colors={["rgba(255,255,255,0.06)", "transparent"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.glassHighlight}
+          />
 
           <View style={[styles.miniIconWrap, { backgroundColor: colors.surfaceMuted, overflow: "hidden" }]}>
             {coverUrl ? (
-              <Image source={{ uri: coverUrl }} style={{ width: "100%", height: "100%" }} contentFit="cover" transition={300} />
+              <Image
+                source={{ uri: coverUrl }}
+                style={{ width: "100%", height: "100%" }}
+                contentFit="cover"
+                transition={300}
+              />
             ) : (
               <MaterialCommunityIcons name="music-note" size={24} color={gradients.brand[0]} />
             )}
           </View>
 
           <View style={styles.miniTextWrap}>
-            <Text style={[styles.miniTitle, { color: colors.content, fontSize: font.sm }]} numberOfLines={1}>{currentTrack.name}</Text>
+            <Text
+              style={[styles.miniTitle, { color: colors.content, fontSize: font.sm }]}
+              numberOfLines={1}
+            >
+              {currentTrack.name}
+            </Text>
             <View style={styles.miniSubRow}>
-              <AudioQualityPill extension={ext} mime={currentTrack.mime} fileSize={currentTrack.size} />
-              <Text style={[styles.miniSub, { color: colors.muted, fontSize: font.xs }]} numberOfLines={1}>{currentTrack.extension?.toUpperCase() || "AUDIO"} · Nexora</Text>
+              <AudioQualityPill
+                extension={ext}
+                mime={currentTrack.mime}
+                fileSize={currentTrack.size}
+              />
+              <Text
+                style={[styles.miniSub, { color: colors.muted, fontSize: font.xs }]}
+                numberOfLines={1}
+              >
+                {currentTrack.extension?.toUpperCase() || "AUDIO"} · Nexora
+              </Text>
             </View>
           </View>
 
@@ -166,71 +212,192 @@ export function MiniPlayer() {
             {status === "loading" ? (
               <ActivityIndicator color={colors.content} size="small" />
             ) : (
-              <MaterialCommunityIcons name={playing ? "pause" : "play"} size={32} color={colors.content} />
+              <MaterialCommunityIcons
+                name={playing ? "pause" : "play"}
+                size={32}
+                color={colors.content}
+              />
             )}
           </TouchableOpacity>
           <TouchableOpacity style={styles.miniBtn} onPress={closePlayer}>
             <MaterialCommunityIcons name="close" size={28} color={colors.content} />
           </TouchableOpacity>
         </TouchableOpacity>
+
         {/* Live progress bar along the bottom edge of the mini card */}
         <View style={[styles.miniProgressTrack, { backgroundColor: colors.borderSoft }]}>
-          <LinearGradient colors={[...gradients.brand]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={[styles.miniProgressFill, { width: `${progressPct}%` }]} />
+          <LinearGradient
+            colors={[...gradients.brand]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={[styles.miniProgressFill, { width: `${progressPct}%` }]}
+          />
         </View>
       </View>
 
-      {/* Full Screen Modal */}
+      {/* ═══════════════════════════════════════════════════════════════
+          FULL SCREEN PLAYER (modal) — Apple Music style
+          ═══════════════════════════════════════════════════════════════ */}
       {modalVisible && (
         <Modal transparent visible={modalVisible} animationType="none" onRequestClose={closeModal}>
           <Animated.View style={[styles.modalRoot, { transform: [{ translateY: slideAnim }] }]}>
-            {/* Background Blur */}
+            {/* ── Background: blurred artwork + dark overlay + blur ── */}
             {coverUrl ? (
-              <Image source={{ uri: coverUrl }} style={StyleSheet.absoluteFill} contentFit="cover" blurRadius={90} />
+              <Image
+                source={{ uri: coverUrl }}
+                style={StyleSheet.absoluteFill}
+                contentFit="cover"
+                blurRadius={90}
+              />
             ) : (
               <LinearGradient colors={[...gradients.player]} style={StyleSheet.absoluteFill} />
             )}
-            <View style={[StyleSheet.absoluteFill, { backgroundColor: isDark ? "rgba(0,0,0,0.5)" : "rgba(255,255,255,0.4)" }]} />
-            <BlurView intensity={isDark ? 50 : 80} tint={isDark ? "dark" : "light"} style={StyleSheet.absoluteFill} />
-            
-            <TouchableOpacity activeOpacity={0.9} onPress={closeModal} style={[styles.modalHeader, { paddingTop: insets.top + 10 }]}>
-              <View style={styles.pullDownWrap}>
-                <View style={[styles.pullDownIndicator, { backgroundColor: colors.muted }]} />
-              </View>
-            </TouchableOpacity>
+            <View
+              style={[
+                StyleSheet.absoluteFill,
+                { backgroundColor: isDark ? "rgba(0,0,0,0.55)" : "rgba(255,255,255,0.45)" },
+              ]}
+            />
+            <BlurView
+              intensity={60}
+              tint={isDark ? "dark" : "light"}
+              style={StyleSheet.absoluteFill}
+            />
 
+            {/* ── Header: chevron-down / source label / more ── */}
+            <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+              <TouchableOpacity
+                style={styles.headerBtn}
+                onPress={closeModal}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              >
+                <MaterialCommunityIcons name="chevron-down" size={30} color={colors.content} />
+              </TouchableOpacity>
+
+              <View style={styles.headerCenter}>
+                <Text
+                  style={[
+                    styles.headerLabel,
+                    { color: colors.content, opacity: 0.55 },
+                  ]}
+                >
+                  PLAYING FROM
+                </Text>
+                <Text
+                  style={[
+                    styles.headerSource,
+                    { color: colors.content, opacity: 0.85 },
+                  ]}
+                  numberOfLines={1}
+                >
+                  Nexora
+                </Text>
+              </View>
+
+              <TouchableOpacity
+                style={styles.headerBtn}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              >
+                <MaterialCommunityIcons
+                  name="dots-horizontal"
+                  size={24}
+                  color={colors.content}
+                  style={{ opacity: 0.7 }}
+                />
+              </TouchableOpacity>
+            </View>
+
+            {/* ── Main Content Area ── */}
             <View style={styles.modalContent}>
-              {/* Artwork */}
-              <View style={styles.artworkContainer}>
-                <Animated.View style={[styles.artworkBox, { transform: [{ scale: artworkScale }] }]}>
-                  {coverUrl ? (
-                    <Image source={{ uri: coverUrl }} style={{ width: "100%", height: "100%", position: "absolute" }} contentFit="cover" transition={300} />
-                  ) : (
-                    <LinearGradient colors={[...gradients.brand]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill}>
-                      <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-                        <MaterialCommunityIcons name="music-note" size={100} color="#fff" />
+              {/* ── Artwork ── */}
+              <View style={styles.artworkSection}>
+                <View style={styles.artworkShadowWrap}>
+                  <Animated.View
+                    style={[
+                      styles.artworkBox,
+                      { transform: [{ scale: artworkScaleAnim }] },
+                    ]}
+                  >
+                    {coverUrl ? (
+                      <Image
+                        source={{ uri: coverUrl }}
+                        style={styles.artworkImage}
+                        contentFit="cover"
+                        transition={300}
+                      />
+                    ) : (
+                      <LinearGradient
+                        colors={[...gradients.brand]}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                        style={StyleSheet.absoluteFill}
+                      >
+                        <View style={styles.artworkPlaceholder}>
+                          <MaterialCommunityIcons name="music-note" size={80} color="#fff" />
+                        </View>
+                      </LinearGradient>
+                    )}
+                    {status === "loading" && (
+                      <View
+                        style={[
+                          StyleSheet.absoluteFill,
+                          styles.artworkLoading,
+                          {
+                            backgroundColor: isDark
+                              ? "rgba(0,0,0,0.45)"
+                              : "rgba(255,255,255,0.45)",
+                          },
+                        ]}
+                      >
+                        <ActivityIndicator size="large" color={colors.content} />
                       </View>
-                    </LinearGradient>
-                  )}
-                  {status === "loading" && (
-                    <View style={[StyleSheet.absoluteFill, { backgroundColor: isDark ? "rgba(0,0,0,0.5)" : "rgba(255,255,255,0.5)", alignItems: "center", justifyContent: "center" }]}>
-                      <ActivityIndicator size="large" color={colors.content} />
-                    </View>
-                  )}
-                </Animated.View>
+                    )}
+                  </Animated.View>
+                </View>
               </View>
 
-              {/* Title & Artist */}
-              <View style={styles.trackInfo}>
+              {/* ── Track Info + More Button ── */}
+              <View style={styles.trackInfoRow}>
                 <View style={styles.trackTextCol}>
-                  <Text style={[styles.trackName, { fontSize: font.xxxl, color: colors.content }]} numberOfLines={1}>{currentTrack.name}</Text>
-                  <Text style={[styles.trackArtist, { fontSize: font.xl, color: colors.content, opacity: 0.7 }]} numberOfLines={1}>{currentTrack.extension?.toUpperCase() || "AUDIO"} · Nexora</Text>
+                  <Text
+                    style={[
+                      styles.trackName,
+                      { fontSize: font.xl, color: colors.content },
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {currentTrack.name}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.trackArtist,
+                      { fontSize: font.sm, color: colors.content, opacity: 0.55 },
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {ext.toUpperCase() || "AUDIO"} · Nexora
+                  </Text>
                 </View>
-                <TouchableOpacity style={[styles.moreBtn, { backgroundColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.05)" }]}>
-                  <MaterialCommunityIcons name="dots-horizontal" size={24} color={colors.content} />
+                <TouchableOpacity
+                  style={[
+                    styles.trackMoreBtn,
+                    {
+                      backgroundColor: isDark
+                        ? "rgba(255,255,255,0.1)"
+                        : "rgba(0,0,0,0.06)",
+                    },
+                  ]}
+                >
+                  <MaterialCommunityIcons
+                    name="dots-horizontal"
+                    size={20}
+                    color={colors.content}
+                  />
                 </TouchableOpacity>
               </View>
-              
-              <View style={{ marginBottom: 16 }}>
+
+              {/* ── Audio Quality Detail ── */}
+              <View style={styles.qualityRow}>
                 <AudioQualityDetail
                   extension={ext}
                   mime={currentTrack.mime}
@@ -239,67 +406,154 @@ export function MiniPlayer() {
                 />
               </View>
 
-              {/* Scrubber */}
+              {/* ── Progress Scrubber (Apple Music thin style, no thumb) ── */}
               <View style={styles.scrubberWrap}>
                 <View
                   style={styles.scrubberHitbox}
                   onLayout={(e) => setScrubberWidth(e.nativeEvent.layout.width)}
                   onStartShouldSetResponder={() => true}
                   onMoveShouldSetResponder={() => true}
-                  onResponderGrant={(e) => {
-                    if (player && duration > 0 && e.nativeEvent.locationX != null) {
-                      const pct = Math.max(0, Math.min(1, e.nativeEvent.locationX / scrubberWidth));
-                      player.currentTime = pct * duration;
-                    }
-                  }}
-                  onResponderMove={(e) => {
-                    if (player && duration > 0 && e.nativeEvent.locationX != null) {
-                      const pct = Math.max(0, Math.min(1, e.nativeEvent.locationX / scrubberWidth));
-                      player.currentTime = pct * duration;
-                    }
-                  }}
+                  onResponderGrant={(e) => handleScrub(e.nativeEvent.locationX)}
+                  onResponderMove={(e) => handleScrub(e.nativeEvent.locationX)}
                 >
-                  <View style={[styles.scrubberTrack, { backgroundColor: isDark ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.1)" }]}>
-                    <View style={[styles.scrubberFill, { width: `${progressPct}%`, backgroundColor: colors.content }]} />
-                    <View style={[styles.scrubberThumb, { left: `${progressPct}%`, backgroundColor: colors.content }]} />
+                  <View
+                    style={[
+                      styles.scrubberTrack,
+                      {
+                        backgroundColor: isDark
+                          ? "rgba(255,255,255,0.20)"
+                          : "rgba(0,0,0,0.12)",
+                      },
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.scrubberFill,
+                        {
+                          width: `${progressPct}%`,
+                          backgroundColor: colors.content,
+                        },
+                      ]}
+                    />
                   </View>
                 </View>
                 <View style={styles.timeRow}>
-                  <Text style={[styles.timeText, { color: colors.content, opacity: 0.6 }]}>{formatTime(currentTime)}</Text>
-                  <Text style={[styles.timeText, { color: colors.content, opacity: 0.6 }]}>{duration > 0 ? `-${formatTime(duration - currentTime)}` : "-:-"}</Text>
+                  <Text
+                    style={[
+                      styles.timeText,
+                      { color: colors.content, opacity: 0.5 },
+                    ]}
+                  >
+                    {formatTime(currentTime)}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.timeText,
+                      { color: colors.content, opacity: 0.5 },
+                    ]}
+                  >
+                    {duration > 0 ? `-${formatTime(duration - currentTime)}` : "-:--"}
+                  </Text>
                 </View>
               </View>
 
-              {/* Controls */}
-              <View style={styles.controlsRow}>
-                <TouchableOpacity style={styles.controlBtnSmall} onPress={toggleRepeat}>
-                  <MaterialCommunityIcons 
-                    name={repeat === "one" ? "repeat-once" : "repeat"} 
-                    size={24} 
-                    color={repeat !== "off" ? colors.content : colors.muted} 
+              {/* ── Main Controls: skip-back / play-pause / skip-forward ── */}
+              <View style={styles.mainControlsRow}>
+                <TouchableOpacity
+                  style={styles.skipBtn}
+                  onPress={prevTrack}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <MaterialCommunityIcons
+                    name="skip-previous"
+                    size={38}
+                    color={colors.content}
                   />
                 </TouchableOpacity>
-                
-                <View style={styles.mainControls}>
-                  <TouchableOpacity style={styles.controlBtn} onPress={prevTrack}>
-                    <MaterialCommunityIcons name="skip-backward" size={48} color={colors.content} />
-                  </TouchableOpacity>
-                  
-                  <TouchableOpacity style={styles.playBtn} onPress={togglePlay}>
-                    {status === "loading" ? (
-                      <ActivityIndicator color={colors.content} size="large" />
-                    ) : (
-                      <MaterialCommunityIcons name={playing ? "pause" : "play"} size={64} color={colors.content} />
-                    )}
-                  </TouchableOpacity>
-                  
-                  <TouchableOpacity style={styles.controlBtn} onPress={nextTrack}>
-                    <MaterialCommunityIcons name="skip-forward" size={48} color={colors.content} />
-                  </TouchableOpacity>
-                </View>
 
-                <TouchableOpacity style={styles.controlBtnSmall} onPress={() => setShuffle(!shuffle)}>
-                  <MaterialCommunityIcons name="shuffle" size={24} color={shuffle ? colors.content : colors.muted} />
+                <TouchableOpacity
+                  style={styles.playPauseBtn}
+                  onPress={togglePlay}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  {status === "loading" ? (
+                    <ActivityIndicator color={colors.content} size="large" />
+                  ) : (
+                    <View
+                      style={[
+                        styles.playPauseCircle,
+                        { backgroundColor: colors.content },
+                      ]}
+                    >
+                      <MaterialCommunityIcons
+                        name={playing ? "pause" : "play"}
+                        size={34}
+                        color={isDark ? "#000" : "#fff"}
+                        style={playing ? undefined : { marginLeft: 3 }}
+                      />
+                    </View>
+                  )}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.skipBtn}
+                  onPress={nextTrack}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <MaterialCommunityIcons
+                    name="skip-next"
+                    size={38}
+                    color={colors.content}
+                  />
+                </TouchableOpacity>
+              </View>
+
+              {/* ── Secondary Controls Row ── */}
+              <View style={styles.secondaryControlsRow}>
+                <TouchableOpacity
+                  style={styles.secondaryBtn}
+                  onPress={() => setShuffle(!shuffle)}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <MaterialCommunityIcons
+                    name="shuffle-variant"
+                    size={22}
+                    color={shuffle ? colors.content : colors.muted}
+                  />
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.secondaryBtn}
+                  onPress={toggleRepeat}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <MaterialCommunityIcons
+                    name={repeat === "one" ? "repeat-once" : "repeat"}
+                    size={22}
+                    color={repeat !== "off" ? colors.content : colors.muted}
+                  />
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.secondaryBtn}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <MaterialCommunityIcons
+                    name="cast-connected"
+                    size={22}
+                    color={colors.muted}
+                  />
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.secondaryBtn}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <MaterialCommunityIcons
+                    name="playlist-music"
+                    size={22}
+                    color={colors.muted}
+                  />
                 </TouchableOpacity>
               </View>
             </View>
@@ -310,10 +564,15 @@ export function MiniPlayer() {
   );
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+// STYLES
+// ═══════════════════════════════════════════════════════════════════════
+
 const styles = StyleSheet.create({
+  /* ── Mini Player ─────────────────────────────────────────────────── */
   miniContainer: {
     position: "absolute",
-    bottom: 100, // Above bottom nav
+    bottom: 100,
     left: 16,
     right: 16,
     zIndex: 999,
@@ -371,86 +630,179 @@ const styles = StyleSheet.create({
   },
   miniProgressFill: { height: "100%", borderRadius: 2 },
 
-  // Modal
-  modalRoot: { flex: 1 },
-  modalHeader: {
-    paddingHorizontal: 16,
-    paddingBottom: 16,
+  /* ── Full Screen Modal ───────────────────────────────────────────── */
+  modalRoot: {
+    flex: 1,
   },
-  pullDownWrap: {
+
+  /* Header */
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingBottom: 4,
+  },
+  headerBtn: {
+    width: 40,
+    height: 40,
     alignItems: "center",
     justifyContent: "center",
-    width: "100%",
-    paddingVertical: 12,
   },
-  pullDownIndicator: {
-    width: 40,
-    height: 5,
-    borderRadius: 2.5,
-    opacity: 0.5,
+  headerCenter: {
+    flex: 1,
+    alignItems: "center",
   },
+  headerLabel: {
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 1.2,
+    textTransform: "uppercase",
+  },
+  headerSource: {
+    fontSize: 13,
+    fontWeight: "600",
+    marginTop: 1,
+  },
+
+  /* Modal Content */
   modalContent: {
     flex: 1,
-    paddingHorizontal: 32,
-    paddingBottom: 60,
+    paddingHorizontal: 28,
+    justifyContent: "flex-end",
+    paddingBottom: 48,
   },
-  artworkContainer: {
-    aspectRatio: 1,
-    width: "100%",
+
+  /* Artwork */
+  artworkSection: {
+    flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 20,
-    marginBottom: 40,
+    paddingVertical: 8,
+  },
+  artworkShadowWrap: {
+    width: "100%",
+    aspectRatio: 1,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 16 },
-    shadowOpacity: 0.4,
-    shadowRadius: 24,
-    elevation: 20,
+    shadowOffset: { width: 0, height: 24 },
+    shadowOpacity: 0.55,
+    shadowRadius: 40,
+    elevation: 28,
   },
   artworkBox: {
     width: "100%",
     aspectRatio: 1,
-    borderRadius: 16,
+    borderRadius: 12,
     overflow: "hidden",
   },
-  trackInfo: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 16 },
-  trackTextCol: { flex: 1, paddingRight: 16 },
-  trackName: { fontWeight: "800", marginBottom: 4 },
-  trackArtist: { fontWeight: "600" },
-  moreBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  
-  scrubberWrap: { marginBottom: 40 },
-  scrubberHitbox: { height: 30, justifyContent: "center" },
-  scrubberTrack: { height: 6, borderRadius: 3, position: "relative" },
-  scrubberFill: { height: "100%", borderRadius: 3 },
-  scrubberThumb: {
+  artworkImage: {
+    width: "100%",
+    height: "100%",
     position: "absolute",
-    top: -4,
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 3,
-    elevation: 3,
-    marginLeft: -7,
   },
-  timeRow: { flexDirection: "row", justifyContent: "space-between", marginTop: 4 },
-  timeText: { fontSize: 12, fontVariant: ["tabular-nums"], fontWeight: "600" },
-
-  controlsRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  mainControls: { flexDirection: "row", alignItems: "center", gap: 32 },
-  controlBtn: { padding: 4 },
-  controlBtnSmall: { padding: 8 },
-  playBtn: {
+  artworkPlaceholder: {
+    flex: 1,
     alignItems: "center",
     justifyContent: "center",
+  },
+  artworkLoading: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  /* Track Info */
+  trackInfoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 24,
+    marginBottom: 4,
+  },
+  trackTextCol: {
+    flex: 1,
+    paddingRight: 12,
+  },
+  trackName: {
+    fontWeight: "800",
+    marginBottom: 3,
+  },
+  trackArtist: {
+    fontWeight: "500",
+  },
+  trackMoreBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  /* Audio Quality */
+  qualityRow: {
+    marginBottom: 20,
+    marginTop: 2,
+  },
+
+  /* Scrubber */
+  scrubberWrap: {
+    marginBottom: 16,
+  },
+  scrubberHitbox: {
+    height: 28,
+    justifyContent: "center",
+  },
+  scrubberTrack: {
+    height: 4,
+    borderRadius: 2,
+    overflow: "hidden",
+  },
+  scrubberFill: {
+    height: "100%",
+    borderRadius: 2,
+  },
+  timeRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 6,
+  },
+  timeText: {
+    fontSize: 11,
+    fontVariant: ["tabular-nums"],
+    fontWeight: "600",
+  },
+
+  /* Main Controls */
+  mainControlsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 40,
+    marginBottom: 28,
+    marginTop: 8,
+  },
+  skipBtn: {
+    padding: 4,
+  },
+  playPauseBtn: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  playPauseCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  /* Secondary Controls */
+  secondaryControlsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 24,
+  },
+  secondaryBtn: {
+    padding: 8,
   },
 });

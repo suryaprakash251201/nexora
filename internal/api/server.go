@@ -93,7 +93,7 @@ func (s *Server) Routes() http.Handler {
 	// This avoids issues with wildcard origins (*) and credentials,
 	// especially on restrictive environments like WebKit (Tauri macOS).
 	r.Use(cors.Handler(cors.Options{
-		AllowOriginFunc:  func(r *http.Request, origin string) bool { return true },
+		AllowOriginFunc:  func(_ *http.Request, _ string) bool { return true },
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowedHeaders:   allowedHeaders,
 		AllowCredentials: true,
@@ -158,6 +158,8 @@ func (s *Server) Routes() http.Handler {
 	authed.Get("/files/download", s.handleDownload)
 	authed.Get("/files/raw", s.handleRaw)
 	authed.Get("/files/transcode", s.handleTranscode)
+	authed.Get("/files/hls/playlist.m3u8", s.handleHLSPlaylist)
+	authed.Get("/files/hls/segment.ts", s.handleHLSSegment)
 
 	// Lossless audio metadata, waveforms, and server capabilities.
 	authed.Get("/audio/info", s.handleAudioInfo)

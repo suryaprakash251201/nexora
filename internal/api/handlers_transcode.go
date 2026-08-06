@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
 	"os"
 	"os/exec"
@@ -85,8 +86,13 @@ type ffprobeStream struct {
 	Channels    int    `json:"channels"`
 }
 
+type ffprobeFormat struct {
+	Duration string `json:"duration"`
+}
+
 type ffprobeOutput struct {
 	Streams []ffprobeStream `json:"streams"`
+	Format  ffprobeFormat   `json:"format"`
 }
 
 // probeFile runs ffprobe on the input file and returns parsed stream info.
@@ -94,6 +100,7 @@ func probeFile(ffprobe, input string) (*ffprobeOutput, error) {
 	cmd := exec.Command(ffprobe,
 		"-v", "quiet",
 		"-print_format", "json",
+		"-show_format",
 		"-show_streams",
 		input,
 	)
@@ -383,4 +390,139 @@ func (s *Server) handleTranscode(w http.ResponseWriter, r *http.Request) {
 		}
 		s.Log.Error("transcode failed", "error", runErr, "detail", stderr.String())
 	}
+}
+
+func (s *Server) handleHLSPlaylist(w http.ResponseWriter, r *http.Request) {
+	rootID := queryParam(r, "root", "")
+	rel, err := storage.CleanRelative(queryParam(r, "path", ""))
+	sessionID := queryParam(r, "session", "")
+	token := queryParam(r, "token", "")
+
+	if err != nil || rel == "" {
+		writeError(w, http.StatusBadRequest, "invalid_path", "invalid path", middleware.GetRequestID(r.Context()))
+		return
+	}
+	acc, err := s.resolveAccess(r, rootID, false)
+	if err != nil {
+		s.writeAccessError(w, r, err)
+		return
+	}
+	rc, err := acc.provider.Read(rel)
+	if err != nil {
+		s.writeProviderError(w, r, err)
+		return
+	}
+	inputArg := "pipe:0"
+	if f, ok := rc.(*os.File); ok {
+		inputArg = f.Name()
+		rc.Close()
+	} else {
+		rc.Close()
+		writeError(w, http.StatusBadRequest, "unsupported", "HLS requires a local filesystem", middleware.GetRequestID(r.Context()))
+		return
+	}
+
+	_, ffprobeP, err := detectFfmpeg()
+	if err != nil || ffprobeP == "" {
+		writeError(w, http.StatusNotImplemented, "ffmpeg_missing", "ffmpeg not found", middleware.GetRequestID(r.Context()))
+		return
+	}
+
+	probe, err := probeFile(ffprobeP, inputArg)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "probe_failed", err.Error(), middleware.GetRequestID(r.Context()))
+		return
+	}
+
+	duration, _ := strconv.ParseFloat(probe.Format.Duration, 64)
+	if duration <= 0 {
+		writeError(w, http.StatusBadRequest, "invalid_duration", "could not determine video duration", middleware.GetRequestID(r.Context()))
+		return
+	}
+
+	segmentDuration := 10.0
+	w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
+	w.Header().Set("Cache-Control", "no-cache")
+
+	fmt.Fprintln(w, "#EXTM3U")
+	fmt.Fprintln(w, "#EXT-X-VERSION:3")
+	fmt.Fprintf(w, "#EXT-X-TARGETDURATION:%d\n", int(math.Ceil(segmentDuration)))
+	fmt.Fprintln(w, "#EXT-X-MEDIA-SEQUENCE:0")
+	fmt.Fprintln(w, "#EXT-X-PLAYLIST-TYPE:VOD")
+
+	for i := 0; float64(i)*segmentDuration < duration; i++ {
+		chunkDuration := segmentDuration
+		if float64(i)*segmentDuration+segmentDuration > duration {
+			chunkDuration = duration - float64(i)*segmentDuration
+		}
+		fmt.Fprintln(w, "#EXT-X-DISCONTINUITY")
+		fmt.Fprintf(w, "#EXTINF:%.6f,\n", chunkDuration)
+		if token != "" {
+			fmt.Fprintf(w, "segment.ts?root=%s&path=%s&session=%s&seq=%d&token=%s\n", urlEncode(rootID), urlEncode(rel), urlEncode(sessionID), i, urlEncode(token))
+		} else {
+			fmt.Fprintf(w, "segment.ts?root=%s&path=%s&session=%s&seq=%d\n", urlEncode(rootID), urlEncode(rel), urlEncode(sessionID), i)
+		}
+	}
+	fmt.Fprintln(w, "#EXT-X-ENDLIST")
+}
+
+func (s *Server) handleHLSSegment(w http.ResponseWriter, r *http.Request) {
+	rootID := queryParam(r, "root", "")
+	rel, err := storage.CleanRelative(queryParam(r, "path", ""))
+	seqStr := queryParam(r, "seq", "0")
+	seq, _ := strconv.Atoi(seqStr)
+
+	if err != nil || rel == "" {
+		writeError(w, http.StatusBadRequest, "invalid_path", "invalid path", middleware.GetRequestID(r.Context()))
+		return
+	}
+	acc, err := s.resolveAccess(r, rootID, false)
+	if err != nil {
+		s.writeAccessError(w, r, err)
+		return
+	}
+	rc, err := acc.provider.Read(rel)
+	if err != nil {
+		s.writeProviderError(w, r, err)
+		return
+	}
+	inputArg := "pipe:0"
+	if f, ok := rc.(*os.File); ok {
+		inputArg = f.Name()
+		rc.Close()
+	} else {
+		rc.Close()
+		writeError(w, http.StatusBadRequest, "unsupported", "HLS requires a local filesystem", middleware.GetRequestID(r.Context()))
+		return
+	}
+
+	ffp, _, err := detectFfmpeg()
+	if err != nil {
+		writeError(w, http.StatusNotImplemented, "ffmpeg_missing", "ffmpeg not found", middleware.GetRequestID(r.Context()))
+		return
+	}
+
+	segmentDuration := 10.0
+	startOffset := float64(seq) * segmentDuration
+
+	ffArgs := []string{
+		"-hide_banner", "-loglevel", "warning",
+		"-ss", fmt.Sprintf("%.3f", startOffset),
+		"-i", inputArg,
+		"-t", fmt.Sprintf("%.3f", segmentDuration),
+		"-map", "0:v:0?", "-map", "0:a:0?",
+		"-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-vf", "format=yuv420p",
+		"-c:a", "aac", "-b:a", "128k",
+		"-muxdelay", "0",
+		"-f", "mpegts", "pipe:1",
+	}
+
+	cmd := exec.CommandContext(r.Context(), ffp, ffArgs...)
+	w.Header().Set("Content-Type", "video/mp2t")
+	w.Header().Set("Cache-Control", "public, max-age=3600")
+	w.WriteHeader(http.StatusOK)
+
+	cmd.Stdout = w
+	cmd.Stderr = os.Stderr
+	cmd.Run()
 }
