@@ -81,7 +81,7 @@ func Load() (*Config, error) {
 		MaxEditableSize:    envBytes("NEXORA_MAX_EDITABLE_SIZE", 5<<20),
 		DefaultRoots:       parseRoots(env("NEXORA_DEFAULT_ROOTS", "Files:/mnt/files:false,Media:/mnt/media:true,Backups:/mnt/backups:false,Shared:/mnt/shared:false")),
 		AllowRegistration:  envBool("NEXORA_ALLOW_REGISTRATION", true),
-		SecureCookies:      envBool("NEXORA_SECURE_COOKIES", false),
+		SecureCookies:      envBool("NEXORA_SECURE_COOKIES", true), // secure by default; set false for plain-HTTP/LAN installs
 		ReadonlyFS:         envBool("NEXORA_READONLY_FS", false),
 		PlaylistCoverPath:  env("NEXORA_PLAYLIST_COVER_PATH", ""),
 		TailscaleAuth:      envBool("NEXORA_TAILSCALE_AUTH", false),

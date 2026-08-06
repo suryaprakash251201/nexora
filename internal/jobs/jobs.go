@@ -440,6 +440,15 @@ func (m *Manager) doExtract(id string, p ExtractPayload) error {
 		if strings.HasPrefix(cleanedName, "..") {
 			return fmt.Errorf("zip-slip blocked (traversal in raw name): %q", name)
 		}
+		
+		cleanedDest := filepath.Clean(dest)
+		if cleanedDest == "" {
+			cleanedDest = "."
+		}
+		cleanedFull := filepath.Clean(filepath.Join(cleanedDest, name))
+		if cleanedDest != "." && !strings.HasPrefix(cleanedFull, cleanedDest+string(filepath.Separator)) {
+			return fmt.Errorf("zip slip detected: %q", name)
+		}
 		// Zip entries may already include the destination folder (e.g. when the
 		// archive was created from inside it). Normalize to a path relative to
 		// dest so entries land in the right place without being doubled.

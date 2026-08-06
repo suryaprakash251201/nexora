@@ -55,7 +55,7 @@ func NewS3Provider(cfg S3Config) *S3Provider {
 		if cfg.Region == "" || strings.ToUpper(cfg.Region) != cfg.Region {
 			cfg.Region = autoRegion
 		} else {
-			log.Printf("S3: region '%s' looks uppercase, auto-detected '%s' from endpoint, using auto-detected", cfg.Region, autoRegion)
+			log.Printf("S3: region '%s' looks uppercase, auto-detected '%s' from endpoint, using auto-detected", sanitizeLog(cfg.Region), sanitizeLog(autoRegion))
 			cfg.Region = autoRegion
 		}
 	}
@@ -85,25 +85,25 @@ func extractRegion(endpoint string) string {
 		host = host[:idx]
 	}
 	parts := strings.Split(host, ".")
-	log.Printf("S3 extractRegion: host=%s parts=%v", host, parts)
+	log.Printf("S3 extractRegion: host=%s parts=%v", sanitizeLog(host), parts)
 	// Look for region patterns: s3.<region>.<rest> or s3-<region>.amazonaws.com
 	for i, p := range parts {
 		if strings.HasPrefix(p, "s3-") {
 			region := strings.TrimPrefix(p, "s3-")
-			log.Printf("S3 extractRegion: found via s3- prefix: %s", region)
+			log.Printf("S3 extractRegion: found via s3- prefix: %s", sanitizeLog(region))
 			return region
 		}
 		// Skip the "s3" subdomain prefix (s3.<region>.amazonaws.com)
 		if i == 0 && p == "s3" && len(parts) > 2 {
 			// If the next part looks like a region, use it
 			if isRegionPart(parts[1]) {
-				log.Printf("S3 extractRegion: found region after s3: %s", parts[1])
+				log.Printf("S3 extractRegion: found region after s3: %s", sanitizeLog(parts[1]))
 				return parts[1]
 			}
 			continue
 		}
 		if isRegionPart(p) {
-			log.Printf("S3 extractRegion: found via isRegionPart: %s", p)
+			log.Printf("S3 extractRegion: found via isRegionPart: %s", sanitizeLog(p))
 			return p
 		}
 	}

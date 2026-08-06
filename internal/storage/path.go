@@ -59,6 +59,23 @@ func Resolve(rootPath, rel string) (string, error) {
 	if rel2 == ".." || strings.HasPrefix(rel2, ".."+string(filepath.Separator)) {
 		return "", ErrTraversal
 	}
+
+	joinedAbs, err := filepath.Abs(joined)
+	if err != nil {
+		return "", err
+	}
+	rootAbs, err := filepath.Abs(absRoot)
+	if err != nil {
+		return "", err
+	}
+	// Boundary-aware containment check: a bare HasPrefix would wrongly accept
+	// siblings like /data2 when the root is /data. Accept only the root itself
+	// or paths below root/ (the filepath.Rel check above already enforces this,
+	// this is defense in depth against future refactors).
+	if joinedAbs != rootAbs && !strings.HasPrefix(joinedAbs, rootAbs+string(filepath.Separator)) {
+		return "", ErrTraversal
+	}
+
 	// Resolve symlinks so an attacker cannot escape the root via a symlink
 	// planted inside the storage tree. EvalSymlinks returns the original path
 	// if it does not exist or is not a symlink, so this is safe to call even
