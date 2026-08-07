@@ -38,6 +38,8 @@ services:
       # CORS origins come from .env (set NEXORA_CORS_ORIGINS there); compose
       # falls back to a neutral localhost default.
       NEXORA_CORS_ORIGINS: "${NEXORA_CORS_ORIGINS:-http://localhost:5173}"
+      # Cookies must not be Secure when served over plain HTTP (LAN installs).
+      NEXORA_SECURE_COOKIES: "${NEXORA_SECURE_COOKIES:-false}"
     ports:
       - "${NEXORA_HTTP_PORT:-80}:80"
     volumes:

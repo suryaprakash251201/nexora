@@ -444,9 +444,12 @@ func (s *Server) handleTailscaleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tailscaleUser := r.Header.Get("Tailscale-User")
+	tailscaleUser := r.Header.Get("Tailscale-User-Login") // header injected by Tailscale Serve
 	if tailscaleUser == "" {
-		writeError(w, http.StatusUnauthorized, "tailscale_user_missing", "Tailscale-User header not found — ensure you're accessing via Tailscale", middleware.GetRequestID(r.Context()))
+		tailscaleUser = r.Header.Get("Tailscale-User") // fallback for Caddy-style proxies
+	}
+	if tailscaleUser == "" {
+		writeError(w, http.StatusUnauthorized, "tailscale_user_missing", "Tailscale identity header not found — ensure you're accessing via Tailscale", middleware.GetRequestID(r.Context()))
 		return
 	}
 
