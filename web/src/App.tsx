@@ -8,6 +8,7 @@ import MouseGlow from "./components/MouseGlow";
 import UpdaterCheck from "./components/UpdaterCheck";
 import TauriShell from "./components/TauriShell";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { Toaster } from "./components/ui/sonner";
 import { openInBrowser, isTauri } from "./lib/desktop";
 import type { User } from "./api/types";
 
@@ -18,6 +19,7 @@ export default function App() {
       <MouseGlow />
       {isTauri() && <TauriShell />}
       {isTauri() && <UpdaterCheck />}
+      <Toaster />
       <AppInner />
     </>
   );
