@@ -14,6 +14,11 @@ RUN npm run build
 # 2. Build the Go binary
 ############################
 FROM golang:1.26-alpine AS gobuild
+# Work around a QEMU user-mode emulation bug (golang/go#77572) that panics
+# the Go compiler with "runtime error: growslice" when cross-building
+# linux/arm64 on amd64 runners (the publish workflow pins QEMU 7.0.0 to fix
+# an npm SIGILL; QEMU 10.0.6+ fixes this Go bug natively).
+ENV GODEBUG=madvdontneed=0
 RUN apk add --no-cache git
 WORKDIR /src
 COPY go.mod go.sum ./
