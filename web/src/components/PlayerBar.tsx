@@ -230,7 +230,7 @@ export default function PlayerBar() {
         <div className="fixed bottom-32 md:bottom-6 left-1/2 -translate-x-1/2 z-[60] w-[calc(100%-2rem)] max-w-lg pointer-events-none">
           <div className="pointer-events-auto glass-strong rounded-2xl px-3 py-2.5 shadow-2xl transition-all duration-500 ease-out">
             <div className="flex items-center gap-2">
-              <div className={`group relative h-10 w-10 rounded-full overflow-hidden shrink-0 shadow-md transition-all duration-500 ${isPlaying ? 'animate-[spin_8s_linear_infinite]' : ''}`}>
+              <div className={`group relative h-10 w-10 rounded-full overflow-hidden shrink-0 shadow-md transition-all duration-500 ${isPlaying ? 'animate-[spin_20s_linear_infinite]' : ''}`}>
                 <Cover item={current} />
                 <div className="absolute inset-0 bg-glass-bg-strong opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer rounded-full dark:bg-black/40" onClick={openExpanded}>
                   <ChevronUp className="h-4 w-4 text-white" />

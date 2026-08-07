@@ -17,11 +17,11 @@ import (
 const maxCoverFile = 60 << 20
 
 // Cover returns a cached JPEG thumbnail derived from embedded album art inside
-// an MP3 (ID3v2 APIC) or FLAC (PICTURE) file. It returns ErrUnsupported when
-// the file has no usable embedded picture.
+// an MP3 (ID3v2 APIC), FLAC (PICTURE) or M4A/MP4 (iTunes covr atom) file. It
+// returns ErrUnsupported when the file has no usable embedded picture.
 func (s *Service) Cover(provider storage.StorageProvider, rootID, rel string, maxDim int) ([]byte, error) {
 	ext := storage.Ext(rel)
-	if ext != "mp3" && ext != "flac" {
+	if ext != "mp3" && ext != "flac" && ext != "m4a" && ext != "m4b" && ext != "mp4" {
 		return nil, ErrUnsupported
 	}
 	if maxDim <= 0 || maxDim > 1024 {
@@ -72,7 +72,7 @@ func (s *Service) Cover(provider storage.StorageProvider, rootID, rel string, ma
 // HasCover reports whether we should attempt cover extraction for a file.
 func HasCover(name string) bool {
 	switch storage.Ext(name) {
-	case "mp3", "flac":
+	case "mp3", "flac", "m4a", "m4b", "mp4":
 		return true
 	default:
 		return false
@@ -88,10 +88,14 @@ func extractCover(r io.Reader, ext string) ([]byte, error) {
 	if len(data) > maxCoverFile {
 		return nil, ErrUnsupported
 	}
-	if ext == "mp3" {
+	switch ext {
+	case "mp3":
 		return extractID3Cover(data)
+	case "flac":
+		return extractFLACCover(data)
+	default: // m4a, m4b, mp4
+		return extractM4ACover(data)
 	}
-	return extractFLACCover(data)
 }
 
 // --- MP3 / ID3v2 -----------------------------------------------------------
@@ -300,6 +304,139 @@ func parseFLACPicture(b []byte) ([]byte, bool) {
 		return nil, false
 	}
 	return b[pos : pos+dataLen], true
+}
+
+// --- M4A / MP4 (iTunes covr atom) -----------------------------------------
+
+// extractM4ACover walks the top-level MP4 boxes looking for a moov box and
+// returns embedded cover art found under moov/(udta/)?meta/ilst/covr.
+func extractM4ACover(data []byte) ([]byte, error) {
+	i := 0
+	for i+8 <= len(data) {
+		size, typ, next, err := mp4BoxHeader(data, i)
+		if err != nil {
+			return nil, ErrUnsupported
+		}
+		switch typ {
+		case "moov":
+			if img, ok := findM4ACover(data[i+8 : i+size]); ok {
+				return img, nil
+			}
+		}
+		if next <= i {
+			break
+		}
+		i = next
+	}
+	return nil, ErrUnsupported
+}
+
+// findM4ACover scans the payload of a container box for meta/ilst/covr.
+// The meta box is a FullBox, so its 4-byte version/flags are skipped.
+func findM4ACover(payload []byte) ([]byte, bool) {
+	i := 0
+	for i+8 <= len(payload) {
+		size, typ, next, err := mp4BoxHeader(payload, i)
+		if err != nil {
+			return nil, false
+		}
+		switch typ {
+		case "meta":
+			body := payload[i+8 : i+size]
+			if len(body) < 4 {
+				break
+			}
+			if img, ok := findM4ACover(body[4:]); ok {
+				return img, true
+			}
+		case "udta", "moov":
+			if img, ok := findM4ACover(payload[i+8 : i+size]); ok {
+				return img, true
+			}
+		case "ilst":
+			if img, ok := findM4ACover(payload[i+8 : i+size]); ok {
+				return img, true
+			}
+		case "covr":
+			if img, ok := parseCovr(payload[i+8 : i+size]); ok {
+				return img, true
+			}
+		}
+		if next <= i {
+			break
+		}
+		i = next
+	}
+	return nil, false
+}
+
+// parseCovr extracts image data from the covr atom. It contains one or more
+// 'data' FullBoxes; the payload after version/flags + reserved bytes is the
+// raw picture (JPEG or PNG).
+func parseCovr(payload []byte) ([]byte, bool) {
+	i := 0
+	for i+8 <= len(payload) {
+		size, typ, next, err := mp4BoxHeader(payload, i)
+		if err != nil {
+			// Not a box — fall through; some writers store the raw picture
+			// directly in the covr payload.
+			break
+		}
+		if typ == "data" {
+			body := payload[i+8 : i+size]
+			if len(body) >= 8 {
+				img := body[8:]
+				if isPlausibleImage(img) {
+					return img, true
+				}
+			}
+		}
+		if next <= i {
+			break
+		}
+		i = next
+	}
+	// Some writers store the raw picture directly in the covr payload.
+	if isPlausibleImage(payload) {
+		return payload, true
+	}
+	return nil, false
+}
+
+// mp4BoxHeader returns the size and type of the box starting at i, plus the
+// offset of the next box (i+size). size==1 means a 64-bit largesize follows;
+// size==0 means the box extends to the end of the buffer.
+func mp4BoxHeader(data []byte, i int) (size int, typ string, next int, err error) {
+	if i+8 > len(data) {
+		return 0, "", 0, ErrUnsupported
+	}
+	size = int(data[i])<<24 | int(data[i+1])<<16 | int(data[i+2])<<8 | int(data[i+3])
+	typ = string(data[i+4 : i+8])
+	next = i + 8
+	if size == 1 {
+		if i+16 > len(data) {
+			return 0, "", 0, ErrUnsupported
+		}
+		// 64-bit largesize; only the low 32 bits matter for our size caps.
+		size = int(data[i+12])<<24 | int(data[i+13])<<16 | int(data[i+14])<<8 | int(data[i+15])
+		next = i + 16
+	} else if size == 0 {
+		size = len(data) - i
+	}
+	if size < 8 || i+size > len(data) {
+		return 0, "", 0, ErrUnsupported
+	}
+	// Advance past the whole box, not just its 8-byte header.
+	next = i + size
+	return size, typ, next, nil
+}
+
+// isPlausibleImage reports whether b starts with JPEG or PNG magic bytes.
+func isPlausibleImage(b []byte) bool {
+	if len(b) >= 2 && b[0] == 0xFF && b[1] == 0xD8 {
+		return true
+	}
+	return len(b) >= 4 && b[0] == 0x89 && b[1] == 'P' && b[2] == 'N' && b[3] == 'G'
 }
 
 // --- helpers --------------------------------------------------------------

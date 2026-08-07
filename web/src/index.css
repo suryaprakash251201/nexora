@@ -465,7 +465,7 @@ body {
 }
 
 .audio-disc {
-  animation: n-disc-spin 16s linear infinite;
+  animation: n-disc-spin 32s linear infinite;
   animation-play-state: running;
 }
 
