@@ -18,9 +18,19 @@ const TAILSCALE_HOSTS = [
  */
 export function getBaseUrl(): string {
   const isTauri = typeof window !== "undefined" && (!!(window as any).__TAURI_INTERNALS__ || !!(window as any).isTauri);
-  const storedUrl = localStorage.getItem("nexora-api-url") || "";
+  const storedUrl = localStorage.getItem("nexora-api-url");
   if (isTauri) {
-    return (storedUrl || "http://localhost:8080").replace(/\/$/, "");
+    if (!storedUrl) {
+      return "http://localhost:8080";
+    }
+    // Only http(s) origins are valid API bases. Anything else (e.g. a
+    // `javascript:` value planted in localStorage) is rejected so DOM text
+    // can never reach src/href/location sinks via the media URL helpers.
+    const trimmed = storedUrl.trim();
+    if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+      return trimmed.replace(/\/$/, "");
+    }
+    return "";
   }
   return "";
 }
@@ -99,7 +109,20 @@ export function getMediaUrl(path: string, query?: Record<string, string | number
   }
 
   const s = params.toString();
-  return baseUrl + "/api/v1" + path + (s ? "?" + s : "");
+  const url = baseUrl + "/api/v1" + path + (s ? "?" + s : "");
+  // Only http(s) URLs may ever be returned. The stored API base is
+  // user-controllable in Tauri mode, so anything else (e.g. a `javascript:`
+  // value) must not reach src/href/location sinks. Resolving against the
+  // current origin also normalizes relative URLs (browser mode).
+  try {
+    const u = new URL(url, window.location.origin);
+    if (u.protocol === "http:" || u.protocol === "https:") {
+      return u.href;
+    }
+  } catch {
+    // Invalid URL – ignore.
+  }
+  return "";
 }
 
 export async function api<T>(path: string, opts: RequestOptions = {}): Promise<T> {

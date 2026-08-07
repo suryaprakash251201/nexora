@@ -428,11 +428,14 @@ func (m *Manager) doExtract(id string, p ExtractPayload) error {
 			return context.Canceled
 		default:
 		}
-		// zip-slip protection: reject absolute paths, backslashes, and any
-		// entry that would escape the destination after cleaning.
+		// zip-slip protection: reject absolute paths, backslashes, null bytes, and
+		// any entry that would escape the destination after cleaning.
 		name := zf.Name
 		if strings.ContainsRune(name, 0) || strings.Contains(name, "\\") {
 			return fmt.Errorf("unsafe zip entry: %q", name)
+		}
+		if strings.Contains(name, "..") {
+			return fmt.Errorf("zip-slip blocked (traversal in raw entry name): %q", name)
 		}
 		// Check for path traversal in the raw entry name BEFORE any path.Join
 		// normalization that could absorb the ".." away.

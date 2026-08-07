@@ -431,9 +431,13 @@ function startDownloadFromUrl(url: string, name: string) {
     const root = u.searchParams.get("root") || "";
     const path = u.searchParams.get("path") || "";
     if (root && path) startDownload(root, path, name);
-    else window.location.href = url;
+    else if (u.protocol === "http:" || u.protocol === "https:") {
+      // Only navigate to http(s) destinations; anything else (e.g. a
+      // `javascript:` hyperlink embedded in the PDF) is ignored.
+      window.location.href = u.href;
+    }
   } catch {
-    window.location.href = url;
+    // Invalid URL – nothing to do.
   }
 }
 

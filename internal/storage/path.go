@@ -52,13 +52,6 @@ func Resolve(rootPath, rel string) (string, error) {
 		return "", err
 	}
 	joined := filepath.Clean(filepath.Join(absRoot, filepath.FromSlash(cleaned)))
-	rel2, err := filepath.Rel(absRoot, joined)
-	if err != nil {
-		return "", ErrTraversal
-	}
-	if rel2 == ".." || strings.HasPrefix(rel2, ".."+string(filepath.Separator)) {
-		return "", ErrTraversal
-	}
 
 	joinedAbs, err := filepath.Abs(joined)
 	if err != nil {
@@ -68,19 +61,12 @@ func Resolve(rootPath, rel string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	// Boundary-aware containment check: a bare HasPrefix would wrongly accept
-	// siblings like /data2 when the root is /data. Accept only the root itself
-	// or paths below root/ (the filepath.Rel check above already enforces this,
-	// this is defense in depth against future refactors).
-	if joinedAbs != rootAbs && !strings.HasPrefix(joinedAbs, rootAbs+string(filepath.Separator)) {
-		return "", ErrTraversal
-	}
 
 	// Resolve symlinks so an attacker cannot escape the root via a symlink
 	// planted inside the storage tree. EvalSymlinks returns the original path
 	// if it does not exist or is not a symlink, so this is safe to call even
 	// when the target does not yet exist (e.g. for Write/CreateDirectory).
-	resolved, err := filepath.EvalSymlinks(joined)
+	resolved, err := filepath.EvalSymlinks(joinedAbs)
 	if err != nil && !os.IsNotExist(err) {
 		return "", err
 	}
@@ -90,7 +76,18 @@ func Resolve(rootPath, rel string) (string, error) {
 			return "", ErrTraversal
 		}
 	}
-	return joined, nil
+
+	// Boundary-aware containment check: a bare HasPrefix would wrongly accept
+	// siblings like /data2 when the root is /data. Accept only the root itself
+	// or paths below root/. The value returned below is the same one validated
+	// by this guard so that taint analysis recognizes it as safe.
+	if joinedAbs == rootAbs {
+		return rootAbs, nil
+	}
+	if !strings.HasPrefix(joinedAbs, rootAbs+string(filepath.Separator)) {
+		return "", ErrTraversal
+	}
+	return joinedAbs, nil
 }
 
 // NameFromPath returns the base name of a relative path.
