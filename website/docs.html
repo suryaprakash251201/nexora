@@ -1,0 +1,585 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Documentation — Nexora</title>
+  <script>
+    /* apply theme before first paint to avoid flash */
+    (function () {
+      try {
+        var t = localStorage.getItem('nx-theme');
+        if (t !== 'dark' && t !== 'light') t = 'light'; /* light is the default */
+        document.documentElement.setAttribute('data-theme', t);
+      } catch (e) { document.documentElement.setAttribute('data-theme', 'light'); }
+    })();
+  </script>
+  <meta name="description" content="Complete Nexora documentation: quick start, installation, Docker deployment, configuration reference, features guide, security and operations." />
+  <meta name="theme-color" content="#090B12" />
+
+  <link rel="icon" type="image/svg+xml" href="assets/img/logo.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet" />
+  <link href="assets/css/style.css" rel="stylesheet" />
+</head>
+<body>
+
+  <div class="bg-ambient"></div>
+  <div class="grid-overlay"></div>
+
+  <!-- ================= NAVBAR ================= -->
+  <nav class="navbar navbar-expand-lg fixed-top nx-navbar scrolled" id="nxNav">
+    <div class="container">
+      <a class="navbar-brand" href="index.html">
+        <img src="assets/img/logo.svg" alt="Nexora logo" />
+        Nexora
+      </a>
+      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#nxMenu" aria-controls="nxMenu" aria-expanded="false" aria-label="Toggle navigation">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+      <div class="collapse navbar-collapse" id="nxMenu">
+        <ul class="navbar-nav mx-auto mb-2 mb-lg-0">
+          <li class="nav-item"><a class="nav-link" href="index.html#features">Features</a></li>
+          <li class="nav-item"><a class="nav-link" href="index.html#screenshots">Screenshots</a></li>
+          <li class="nav-item"><a class="nav-link" href="index.html#deploy">Install</a></li>
+          <li class="nav-item"><a class="nav-link" href="index.html#faq">FAQ</a></li>
+          <li class="nav-item"><a class="nav-link active" href="docs.html">Docs</a></li>
+        </ul>
+        <div class="d-flex gap-2 align-items-center">
+          <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle light or dark theme" title="Toggle theme">
+            <i class="bi bi-sun-fill"></i>
+          </button>
+          <a href="https://pms2.tail58d7ea.ts.net" target="_blank" rel="noopener" class="btn btn-nx-ghost btn-nx-sm">
+            <span class="live-dot me-2" style="display:inline-block"></span>Live Demo
+          </a>
+          <a href="https://github.com/suryaprakash251201/nexora" target="_blank" rel="noopener" class="btn btn-nx-primary btn-nx-sm">
+            <i class="bi bi-github me-1"></i> GitHub
+          </a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ================= DOCS HERO ================= -->
+  <header class="docs-hero text-center">
+    <div class="container">
+      <div class="reveal">
+        <span class="eyebrow">Documentation</span>
+      </div>
+      <h1 class="reveal" style="--rd:80ms">
+        Nexora <span class="text-gradient">Guide</span>
+      </h1>
+      <p class="lead mx-auto reveal text-muted-nx" style="--rd:160ms; max-width:600px">
+        Everything you need to install, configure, secure, and get the most out of your
+        private file workspace — from first <code style="color:#a78bfa">docker pull</code> to daily operations.
+      </p>
+      <div class="hero-pull reveal" style="--rd:240ms">
+        <div class="pull-pill">
+          <i class="bi bi-box-seam"></i>
+          <code>docker pull ghcr.io/suryaprakash251201/nexora:latest-8141398</code>
+          <button class="copy-btn" type="button" data-copy="docker pull ghcr.io/suryaprakash251201/nexora:latest-8141398" aria-label="Copy pull command"><i class="bi bi-clipboard"></i></button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ================= DOCS LAYOUT ================= -->
+  <section class="docs-layout">
+    <div class="container">
+      <div class="row g-4">
+
+        <!-- sidebar TOC -->
+        <div class="col-lg-3">
+          <nav class="docs-toc" aria-label="Table of contents">
+            <h6>On this page</h6>
+            <ul>
+              <li><a href="#quick-start">Quick Start</a></li>
+              <li><a href="#installation">Installation</a></li>
+              <li><a href="#first-run">First-Run Setup</a></li>
+              <li><a href="#https">HTTPS &amp; Reverse Proxy</a></li>
+              <li><a href="#configuration">Configuration Reference</a></li>
+              <li><a href="#features-guide">Features Guide</a></li>
+              <li><a href="#shortcuts">Keyboard Shortcuts</a></li>
+              <li><a href="#security">Security &amp; Operations</a></li>
+              <li><a href="#backup">Backup &amp; Upgrade</a></li>
+              <li><a href="#api">API &amp; Health Checks</a></li>
+              <li><a href="#faq">FAQ</a></li>
+            </ul>
+            <hr class="my-3" style="border-color:var(--nx-border)" />
+            <ul>
+              <li><a href="index.html"><i class="bi bi-arrow-left me-1"></i>Back to homepage</a></li>
+            </ul>
+          </nav>
+        </div>
+
+        <!-- content -->
+        <div class="col-lg-9">
+          <!-- mobile toc -->
+          <div class="docs-mobile-toc d-lg-none">
+            <select id="mobileToc" aria-label="Jump to section">
+              <option value="quick-start">Quick Start</option>
+              <option value="installation">Installation</option>
+              <option value="first-run">First-Run Setup</option>
+              <option value="https">HTTPS &amp; Reverse Proxy</option>
+              <option value="configuration">Configuration Reference</option>
+              <option value="features-guide">Features Guide</option>
+              <option value="shortcuts">Keyboard Shortcuts</option>
+              <option value="security">Security &amp; Operations</option>
+              <option value="backup">Backup &amp; Upgrade</option>
+              <option value="api">API &amp; Health Checks</option>
+              <option value="faq">FAQ</option>
+            </select>
+          </div>
+
+          <div class="docs-content">
+
+            <!-- QUICK START -->
+            <div class="doc-section" id="quick-start">
+              <h2><span class="doc-ico ic-blue"><i class="bi bi-rocket-takeoff"></i></span>Quick Start</h2>
+              <p class="lead">Docker Compose is the recommended deployment path. It builds both applications and exposes Nexora on port <strong>80</strong>.</p>
+              <div class="code-shell">
+                <div class="code-bar">
+                  <div class="dots"><span></span><span></span><span></span></div>
+                  <span style="margin-left:auto">terminal — bash</span>
+                  <button class="copy-btn ms-2" type="button" data-copy="cp .env.example .env
+openssl rand -hex 32
+docker compose up -d --build
+docker compose ps
+curl -f http://localhost/healthz" aria-label="Copy quick start"><i class="bi bi-clipboard"></i></button>
+                </div>
+                <pre><code><span class="c"># 1. Configure the instance</span>
+<span class="k">cp</span> .env.example .env
+<span class="k">openssl</span> rand -hex 32  <span class="c"># set as NEXORA_SESSION_SECRET</span>
+
+<span class="c"># 2. Start Nexora</span>
+<span class="k">docker compose</span> up -d --build
+<span class="k">docker compose</span> ps
+
+<span class="c"># 3. Verify it's healthy</span>
+<span class="k">curl</span> -f http://localhost/healthz
+<span class="p">→</span> {<span class="s">"service"</span>:<span class="s">"nexora"</span>,<span class="s">"status"</span>:<span class="s">"ok"</span>,<span class="s">"version"</span>:<span class="s">"1.7.2"</span>}
+
+<span class="c"># 4. Open your browser and complete first-run setup</span>
+<span class="n">open</span> http://localhost</code></pre>
+              </div>
+              <div class="docs-callout ok">
+                <i class="bi bi-check-circle-fill"></i>
+                <span>If the session secret is blank, Nexora generates one and persists it in SQLite. Supplying a stable secret is recommended for managed deployments.</span>
+              </div>
+            </div>
+
+            <!-- INSTALLATION -->
+            <div class="doc-section" id="installation">
+              <h2><span class="doc-ico ic-emerald"><i class="bi bi-box-seam"></i></span>Installation</h2>
+              <p>Three supported ways to run Nexora — pick whichever fits your workflow.</p>
+
+              <h3>Option A — Docker Compose <span style="font-weight:400;color:var(--nx-muted)">(recommended)</span></h3>
+              <div class="code-shell">
+                <div class="code-bar">
+                  <div class="dots"><span></span><span></span><span></span></div>
+                  <span style="margin-left:auto">terminal — bash</span>
+                  <button class="copy-btn ms-2" type="button" data-copy="git clone https://github.com/suryaprakash251201/nexora.git
+cd nexora
+cp .env.example .env
+docker compose up -d --build" aria-label="Copy compose install"><i class="bi bi-clipboard"></i></button>
+                </div>
+                <pre><code><span class="k">git clone</span> https://github.com/suryaprakash251201/nexora.git
+<span class="k">cd</span> nexora
+<span class="k">cp</span> .env.example .env
+<span class="k">docker compose</span> up -d --build</code></pre>
+              </div>
+              <p>The included Compose file mounts these host folders:</p>
+              <table class="docs-table">
+                <thead><tr><th>Host folder</th><th>Container path</th><th>Access</th></tr></thead>
+                <tbody>
+                  <tr><td><code>./data/files</code></td><td><code>/mnt/files</code></td><td>Read/write</td></tr>
+                  <tr><td><code>./data/media</code></td><td><code>/mnt/media</code></td><td>Read-only</td></tr>
+                  <tr><td><code>./data/backups</code></td><td><code>/mnt/backups</code></td><td>Read/write</td></tr>
+                  <tr><td><code>./data/shared</code></td><td><code>/mnt/shared</code></td><td>Read/write</td></tr>
+                </tbody>
+              </table>
+              <p>The named <code>nexora-data</code> volume contains SQLite, the thumbnail cache, and the temporary archive workspace. Back it up alongside the mounted storage folders.</p>
+
+              <h3>Option B — Docker Run from GHCR</h3>
+              <p>Pull the official image from GitHub Container Registry and run it directly — no build required:</p>
+              <div class="code-shell">
+                <div class="code-bar">
+                  <div class="dots"><span></span><span></span><span></span></div>
+                  <span style="margin-left:auto">terminal — bash</span>
+                  <button class="copy-btn ms-2" type="button" data-copy="docker pull ghcr.io/suryaprakash251201/nexora:latest-8141398
+docker run -d --name nexora \
+  -p 8080:80 \
+  -v nexora-data:/app/data \
+  -v ./data/files:/mnt/files \
+  -e NEXORA_LISTEN_ADDR=:80 \
+  -e NEXORA_SESSION_SECRET=$(openssl rand -hex 32) \
+  ghcr.io/suryaprakash251201/nexora:latest-8141398" aria-label="Copy docker run"><i class="bi bi-clipboard"></i></button>
+                </div>
+                <pre><code><span class="c"># 1. Pull the official image</span>
+<span class="k">docker pull</span> ghcr.io/suryaprakash251201/nexora:latest-8141398
+
+<span class="c"># 2. Run it — web UI on http://localhost:8080</span>
+<span class="k">docker run</span> -d --name nexora <span class="p">\</span>
+  -p <span class="n">8080</span>:<span class="n">80</span> <span class="p">\</span>
+  -v nexora-data:/app/data <span class="p">\</span>
+  -v ./data/files:/mnt/files <span class="p">\</span>
+  -e NEXORA_LISTEN_ADDR=:80 <span class="p">\</span>
+  -e NEXORA_SESSION_SECRET=<span class="n">$(openssl rand -hex 32)</span> <span class="p">\</span>
+  ghcr.io/suryaprakash251201/nexora:latest-8141398</code></pre>
+              </div>
+              <div class="docs-callout info">
+                <i class="bi bi-info-circle-fill"></i>
+                <span>The single container serves both the compiled web app and the Go API — there is nothing else to install.</span>
+              </div>
+
+              <h3>Option C — From source</h3>
+              <p>Prerequisites: <strong>Go 1.26+</strong>, <strong>Node.js 20+</strong>, and <strong>npm</strong>. Local development works when storage root paths are valid for your host operating system.</p>
+              <div class="code-shell">
+                <div class="code-bar">
+                  <div class="dots"><span></span><span></span><span></span></div>
+                  <span style="margin-left:auto">terminal — bash</span>
+                  <button class="copy-btn ms-2" type="button" data-copy="git clone https://github.com/suryaprakash251201/nexora.git
+cd nexora
+go run ./cmd/nexora
+# second terminal:
+cd web && npm install && npm run dev" aria-label="Copy source install"><i class="bi bi-clipboard"></i></button>
+                </div>
+                <pre><code><span class="c"># Terminal 1 — API (http://localhost:8080)</span>
+<span class="k">go run</span> ./cmd/nexora
+
+<span class="c"># Terminal 2 — web app (http://localhost:5173)</span>
+<span class="k">cd</span> web <span class="p">&amp;&amp;</span> npm install <span class="p">&amp;&amp;</span> npm run dev</code></pre>
+              </div>
+              <p>The Vite dev server proxies <code>/api</code> and <code>/healthz</code> to <code>http://localhost:8080</code>. For a local root, replace the Docker-oriented defaults in <code>.env</code>:</p>
+              <div class="code-shell">
+                <div class="code-bar">
+                  <div class="dots"><span></span><span></span><span></span></div>
+                  <span style="margin-left:auto">.env</span>
+                  <button class="copy-btn ms-2" type="button" data-copy="NEXORA_DEFAULT_ROOTS=Files:./data/files:false" aria-label="Copy env line"><i class="bi bi-clipboard"></i></button>
+                </div>
+                <pre><code><span class="n">NEXORA_DEFAULT_ROOTS</span>=Files:./data/files:false</code></pre>
+              </div>
+            </div>
+
+            <!-- FIRST RUN -->
+            <div class="doc-section" id="first-run">
+              <h2><span class="doc-ico ic-amber"><i class="bi bi-magic"></i></span>First-Run Setup</h2>
+              <ol>
+                <li>Open <code>http://localhost</code> in your browser.</li>
+                <li>Complete the <strong>Setup Wizard</strong> to create your administrator account.</li>
+                <li>Nexora auto-creates the configured default storage roots from <code>NEXORA_DEFAULT_ROOTS</code> and grants that administrator access.</li>
+                <li>Start browsing — upload files, mount more roots from the Admin panel, and invite users.</li>
+              </ol>
+              <div class="docs-callout warn">
+                <i class="bi bi-exclamation-triangle-fill"></i>
+                <span>Do not enable <code>NEXORA_SECURE_COOKIES=true</code> for a plain <code>http://localhost</code> installation — secure cookies require HTTPS.</span>
+              </div>
+            </div>
+
+            <!-- HTTPS -->
+            <div class="doc-section" id="https">
+              <h2><span class="doc-ico ic-teal"><i class="bi bi-shield-lock"></i></span>HTTPS &amp; Reverse Proxy</h2>
+              <p>Nexora serves HTTP inside its container. For an internet-facing server, place Caddy, Nginx, Traefik, Cloudflare Tunnel, or another TLS proxy in front of it.</p>
+              <ol>
+                <li>Configure the proxy to forward your domain to Nexora's HTTP port.</li>
+                <li>Set <code>NEXORA_BASE_URL</code> to the public HTTPS URL (used for generated share links).</li>
+                <li>Set <code>NEXORA_SECURE_COOKIES=true</code>.</li>
+                <li>Set <code>NEXORA_TRUSTED_PROXIES</code> only to the proxy networks that should be trusted for <code>X-Forwarded-For</code> and <code>X-Real-IP</code>.</li>
+                <li>Prevent direct public access to the HTTP port when the proxy is on the same server.</li>
+              </ol>
+              <div class="code-shell">
+                <div class="code-bar">
+                  <div class="dots"><span></span><span></span><span></span></div>
+                  <span style="margin-left:auto">.env</span>
+                  <button class="copy-btn ms-2" type="button" data-copy="NEXORA_BASE_URL=https://files.example.com
+NEXORA_SESSION_SECRET=replace-with-a-long-random-secret
+NEXORA_SECURE_COOKIES=true
+# NEXORA_TRUSTED_PROXIES=172.16.0.0/12" aria-label="Copy env example"><i class="bi bi-clipboard"></i></button>
+                </div>
+                <pre><code><span class="c"># Public URL for generated share links; no trailing slash</span>
+<span class="n">NEXORA_BASE_URL</span>=https://files.example.com
+
+<span class="c"># Use a stable random secret for sessions</span>
+<span class="n">NEXORA_SESSION_SECRET</span>=replace-with-a-long-random-secret
+
+<span class="c"># Required when HTTPS is terminated by a reverse proxy</span>
+<span class="n">NEXORA_SECURE_COOKIES</span>=true
+
+<span class="c"># Set only when a trusted proxy supplies client-IP headers</span>
+<span class="c"># NEXORA_TRUSTED_PROXIES=172.16.0.0/12</span></code></pre>
+              </div>
+            </div>
+
+            <!-- CONFIGURATION -->
+            <div class="doc-section" id="configuration">
+              <h2><span class="doc-ico ic-cyan"><i class="bi bi-sliders"></i></span>Configuration Reference</h2>
+              <p>Copy <code>.env.example</code> to <code>.env</code> for documented defaults. Key settings:</p>
+              <table class="docs-table">
+                <thead><tr><th>Variable</th><th>Purpose</th></tr></thead>
+                <tbody>
+                  <tr><td><code>NEXORA_LISTEN_ADDR</code></td><td>HTTP listen address; Compose sets this to <code>:80</code>.</td></tr>
+                  <tr><td><code>NEXORA_BASE_URL</code></td><td>Public base URL for generated share links.</td></tr>
+                  <tr><td><code>NEXORA_DATA_DIR</code></td><td>Database, cache, and archive-workspace directory.</td></tr>
+                  <tr><td><code>NEXORA_DATABASE_TYPE</code></td><td>Metadata store: <code>sqlite</code> (default) or <code>postgres</code>.</td></tr>
+                  <tr><td><code>NEXORA_DATABASE_PATH</code> / <code>NEXORA_DATABASE_URL</code></td><td>SQLite path or PostgreSQL connection URL.</td></tr>
+                  <tr><td><code>NEXORA_SESSION_SECRET</code></td><td>Session-signing secret (generate with <code>openssl rand -hex 32</code>).</td></tr>
+                  <tr><td><code>NEXORA_SESSION_LIFETIME</code></td><td>Session lifetime, e.g. <code>168h</code>.</td></tr>
+                  <tr><td><code>NEXORA_SECURE_COOKIES</code></td><td>Set to <code>true</code> for HTTPS.</td></tr>
+                  <tr><td><code>NEXORA_MAX_UPLOAD_SIZE</code></td><td>Maximum upload size, e.g. <code>2GB</code>.</td></tr>
+                  <tr><td><code>NEXORA_ALLOWED_MIME</code></td><td>Optional comma-separated upload allowlist.</td></tr>
+                  <tr><td><code>NEXORA_DEFAULT_ROOTS</code></td><td>Roots created on first setup: <code>Name:/path:readOnly[:indexed]</code>.</td></tr>
+                  <tr><td><code>NEXORA_RATE_LIMIT_PER_MIN</code></td><td>Login rate limit (default <code>60</code>).</td></tr>
+                  <tr><td><code>NEXORA_LOCKOUT_ATTEMPTS</code> / <code>NEXORA_LOCKOUT_WINDOW</code></td><td>Account lockout policy (default <code>5</code> / <code>15m</code>).</td></tr>
+                  <tr><td><code>NEXORA_TRUSTED_PROXIES</code></td><td>Proxy CIDRs allowed to send client-IP headers.</td></tr>
+                  <tr><td><code>NEXORA_CORS_ORIGINS</code></td><td>Allowed browser origins; empty disables CORS.</td></tr>
+                  <tr><td><code>NEXORA_ENABLE_FFMPEG_THUMBS</code></td><td>Enables FFmpeg video thumbnail generation.</td></tr>
+                  <tr><td><code>NEXORA_THUMBNAIL_MAX_SIZE</code> / <code>NEXORA_THUMBNAIL_TTL</code></td><td>Thumbnail cache policy (default <code>20MB</code> / <code>168h</code>).</td></tr>
+                  <tr><td><code>NEXORA_ENABLE_PROMETHEUS</code></td><td>Enables the <code>/metrics</code> endpoint.</td></tr>
+                  <tr><td><code>NEXORA_MAX_EDITABLE_SIZE</code></td><td>Maximum file size for the built-in editor.</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- FEATURES GUIDE -->
+            <div class="doc-section" id="features-guide">
+              <h2><span class="doc-ico ic-purple"><i class="bi bi-grid"></i></span>Features Guide</h2>
+
+              <h3>File Browser</h3>
+              <p>Right-click any file for the full action menu: download, preview, rename, move, copy, delete (to trash), archive as ZIP, or add to favorites.</p>
+              <ul>
+                <li><strong>Upload</strong> — drag-and-drop anywhere, or use the Upload button.</li>
+                <li><strong>Preview</strong> — images, video, audio, PDFs, Markdown, and code in one click.</li>
+                <li><strong>Bulk operations</strong> — multi-select files for batch download, move, delete, or bulk rename.</li>
+                <li><strong>Views</strong> — grid or list, with density control and a column picker.</li>
+              </ul>
+
+              <h3>Multiple Storage Roots</h3>
+              <p>Named locations managed from one UI, with per-user <strong>read or write</strong> access on each root. Configure defaults in <code>.env</code>:</p>
+              <div class="code-shell">
+                <div class="code-bar">
+                  <div class="dots"><span></span><span></span><span></span></div>
+                  <span style="margin-left:auto">.env</span>
+                  <button class="copy-btn ms-2" type="button" data-copy="NEXORA_DEFAULT_ROOTS=Files:/mnt/files:false,Media:/mnt/media:true,Backups:/mnt/backups:false" aria-label="Copy roots"><i class="bi bi-clipboard"></i></button>
+                </div>
+                <pre><code><span class="n">NEXORA_DEFAULT_ROOTS</span>=Files:/mnt/files:false,Media:/mnt/media:true,Backups:/mnt/backups:false</code></pre>
+              </div>
+
+              <h3>Search &amp; Organization</h3>
+              <ul>
+                <li><strong>Instant search</strong> — type in the search bar at the top of the file browser.</li>
+                <li><strong>Global search</strong> — full-text search across all roots from the Search view.</li>
+                <li><strong>Filters</strong> — by type: All, Documents, Images, Videos, Audio, Archives, Folders.</li>
+                <li><strong>Smart folders</strong> — saved searches that auto-update, e.g. “Images modified this week”.</li>
+                <li><strong>Tags &amp; favorites</strong> — organize anything, from anywhere.</li>
+                <li><strong>Duplicate discovery</strong> — find duplicate files by checksum.</li>
+              </ul>
+
+              <h3>Sharing</h3>
+              <p>Create revocable public links with <strong>optional expiry, password protection, and download limits</strong>. The shared page works for anyone — no account required.</p>
+
+              <h3>Playlists &amp; Media</h3>
+              <ul>
+                <li><strong>Audio playlists</strong> — public and collaborative playlists with a lossless-friendly player.</li>
+                <li><strong>Video</strong> — HTTP Range streaming for instant seeking, subtitles, theater mode, browser fullscreen.</li>
+                <li><strong>FFmpeg</strong> — optional video thumbnails and transcoding.</li>
+              </ul>
+
+              <h3>Administration</h3>
+              <p>Users, roles, root access, storage settings, <strong>storage analytics dashboards</strong>, audit history, search reindexing, and file versioning — all from the Admin panel.</p>
+            </div>
+
+            <!-- SHORTCUTS -->
+            <div class="doc-section" id="shortcuts">
+              <h2><span class="doc-ico ic-pink"><i class="bi bi-keyboard"></i></span>Keyboard Shortcuts</h2>
+              <p>Press <span class="kbd">?</span> (or <span class="kbd">Cmd+/</span> / <span class="kbd">Ctrl+/</span>) anywhere to see the full searchable overlay.</p>
+              <h3>Global</h3>
+              <table class="docs-table">
+                <thead><tr><th>Shortcut</th><th>Action</th></tr></thead>
+                <tbody>
+                  <tr><td><span class="kbd">Cmd+K</span> / <span class="kbd">Ctrl+K</span></td><td>Open command palette</td></tr>
+                  <tr><td><span class="kbd">?</span> / <span class="kbd">Cmd+/</span> / <span class="kbd">Ctrl+/</span></td><td>Keyboard shortcuts overlay</td></tr>
+                  <tr><td><span class="kbd">Esc</span></td><td>Close modal / clear selection</td></tr>
+                </tbody>
+              </table>
+              <h3>File operations</h3>
+              <table class="docs-table">
+                <thead><tr><th>Shortcut</th><th>Action</th></tr></thead>
+                <tbody>
+                  <tr><td><span class="kbd">Cmd+N</span> / <span class="kbd">Ctrl+N</span></td><td>New folder</td></tr>
+                  <tr><td><span class="kbd">Cmd+Shift+N</span> / <span class="kbd">Ctrl+Shift+N</span></td><td>New text file</td></tr>
+                  <tr><td><span class="kbd">Cmd+U</span> / <span class="kbd">Ctrl+U</span></td><td>Upload files</td></tr>
+                  <tr><td><span class="kbd">F5</span></td><td>Refresh view</td></tr>
+                  <tr><td><span class="kbd">Cmd+D</span> / <span class="kbd">Ctrl+D</span></td><td>Download selected</td></tr>
+                  <tr><td><span class="kbd">Cmd+Shift+S</span> / <span class="kbd">Ctrl+Shift+S</span></td><td>Share selected</td></tr>
+                  <tr><td><span class="kbd">Cmd+Shift+F</span> / <span class="kbd">Ctrl+Shift+F</span></td><td>Toggle favorite</td></tr>
+                  <tr><td><span class="kbd">F2</span></td><td>Rename selected item</td></tr>
+                  <tr><td><span class="kbd">Cmd+Shift+M</span> / <span class="kbd">Ctrl+Shift+M</span></td><td>Move selection</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- SECURITY -->
+            <div class="doc-section" id="security">
+              <h2><span class="doc-ico ic-rose"><i class="bi bi-shield-check"></i></span>Security &amp; Operations</h2>
+              <ul>
+                <li>Passwords use <strong>Argon2id</strong>; sessions are server-side and use HTTP-only cookies.</li>
+                <li>State-changing requests require <strong>CSRF validation</strong>.</li>
+                <li>Login attempts are <strong>rate-limited</strong> and protected by <strong>account lockouts</strong>; optional <strong>TOTP</strong> two-factor authentication.</li>
+                <li>Storage access is permission-scoped, and path validation prevents traversal outside an authorized root.</li>
+                <li>The Docker image runs as an <strong>unprivileged user</strong> with a read-only root filesystem, dropped capabilities, and a temporary <code>/tmp</code> filesystem.</li>
+                <li>Audit records cover authentication, administration, and file activity.</li>
+              </ul>
+              <h3>Health checks</h3>
+              <ul>
+                <li><code>GET /healthz</code> — liveness</li>
+                <li><code>GET /readyz</code> — database readiness</li>
+              </ul>
+            </div>
+
+            <!-- BACKUP -->
+            <div class="doc-section" id="backup">
+              <h2><span class="doc-ico ic-orange"><i class="bi bi-archive"></i></span>Backup &amp; Upgrade</h2>
+              <h3>Backup</h3>
+              <p>Back up the <code>nexora-data</code> volume and every mounted storage folder before upgrades. The volume holds:</p>
+              <ul>
+                <li>SQLite database (or PostgreSQL if configured)</li>
+                <li>Thumbnail cache</li>
+                <li>Archive workspace</li>
+              </ul>
+              <div class="code-shell">
+                <div class="code-bar">
+                  <div class="dots"><span></span><span></span><span></span></div>
+                  <span style="margin-left:auto">terminal — bash</span>
+                  <button class="copy-btn ms-2" type="button" data-copy="docker run --rm -v nexora-data:/data -v $(pwd):/backup alpine tar czf /backup/nexora-data.tar.gz -C /data ." aria-label="Copy backup"><i class="bi bi-clipboard"></i></button>
+                </div>
+                <pre><code><span class="k">docker run</span> --rm <span class="p">\</span>
+  -v nexora-data:/data <span class="p">\</span>
+  -v <span class="n">$(pwd)</span>:/backup alpine <span class="p">\</span>
+  tar czf /backup/nexora-data.tar.gz -C /data .</code></pre>
+              </div>
+              <h3 id="upgrading">Upgrade</h3>
+              <div class="code-shell">
+                <div class="code-bar">
+                  <div class="dots"><span></span><span></span><span></span></div>
+                  <span style="margin-left:auto">terminal — bash</span>
+                  <button class="copy-btn ms-2" type="button" data-copy="docker compose up -d --build
+docker compose logs -f nexora" aria-label="Copy upgrade"><i class="bi bi-clipboard"></i></button>
+                </div>
+                <pre><code><span class="c"># From source builds</span>
+<span class="k">docker compose</span> up -d --build
+<span class="k">docker compose</span> logs -f nexora
+
+<span class="c"># From a GHCR image, just pull the new tag and recreate</span>
+<span class="k">docker pull</span> ghcr.io/suryaprakash251201/nexora:latest-8141398</code></pre>
+              </div>
+              <div class="docs-callout warn">
+                <i class="bi bi-exclamation-triangle-fill"></i>
+                <span>Migrations run forward at startup. Restoring the database and the prior image is the safe rollback method.</span>
+              </div>
+            </div>
+
+            <!-- API -->
+            <div class="doc-section" id="api">
+              <h2><span class="doc-ico ic-blue"><i class="bi bi-braces"></i></span>API &amp; Health Checks</h2>
+              <p>Application endpoints live under <code>/api/v1</code>; public health checks are <code>/healthz</code> and <code>/readyz</code>. The complete route list is in <code>internal/api/server.go</code> in the repository.</p>
+              <div class="code-shell">
+                <div class="code-bar">
+                  <div class="dots"><span></span><span></span><span></span></div>
+                  <span style="margin-left:auto">terminal — curl</span>
+                  <button class="copy-btn ms-2" type="button" data-copy="curl -f http://localhost/healthz
+curl -f http://localhost/readyz" aria-label="Copy health checks"><i class="bi bi-clipboard"></i></button>
+                </div>
+                <pre><code><span class="k">curl</span> -f http://localhost/healthz
+<span class="p">→</span> {<span class="s">"service"</span>:<span class="s">"nexora"</span>,<span class="s">"status"</span>:<span class="s">"ok"</span>}
+
+<span class="k">curl</span> -f http://localhost/readyz
+<span class="p">→</span> {<span class="s">"status"</span>:<span class="s">"ready"</span>}</code></pre>
+              </div>
+              <p>Design tokens and visual guidance are in <code>docs/design-system.md</code>; a complete feature walkthrough is in <code>docs/features.md</code> — both in the GitHub repository.</p>
+            </div>
+
+            <!-- FAQ -->
+            <div class="doc-section" id="faq">
+              <h2><span class="doc-ico ic-amber"><i class="bi bi-question-circle"></i></span>FAQ</h2>
+              <h3>Is Nexora free?</h3>
+              <p>Yes — it's open source under the <a href="https://github.com/suryaprakash251201/nexora/blob/main/LICENSE" target="_blank" rel="noopener">MIT license</a>. Run it forever, modify it, host it for as many users as you like.</p>
+              <h3>Can I use PostgreSQL instead of SQLite?</h3>
+              <p>Yes. Set <code>NEXORA_DATABASE_TYPE=postgres</code> and provide <code>NEXORA_DATABASE_URL</code>. SQLite remains the zero-config default. See <code>docker-compose.postgres.yml</code> in the repo.</p>
+              <h3>Where do I report security issues?</h3>
+              <p>Follow the instructions in <a href="https://github.com/suryaprakash251201/nexora/blob/main/SECURITY.md" target="_blank" rel="noopener">SECURITY.md</a> — do not open a public issue for vulnerabilities.</p>
+              <h3>How do I expose only a subfolder of a drive?</h3>
+              <p>Mount the exact folder into the container and register it as its own root — roots are paths, not whole drives.</p>
+            </div>
+
+            <!-- prev / next -->
+            <div class="doc-prevnext">
+              <a href="index.html#features"><i class="bi bi-arrow-left me-1"></i>Features overview</a>
+              <a href="index.html#deploy">Install on homepage <i class="bi bi-arrow-right ms-1"></i></a>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= FOOTER ================= -->
+  <footer class="nx-footer">
+    <div class="container">
+      <div class="row g-4">
+        <div class="col-lg-5">
+          <a class="footer-brand mb-3 d-inline-flex" href="index.html">
+            <img src="assets/img/logo.svg" alt="Nexora logo" />
+            Nexora
+          </a>
+          <p class="text-muted-nx mt-3 mb-0" style="font-size:0.9rem; max-width:340px">
+            A private, self-hosted file workspace. React interface, Go API, SQLite metadata,
+            and your storage — in a single deployable service.
+          </p>
+          <div class="d-flex gap-3 mt-4 fs-5">
+            <a href="https://github.com/suryaprakash251201/nexora" target="_blank" rel="noopener" aria-label="GitHub"><i class="bi bi-github"></i></a>
+            <a href="https://github.com/suryaprakash251201/nexora/blob/main/LICENSE" target="_blank" rel="noopener" aria-label="License"><i class="bi bi-shield-check"></i></a>
+            <a href="https://pms2.tail58d7ea.ts.net" target="_blank" rel="noopener" aria-label="Live demo"><i class="bi bi-box-arrow-up-right"></i></a>
+          </div>
+        </div>
+        <div class="col-6 col-lg-2 offset-lg-1">
+          <h6>Product</h6>
+          <ul class="list-unstyled d-grid gap-2">
+            <li><a href="index.html#features">Features</a></li>
+            <li><a href="index.html#screenshots">Screenshots</a></li>
+            <li><a href="index.html#stack">Tech stack</a></li>
+            <li><a href="index.html#faq">FAQ</a></li>
+          </ul>
+        </div>
+        <div class="col-6 col-lg-2">
+          <h6>Resources</h6>
+          <ul class="list-unstyled d-grid gap-2">
+            <li><a href="docs.html">Documentation</a></li>
+            <li><a href="docs.html#configuration">Configuration</a></li>
+            <li><a href="https://github.com/suryaprakash251201/nexora" target="_blank" rel="noopener">GitHub</a></li>
+            <li><a href="https://github.com/suryaprakash251201/nexora/issues" target="_blank" rel="noopener">Issues</a></li>
+          </ul>
+        </div>
+        <div class="col-lg-2">
+          <h6>Legal</h6>
+          <ul class="list-unstyled d-grid gap-2">
+            <li><a href="https://github.com/suryaprakash251201/nexora/blob/main/LICENSE" target="_blank" rel="noopener">MIT License</a></li>
+            <li><a href="https://github.com/suryaprakash251201/nexora/blob/main/SECURITY.md" target="_blank" rel="noopener">Security policy</a></li>
+          </ul>
+        </div>
+      </div>
+      <hr class="my-4" style="border-color: var(--nx-border)" />
+      <div class="d-flex flex-column flex-md-row justify-content-between align-items-center gap-2 text-muted-nx" style="font-size:0.82rem">
+        <span>© 2026 Nexora Project · <a href="https://github.com/suryaprakash251201/nexora" target="_blank" rel="noopener">GitHub</a> · <a href="docs.html">Docs</a></span>
+        <span>Made with <i class="bi bi-heart-fill" style="color:#f472b6"></i> and Go</span>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="assets/js/main.js"></script>
+</body>
+</html>

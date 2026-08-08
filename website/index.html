@@ -1,0 +1,813 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nexora — Your private file workspace</title>
+  <script>
+    /* apply theme before first paint to avoid flash */
+    (function () {
+      try {
+        var t = localStorage.getItem('nx-theme');
+        if (t !== 'dark' && t !== 'light') t = 'light'; /* light is the default */
+        document.documentElement.setAttribute('data-theme', t);
+      } catch (e) { document.documentElement.setAttribute('data-theme', 'light'); }
+    })();
+  </script>
+  <meta name="description" content="Nexora is a private, self-hosted file workspace. A React interface, Go API, SQLite metadata, and local storage roots in a single deployable service. Browse, search, preview, share and organize your files — your data stays yours." />
+  <meta name="theme-color" content="#090B12" />
+  <meta property="og:title" content="Nexora — Your private file workspace" />
+  <meta property="og:description" content="A private, self-hosted file workspace with search, previews, sharing, playlists and more — all in a single container." />
+  <meta property="og:type" content="website" />
+
+  <link rel="icon" type="image/svg+xml" href="assets/img/logo.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet" />
+  <link href="assets/css/style.css" rel="stylesheet" />
+</head>
+<body>
+
+  <!-- ambient background -->
+  <div class="bg-ambient"></div>
+  <div class="grid-overlay"></div>
+
+  <!-- ================= NAVBAR ================= -->
+  <nav class="navbar navbar-expand-lg fixed-top nx-navbar" id="nxNav">
+    <div class="container">
+      <a class="navbar-brand" href="#top">
+        <img src="assets/img/logo.svg" alt="Nexora logo" />
+        Nexora
+      </a>
+      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#nxMenu" aria-controls="nxMenu" aria-expanded="false" aria-label="Toggle navigation">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+      <div class="collapse navbar-collapse" id="nxMenu">
+        <ul class="navbar-nav mx-auto mb-2 mb-lg-0">
+          <li class="nav-item"><a class="nav-link" href="#features">Features</a></li>
+          <li class="nav-item"><a class="nav-link" href="#screenshots">Screenshots</a></li>
+          <li class="nav-item"><a class="nav-link" href="#deploy">Install</a></li>
+          <li class="nav-item"><a class="nav-link" href="#faq">FAQ</a></li>
+          <li class="nav-item"><a class="nav-link" href="docs.html">Docs</a></li>
+        </ul>
+        <div class="d-flex gap-2 align-items-center">
+          <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle light or dark theme" title="Toggle theme">
+            <i class="bi bi-sun-fill"></i>
+          </button>
+          <a href="https://pms2.tail58d7ea.ts.net" target="_blank" rel="noopener" class="btn btn-nx-ghost btn-nx-sm">
+            <span class="live-dot me-2" style="display:inline-block"></span>Live Demo
+          </a>
+          <a href="https://github.com/suryaprakash251201/nexora" target="_blank" rel="noopener" class="btn btn-nx-primary btn-nx-sm">
+            <i class="bi bi-github me-1"></i> GitHub
+          </a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ================= HERO ================= -->
+  <header class="hero text-center" id="top">
+    <div class="container">
+      <div class="reveal">
+        <a class="hero-badge" href="https://pms2.tail58d7ea.ts.net" target="_blank" rel="noopener">
+          <span class="live-dot"></span>
+          Live demo · v1.7 · Self-hosted · MIT
+        </a>
+      </div>
+      <h1 class="reveal" style="--rd:80ms">
+        Your files.<br />
+        <span class="text-gradient">Your server.</span><br />
+        Zero compromise.
+      </h1>
+      <p class="lead mx-auto reveal" style="--rd:160ms">
+        Nexora is a private, self-hosted file workspace. It combines a fast React
+        interface, a Go API, SQLite metadata, and one or more local storage roots
+        in a single deployable service — so your data never leaves your hands.
+      </p>
+      <div class="hero-ctas d-flex flex-wrap justify-content-center reveal" style="--rd:240ms">
+        <a href="https://pms2.tail58d7ea.ts.net" target="_blank" rel="noopener" class="btn btn-nx-primary btn-lg">
+          <i class="bi bi-box-arrow-up-right me-2"></i>Open Live Demo
+        </a>
+        <a href="#deploy" class="btn btn-nx-ghost btn-lg">
+          <i class="bi bi-rocket-takeoff me-2"></i>Deploy with Docker
+        </a>
+      </div>
+      <div class="hero-pull reveal" style="--rd:300ms">
+        <div class="pull-pill">
+          <i class="bi bi-box-seam"></i>
+          <code>docker pull ghcr.io/suryaprakash251201/nexora:latest-8141398</code>
+          <button class="copy-btn" type="button" data-copy="docker pull ghcr.io/suryaprakash251201/nexora:latest-8141398" aria-label="Copy pull command"><i class="bi bi-clipboard"></i></button>
+        </div>
+      </div>
+      <div class="hero-meta reveal" style="--rd:320ms">
+        <span><i class="bi bi-shield-check"></i>Self-hosted &amp; private</span>
+        <span><i class="bi bi-box-seam"></i>Single container</span>
+        <span><i class="bi bi-arrow-repeat"></i>1-command deploy</span>
+        <span><i class="bi bi-database-check"></i>SQLite · optional PostgreSQL</span>
+      </div>
+
+      <!-- capability icon strip -->
+      <div class="cap-strip reveal" style="--rd:360ms">
+        <span class="cap-pill"><i class="bi bi-cloud-arrow-up-fill ic-blue"></i>Upload</span>
+        <span class="cap-pill"><i class="bi bi-cloud-arrow-down-fill ic-cyan"></i>Download</span>
+        <span class="cap-pill"><i class="bi bi-play-circle-fill ic-emerald"></i>Stream</span>
+        <span class="cap-pill"><i class="bi bi-link-45deg ic-purple"></i>Share</span>
+        <span class="cap-pill"><i class="bi bi-search-heart-fill ic-pink"></i>Search</span>
+        <span class="cap-pill"><i class="bi bi-tags-fill ic-amber"></i>Tag</span>
+        <span class="cap-pill"><i class="bi bi-archive-fill ic-orange"></i>Archive</span>
+        <span class="cap-pill"><i class="bi bi-shield-lock-fill ic-teal"></i>Protect</span>
+      </div>
+
+      <!-- browser mockup -->
+      <div class="mockup reveal" style="--rd:400ms">
+        <div class="window">
+          <div class="window-bar">
+            <div class="traffic"><span></span><span></span><span></span></div>
+            <div class="url"><i class="bi bi-lock-fill me-1 text-success"></i>localhost — Nexora</div>
+          </div>
+          <img src="assets/img/screenshots/shot-1.png" alt="Nexora file workspace interface" loading="eager" />
+        </div>
+        <div class="mockup-float float-1 d-none d-lg-block">
+          <div class="d-flex align-items-center">
+            <span class="fi bi bi-shield-lock-fill" style="color:var(--c-emerald)"></span>
+            <div><strong>Encrypted sessions</strong><small>Argon2id · CSRF protected</small></div>
+          </div>
+        </div>
+        <div class="mockup-float float-2 d-none d-lg-block">
+          <div class="d-flex align-items-center">
+            <span class="fi bi bi-cloud-arrow-down-fill" style="color:var(--c-blue)"></span>
+            <div><strong>Transfers panel</strong><small>Uploads &amp; downloads in one place</small></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ================= STATS ================= -->
+  <section class="section pt-0">
+    <div class="container">
+      <div class="row g-4">
+        <div class="col-6 col-lg-3 reveal">
+          <div class="stat-card text-center">
+            <div class="stat-ico ic-blue mx-auto"><i class="bi bi-stars"></i></div>
+            <div class="stat-num" data-count="12">0</div>
+            <div class="stat-label">Features shipped</div>
+          </div>
+        </div>
+        <div class="col-6 col-lg-3 reveal" style="--rd:80ms">
+          <div class="stat-card text-center">
+            <div class="stat-ico ic-cyan mx-auto"><i class="bi bi-folder-symlink"></i></div>
+            <div class="stat-num" data-count="20">0</div>
+            <div class="stat-label">File operations</div>
+          </div>
+        </div>
+        <div class="col-6 col-lg-3 reveal" style="--rd:160ms">
+          <div class="stat-card text-center">
+            <div class="stat-ico ic-emerald mx-auto"><i class="bi bi-infinity"></i></div>
+            <div class="stat-num"><i class="bi bi-infinity"></i></div>
+            <div class="stat-label">Scalable storage roots</div>
+          </div>
+        </div>
+        <div class="col-6 col-lg-3 reveal" style="--rd:240ms">
+          <div class="stat-card text-center">
+            <div class="stat-ico ic-amber mx-auto"><i class="bi bi-key"></i></div>
+            <div class="stat-num" data-count="100">0</div>
+            <div class="stat-label">% Data ownership</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= FEATURES ================= -->
+  <section class="section" id="features">
+    <div class="container">
+      <div class="section-head text-center reveal">
+        <span class="eyebrow">Features</span>
+        <h2>Everything a file server should be.<br class="d-none d-md-block" /> <span class="text-gradient">Nothing it shouldn't.</span></h2>
+        <p>Browse, organize, preview, share, and play — a complete private workspace with the features you expect and the privacy you demand.</p>
+      </div>
+      <div class="row g-4">
+        <div class="col-md-6 col-lg-4 reveal">
+          <div class="feature-card">
+            <span class="feature-tag">Core</span>
+            <div class="feature-icon ic-blue"><i class="bi bi-folder2-open"></i></div>
+            <h5>File workspace</h5>
+            <p>Browse, upload, download, create, rename, move, copy, delete, restore, and archive files with a fluid, keyboard-friendly interface.</p>
+          </div>
+        </div>
+        <div class="col-md-6 col-lg-4 reveal" style="--rd:80ms">
+          <div class="feature-card">
+            <span class="feature-tag">Storage</span>
+            <div class="feature-icon ic-cyan"><i class="bi bi-hdd-stack"></i></div>
+            <h5>Multiple storage roots</h5>
+            <p>Manage named locations from one UI — with per-user read or write access on every root. Your disk, your rules.</p>
+          </div>
+        </div>
+        <div class="col-md-6 col-lg-4 reveal" style="--rd:160ms">
+          <div class="feature-card">
+            <span class="feature-tag">Search</span>
+            <div class="feature-icon ic-purple"><i class="bi bi-search-heart"></i></div>
+            <h5>Search &amp; organization</h5>
+            <p>Indexed search, tags, favorites, recents, checksums, metadata, and duplicate-file discovery keep everything findable.</p>
+          </div>
+        </div>
+        <div class="col-md-6 col-lg-4 reveal" style="--rd:240ms">
+          <div class="feature-card">
+            <span class="feature-tag">Media</span>
+            <div class="feature-icon ic-pink"><i class="bi bi-play-btn"></i></div>
+            <h5>Previews &amp; media</h5>
+            <p>Images, video, audio, PDFs, Markdown, and code. Video supports range streaming, subtitles, theater mode, and fullscreen.</p>
+          </div>
+        </div>
+        <div class="col-md-6 col-lg-4 reveal" style="--rd:320ms">
+          <div class="feature-card">
+            <span class="feature-tag">Sharing</span>
+            <div class="feature-icon ic-emerald"><i class="bi bi-link-45deg"></i></div>
+            <h5>Revocable sharing</h5>
+            <p>Create public links with optional expiry, password protection, and download limits — then revoke them anytime.</p>
+          </div>
+        </div>
+        <div class="col-md-6 col-lg-4 reveal" style="--rd:400ms">
+          <div class="feature-card">
+            <span class="feature-tag">Playlists</span>
+            <div class="feature-icon ic-amber"><i class="bi bi-music-note-beamed"></i></div>
+            <h5>Audio playlists</h5>
+            <p>Create and manage playlists — including public and collaborative playlists — with a lossless-friendly player.</p>
+          </div>
+        </div>
+        <div class="col-md-6 col-lg-4 reveal" style="--rd:480ms">
+          <div class="feature-card">
+            <span class="feature-tag">Admin</span>
+            <div class="feature-icon ic-orange"><i class="bi bi-person-gear"></i></div>
+            <h5>Administration</h5>
+            <p>Users, roles, root access, storage settings, audit history, and search reindexing — full control from one panel.</p>
+          </div>
+        </div>
+        <div class="col-md-6 col-lg-4 reveal" style="--rd:560ms">
+          <div class="feature-card">
+            <span class="feature-tag">UX</span>
+            <div class="feature-icon ic-teal"><i class="bi bi-moon-stars"></i></div>
+            <h5>Responsive &amp; beautiful</h5>
+            <p>Light and dark themes, density control, command palette, keyboard shortcuts, and mobile navigation.</p>
+          </div>
+        </div>
+        <div class="col-md-6 col-lg-4 reveal" style="--rd:640ms">
+          <div class="feature-card">
+            <span class="feature-tag">Analytics</span>
+            <div class="feature-icon ic-rose"><i class="bi bi-graph-up-arrow"></i></div>
+            <h5>Storage analytics</h5>
+            <p>Live dashboards for storage usage, capacity, and file composition — plus bulk operations and file versioning.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= SCREENSHOTS ================= -->
+  <section class="section" id="screenshots">
+    <div class="container">
+      <div class="section-head text-center reveal">
+        <span class="eyebrow">Gallery</span>
+        <h2>Built for speed.<br class="d-none d-md-block" /> <span class="text-gradient">Polished for humans.</span></h2>
+        <p>Real screenshots from a running Nexora instance. Click any shot to view it full size.</p>
+      </div>
+      <div class="row g-3" id="gallery">
+        <div class="col-6 col-md-4 col-lg-3 reveal">
+          <a class="gallery-item" href="assets/img/screenshots/shot-1.png" data-full="assets/img/screenshots/shot-1.png" data-caption="File workspace">
+            <img src="assets/img/screenshots/shot-1.png" alt="File workspace" loading="lazy" />
+            <span class="gallery-cap"><i class="bi bi-folder2-open"></i>File workspace</span>
+          </a>
+        </div>
+        <div class="col-6 col-md-4 col-lg-3 reveal" style="--rd:60ms">
+          <a class="gallery-item" href="assets/img/screenshots/shot-2.png" data-full="assets/img/screenshots/shot-2.png" data-caption="Browse &amp; navigate">
+            <img src="assets/img/screenshots/shot-2.png" alt="Browse and navigate" loading="lazy" />
+            <span class="gallery-cap"><i class="bi bi-collection"></i>Browse &amp; navigate</span>
+          </a>
+        </div>
+        <div class="col-6 col-md-4 col-lg-3 reveal" style="--rd:120ms">
+          <a class="gallery-item" href="assets/img/screenshots/shot-3.png" data-full="assets/img/screenshots/shot-3.png" data-caption="File management">
+            <img src="assets/img/screenshots/shot-3.png" alt="File management" loading="lazy" />
+            <span class="gallery-cap"><i class="bi bi-arrow-left-right"></i>File management</span>
+          </a>
+        </div>
+        <div class="col-6 col-md-4 col-lg-3 reveal" style="--rd:180ms">
+          <a class="gallery-item" href="assets/img/screenshots/shot-4.png" data-full="assets/img/screenshots/shot-4.png" data-caption="Media preview">
+            <img src="assets/img/screenshots/shot-4.png" alt="Media preview" loading="lazy" />
+            <span class="gallery-cap"><i class="bi bi-play-btn"></i>Media preview</span>
+          </a>
+        </div>
+        <div class="col-6 col-md-4 col-lg-3 reveal" style="--rd:240ms">
+          <a class="gallery-item" href="assets/img/screenshots/shot-5.png" data-full="assets/img/screenshots/shot-5.png" data-caption="Image viewer">
+            <img src="assets/img/screenshots/shot-5.png" alt="Image viewer" loading="lazy" />
+            <span class="gallery-cap"><i class="bi bi-image"></i>Image viewer</span>
+          </a>
+        </div>
+        <div class="col-6 col-md-4 col-lg-3 reveal" style="--rd:300ms">
+          <a class="gallery-item" href="assets/img/screenshots/shot-6.png" data-full="assets/img/screenshots/shot-6.png" data-caption="Search &amp; filters">
+            <img src="assets/img/screenshots/shot-6.png" alt="Search and filters" loading="lazy" />
+            <span class="gallery-cap"><i class="bi bi-search"></i>Search &amp; filters</span>
+          </a>
+        </div>
+        <div class="col-6 col-md-4 col-lg-3 reveal" style="--rd:360ms">
+          <a class="gallery-item" href="assets/img/screenshots/shot-7.png" data-full="assets/img/screenshots/shot-7.png" data-caption="Organize &amp; tag">
+            <img src="assets/img/screenshots/shot-7.png" alt="Organize and tag" loading="lazy" />
+            <span class="gallery-cap"><i class="bi bi-tags"></i>Organize &amp; tag</span>
+          </a>
+        </div>
+        <div class="col-6 col-md-4 col-lg-3 reveal" style="--rd:420ms">
+          <a class="gallery-item" href="assets/img/screenshots/shot-8.png" data-full="assets/img/screenshots/shot-8.png" data-caption="Sharing">
+            <img src="assets/img/screenshots/shot-8.png" alt="Sharing" loading="lazy" />
+            <span class="gallery-cap"><i class="bi bi-link-45deg"></i>Sharing</span>
+          </a>
+        </div>
+        <div class="col-6 col-md-4 col-lg-3 reveal" style="--rd:480ms">
+          <a class="gallery-item" href="assets/img/screenshots/shot-9.png" data-full="assets/img/screenshots/shot-9.png" data-caption="Playlists">
+            <img src="assets/img/screenshots/shot-9.png" alt="Playlists" loading="lazy" />
+            <span class="gallery-cap"><i class="bi bi-music-note-beamed"></i>Playlists</span>
+          </a>
+        </div>
+        <div class="col-6 col-md-4 col-lg-3 reveal" style="--rd:540ms">
+          <a class="gallery-item" href="assets/img/screenshots/shot-10.png" data-full="assets/img/screenshots/shot-10.png" data-caption="Admin panel">
+            <img src="assets/img/screenshots/shot-10.png" alt="Admin panel" loading="lazy" />
+            <span class="gallery-cap"><i class="bi bi-person-gear"></i>Admin panel</span>
+          </a>
+        </div>
+        <div class="col-6 col-md-4 col-lg-3 reveal" style="--rd:600ms">
+          <a class="gallery-item" href="assets/img/screenshots/shot-11.png" data-full="assets/img/screenshots/shot-11.png" data-caption="Storage analytics">
+            <img src="assets/img/screenshots/shot-11.png" alt="Storage analytics" loading="lazy" />
+            <span class="gallery-cap"><i class="bi bi-graph-up-arrow"></i>Storage analytics</span>
+          </a>
+        </div>
+        <div class="col-6 col-md-4 col-lg-3 reveal" style="--rd:660ms">
+          <a class="gallery-item" href="assets/img/screenshots/shot-12.png" data-full="assets/img/screenshots/shot-12.png" data-caption="Video playback">
+            <img src="assets/img/screenshots/shot-12.png" alt="Video playback" loading="lazy" />
+            <span class="gallery-cap"><i class="bi bi-film"></i>Video playback</span>
+          </a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= TECH STACK ================= -->
+  <section class="section" id="stack">
+    <div class="container">
+      <div class="section-head text-center reveal">
+        <span class="eyebrow">Tech Stack</span>
+        <h2>Modern tools, <span class="text-gradient">boring reliability.</span></h2>
+        <p>A pragmatic stack that is fast to run, easy to reason about, and simple to deploy anywhere.</p>
+      </div>
+      <div class="row g-3">
+        <div class="col-6 col-md-4 col-lg-3 reveal">
+          <div class="tech-card">
+            <div class="tc-icon ic-blue"><i class="bi bi-filetype-tsx"></i></div>
+            <div><strong>React 18 + TypeScript</strong><small>Vite · Tailwind · Zustand</small></div>
+          </div>
+        </div>
+        <div class="col-6 col-md-4 col-lg-3 reveal" style="--rd:60ms">
+          <div class="tech-card">
+            <div class="tc-icon ic-cyan"><i class="bi bi-filetype-go"></i></div>
+            <div><strong>Go API</strong><small>Chi router · embedded migrations</small></div>
+          </div>
+        </div>
+        <div class="col-6 col-md-4 col-lg-3 reveal" style="--rd:120ms">
+          <div class="tech-card">
+            <div class="tc-icon ic-purple"><i class="bi bi-database"></i></div>
+            <div><strong>SQLite</strong><small>Optional PostgreSQL backend</small></div>
+          </div>
+        </div>
+        <div class="col-6 col-md-4 col-lg-3 reveal" style="--rd:180ms">
+          <div class="tech-card">
+            <div class="tc-icon ic-emerald"><i class="bi bi-box-seam"></i></div>
+            <div><strong>Single container</strong><small>Multi-stage Docker build</small></div>
+          </div>
+        </div>
+        <div class="col-6 col-md-4 col-lg-3 reveal" style="--rd:240ms">
+          <div class="tech-card">
+            <div class="tc-icon ic-pink"><i class="bi bi-film"></i></div>
+            <div><strong>FFmpeg</strong><small>Thumbnails &amp; transcoding</small></div>
+          </div>
+        </div>
+        <div class="col-6 col-md-4 col-lg-3 reveal" style="--rd:300ms">
+          <div class="tech-card">
+            <div class="tc-icon ic-amber"><i class="bi bi-key"></i></div>
+            <div><strong>Argon2id</strong><small>TOTP · server-side sessions</small></div>
+          </div>
+        </div>
+        <div class="col-6 col-md-4 col-lg-3 reveal" style="--rd:360ms">
+          <div class="tech-card">
+            <div class="tc-icon ic-teal"><i class="bi bi-graph-up"></i></div>
+            <div><strong>Prometheus</strong><small>Optional /metrics endpoint</small></div>
+          </div>
+        </div>
+        <div class="col-6 col-md-4 col-lg-3 reveal" style="--rd:420ms">
+          <div class="tech-card">
+            <div class="tc-icon ic-orange"><i class="bi bi-layers"></i></div>
+            <div><strong>Embedded assets</strong><small>One binary serves API + UI</small></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= GETTING STARTED / DEPLOY ================= -->
+  <section class="section" id="deploy">
+    <div class="container">
+      <div class="section-head text-center reveal">
+        <span class="eyebrow">Installation</span>
+        <h2>Up and running <span class="text-gradient">in under a minute.</span></h2>
+        <p>Pull the official image from GitHub Container Registry, or use Docker Compose for the recommended one-command deploy. Prefer source? That works too.</p>
+      </div>
+
+      <div class="text-center reveal">
+        <ul class="nav nav-pills deploy-tabs justify-content-center" id="deployTabs" role="tablist">
+          <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="tab-compose" data-bs-toggle="tab" data-bs-target="#pane-compose" type="button" role="tab"><i class="bi bi-box-seam me-1"></i>Docker Compose</button>
+          </li>
+          <li class="nav-item" role="presentation">
+            <button class="nav-link" id="tab-run" data-bs-toggle="tab" data-bs-target="#pane-run" type="button" role="tab"><i class="bi bi-hdd-fill me-1"></i>Docker Run</button>
+          </li>
+          <li class="nav-item" role="presentation">
+            <button class="nav-link" id="tab-source" data-bs-toggle="tab" data-bs-target="#pane-source" type="button" role="tab"><i class="bi bi-code-slash me-1"></i>From Source</button>
+          </li>
+        </ul>
+      </div>
+
+      <div class="tab-content reveal" id="deployPanes">
+        <!-- Docker Compose -->
+        <div class="tab-pane fade show active" id="pane-compose" role="tabpanel" aria-labelledby="tab-compose">
+          <div class="code-shell">
+            <div class="code-bar">
+              <div class="dots"><span></span><span></span><span></span></div>
+              <span style="margin-left:auto">terminal — bash</span>
+              <button class="copy-btn ms-2" type="button" data-copy="cp .env.example .env
+openssl rand -hex 32
+docker compose up -d --build
+docker compose ps
+curl -f http://localhost/healthz" aria-label="Copy compose commands"><i class="bi bi-clipboard"></i></button>
+            </div>
+            <pre><code><span class="c"># 1. Configure the instance</span>
+<span class="k">cp</span> .env.example .env
+<span class="k">openssl</span> rand -hex 32  <span class="c"># session secret</span>
+
+<span class="c"># 2. Start Nexora</span>
+<span class="k">docker compose</span> up -d --build
+<span class="k">docker compose</span> ps
+
+<span class="c"># 3. Verify it's healthy</span>
+<span class="k">curl</span> -f http://localhost/healthz
+<span class="p">→</span> {<span class="s">"service"</span>:<span class="s">"nexora"</span>,<span class="s">"status"</span>:<span class="s">"ok"</span>}
+
+<span class="c"># 4. Open your browser</span>
+<span class="n">open</span> http://localhost</code></pre>
+          </div>
+          <div class="deploy-note">
+            <i class="bi bi-info-circle-fill"></i>
+            <span>Docker Compose mounts <code>./data/files</code>, <code>./data/media</code>, <code>./data/backups</code> and <code>./data/shared</code> into the container and exposes Nexora on port <code>80</code>. Full guide in the <a href="docs.html#installation" class="text-gradient" style="font-weight:600; text-decoration:none">documentation</a>.</span>
+          </div>
+        </div>
+
+        <!-- Docker Run -->
+        <div class="tab-pane fade" id="pane-run" role="tabpanel" aria-labelledby="tab-run">
+          <div class="code-shell">
+            <div class="code-bar">
+              <div class="dots"><span></span><span></span><span></span></div>
+              <span style="margin-left:auto">terminal — bash</span>
+              <button class="copy-btn ms-2" type="button" data-copy="docker pull ghcr.io/suryaprakash251201/nexora:latest-8141398
+docker run -d --name nexora \
+  -p 8080:80 \
+  -v nexora-data:/app/data \
+  -v ./data/files:/mnt/files \
+  -e NEXORA_LISTEN_ADDR=:80 \
+  -e NEXORA_SESSION_SECRET=$(openssl rand -hex 32) \
+  ghcr.io/suryaprakash251201/nexora:latest-8141398" aria-label="Copy docker run command"><i class="bi bi-clipboard"></i></button>
+            </div>
+            <pre><code><span class="c"># 1. Pull the official image</span>
+<span class="k">docker pull</span> ghcr.io/suryaprakash251201/nexora:latest-8141398
+
+<span class="c"># 2. Run it — the web UI is served on http://localhost:8080</span>
+<span class="k">docker run</span> -d --name nexora <span class="p">\</span>
+  -p <span class="n">8080</span>:<span class="n">80</span> <span class="p">\</span>
+  -v nexora-data:/app/data <span class="p">\</span>
+  -v ./data/files:/mnt/files <span class="p">\</span>
+  -e NEXORA_LISTEN_ADDR=:80 <span class="p">\</span>
+  -e NEXORA_SESSION_SECRET=<span class="n">$(openssl rand -hex 32)</span> <span class="p">\</span>
+  ghcr.io/suryaprakash251201/nexora:latest-8141398
+
+<span class="c"># 3. Verify</span>
+<span class="k">curl</span> -f http://localhost:8080/healthz
+<span class="k">docker logs</span> -f nexora</code></pre>
+          </div>
+          <div class="deploy-note">
+            <i class="bi bi-info-circle-fill"></i>
+            <span>Image: <code>ghcr.io/suryaprakash251201/nexora:latest-8141398</code> — hosted on GitHub Container Registry. The single container serves both the compiled web app and the Go API.</span>
+          </div>
+        </div>
+
+        <!-- From source -->
+        <div class="tab-pane fade" id="pane-source" role="tabpanel" aria-labelledby="tab-source">
+          <div class="code-shell">
+            <div class="code-bar">
+              <div class="dots"><span></span><span></span><span></span></div>
+              <span style="margin-left:auto">terminal — bash</span>
+              <button class="copy-btn ms-2" type="button" data-copy="git clone https://github.com/suryaprakash251201/nexora.git
+cd nexora
+go run ./cmd/nexora
+# in a second terminal:
+cd web && npm install && npm run dev" aria-label="Copy source commands"><i class="bi bi-clipboard"></i></button>
+            </div>
+            <pre><code><span class="c"># 1. Clone the repository</span>
+<span class="k">git clone</span> https://github.com/suryaprakash251201/nexora.git
+<span class="k">cd</span> nexora
+
+<span class="c"># 2. Run the API (Go 1.26+, SQLite)</span>
+<span class="k">go run</span> ./cmd/nexora
+
+<span class="c"># 3. In a second terminal — web app on http://localhost:5173</span>
+<span class="k">cd</span> web <span class="p">&amp;&amp;</span> npm install <span class="p">&amp;&amp;</span> npm run dev</code></pre>
+          </div>
+          <div class="deploy-note">
+            <i class="bi bi-info-circle-fill"></i>
+            <span>Prerequisites: Go 1.26+, Node.js 20+, and npm. The Vite dev server proxies <code>/api</code> and <code>/healthz</code> to the Go API on port <code>8080</code>.</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="row g-4 align-items-center mt-4">
+        <div class="col-lg-6">
+          <div class="row g-3">
+            <div class="col-12 reveal">
+              <div class="feature-card step-card">
+                <div class="step-num"><i class="bi bi-gear-fill"></i></div>
+                <h5>Configure</h5>
+                <p>Copy the environment template, generate a session secret, and set your public URL for HTTPS deployments.</p>
+              </div>
+            </div>
+            <div class="col-12 reveal" style="--rd:100ms">
+              <div class="feature-card step-card">
+                <div class="step-num" style="background:var(--bg-emerald);border-color:var(--bd-emerald);color:var(--c-emerald)"><i class="bi bi-rocket-takeoff-fill"></i></div>
+                <h5>Deploy</h5>
+                <p>One command pulls the official image and starts the whole service — a single container serves the compiled web app and the Go API.</p>
+              </div>
+            </div>
+            <div class="col-12 reveal" style="--rd:200ms">
+              <div class="feature-card step-card">
+                <div class="step-num" style="background:var(--bg-purple);border-color:var(--bd-purple);color:var(--c-purple)"><i class="bi bi-database-fill-lock"></i></div>
+                <h5>Own your data</h5>
+                <p>SQLite, the thumbnail cache, and archive workspace live in a named volume. Mount your storage folders and go.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="col-lg-6 reveal" style="--rd:150ms">
+          <a href="https://pms2.tail58d7ea.ts.net" target="_blank" rel="noopener" class="feature-card d-block text-center p-5" style="text-decoration:none">
+            <span class="feature-tag">Live</span>
+            <div class="feature-icon ic-emerald mx-auto mb-3"><i class="bi bi-broadcast"></i></div>
+            <h5 class="mb-2">Try the hosted instance</h5>
+            <p class="mx-auto" style="max-width:300px">A public Nexora instance is running right now — explore the full interface without installing anything.</p>
+            <span class="btn btn-nx-primary mt-3"><i class="bi bi-box-arrow-up-right me-1"></i>Open live demo</span>
+          </a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= SECURITY ================= -->
+  <section class="section" id="security">
+    <div class="container">
+      <div class="section-head text-center reveal">
+        <span class="eyebrow">Security</span>
+        <h2>Hardened by default.<br class="d-none d-md-block" /> <span class="text-gradient">Private by design.</span></h2>
+        <p>Nexora takes the boring-but-essential approach to security, so you don't have to.</p>
+      </div>
+      <div class="row g-4">
+        <div class="col-md-6 reveal">
+          <div class="sec-item">
+            <div class="si-icon ic-amber"><i class="bi bi-key-fill"></i></div>
+            <div><strong>Argon2id passwords</strong><span>Modern password hashing with server-side sessions, HTTP-only cookies, and CSRF validation on every state-changing request.</span></div>
+          </div>
+          <div class="sec-item">
+            <div class="si-icon ic-blue"><i class="bi bi-lock-fill"></i></div>
+            <div><strong>Permission-scoped storage</strong><span>Path validation prevents traversal outside an authorized root; read and write access is granted per user, per root.</span></div>
+          </div>
+          <div class="sec-item">
+            <div class="si-icon ic-purple"><i class="bi bi-shield-lock-fill"></i></div>
+            <div><strong>Hardened container</strong><span>Runs as an unprivileged user with a read-only root filesystem, dropped capabilities, and a temporary /tmp.</span></div>
+          </div>
+        </div>
+        <div class="col-md-6 reveal" style="--rd:120ms">
+          <div class="sec-item">
+            <div class="si-icon ic-rose"><i class="bi bi-shield-exclamation"></i></div>
+            <div><strong>Login protection</strong><span>Rate-limited login attempts with account lockout, plus optional TOTP two-factor authentication.</span></div>
+          </div>
+          <div class="sec-item">
+            <div class="si-icon ic-teal"><i class="bi bi-journal-check"></i></div>
+            <div><strong>Full audit trail</strong><span>Audit records cover authentication, administration, and file activity — know exactly what happened, and when.</span></div>
+          </div>
+          <div class="sec-item">
+            <div class="si-icon ic-orange"><i class="bi bi-arrow-counterclockwise"></i></div>
+            <div><strong>Revocable shares</strong><span>Public links support expiry, password protection, and download limits — and can be revoked at any moment.</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= FAQ ================= -->
+  <section class="section pt-0" id="faq">
+    <div class="container">
+      <div class="section-head text-center reveal">
+        <span class="eyebrow">FAQ</span>
+        <h2>Questions? <span class="text-gradient">Answered.</span></h2>
+        <p>Everything people usually ask before self-hosting Nexora.</p>
+      </div>
+      <div class="row justify-content-center">
+        <div class="col-lg-9 reveal">
+          <div class="accordion faq-acc" id="faqAcc">
+            <div class="accordion-item">
+              <h2 class="accordion-header">
+                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq1" aria-expanded="false">
+                  <span class="faq-ico ic-blue"><i class="bi bi-shield-lock"></i></span>
+                  <span>Is my data really private?</span>
+                </button>
+              </h2>
+              <div id="faq1" class="accordion-collapse collapse" data-bs-parent="#faqAcc">
+                <div class="accordion-body">Yes. Nexora is fully self-hosted — the database, thumbnails, and files all live on <strong>your</strong> hardware, in your own containers and volumes. There are no telemetry services, no third-party cloud sync, and no account required with anyone. Your data never leaves your server.</div>
+              </div>
+            </div>
+            <div class="accordion-item">
+              <h2 class="accordion-header">
+                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq2" aria-expanded="false">
+                  <span class="faq-ico ic-cyan"><i class="bi bi-hdd-stack"></i></span>
+                  <span>Which storage backends are supported?</span>
+                </button>
+              </h2>
+              <div id="faq2" class="accordion-collapse collapse" data-bs-parent="#faqAcc">
+                <div class="accordion-body">Nexora works with any number of local filesystem roots — just mount folders into the container and register them as named roots with per-user read or write access. SQLite is the default metadata store, with PostgreSQL available for larger deployments.</div>
+              </div>
+            </div>
+            <div class="accordion-item">
+              <h2 class="accordion-header">
+                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq3" aria-expanded="false">
+                  <span class="faq-ico ic-emerald"><i class="bi bi-link-45deg"></i></span>
+                  <span>Can I share files with people who don't have an account?</span>
+                </button>
+              </h2>
+              <div id="faq3" class="accordion-collapse collapse" data-bs-parent="#faqAcc">
+                <div class="accordion-body">Yes — create a public share link with optional expiry, password protection, and download limits. Links are revocable at any time, and the shared page works for anyone, no login required.</div>
+              </div>
+            </div>
+            <div class="accordion-item">
+              <h2 class="accordion-header">
+                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq4" aria-expanded="false">
+                  <span class="faq-ico ic-pink"><i class="bi bi-play-circle"></i></span>
+                  <span>Does video streaming work well in the browser?</span>
+                </button>
+              </h2>
+              <div id="faq4" class="accordion-collapse collapse" data-bs-parent="#faqAcc">
+                <div class="accordion-body">Yes. Video is served with HTTP Range streaming so seeking is instant, and optional FFmpeg integration adds thumbnails and transcoding. Subtitles, theater mode, and fullscreen are built in — plus a lossless-friendly audio player for your playlists.</div>
+              </div>
+            </div>
+            <div class="accordion-item">
+              <h2 class="accordion-header">
+                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq5" aria-expanded="false">
+                  <span class="faq-ico ic-amber"><i class="bi bi-database-check"></i></span>
+                  <span>How do I back up my data?</span>
+                </button>
+              </h2>
+              <div id="faq5" class="accordion-collapse collapse" data-bs-parent="#faqAcc">
+                <div class="accordion-body">Back up the named <code>nexora-data</code> volume (SQLite, thumbnails, archive workspace) alongside your mounted storage folders. Migrations run forward at startup, so restoring the database and the previous image is the safe rollback method.</div>
+              </div>
+            </div>
+            <div class="accordion-item">
+              <h2 class="accordion-header">
+                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq6" aria-expanded="false">
+                  <span class="faq-ico ic-orange"><i class="bi bi-arrow-repeat"></i></span>
+                  <span>How do I update to a new version?</span>
+                </button>
+              </h2>
+              <div id="faq6" class="accordion-collapse collapse" data-bs-parent="#faqAcc">
+                <div class="accordion-body">Simple: <code>docker compose up -d --build</code> rebuilds and rolls the new image, or <code>docker pull ghcr.io/suryaprakash251201/nexora:latest-8141398</code> followed by recreating the container. Back up before upgrading — the full upgrade path is in the <a href="docs.html#upgrading">documentation</a>.</div>
+              </div>
+            </div>
+            <div class="accordion-item">
+              <h2 class="accordion-header">
+                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq7" aria-expanded="false">
+                  <span class="faq-ico ic-purple"><i class="bi bi-broadcast"></i></span>
+                  <span>Is there a hosted or managed version?</span>
+                </button>
+              </h2>
+              <div id="faq7" class="accordion-collapse collapse" data-bs-parent="#faqAcc">
+                <div class="accordion-body">Nexora is self-hosted software — but a public instance is running at <a href="https://pms2.tail58d7ea.ts.net" target="_blank" rel="noopener" class="text-gradient" style="font-weight:600; text-decoration:none">pms2.tail58d7ea.ts.net</a> so you can try it before you deploy it.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= CTA ================= -->
+  <section class="section pt-0">
+    <div class="container">
+      <div class="cta-band reveal">
+        <h2>Take back control of your files.</h2>
+        <p class="mt-3">Self-host Nexora today and keep your data where it belongs — on your own hardware.</p>
+        <div class="d-flex flex-wrap justify-content-center gap-3 mt-4 position-relative">
+          <a href="https://pms2.tail58d7ea.ts.net" target="_blank" rel="noopener" class="btn btn-nx-primary btn-lg">
+            <i class="bi bi-box-arrow-up-right me-2"></i>Try the live demo
+          </a>
+          <a href="#deploy" class="btn btn-nx-ghost btn-lg">
+            <i class="bi bi-rocket-takeoff me-2"></i>Deploy now
+          </a>
+        </div>
+        <div class="hero-pull mt-4 position-relative">
+          <div class="pull-pill">
+            <i class="bi bi-box-seam"></i>
+            <code>docker pull ghcr.io/suryaprakash251201/nexora:latest-8141398</code>
+            <button class="copy-btn" type="button" data-copy="docker pull ghcr.io/suryaprakash251201/nexora:latest-8141398" aria-label="Copy pull command"><i class="bi bi-clipboard"></i></button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= FOOTER ================= -->
+  <footer class="nx-footer">
+    <div class="container">
+      <div class="row g-4">
+        <div class="col-lg-5">
+          <a class="footer-brand mb-3 d-inline-flex" href="#top">
+            <img src="assets/img/logo.svg" alt="Nexora logo" />
+            Nexora
+          </a>
+          <p class="text-muted-nx mt-3 mb-0" style="font-size:0.9rem; max-width:340px">
+            A private, self-hosted file workspace. React interface, Go API, SQLite metadata,
+            and your storage — in a single deployable service.
+          </p>
+          <div class="d-flex gap-3 mt-4 fs-5">
+            <a href="https://github.com/suryaprakash251201/nexora" target="_blank" rel="noopener" aria-label="GitHub"><i class="bi bi-github"></i></a>
+            <a href="https://github.com/suryaprakash251201/nexora/blob/main/LICENSE" target="_blank" rel="noopener" aria-label="License"><i class="bi bi-shield-check"></i></a>
+            <a href="https://pms2.tail58d7ea.ts.net" target="_blank" rel="noopener" aria-label="Live demo"><i class="bi bi-box-arrow-up-right"></i></a>
+          </div>
+        </div>
+        <div class="col-6 col-lg-2 offset-lg-1">
+          <h6>Product</h6>
+          <ul class="list-unstyled d-grid gap-2">
+            <li><a href="#features">Features</a></li>
+            <li><a href="#screenshots">Screenshots</a></li>
+            <li><a href="#stack">Tech stack</a></li>
+            <li><a href="#security">Security</a></li>
+          </ul>
+        </div>
+        <div class="col-6 col-lg-2">
+          <h6>Resources</h6>
+          <ul class="list-unstyled d-grid gap-2">
+            <li><a href="docs.html">Documentation</a></li>
+            <li><a href="docs.html#installation">Installation</a></li>
+            <li><a href="docs.html#configuration">Configuration</a></li>
+            <li><a href="https://github.com/suryaprakash251201/nexora" target="_blank" rel="noopener">GitHub</a></li>
+            <li><a href="https://github.com/suryaprakash251201/nexora/issues" target="_blank" rel="noopener">Issues</a></li>
+          </ul>
+        </div>
+        <div class="col-6 col-lg-2">
+          <h6>Product</h6>
+          <ul class="list-unstyled d-grid gap-2">
+            <li><a href="index.html#features">Features</a></li>
+            <li><a href="index.html#screenshots">Screenshots</a></li>
+            <li><a href="index.html#stack">Tech stack</a></li>
+            <li><a href="index.html#security">Security</a></li>
+            <li><a href="index.html#faq">FAQ</a></li>
+          </ul>
+        </div>
+        <div class="col-lg-2">
+          <h6>Legal</h6>
+          <ul class="list-unstyled d-grid gap-2">
+            <li><a href="https://github.com/suryaprakash251201/nexora/blob/main/LICENSE" target="_blank" rel="noopener">MIT License</a></li>
+            <li><a href="https://github.com/suryaprakash251201/nexora/blob/main/SECURITY.md" target="_blank" rel="noopener">Security policy</a></li>
+          </ul>
+        </div>
+      </div>
+      <hr class="my-4" style="border-color: var(--nx-border)" />
+      <div class="d-flex flex-column flex-md-row justify-content-between align-items-center gap-2 text-muted-nx" style="font-size:0.82rem">
+        <span>© 2026 Nexora Project · <a href="https://github.com/suryaprakash251201/nexora" target="_blank" rel="noopener">GitHub</a> · <a href="docs.html">Docs</a></span>
+        <span>Made with <i class="bi bi-heart-fill" style="color:#f472b6"></i> and Go</span>
+      </div>
+    </div>
+  </footer>
+
+  <!-- ================= LIGHTBOX ================= -->
+  <div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-label="Screenshot viewer">
+    <button class="lb-close" id="lbClose" aria-label="Close"><i class="bi bi-x-lg"></i></button>
+    <button class="lb-nav lb-prev" id="lbPrev" aria-label="Previous"><i class="bi bi-chevron-left"></i></button>
+    <img id="lbImg" src="" alt="Screenshot" />
+    <button class="lb-nav lb-next" id="lbNext" aria-label="Next"><i class="bi bi-chevron-right"></i></button>
+    <div class="lb-count" id="lbCount"></div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="assets/js/main.js"></script>
+</body>
+</html>
