@@ -161,9 +161,8 @@ func (s *Server) Routes() http.Handler {
 	authed.Get("/files/hls/playlist.m3u8", s.handleHLSPlaylist)
 	authed.Get("/files/hls/segment.ts", s.handleHLSSegment)
 
-	// Lossless audio metadata, waveforms, and server capabilities.
+	// Lossless audio metadata and server capabilities.
 	authed.Get("/audio/info", s.handleAudioInfo)
-	authed.Get("/audio/waveform", s.handleAudioWaveform)
 	authed.Get("/audio/formats", s.handleAudioFormats)
 	authed.Get("/trash", s.handleListTrash)
 	authed.Post("/trash/restore", s.handleRestoreTrash)

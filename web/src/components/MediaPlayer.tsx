@@ -26,7 +26,7 @@ import {
 import type { FileItem } from "../api/types";
 import { thumbUrl, needsTranscode, transcodeUrl, audioTranscodeUrl, serverSupportsTranscode, rawUrl, generateSessionId, isLosslessExtension } from "../lib/preview";
 import type { AudioTranscodeFormat } from "../lib/preview";
-import { AudioInfoPanel, WaveformDisplay, EqualizerBars, OutputDevicePicker, useAudioContext } from "./LosslessPlayer";
+import { AudioInfoPanel, EqualizerBars, OutputDevicePicker, useAudioContext } from "./LosslessPlayer";
 import { startDownload } from "../lib/transfer";
 import { engine, usePlayer } from "../store/player";
 import { AddToPlaylistMenu } from "./PlaylistAdder";
@@ -606,38 +606,26 @@ function AudioPlayer({
         </div>
 
         <div className="w-full space-y-2" onClick={(e) => e.stopPropagation()}>
-          {/* Waveform seek (lossless player) */}
-          {cur && duration > 0 && (
-            <WaveformDisplay
-              rootId={cur.root_id}
-              path={cur.path}
-              currentTime={curTime}
-              duration={duration}
-              onSeek={seek}
-              height={48}
-            />
-          )}
           {/* Progress Bar with touch swipe/tap support */}
-          <div className="w-full space-y-2">
-            <div
-              className="relative h-2 sm:h-2.5 rounded-full bg-white/20 overflow-hidden cursor-pointer group"
-              onTouchStart={(e) => {
-                const rect = e.currentTarget.getBoundingClientRect();
-                const x = (e.touches[0].clientX - rect.left) / rect.width;
-                seek(Math.max(0, Math.min(duration || 0, x * (duration || 0))));
-              }}
-              onTouchMove={(e) => {
-                e.preventDefault();
-                const rect = e.currentTarget.getBoundingClientRect();
-                const x = (e.touches[0].clientX - rect.left) / rect.width;
-                seek(Math.max(0, Math.min(duration || 0, x * (duration || 0))));
-              }}
-              onClick={(e) => {
-                const rect = e.currentTarget.getBoundingClientRect();
-                const x = (e.clientX - rect.left) / rect.width;
-                seek(Math.max(0, Math.min(duration || 0, x * (duration || 0))));
-              }}
-            >
+          <div
+            className="relative h-2 sm:h-2.5 rounded-full bg-white/20 overflow-hidden cursor-pointer group"
+            onTouchStart={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              const x = (e.touches[0].clientX - rect.left) / rect.width;
+              seek(Math.max(0, Math.min(duration || 0, x * (duration || 0))));
+            }}
+            onTouchMove={(e) => {
+              e.preventDefault();
+              const rect = e.currentTarget.getBoundingClientRect();
+              const x = (e.touches[0].clientX - rect.left) / rect.width;
+              seek(Math.max(0, Math.min(duration || 0, x * (duration || 0))));
+            }}
+            onClick={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              const x = (e.clientX - rect.left) / rect.width;
+              seek(Math.max(0, Math.min(duration || 0, x * (duration || 0))));
+            }}
+          >
               {bufferedPct > 0 && (
                 <div className="absolute inset-y-0 left-0 bg-white/15 transition-all duration-300" style={{ width: `${bufferedPct}%` }} />
               )}
@@ -659,7 +647,7 @@ function AudioPlayer({
                 Buffering…
               </div>
             )}
-          </div>
+        </div>
 
         {/* Primary Controls */}
         <div className="flex items-center justify-center gap-3 sm:gap-5 md:gap-7 w-full mt-6 sm:mt-9">
@@ -825,7 +813,6 @@ function AudioPlayer({
           </div>
         </div>
       </div>
-    </div>
   );
 
   return (

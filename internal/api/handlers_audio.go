@@ -2,7 +2,6 @@ package api
 
 import (
 	"bytes"
-	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -11,8 +10,6 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
-	"sync"
-	"time"
 
 	"github.com/nexora/nexora/internal/middleware"
 	"github.com/nexora/nexora/internal/storage"
@@ -227,179 +224,6 @@ func (s *Server) handleAudioInfo(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, info)
 }
 
-// ── Waveform peaks ──────────────────────────────────────────────────────────
-
-const (
-	waveformBuckets = 1000
-	waveformRate    = 8000 // mono decode rate for peak extraction
-	waveformCacheMax = 128
-)
-
-type waveformCacheEntry struct {
-	peaks    []float64
-	duration float64
-	at       time.Time
-}
-
-var (
-	waveformMu    sync.Mutex
-	waveformCache = make(map[string]waveformCacheEntry)
-)
-
-// handleAudioWaveform decodes the audio to mono PCM and returns per-bucket peak
-// amplitudes (0..1) for canvas waveform rendering. Results are cached in memory
-// keyed by root+path+size+mtime so repeated renders are instant.
-func (s *Server) handleAudioWaveform(w http.ResponseWriter, r *http.Request) {
-	inputArg, rc, info, err := s.resolveAudioInput(r)
-	if err != nil {
-		s.writeAudioInputError(w, r, err)
-		return
-	}
-	defer func() {
-		if rc != nil {
-			rc.Close()
-		}
-	}()
-
-	rootID := queryParam(r, "root", "")
-	rel, _ := storage.CleanRelative(queryParam(r, "path", ""))
-
-	// Cache key includes size+mtime so edits invalidate the waveform.
-	cacheKey := rootID + "|" + rel + "|" + strconv.FormatInt(info.Size, 10) + "|" + info.Modified.UTC().Format(time.RFC3339Nano)
-
-	waveformMu.Lock()
-	if entry, ok := waveformCache[cacheKey]; ok {
-		entry.at = time.Now()
-		waveformCache[cacheKey] = entry
-		waveformMu.Unlock()
-		writeWaveformJSON(w, entry.peaks, entry.duration)
-		return
-	}
-	waveformMu.Unlock()
-
-	ffp, _, err := detectFfmpeg()
-	if err != nil {
-		writeError(w, http.StatusNotImplemented, "transcode_unavailable", "waveform generation requires ffmpeg on the server", middleware.GetRequestID(r.Context()))
-		return
-	}
-
-	peaks, duration, err := computeWaveform(ffp, inputArg, rc)
-	if err != nil {
-		s.Log.Warn("audio/waveform: generation failed", "error", err)
-		writeError(w, http.StatusUnprocessableEntity, "waveform_failed", "could not generate waveform", middleware.GetRequestID(r.Context()))
-		return
-	}
-
-	waveformMu.Lock()
-	if len(waveformCache) >= waveformCacheMax {
-		// Simple FIFO eviction: drop the oldest entry.
-		var oldestKey string
-		var oldest time.Time
-		for k, v := range waveformCache {
-			if oldestKey == "" || v.at.Before(oldest) {
-				oldestKey, oldest = k, v.at
-			}
-		}
-		delete(waveformCache, oldestKey)
-	}
-	waveformCache[cacheKey] = waveformCacheEntry{peaks: peaks, duration: duration, at: time.Now()}
-	waveformMu.Unlock()
-
-	writeWaveformJSON(w, peaks, duration)
-}
-
-func writeWaveformJSON(w http.ResponseWriter, peaks []float64, duration float64) {
-	writeJSON(w, http.StatusOK, map[string]any{
-		"buckets":  len(peaks),
-		"duration": duration,
-		"peaks":    peaks,
-	})
-}
-
-// computeWaveform decodes input to mono 8kHz s16le and computes one peak
-// (max |sample|) per bucket across the whole track. It streams ffmpeg's stdout
-// so memory stays bounded regardless of file length.
-func computeWaveform(ffmpegBin, inputArg string, rc io.ReadCloser) ([]float64, float64, error) {
-	args := []string{
-		"-hide_banner", "-loglevel", "error",
-		"-i", inputArg,
-		"-map", "0:a:0",
-		"-ac", "1",
-		"-ar", strconv.Itoa(waveformRate),
-		"-f", "s16le",
-		"pipe:1",
-	}
-	cmd := exec.Command(ffmpegBin, args...)
-	if inputArg == "pipe:0" {
-		cmd.Stdin = rc
-	}
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return nil, 0, err
-	}
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	if err := cmd.Start(); err != nil {
-		return nil, 0, err
-	}
-
-	// Stream in 64KB chunks, accumulate per-bucket max abs sample.
-	const chunk = 64 * 1024
-	buf := make([]byte, chunk)
-	var sampleCount int64
-	peaks := make([]float64, waveformBuckets)
-	for {
-		n, rerr := io.ReadFull(stdout, buf)
-		sampleCount += int64(n / 2)
-		for i := 0; i+1 < n; i += 2 {
-			v := int16(binary.LittleEndian.Uint16(buf[i : i+2]))
-			abs := v
-			if abs < 0 {
-				abs = -abs
-			}
-			idx := int((sampleCount-1) * int64(waveformBuckets) / max64(sampleCount, 1))
-			if idx >= waveformBuckets {
-				idx = waveformBuckets - 1
-			}
-			if idx < 0 {
-				idx = 0
-			}
-			if float64(abs) > peaks[idx] {
-				peaks[idx] = float64(abs)
-			}
-		}
-		if rerr == io.EOF {
-			break
-		}
-		if rerr == io.ErrUnexpectedEOF && n > 0 {
-			// Partial final chunk already processed above; stop.
-			break
-		}
-		if rerr != nil {
-			_ = cmd.Process.Kill()
-			_ = cmd.Wait()
-			return nil, 0, rerr
-		}
-	}
-	if werr := cmd.Wait(); werr != nil {
-		return nil, 0, fmt.Errorf("ffmpeg decode failed: %w — %s", werr, strings.TrimSpace(stderr.String()))
-	}
-
-	// Normalize to 0..1.
-	for i := range peaks {
-		peaks[i] = peaks[i] / 32768.0
-	}
-	duration := float64(sampleCount) / waveformRate
-	return peaks, duration, nil
-}
-
-func max64(a, b int64) int64 {
-	if a > b {
-		return a
-	}
-	return b
-}
-
 // ── Server capabilities ─────────────────────────────────────────────────────
 
 // handleAudioFormats reports what the server can do for audio playback so the
@@ -410,7 +234,6 @@ func (s *Server) handleAudioFormats(w http.ResponseWriter, r *http.Request) {
 		"ffmpeg":    ffmpegErr == nil,
 		"transcode": ffmpegErr == nil,
 		"formats":   []string{"aac", "flac", "flac24", "wav"},
-		"waveform":  ffmpegErr == nil,
 	})
 }
 
