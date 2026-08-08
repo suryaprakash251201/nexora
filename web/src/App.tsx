@@ -1,10 +1,12 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Sparkles, RotateCcw, ExternalLink, LoaderCircle, PlugZap, WifiOff } from "lucide-react";
+import { RotateCcw, ExternalLink, LoaderCircle, PlugZap, WifiOff } from "lucide-react";
 import { get, post, discoverServerUrl } from "./api/client";
 import Login from "./components/Login";
 import Setup from "./components/Setup";
 import Workspace from "./components/Workspace";
 import MouseGlow from "./components/MouseGlow";
+import SplashScreen from "./components/SplashScreen";
+import NexoraLogo from "./components/icons/NexoraLogo";
 import UpdaterCheck from "./components/UpdaterCheck";
 import TauriShell from "./components/TauriShell";
 import { ErrorBoundary } from "./components/ErrorBoundary";
@@ -70,14 +72,21 @@ function AppInner() {
     setInputUrl(url);
   };
 
+  // ── Boot splash: hold the app logo in front for a minimum of ~2s on
+  // every full page load (web refresh, desktop first start, fresh URL). ──
+  const [splashDone, setSplashDone] = useState(false);
+  if (!splashDone) {
+    return <SplashScreen onDone={() => setSplashDone(true)} />;
+  }
+
   if (isTauriEnv && !apiUrl) {
     return (
       <div className="min-h-screen grid place-items-center bg-background">
         <div className="w-full max-w-sm px-6">
           <div className="rounded-2xl border border-glass-border-soft bg-glass-bg-strong/80 backdrop-blur-xl shadow-glass-strong p-8 space-y-5">
             <div className="flex flex-col items-center gap-3 text-center">
-              <span className="grid place-items-center h-14 w-14 rounded-2xl bg-gradient-to-br from-accent via-accent-secondary to-accent-tertiary text-white shadow-lg shadow-accent/25">
-                <Sparkles className="h-7 w-7" />
+              <span className="grid place-items-center h-14 w-14 rounded-2xl bg-white/5 ring-1 ring-white/10 shadow-lg shadow-accent/25">
+                <NexoraLogo size={40} idPrefix="connect" />
               </span>
               <div>
                 <h2 className="text-xl font-bold tracking-tight">Connect to Nexora</h2>
@@ -154,12 +163,8 @@ function AppInner() {
   }
 
   if (needsSetup.isLoading || session.isLoading) {
-    return (
-      <div className="min-h-screen grid place-items-center gap-3 flex-col text-content-muted">
-        <LoaderCircle className="h-7 w-7 animate-spin text-accent" />
-        <span className="text-sm">Loading…</span>
-      </div>
-    );
+    // Branded loading: logo + animation while we connect to the server.
+    return <SplashScreen persistent caption="Connecting to your server…" />;
   }
 
   if (needsSetup.isError || session.isError) {

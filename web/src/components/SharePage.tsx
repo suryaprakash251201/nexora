@@ -34,6 +34,11 @@ export default function SharePage({ token }: { token: string }) {
   const [unlocked, setUnlocked] = useState(false);
   const [verifying, setVerifying] = useState(false);
 
+  // Remove the static boot splash (index.html) — this route renders its own UI.
+  useEffect(() => {
+    document.getElementById("boot-splash")?.remove();
+  }, []);
+
   useEffect(() => {
     fetchInfo(token).then(setInfo).catch((e) => setError(e.message));
   }, [token]);
