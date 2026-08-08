@@ -465,7 +465,7 @@ body {
 }
 
 .audio-disc {
-  animation: n-disc-spin 60s linear infinite;
+  animation: n-disc-spin 45s linear infinite;
   animation-play-state: running;
 }
 
@@ -473,7 +473,7 @@ body {
 
 /* Mini player (PlayerBar) vinyl thumb — same slow turntable motion, 40s/rev */
 .audio-disc-mini {
-  animation: n-disc-spin 40s linear infinite;
+  animation: n-disc-spin 30s linear infinite;
 }
 
 /* ============================================================
@@ -748,12 +748,12 @@ body {
     transition-duration: 0.001ms !important;
   }
   .nexora-bg { animation: none !important; transform: none !important; }
-  /* Vinyl discs are deliberately slow ambient turntable motion (60s/40s per
+  /* Vinyl discs are deliberately slow ambient turntable motion (45s/30s per
      revolution) — exempt them so they keep the slow spin in every browser,
      matching the mobile/desktop apps. */
-  .audio-disc { animation: n-disc-spin 60s linear infinite !important; }
+  .audio-disc { animation: n-disc-spin 45s linear infinite !important; }
   .audio-disc.paused { animation-play-state: paused !important; }
-  .audio-disc-mini { animation: n-disc-spin 40s linear infinite !important; }
+  .audio-disc-mini { animation: n-disc-spin 30s linear infinite !important; }
 }
 
 /* ============================================================
