@@ -471,6 +471,11 @@ body {
 
 .audio-disc.paused { animation-play-state: paused; }
 
+/* Mini player (PlayerBar) vinyl thumb — same slow turntable motion, 40s/rev */
+.audio-disc-mini {
+  animation: n-disc-spin 40s linear infinite;
+}
+
 /* ============================================================
    Vinyl tone arm animation
    ============================================================ */
@@ -732,8 +737,23 @@ body {
    ============================================================ */
 
 @media (prefers-reduced-motion: reduce) {
-  * { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
+  /* Jump one-shot animations to their end state instead of animating, but
+     never let infinite animations loop at 0.001ms: Gecko renders that as a
+     chaotic high-speed spin (the "vinyl disc spins too fast" browser bug). */
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
   .nexora-bg { animation: none !important; transform: none !important; }
+  /* Vinyl discs are deliberately slow ambient turntable motion (60s/40s per
+     revolution) — exempt them so they keep the slow spin in every browser,
+     matching the mobile/desktop apps. */
+  .audio-disc { animation: n-disc-spin 60s linear infinite !important; }
+  .audio-disc.paused { animation-play-state: paused !important; }
+  .audio-disc-mini { animation: n-disc-spin 40s linear infinite !important; }
 }
 
 /* ============================================================
