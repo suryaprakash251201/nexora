@@ -1,0 +1,41 @@
+name: Deploy Website to Cloudflare Pages
+
+# Deploys the static site in ./website to Cloudflare Pages
+# (https://nexora.suryaprakashinfo.in) on every push that touches it.
+#
+# One-time setup:
+#   1. Create a Cloudflare Pages project named "nexora" (or edit --project-name below).
+#   2. Add repo secrets:
+#      - CLOUDFLARE_API_TOKEN  (token with "Cloudflare Pages: Edit" permission)
+#      - CLOUDFLARE_ACCOUNT_ID (your Cloudflare account ID)
+#      See website/DEPLOY.md for details.
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'website/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: website-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Deploy to Cloudflare Pages
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v7
+
+      - name: Deploy website to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy website --project-name=nexora --branch=main

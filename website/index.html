@@ -3,7 +3,68 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Nexora — Your private file workspace</title>
+  <title>Nexora — Your Private Self-Hosted File Workspace</title>
+  <meta name="description" content="Nexora is a private, self-hosted file workspace. A React interface, Go API, SQLite metadata, and local storage roots in a single deployable service. Browse, search, preview, share, stream and organize your files — your data stays yours." />
+  <meta name="keywords" content="nexora, self-hosted, file server, file browser, file manager, private cloud, file sharing, self-hosted cloud, docker file server, media server, open source, go, react" />
+  <meta name="author" content="Suryaprakash" />
+  <meta name="robots" content="index, follow, max-image-preview:large" />
+  <meta name="theme-color" content="#f4f5fb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#090B12" media="(prefers-color-scheme: dark)" />
+  <link rel="canonical" href="https://nexora.suryaprakashinfo.in/" />
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Nexora" />
+  <meta property="og:title" content="Nexora — Your Private Self-Hosted File Workspace" />
+  <meta property="og:description" content="Browse, search, preview, stream, share and organize your files on your own hardware. React interface, Go API, SQLite metadata — one container, zero compromises." />
+  <meta property="og:url" content="https://nexora.suryaprakashinfo.in/" />
+  <meta property="og:image" content="https://nexora.suryaprakashinfo.in/assets/img/og-image.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="Nexora — your private, self-hosted file workspace" />
+  <meta property="og:locale" content="en_US" />
+
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Nexora — Your Private Self-Hosted File Workspace" />
+  <meta name="twitter:description" content="Browse, search, preview, stream, share and organize your files on your own hardware. One container, zero compromises." />
+  <meta name="twitter:image" content="https://nexora.suryaprakashinfo.in/assets/img/og-image.png" />
+
+  <!-- Structured data -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "Nexora",
+    "applicationCategory": "WebApplication",
+    "operatingSystem": "Web, Docker, Linux, macOS, Windows",
+    "description": "Nexora is a private, self-hosted file workspace. It combines a React interface, a Go API, SQLite metadata, and local storage roots in a single deployable service.",
+    "url": "https://nexora.suryaprakashinfo.in/",
+    "image": "https://nexora.suryaprakashinfo.in/assets/img/og-image.png",
+    "screenshot": "https://nexora.suryaprakashinfo.in/assets/img/screenshots/shot-1.png",
+    "softwareVersion": "1.8.0",
+    "license": "https://github.com/suryaprakash251201/nexora/blob/main/LICENSE",
+    "codeRepository": "https://github.com/suryaprakash251201/nexora",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    },
+    "featureList": "Self-hosted file workspace, multiple storage roots, indexed search, media previews with video streaming, revocable sharing, audio playlists, admin panel, storage analytics, Argon2id security"
+  }
+  </script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    "name": "Nexora",
+    "url": "https://nexora.suryaprakashinfo.in/",
+    "description": "Nexora — your private, self-hosted file workspace.",
+    "inLanguage": "en",
+    "publisher": { "@type": "Organization", "name": "Nexora Project", "logo": { "@type": "ImageObject", "url": "https://nexora.suryaprakashinfo.in/assets/img/logo.svg" } }
+  }
+  </script>
+
   <script>
     /* apply theme before first paint to avoid flash */
     (function () {
@@ -14,15 +75,12 @@
       } catch (e) { document.documentElement.setAttribute('data-theme', 'light'); }
     })();
   </script>
-  <meta name="description" content="Nexora is a private, self-hosted file workspace. A React interface, Go API, SQLite metadata, and local storage roots in a single deployable service. Browse, search, preview, share and organize your files — your data stays yours." />
-  <meta name="theme-color" content="#090B12" />
-  <meta property="og:title" content="Nexora — Your private file workspace" />
-  <meta property="og:description" content="A private, self-hosted file workspace with search, previews, sharing, playlists and more — all in a single container." />
-  <meta property="og:type" content="website" />
 
   <link rel="icon" type="image/svg+xml" href="assets/img/logo.svg" />
+  <link rel="apple-touch-icon" href="apple-touch-icon.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet" />
@@ -69,6 +127,9 @@
 
   <!-- ================= HERO ================= -->
   <header class="hero text-center" id="top">
+    <div class="aurora aurora-1"></div>
+    <div class="aurora aurora-2"></div>
+    <div class="aurora aurora-3"></div>
     <div class="container">
       <div class="reveal">
         <a class="hero-badge" href="https://pms2.tail58d7ea.ts.net" target="_blank" rel="noopener">
@@ -127,7 +188,7 @@
             <div class="traffic"><span></span><span></span><span></span></div>
             <div class="url"><i class="bi bi-lock-fill me-1 text-success"></i>localhost — Nexora</div>
           </div>
-          <img src="assets/img/screenshots/shot-1.png" alt="Nexora file workspace interface" loading="eager" />
+          <img src="assets/img/screenshots/shot-1.png" alt="Nexora file workspace interface" loading="eager" fetchpriority="high" />
         </div>
         <div class="mockup-float float-1 d-none d-lg-block">
           <div class="d-flex align-items-center">
@@ -407,6 +468,39 @@
             <div class="tc-icon ic-orange"><i class="bi bi-layers"></i></div>
             <div><strong>Embedded assets</strong><small>One binary serves API + UI</small></div>
           </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= ARCHITECTURE ================= -->
+  <section class="section pt-0" id="architecture">
+    <div class="container">
+      <div class="section-head text-center reveal">
+        <span class="eyebrow">Architecture</span>
+        <h2>One container, <span class="text-gradient">three moving parts.</span></h2>
+        <p>A pragmatic stack that is fast to run, easy to reason about, and simple to deploy anywhere.</p>
+      </div>
+      <div class="arch-flow reveal">
+        <div class="arch-node">
+          <div class="an-ico ic-blue"><i class="bi bi-window-desktop"></i></div>
+          <h5>Browser</h5>
+          <p>React / Vite interface with instant search, media playback and a command palette.</p>
+          <span class="an-tag">Frontend</span>
+        </div>
+        <div class="arch-arrow"><i class="bi bi-arrow-right"></i></div>
+        <div class="arch-node">
+          <div class="an-ico ic-purple"><i class="bi bi-hdd-network"></i></div>
+          <h5>Go API</h5>
+          <p>Auth, files, search, previews, shares, playlists and jobs behind <code>/api/v1</code>.</p>
+          <span class="an-tag">Backend</span>
+        </div>
+        <div class="arch-arrow"><i class="bi bi-arrow-right"></i></div>
+        <div class="arch-node">
+          <div class="an-ico ic-emerald"><i class="bi bi-database-gear"></i></div>
+          <h5>SQLite + Roots</h5>
+          <p>Metadata, settings and audit data — backed by your mounted filesystem roots.</p>
+          <span class="an-tag">Storage</span>
         </div>
       </div>
     </div>
@@ -798,6 +892,8 @@ cd web && npm install && npm run dev" aria-label="Copy source commands"><i class
     </div>
   </footer>
 
+  <div class="scroll-progress" id="scrollProgress"></div>
+
   <!-- ================= LIGHTBOX ================= -->
   <div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-label="Screenshot viewer">
     <button class="lb-close" id="lbClose" aria-label="Close"><i class="bi bi-x-lg"></i></button>
@@ -807,7 +903,10 @@ cd web && npm install && npm run dev" aria-label="Copy source commands"><i class
     <div class="lb-count" id="lbCount"></div>
   </div>
 
+  <!-- back to top -->
+  <a href="#top" class="back-top" id="backTop" aria-label="Back to top"><i class="bi bi-arrow-up"></i></a>
+
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-  <script src="assets/js/main.js"></script>
+  <script src="assets/js/main.js" defer></script>
 </body>
 </html>

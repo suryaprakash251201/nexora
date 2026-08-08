@@ -51,6 +51,27 @@
     navMenu.addEventListener('shown.bs.collapse', () => nav.classList.remove('nav-hidden'));
   }
 
+  /* ---------- scroll progress bar ---------- */
+  const progressBar = document.getElementById('scrollProgress');
+  if (progressBar && !prefersReduced) {
+    const onProgress = () => {
+      const h = document.documentElement;
+      const max = h.scrollHeight - h.clientHeight;
+      progressBar.style.width = max > 0 ? ((h.scrollTop / max) * 100).toFixed(2) + '%' : '0%';
+    };
+    onProgress();
+    window.addEventListener('scroll', onProgress, { passive: true });
+    window.addEventListener('resize', onProgress, { passive: true });
+  }
+
+  /* ---------- back to top ---------- */
+  const backTop = document.getElementById('backTop');
+  if (backTop) {
+    const onBackTop = () => backTop.classList.toggle('show', window.scrollY > 500);
+    onBackTop();
+    window.addEventListener('scroll', onBackTop, { passive: true });
+  }
+
   /* ---------- reveal on scroll ---------- */
   const revealEls = document.querySelectorAll('.reveal');
   if (prefersReduced || !('IntersectionObserver' in window)) {

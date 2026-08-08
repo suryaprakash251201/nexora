@@ -44,3 +44,6 @@ pi-session-*.html
 # Build / analysis artifacts
 nexora_test
 static_analysis_codeql_*/
+
+# landing page deploy bundle
+website-dist.zip
