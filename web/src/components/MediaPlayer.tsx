@@ -22,6 +22,8 @@ import {
   Download,
   ExternalLink,
   Info,
+  ListMusic,
+  Trash2,
 } from "lucide-react";
 import type { FileItem } from "../api/types";
 import { thumbUrl, needsTranscode, transcodeUrl, audioTranscodeUrl, serverSupportsTranscode, rawUrl, generateSessionId, isLosslessExtension } from "../lib/preview";
@@ -141,9 +143,13 @@ function AudioPlayer({
   const [bgFailed, setBgFailed] = useState(false);
   const [showRates, setShowRates] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
+  const [showQueue, setShowQueue] = useState(false);
   const [lBuffering, setLBuffering] = useState(false);
   const [bufferedEnd, setBufferedEnd] = useState(0);
   const [browserFs, setBrowserFs] = useState(false);
+  // Drag-seek preview position (transcoded streams commit on release).
+  const [dragTime, setDragTime] = useState<number | null>(null);
+  const dragTimeRef = useRef<number | null>(null);
   const suppressFsExitRef = useRef(false);
   const fsWrapRef = useRef<HTMLDivElement>(null);
 
@@ -158,6 +164,8 @@ function AudioPlayer({
   useEffect(() => {
     setFallbackStage(-1);
     setSeekStart(0);
+    setDragTime(null);
+    dragTimeRef.current = null;
   }, [cur?.path]);
 
   const resolvedUrl = cur
@@ -263,6 +271,33 @@ function AudioPlayer({
     if (a) a.currentTime = v;
     setLCur(v);
   };
+  // Shared handler for click + drag seeking on the progress bar. Transcoded
+  // streams restart ffmpeg per seek, so while dragging them we only preview
+  // the position and commit the real seek on release.
+  const transcodeStream = () => {
+    const a = controlled ? engine.audio : ref.current;
+    return !!a && a.src.includes("/files/transcode");
+  };
+  const seekFromPointer = (e: React.PointerEvent<HTMLDivElement>) => {
+    const el = e.currentTarget;
+    const rect = el.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width;
+    const t = Math.max(0, Math.min(duration || 0, x * (duration || 0)));
+    if (transcodeStream()) {
+      dragTimeRef.current = t;
+      setDragTime(t);
+    } else {
+      seek(t);
+    }
+  };
+  const commitSeek = (e: React.PointerEvent<HTMLDivElement>) => {
+    try { (e.currentTarget as HTMLDivElement).releasePointerCapture?.(e.pointerId); } catch { /* ignore */ }
+    if (dragTimeRef.current !== null) {
+      seek(dragTimeRef.current);
+      dragTimeRef.current = null;
+      setDragTime(null);
+    }
+  };
   const changeVol = (v: number) => {
     if (controlled) { player.setVolume(v); return; }
     setLVol(v); setLMuted(v === 0);
@@ -289,7 +324,7 @@ function AudioPlayer({
   const volume = controlled ? volV : lVol;
   const muted = controlled ? mutedV : lMuted;
   const rate = controlled ? rateV : lRate;
-  const pct = duration > 0 ? (curTime / duration) * 100 : 0;
+  const pct = duration > 0 ? ((dragTime ?? curTime) / duration) * 100 : 0;
   const bufferedPct = duration > 0 ? Math.min(100, (bufferedEnd / duration) * 100) : 0;
 
   // Track how much of the stream is buffered (for the seek-bar indicator).
@@ -447,22 +482,119 @@ function AudioPlayer({
         <span className="text-white/55 text-sm font-medium tracking-wide uppercase">
           {multi ? `Track ${qIndex + 1} of ${queue.length}` : "Now Playing"}
         </span>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            if (document.fullscreenElement) {
-              suppressFsExitRef.current = true;
-              document.exitFullscreen?.();
-            } else {
-              fsWrapRef.current?.requestFullscreen?.();
-            }
-          }}
-          className="p-3 rounded-full glass-hover text-white transition-transform hover:scale-110"
-          title="Toggle fullscreen (F)"
-        >
-          {browserFs ? <Minimize2 className="h-6 w-6" /> : <Maximize2 className="h-6 w-6" />}
-        </button>
+        <div className="flex items-center gap-2">
+          {queue.length > 0 && (
+            <button
+              onClick={(e) => { e.stopPropagation(); setShowQueue((v) => !v); }}
+              className={`relative p-3 rounded-full glass-hover text-white transition-colors ${showQueue ? "bg-accent/25 text-accent" : "hover:text-white"}`}
+              title="Playback queue"
+            >
+              <ListMusic className="h-6 w-6" />
+              {queue.length > 1 && !showQueue && (
+                <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-accent text-black text-[10px] font-bold grid place-items-center">
+                  {queue.length}
+                </span>
+              )}
+            </button>
+          )}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              if (document.fullscreenElement) {
+                suppressFsExitRef.current = true;
+                document.exitFullscreen?.();
+              } else {
+                fsWrapRef.current?.requestFullscreen?.();
+              }
+            }}
+            className="p-3 rounded-full glass-hover text-white transition-transform hover:scale-110"
+            title="Toggle fullscreen (F)"
+          >
+            {browserFs ? <Minimize2 className="h-6 w-6" /> : <Maximize2 className="h-6 w-6" />}
+          </button>
+        </div>
       </div>
+
+      {/* Playback queue drawer */}
+      {showQueue && (
+        <div className="absolute inset-0 z-40 flex justify-end" onClick={(e) => e.stopPropagation()}>
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowQueue(false)} />
+          <div className="relative w-full max-w-sm h-full bg-black/85 backdrop-blur-xl border-l border-white/10 flex flex-col animate-slide-in-right shadow-2xl">
+            <div className="flex items-center justify-between px-4 py-4 border-b border-white/10 flex-shrink-0">
+              <div className="flex items-center gap-2">
+                <ListMusic className="h-5 w-5 text-accent" />
+                <h2 className="text-white font-semibold">Queue</h2>
+                <span className="text-xs font-medium text-white/45 bg-white/10 rounded-full px-2 py-0.5">{queue.length}</span>
+              </div>
+              <button
+                onClick={() => setShowQueue(false)}
+                className="p-2 rounded-full glass-hover text-white/70 hover:text-white transition-colors"
+                title="Close queue"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            {queue.length === 0 ? (
+              <div className="flex-1 grid place-items-center text-white/40 text-sm px-6 text-center">
+                The queue is empty — add tracks to start listening.
+              </div>
+            ) : (
+              <div className="flex-1 overflow-y-auto py-1.5">
+                {queue.map((qi, i) => {
+                  const isCur = i === qIndex;
+                  return (
+                    <div
+                      key={qi.path + i}
+                      className={`group flex items-center gap-3 px-4 py-2.5 cursor-pointer transition-colors ${isCur ? "bg-accent/10" : "hover:bg-white/5"}`}
+                      onClick={() => {
+                        if (controlled) player.setIndex(i);
+                        else onSelect?.(i);
+                        setShowQueue(false);
+                      }}
+                    >
+                      {/* Play state / index */}
+                      <div className="w-6 flex-shrink-0 flex justify-center">
+                        {isCur ? (
+                          playing ? (
+                            <span className="flex items-end gap-0.5 h-4" aria-label="Playing">
+                              <span className="w-0.5 h-3 rounded-full bg-accent eq-bar" style={{ animationDelay: "0ms" }} />
+                              <span className="w-0.5 h-3 rounded-full bg-accent eq-bar" style={{ animationDelay: "150ms" }} />
+                              <span className="w-0.5 h-3 rounded-full bg-accent eq-bar" style={{ animationDelay: "300ms" }} />
+                            </span>
+                          ) : (
+                            <Play className="h-4 w-4 text-accent fill-current" />
+                          )
+                        ) : (
+                          <span className="text-[11px] font-mono text-white/35">{String(i + 1).padStart(2, "0")}</span>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-sm truncate ${isCur ? "text-white font-medium" : "text-white/75"}`}>
+                          {qi.name.replace(/\.[^.]+$/, "")}
+                        </p>
+                        <p className="text-[11px] text-white/35 truncate mt-0.5">{qi.extension.toUpperCase()} · {qi.path}</p>
+                      </div>
+                      {controlled && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            player.removeFromQueue(i);
+                          }}
+                          className="p-1.5 rounded-full text-white/30 hover:text-red-400 hover:bg-red-500/10 opacity-0 group-hover:opacity-100 transition-all flex-shrink-0"
+                          title="Remove from queue"
+                          aria-label={`Remove ${qi.name} from queue`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="relative z-10 flex-1 flex flex-col items-center justify-center w-full max-w-2xl mx-auto px-4 sm:px-6 pt-4 sm:pt-0 pb-20 sm:pb-8" style={{ paddingBottom: "max(5rem, env(safe-area-inset-bottom))" }}>
         {/* Album Art — spinning vinyl with tonearm */}
@@ -606,36 +738,33 @@ function AudioPlayer({
         </div>
 
         <div className="w-full space-y-2" onClick={(e) => e.stopPropagation()}>
-          {/* Progress Bar with touch swipe/tap support */}
+          {/* Progress Bar — click + drag-to-seek (pointer events cover mouse/touch/pen) */}
           <div
-            className="relative h-2 sm:h-2.5 rounded-full bg-white/20 overflow-hidden cursor-pointer group"
-            onTouchStart={(e) => {
-              const rect = e.currentTarget.getBoundingClientRect();
-              const x = (e.touches[0].clientX - rect.left) / rect.width;
-              seek(Math.max(0, Math.min(duration || 0, x * (duration || 0))));
+            className="relative h-2 sm:h-2.5 rounded-full bg-white/20 overflow-hidden cursor-pointer group touch-none"
+            onPointerDown={(e) => {
+              try { (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId); } catch { /* ignore */ }
+              seekFromPointer(e);
             }}
-            onTouchMove={(e) => {
-              e.preventDefault();
-              const rect = e.currentTarget.getBoundingClientRect();
-              const x = (e.touches[0].clientX - rect.left) / rect.width;
-              seek(Math.max(0, Math.min(duration || 0, x * (duration || 0))));
+            onPointerMove={(e) => {
+              if (e.buttons === 0) return; // not actively pressed
+              seekFromPointer(e);
             }}
-            onClick={(e) => {
-              const rect = e.currentTarget.getBoundingClientRect();
-              const x = (e.clientX - rect.left) / rect.width;
-              seek(Math.max(0, Math.min(duration || 0, x * (duration || 0))));
+            onPointerUp={commitSeek}
+            onPointerCancel={() => {
+              dragTimeRef.current = null;
+              setDragTime(null);
             }}
           >
               {bufferedPct > 0 && (
                 <div className="absolute inset-y-0 left-0 bg-white/15 transition-all duration-300" style={{ width: `${bufferedPct}%` }} />
               )}
               <div className="absolute inset-y-0 left-0 progress-fill" style={{ width: `${pct}%` }} />
-              <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                <div className="h-3 w-3 sm:h-4 sm:w-4 rounded-full bg-white shadow-lg" style={{ marginLeft: `${pct}%`, transform: 'translateX(-50%)' }} />
+              <div className={`absolute inset-0 flex items-center justify-center transition-opacity ${dragTime !== null || playing ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
+                <div className={`h-3 w-3 sm:h-4 sm:w-4 rounded-full shadow-lg ${dragTime !== null ? "bg-accent scale-125" : "bg-white"}`} style={{ marginLeft: `${pct}%`, transform: 'translateX(-50%)' }} />
               </div>
             </div>
             <div className="flex justify-between text-xs font-medium text-white/55 font-mono tabular-nums">
-              <span>{fmt(curTime)}</span>
+              <span>{fmt(dragTime ?? curTime)}</span>
               <span>{fmt(duration)}</span>
             </div>
             {buffering && playing && (

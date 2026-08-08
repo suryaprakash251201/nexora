@@ -23,6 +23,7 @@ interface PlayerState {
   next: (auto?: boolean) => void;
   prev: () => void;
   setIndex: (i: number) => void;
+  removeFromQueue: (i: number) => void;
   seek: (t: number) => void;
   setVolume: (v: number) => void;
   setPlaybackRate: (r: number) => void;
@@ -164,6 +165,25 @@ export const usePlayer = create<PlayerState>((set, get) => ({
   },
 
   setIndex: (i) => { engine.timeOffset = 0; set({ index: i, currentTime: 0, isPlaying: true }); persist(); },
+
+  removeFromQueue: (i) => {
+    const { queue, index } = get();
+    if (i < 0 || i >= queue.length) return;
+    const nextQ = queue.filter((_, idx) => idx !== i);
+    if (nextQ.length === 0) {
+      engine.pause();
+      engine.timeOffset = 0;
+      set({ queue: [], index: -1, currentTime: 0, duration: 0, isPlaying: false });
+      persist();
+      return;
+    }
+    // Keep the same track playing: shift the index so it still points at it.
+    let ni = index;
+    if (i < index) ni = index - 1;
+    else if (i === index) ni = Math.min(index, nextQ.length - 1);
+    set({ queue: nextQ, index: ni });
+    persist();
+  },
 
   seek: (t) => engine.seek(t),
 
