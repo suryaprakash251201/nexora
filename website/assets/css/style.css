@@ -204,6 +204,11 @@
 @media (max-width: 767.98px) {
   .arch-arrow { transform: rotate(90deg); padding: 6px 0; }
 }
+@media (max-width: 575.98px) {
+  .arch-flow { flex-direction: column; align-items: center; }
+  .arch-node { width: 100%; flex: 0 0 auto; }
+  .arch-arrow { transform: rotate(90deg); padding: 6px 0; flex: 0 0 auto; }
+}
 
 /* ---------- gallery polish ---------- */
 .gallery-item {
@@ -211,6 +216,106 @@
 }
 .gallery-item img { transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1); }
 .gallery-item:hover img { transform: scale(1.05); }
+
+/* ---------- downloads ---------- */
+.dl-card {
+  height: 100%;
+  background: var(--nx-glass);
+  border: 1px solid var(--nx-border);
+  border-radius: 20px;
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+  transition: transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+}
+.dl-card:hover { transform: translateY(-6px); border-color: var(--bd-purple); box-shadow: var(--nx-shadow-sm); }
+.dl-head { display: flex; align-items: center; gap: 0.85rem; }
+.dl-ico {
+  width: 48px; height: 48px;
+  display: grid; place-items: center;
+  border-radius: 14px; font-size: 1.3rem;
+  border: 1px solid;
+  flex-shrink: 0;
+}
+.dl-head h5 { font-size: 1.05rem; font-weight: 700; margin: 0; }
+.dl-sub { font-size: 0.75rem; color: var(--nx-muted); }
+.dl-ver {
+  margin-left: auto;
+  font-size: 0.68rem; font-weight: 700;
+  color: var(--c-emerald); background: var(--bg-emerald);
+  border: 1px solid var(--bd-emerald);
+  padding: 3px 10px; border-radius: 999px;
+  white-space: nowrap;
+}
+.dl-links { display: flex; flex-direction: column; gap: 0.55rem; margin-top: auto; }
+.dl-btn {
+  display: flex; align-items: center; gap: 0.7rem;
+  text-decoration: none;
+  font-size: 0.86rem; font-weight: 600;
+  color: var(--nx-text);
+  border: 1px solid var(--nx-border);
+  border-radius: 12px;
+  padding: 0.68rem 0.9rem;
+  background: var(--nx-card);
+  transition: all 0.2s ease;
+}
+.dl-btn:hover {
+  border-color: var(--bd-purple);
+  color: var(--c-purple);
+  transform: translateY(-2px);
+  box-shadow: var(--nx-shadow-sm);
+}
+.dl-btn .bi-download { color: var(--c-purple); font-size: 1rem; }
+.dl-btn small {
+  margin-left: auto;
+  font-weight: 500;
+  font-size: 0.72rem;
+  color: var(--nx-muted);
+  white-space: nowrap;
+}
+.dl-btn small i { font-style: normal; }
+.dl-format { display: inline-flex; align-items: center; gap: 6px; font-size: 0.8rem; }
+.dl-format b { font-weight: 700; }
+/* coming soon cards */
+.dl-soon {
+  border-style: dashed;
+  opacity: 0.82;
+}
+.dl-soon .dl-ico { color: var(--nx-muted); border-color: var(--nx-border); background: transparent; }
+.soon-badge {
+  margin-left: auto;
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 0.68rem; font-weight: 700; letter-spacing: 0.04em;
+  color: var(--c-amber); background: var(--bg-amber);
+  border: 1px solid var(--bd-amber);
+  padding: 4px 10px; border-radius: 999px;
+  white-space: nowrap;
+  text-transform: uppercase;
+}
+.dl-soon-msg {
+  margin-top: auto;
+  font-size: 0.82rem;
+  color: var(--nx-muted);
+  border: 1px dashed var(--nx-border);
+  border-radius: 12px;
+  padding: 0.85rem 0.95rem;
+  line-height: 1.55;
+  background: var(--nx-card);
+}
+.dl-all {
+  display: flex; align-items: center; justify-content: center; gap: 0.6rem;
+  text-decoration: none;
+  font-size: 0.9rem; font-weight: 600;
+  color: var(--c-purple);
+  border: 1px solid var(--bd-purple);
+  background: var(--bg-purple);
+  border-radius: 12px;
+  padding: 0.75rem 1rem;
+  transition: all 0.2s ease;
+  margin-top: auto;
+}
+.dl-all:hover { transform: translateY(-2px); box-shadow: var(--nx-shadow-sm); }
 
 /* ---------- base ---------- */
 html { scroll-behavior: smooth; }
@@ -446,7 +551,7 @@ body {
 .btn-nx-sm { padding: 0.5rem 1.1rem; font-size: 0.9rem; border-radius: 10px; }
 
 /* ---------- hero ---------- */
-.hero { position: relative; padding: 8.5rem 0 5.5rem; }
+.hero { position: relative; padding: 8.5rem 0 5.5rem; overflow: hidden; }
 .hero-badge {
   display: inline-flex;
   align-items: center;
