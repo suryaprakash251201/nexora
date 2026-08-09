@@ -1,0 +1,22 @@
+diff --git a/node_modules/image-size/dist/types/icns.js b/node_modules/image-size/dist/types/icns.js
+index f2bfafe..89217ad 100644
+--- a/node_modules/image-size/dist/types/icns.js
++++ b/node_modules/image-size/dist/types/icns.js
+@@ -82,7 +82,7 @@ exports.ICNS = {
+         let imageOffset = SIZE_HEADER;
+         let imageHeader = readImageHeader(input, imageOffset);
+         let imageSize = getImageSize(imageHeader[0]);
+-        imageOffset += imageHeader[1];
++        imageOffset += imageHeader[1] || 8; // CVE-2025-71330: zero-length guard
+         if (imageOffset === fileLength)
+             return imageSize;
+         const result = {
+@@ -93,7 +93,7 @@ exports.ICNS = {
+         while (imageOffset < fileLength && imageOffset < inputLength) {
+             imageHeader = readImageHeader(input, imageOffset);
+             imageSize = getImageSize(imageHeader[0]);
+-            imageOffset += imageHeader[1];
++            imageOffset += imageHeader[1] || 8; // CVE-2025-71330: zero-length guard
+             result.images.push(imageSize);
+         }
+         return result;

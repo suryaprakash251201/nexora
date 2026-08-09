@@ -31,13 +31,15 @@
   },
   "devDependencies": {
     "@types/react": "~19.1.0",
+    "patch-package": "^8.0.1",
     "typescript": "~5.9.2"
   },
   "scripts": {
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "postinstall": "patch-package"
   },
   "private": true,
   "overrides": {
@@ -47,6 +49,7 @@
     "postcss": "8.5.25",
     "react-native-markdown-display": {
       "markdown-it": "14.3.0"
-    }
+    },
+    "nanoid": "3.3.18"
   }
 }
