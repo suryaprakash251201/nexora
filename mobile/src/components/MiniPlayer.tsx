@@ -263,7 +263,8 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
           },
           shadow,
         ]}
-      >        <TouchableOpacity
+      >
+        <TouchableOpacity
           style={[
             styles.miniInner,
             { backgroundColor: colors.surfaceElevated, borderColor: colors.borderSoft },
