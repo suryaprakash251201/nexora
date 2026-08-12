@@ -209,8 +209,16 @@ function AudioPlayer({
       const action = (e as CustomEvent).detail;
       const a = ref.current;
       if (action === "MediaPlay" || action === "MediaPause") {
-        if (controlled) { player.toggle(); return; }
-        if (a) { if (a.paused) a.play().catch(() => {}); else a.pause(); }
+        // Directional semantics: the play key resumes, the pause key pauses.
+        // Toggling both would pause on a stray play key and vice-versa.
+        const eng = engine.audio;
+        const target = controlled ? eng : a;
+        if (!target) return;
+        if (action === "MediaPlay") {
+          if (target.paused) target.play().catch(() => {});
+        } else {
+          if (!target.paused) target.pause();
+        }
       } else if (action === "MediaStop") {
         if (controlled) {
           if (engine.audio) { engine.audio.pause(); engine.audio.currentTime = 0; }
@@ -805,51 +813,35 @@ function AudioPlayer({
             )}
         </div>
 
-        {/* Primary Controls */}
-        <div className="flex items-center justify-center gap-3 sm:gap-5 md:gap-7 w-full mt-6 sm:mt-9">
+        {/* Primary Controls — prev/play/next cluster with shuffle/repeat flanking */}
+        <div className="flex items-center justify-center gap-4 sm:gap-7 w-full mt-6 sm:mt-9">
           {controlled && (
             <button
               onClick={() => player.setShuffle(!player.shuffle)}
-              className={`p-2 sm:p-3 rounded-full transition-colors ${player.shuffle ? "text-accent bg-accent/15" : "text-white/70 hover:text-white glass-hover"}`}
+              className={`p-2.5 sm:p-3 rounded-full transition-all duration-200 active:scale-95 ${player.shuffle ? "text-accent bg-accent/15 shadow-[0_0_16px_rgba(91,140,255,0.25)]" : "text-white/70 hover:text-white glass-hover hover:scale-110"}`}
               title="Shuffle"
             >
               <Shuffle className="h-5 w-5 sm:h-6 sm:w-6" />
             </button>
           )}
 
-          <div className="flex items-center gap-2 sm:gap-4">
+          <div className="flex items-center gap-3 sm:gap-5">
             {multi && (
-              <button onClick={() => step(-1)} className="p-2 sm:p-3 rounded-full glass-hover text-white transition-transform hover:scale-110" title="Previous">
+              <button onClick={() => step(-1)} className="p-2.5 sm:p-3 rounded-full glass-hover text-white transition-all duration-200 hover:scale-110 active:scale-95" title="Previous">
                 <SkipBack className="h-5 w-5 sm:h-6 sm:w-6" />
               </button>
             )}
 
             <button
-              onClick={() => seek(Math.max(0, curTime - 10))}
-              className="p-2 sm:p-3 rounded-full glass-hover text-white transition-transform hover:scale-110"
-              title="Back 10s (←)"
-            >
-              <Rewind className="h-4 w-4 sm:h-5 sm:w-5" />
-            </button>
-
-            <button
               onClick={toggle}
-              className="h-16 w-16 sm:h-20 sm:w-20 rounded-full bg-white text-black grid place-items-center transition-transform hover:scale-105 shadow-xl shadow-white/10 active:scale-95"
+              className="h-16 w-16 sm:h-20 sm:w-20 rounded-full bg-gradient-to-b from-white to-white/90 text-black grid place-items-center transition-all duration-200 hover:scale-105 active:scale-95 shadow-[0_10px_30px_rgba(0,0,0,0.45),0_0_0_1px_rgba(255,255,255,0.25)] hover:shadow-[0_10px_36px_rgba(0,0,0,0.5),0_0_30px_rgba(91,140,255,0.35)]"
               title={playing ? "Pause (Space)" : "Play (Space)"}
             >
               {playing ? <Pause className="h-7 w-7 sm:h-9 sm:w-9 fill-current" /> : <Play className="h-7 w-7 sm:h-9 sm:w-9 translate-x-1 fill-current" />}
             </button>
 
-            <button
-              onClick={() => seek(Math.min(duration || 0, curTime + 10))}
-              className="p-2 sm:p-3 rounded-full glass-hover text-white transition-transform hover:scale-110"
-              title="Forward 10s (→)"
-            >
-              <FastForward className="h-4 w-4 sm:h-5 sm:w-5" />
-            </button>
-
             {multi && (
-              <button onClick={() => step(1)} className="p-2 sm:p-3 rounded-full glass-hover text-white transition-transform hover:scale-110" title="Next">
+              <button onClick={() => step(1)} className="p-2.5 sm:p-3 rounded-full glass-hover text-white transition-all duration-200 hover:scale-110 active:scale-95" title="Next">
                 <SkipForward className="h-5 w-5 sm:h-6 sm:w-6" />
               </button>
             )}
@@ -858,7 +850,7 @@ function AudioPlayer({
           {controlled && (
             <button
               onClick={() => player.cycleRepeat()}
-              className={`p-2 sm:p-3 rounded-full transition-colors ${player.repeat !== "off" ? "text-accent bg-accent/15" : "text-white/70 hover:text-white glass-hover"}`}
+              className={`p-2.5 sm:p-3 rounded-full transition-all duration-200 active:scale-95 ${player.repeat !== "off" ? "text-accent bg-accent/15 shadow-[0_0_16px_rgba(91,140,255,0.25)]" : "text-white/70 hover:text-white glass-hover hover:scale-110"}`}
               title={`Repeat: ${player.repeat}`}
             >
               {player.repeat === "one" ? <Repeat1 className="h-5 w-5 sm:h-6 sm:w-6" /> : <Repeat className="h-5 w-5 sm:h-6 sm:w-6" />}
@@ -875,7 +867,7 @@ function AudioPlayer({
           <div className="relative">
             <button
               onClick={() => setShowRates(!showRates)}
-              className="text-xs font-mono px-3 py-1.5 rounded-full glass-hover text-white/80 hover:text-white transition-colors"
+              className={`text-xs font-mono px-3 py-1.5 rounded-full transition-all duration-200 active:scale-95 ${showRates ? "text-accent bg-accent/15" : "glass-hover text-white/80 hover:text-white"}`}
               title="Playback speed"
             >
               {rate}x
@@ -895,11 +887,11 @@ function AudioPlayer({
             )}
           </div>
 
-        {/* Volume — touch-friendly slider */}
+        {/* Volume — touch-friendly slider with level knob */}
           <div className="flex items-center gap-2">
             <button
               onClick={() => (controlled ? player.toggleMute() : setLMuted(!muted))}
-              className="p-2 rounded-full glass-hover transition-transform hover:scale-110"
+              className={`p-2 rounded-full transition-all duration-200 hover:scale-110 active:scale-95 ${muted || volume === 0 ? "text-white/50" : "glass-hover text-white/80 hover:text-white"}`}
               title="Mute (M)"
             >
               {muted || volume === 0 ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
@@ -918,8 +910,13 @@ function AudioPlayer({
                 changeVol(x);
               }}
             >
-              <div className="absolute inset-y-3 left-0 right-0 h-1.5 rounded-full bg-white/20 overflow-hidden pointer-events-none">
+              <div className="absolute inset-y-3 left-0 right-0 h-2 rounded-full bg-white/20 pointer-events-none">
                 <div className="absolute inset-y-0 left-0" style={volFillStyle(volume, muted)} />
+                {/* Level knob — the only handle on this control */}
+                <div
+                  className={`absolute top-1/2 h-3.5 w-3.5 rounded-full shadow-md ring-1 transition-colors ${muted || volume === 0 ? "bg-white/40 ring-white/10" : "bg-white ring-white/30"}`}
+                  style={{ left: `${(muted ? 0 : volume) * 100}%`, transform: "translate(-50%, -50%)" }}
+                />
               </div>
             </div>
           </div>
@@ -927,7 +924,7 @@ function AudioPlayer({
           {cur && (
             <button
               onClick={() => startDownload(cur.root_id, cur.path, cur.name)}
-              className="p-2.5 rounded-full glass-hover text-white/80 hover:text-white transition-transform hover:scale-110"
+              className="p-2.5 rounded-full glass-hover text-white/80 hover:text-white transition-all duration-200 hover:scale-110 active:scale-95"
               title="Download file"
             >
               <Download className="h-5 w-5" />
@@ -943,14 +940,14 @@ function AudioPlayer({
                   console.error("Failed to open externally:", e);
                 }
               }}
-              className="p-2.5 rounded-full glass-hover text-white/80 hover:text-white transition-transform hover:scale-110"
+              className="p-2.5 rounded-full glass-hover text-white/80 hover:text-white transition-all duration-200 hover:scale-110 active:scale-95"
               title="Open in native player"
             >
               <ExternalLink className="h-5 w-5" />
             </button>
           )}
           {cur && (
-            <AddToPlaylistMenu items={[cur]} className="p-2.5 rounded-full glass-hover text-white/80 hover:text-white transition-transform hover:scale-110">
+            <AddToPlaylistMenu items={[cur]} className="p-2.5 rounded-full glass-hover text-white/80 hover:text-white transition-all duration-200 hover:scale-110 active:scale-95">
               <Plus className="h-5 w-5" />
             </AddToPlaylistMenu>
           )}

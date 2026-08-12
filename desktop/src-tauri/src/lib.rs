@@ -1,7 +1,12 @@
 use tauri::{Emitter, Manager};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
 
 static SLEEP_INHIBITED: AtomicBool = AtomicBool::new(false);
+/// PID of the platform inhibitor process we spawned (macOS `caffeinate` /
+/// Linux `systemd-inhibit`). Stored so release can stop exactly that process
+/// — no fragile `pkill -f` pattern matching that can miss or over-kill.
+static INHIBIT_PID: Mutex<Option<u32>> = Mutex::new(None);
 /// Set once the system tray was successfully created. When true, closing the
 /// window hides it to the tray instead of quitting (standard media-app UX).
 static TRAY_READY: AtomicBool = AtomicBool::new(false);
@@ -25,60 +30,80 @@ async fn set_sleep_inhibition(inhibit: bool, app: tauri::AppHandle) -> Result<()
     }
     SLEEP_INHIBITED.store(inhibit, Ordering::SeqCst);
 
-    #[cfg(target_os = "linux")]
-    {
-        // Use systemd-inhibit or xdg-desktop-portal via dbus on Linux.
-        // For simplicity, we spawn a dbus-send to inhibit sleep.
-        use std::process::Command;
-        if inhibit {
-            let _ = Command::new("systemd-inhibit")
-                .args(["--what=idle:sleep", "--who=Nexora", "--why=File transfers active", "--mode=block", "sleep", "inf"])
-                .spawn();
-        } else {
-            // Kill any systemd-inhibit processes we started
-            let _ = Command::new("pkill")
-                .args(["-f", "systemd-inhibit.*Nexora"])
-                .output();
-        }
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        // Use SetThreadExecutionState on Windows
-        unsafe {
-            #[link(name = "kernel32")]
-            extern "system" {
-                fn SetThreadExecutionState(flags: u32) -> u32;
+    if inhibit {
+        // Spawn a platform inhibitor and remember its PID so release can stop
+        // exactly that process (no pkill pattern matching).
+        #[cfg(target_os = "linux")]
+        {
+            // systemd-inhibit runs `sleep infinity` under an idle+sleep lock;
+            // the lock is released when the process is killed.
+            use std::process::Command;
+            if let Ok(child) = Command::new("systemd-inhibit")
+                .args([
+                    "--what=idle:sleep",
+                    "--who=Nexora",
+                    "--why=File transfers active",
+                    "--mode=block",
+                    "sleep",
+                    "infinity",
+                ])
+                .spawn()
+            {
+                *INHIBIT_PID.lock().unwrap() = Some(child.id());
             }
-            const ES_CONTINUOUS: u32 = 0x80000000;
-            const ES_SYSTEM_REQUIRED: u32 = 0x00000001;
-            const ES_DISPLAY_REQUIRED: u32 = 0x00000002;
-            if inhibit {
+        }
+
+        #[cfg(target_os = "windows")]
+        {
+            // SetThreadExecutionState is a flag, not a process — no PID needed.
+            unsafe {
+                #[link(name = "kernel32")]
+                extern "system" {
+                    fn SetThreadExecutionState(flags: u32) -> u32;
+                }
+                const ES_CONTINUOUS: u32 = 0x80000000;
+                const ES_SYSTEM_REQUIRED: u32 = 0x00000001;
+                const ES_DISPLAY_REQUIRED: u32 = 0x00000002;
                 SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED);
-            } else {
+            }
+        }
+
+        #[cfg(target_os = "macos")]
+        {
+            // `caffeinate -dims` with NO trailing utility runs until killed.
+            // (The old `-dims &` passed "&" as a command argument, making
+            // caffeinate try to exec "&" as a utility and exit immediately —
+            // inhibition silently never engaged on macOS.)
+            use std::process::Command;
+            if let Ok(child) = Command::new("caffeinate").args(["-dims"]).spawn() {
+                *INHIBIT_PID.lock().unwrap() = Some(child.id());
+            }
+        }
+
+        eprintln!("[nexora] Preventing system sleep (transfers active)");
+    } else {
+        #[cfg(not(target_os = "windows"))]
+        {
+            // Stop exactly the inhibitor we started (SIGTERM). On Linux this
+            // releases the systemd-inhibit lock; on macOS it stops caffeinate.
+            use std::process::Command;
+            if let Some(pid) = INHIBIT_PID.lock().unwrap().take() {
+                let _ = Command::new("kill").arg(pid.to_string()).output();
+            }
+        }
+
+        #[cfg(target_os = "windows")]
+        {
+            unsafe {
+                #[link(name = "kernel32")]
+                extern "system" {
+                    fn SetThreadExecutionState(flags: u32) -> u32;
+                }
+                const ES_CONTINUOUS: u32 = 0x80000000;
                 SetThreadExecutionState(ES_CONTINUOUS);
             }
         }
-    }
 
-    #[cfg(target_os = "macos")]
-    {
-        // Use caffeinate on macOS
-        use std::process::Command;
-        if inhibit {
-            let _ = Command::new("caffeinate")
-                .args(["-dims", "&"])
-                .spawn();
-        } else {
-            let _ = Command::new("pkill")
-                .args(["-f", "caffeinate.*Nexora"])
-                .output();
-        }
-    }
-
-    if inhibit {
-        eprintln!("[nexora] Preventing system sleep (transfers active)");
-    } else {
         eprintln!("[nexora] Allowing system sleep");
     }
     Ok(())
