@@ -7,6 +7,7 @@ type AudioContextType = {
   player: VideoPlayer | null;
   currentTrack: FileItem | null;
   playlist: FileItem[];
+  queueIndex: number;
   playTrack: (item: FileItem, playlist?: FileItem[]) => void;
   nextTrack: () => void;
   prevTrack: () => void;
@@ -16,6 +17,13 @@ type AudioContextType = {
   shuffle: boolean;
   setShuffle: (s: boolean) => void;
 };
+
+/** Stable session id per playback session (server kills stale ffmpeg on seek). */
+function newSession(): string {
+  const g = (globalThis as any)?.crypto;
+  if (g && typeof g.randomUUID === "function") return g.randomUUID();
+  return Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
 
 const AudioContext = createContext<AudioContextType | null>(null);
 
@@ -29,13 +37,28 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   // Start with no source — expo-video treats null as “no media loaded”.
   // (An empty string is an invalid URI on both iOS and Android and logs errors.)
   const player = useVideoPlayer(null);
+  const sessionRef = useRef(newSession());
 
+  // Stream through the server transcode pipeline when the codec is not
+  // natively decodable (ALAC .m4a, WMA, Ogg/Opus, …) — mirrors the web app.
   useEffect(() => {
-    if (currentTrack && api) {
-      const url = api.rawFileUrl(currentTrack.root_id, currentTrack.path);
-      player.replace(url);
-      player.play();
-    }
+    if (!currentTrack || !api) return;
+    let cancelled = false;
+    sessionRef.current = newSession();
+    api
+      .audioStreamUrl(currentTrack.root_id, currentTrack.path, {
+        extension: currentTrack.extension,
+        mime: currentTrack.mime,
+        session: sessionRef.current,
+      })
+      .then((url) => {
+        if (cancelled) return;
+        player.replace(url);
+        player.play();
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [currentTrack, api]);
 
   // If the session ends (logout / token expiry), stop playback so audio
@@ -84,6 +107,19 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     return () => sub.remove();
   }, [player, step]);
 
+  // If a track fails to load/play (e.g. unsupported codec and no server
+  // transcode), auto-advance to the next track instead of dying silently.
+  useEffect(() => {
+    const sub = player.addListener("statusChange", ({ status }) => {
+      if (status !== "error") return;
+      const { currentTrack: ct, playlist: pl } = stateRef.current;
+      if (!ct || pl.length <= 1) return;
+      const next = step(pl, ct, 1);
+      if (next && next.path !== ct.path) setCurrentTrack(next);
+    });
+    return () => sub.remove();
+  }, [player, step]);
+
   const playTrack = (item: FileItem, list?: FileItem[]) => {
     setCurrentTrack(item);
     if (list) {
@@ -111,12 +147,18 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     setShowPlayer(false);
   };
 
+  const queueIndex =
+    currentTrack && playlist.length > 0
+      ? playlist.findIndex((x) => x.path === currentTrack.path)
+      : -1;
+
   return (
     <AudioContext.Provider
       value={{
         player,
         currentTrack,
         playlist,
+        queueIndex,
         playTrack,
         nextTrack,
         prevTrack,

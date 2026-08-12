@@ -26,6 +26,7 @@ import { GlyphTile } from "../components/AppIcon";
 import { previewKind, formatBytes, formatDate } from "../api/client";
 import { copyShareLink } from "../lib/shareLink";
 import { EqBars } from "../components/EqBars";
+import { BottomSheet } from "../components/BottomSheet";
 import type { RootStackParamList } from "../navigation/types";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Preview">;
@@ -169,10 +170,10 @@ export default function PreviewScreen({ route }: Props) {
 
       {kind === "audio" && (
         <AudioPlayer
-          uri={rawUrl}
           name={item.name}
           size={item.size}
           ext={item.extension || ""}
+          mime={item.mime}
           rootId={item.root_id || rootId}
           path={item.path}
           onShare={downloadAndOpen}
@@ -340,6 +341,7 @@ function VideoPlayer({ uri, hlsUri, ext, onFallback }: { uri: string; hlsUri: st
   const [failed, setFailed] = useState(false);
   const [switching, setSwitching] = useState(false);
   const switched = useRef(needsTranscode && !!hlsUri);
+  const [sheetOpen, setSheetOpen] = useState(false);
 
   useEffect(() => {
     const sub = player.addListener("statusChange", ({ status }) => {
@@ -362,7 +364,9 @@ function VideoPlayer({ uri, hlsUri, ext, onFallback }: { uri: string; hlsUri: st
     });
     return () => {
       sub.remove();
-      player.pause();
+      try {
+        player.pause();
+      } catch (e) {}
     };
   }, [player, hlsUri]);
 
@@ -398,16 +402,84 @@ function VideoPlayer({ uri, hlsUri, ext, onFallback }: { uri: string; hlsUri: st
           <ActivityIndicator size="large" color={colors.accent} />
         </View>
       ) : null}
+
+      <TouchableOpacity
+        style={styles.videoMenuBtn}
+        onPress={() => setSheetOpen(true)}
+      >
+        <MaterialCommunityIcons name="dots-vertical" size={28} color="#fff" />
+      </TouchableOpacity>
+
+      <BottomSheet
+        visible={sheetOpen}
+        onClose={() => setSheetOpen(false)}
+        title="Video Options"
+        actions={[
+          {
+            label: "Open with player",
+            icon: "open-in-new",
+            onPress: () => {
+              if (onFallback) onFallback();
+            },
+          },
+        ]}
+      />
     </View>
   );
 }
 
 // ── Immersive Vinyl Audio Player ────────────────────────────────────────────
-function AudioPlayer({ uri, name, size, ext, rootId, path, onShare }: { uri: string; name: string; size: number; ext: string; rootId: string; path: string; onShare: () => void }) {
+function AudioPlayer({ name, size, ext, mime, rootId, path, onShare }: { name: string; size: number; ext: string; mime?: string; rootId: string; path: string; onShare: () => void }) {
   const { colors, font, gradients } = useTheme();
   const { api } = useSession();
   const [favorited, setFavorited] = useState(false);
-  const player = useVideoPlayer(uri);
+
+  // Resolve the stream URL first: codecs the native players can't decode
+  // (ALAC .m4a, WMA, Ogg/Opus…) are routed through the server transcode
+  // pipeline so they actually play on both iOS and Android.
+  const [resolvedUri, setResolvedUri] = useState<string | null>(null);
+  useEffect(() => {
+    if (!api) return;
+    let cancelled = false;
+    setResolvedUri(null);
+    api
+      .audioStreamUrl(rootId, path, {
+        extension: ext,
+        mime,
+        session: generateSessionId(),
+      })
+      .then((url) => {
+        if (!cancelled) setResolvedUri(url);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [api, rootId, path, ext, mime]);
+
+  // Load the resolved stream once ready.
+  const player = useVideoPlayer(null);
+  useEffect(() => {
+    if (resolvedUri) {
+      player.replace(resolvedUri);
+    }
+  }, [resolvedUri]);
+
+  // Sync the favorite state with the server.
+  useEffect(() => {
+    if (!api) return;
+    let cancelled = false;
+    api
+      .listFavorites()
+      .then((res) => {
+        if (cancelled) return;
+        setFavorited(res.items.some((f) => f.root_id === rootId && f.path === path));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [api, rootId, path]);
+
   const [playing, setPlaying] = useState(false);
   const [duration, setDuration] = useState(0);
   const [current, setCurrent] = useState(0);
@@ -465,7 +537,9 @@ function AudioPlayer({ uri, name, size, ext, rootId, path, onShare }: { uri: str
     ];
     return () => {
       subs.forEach((s) => s.remove());
-      player.pause();
+      try {
+        player.pause();
+      } catch (e) {}
     };
   }, [player]);
 
@@ -725,6 +799,18 @@ const styles = StyleSheet.create({
     paddingVertical: 11,
   },
   videoErrorBtnText: { color: "#fff", fontWeight: "700" },
+  videoMenuBtn: {
+    position: "absolute",
+    top: 48,
+    right: 16,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 10,
+  },
 
   // Text / Code / Markdown
   textRoot: { flex: 1 },

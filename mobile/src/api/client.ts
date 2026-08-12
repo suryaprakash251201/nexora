@@ -13,6 +13,7 @@ import type {
   TrashItem,
   ShareInfo,
 } from "./types";
+import { needsAudioTranscode } from "../lib/audioQuality";
 
 /**
  * Nexora mobile API client.
@@ -127,6 +128,28 @@ export class Api {
       path,
       session,
     });
+  }
+
+  /**
+   * Resolves the best playback URL for an audio file: the raw file when the
+   * codec is natively decodable, otherwise the server's transcode endpoint
+   * (AAC-in-MP4 via ffmpeg) so ALAC .m4a / WMA / Ogg etc. play on both iOS
+   * and Android. Pass a stable `session` id per playback session so the
+   * server can kill stale ffmpeg processes.
+   */
+  async audioStreamUrl(
+    rootId: string,
+    path: string,
+    opts?: { extension?: string; mime?: string; session?: string }
+  ): Promise<string> {
+    const ext = opts?.extension;
+    const mime = opts?.mime;
+    const needs = needsAudioTranscode(ext, mime);
+    if (!needs) return this.rawFileUrl(rootId, path);
+    const supports = await this.serverSupportsTranscode();
+    if (!supports) return this.rawFileUrl(rootId, path); // onError will surface it
+    const session = opts?.session || Math.random().toString(36).slice(2) + Date.now().toString(36);
+    return this.transcodeUrl(rootId, path, { session, quality: "medium" });
   }
 
   private transcodeSupport: boolean | null = null;

@@ -453,6 +453,26 @@ function mkWma(
 
 // ─── Display Utilities ───────────────────────────────────────────────
 
+// Codecs the native players (iOS AVPlayer / Android ExoPlayer) cannot decode
+// reliably. These must be routed through the server's ffmpeg transcode
+// pipeline (AAC-in-MP4) to be playable on both platforms.
+const NON_NATIVE_CODECS = new Set(["ALAC", "WMA", "DSD", "APE", "WV", "TTA", "OGG", "OPUS"]);
+
+/**
+ * needsAudioTranscode reports whether this audio file must be streamed
+ * through the server transcode endpoint instead of played raw.
+ *
+ * Extension/MIME heuristics: `.m4a` is ambiguous (AAC plays everywhere, ALAC
+ * nowhere), so large M4A files (likely ALAC / hi-res) are pre-routed — the
+ * same rule detectAudioQuality uses to label them lossless. WMA, DSD-family,
+ * APE and Ogg/Opus are never decodable by the native players.
+ */
+export function needsAudioTranscode(extension?: string, mime?: string): boolean {
+  const q = detectAudioQuality(extension || "", mime || "");
+  if (NON_NATIVE_CODECS.has(q.codec)) return true;
+  return false;
+}
+
 export function formatBitrate(kbps: number | null): string {
   if (kbps === null) return "—";
   if (kbps >= 1000) return `${(kbps / 1000).toFixed(1)} Mbps`;

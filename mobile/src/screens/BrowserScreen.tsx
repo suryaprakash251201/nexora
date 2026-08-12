@@ -691,7 +691,7 @@ export default function BrowserScreen({ route, navigation }: Props) {
           ...(actionItem && !actionItem.is_dir
             ? [{ label: "Download & share", icon: "share-variant", onPress: () => actionItem && downloadAndShare(actionItem) }]
             : []),
-          ...(!actionItem?.is_dir
+          ...(actionItem
             ? [
                 {
                   label: "Add to favorites",

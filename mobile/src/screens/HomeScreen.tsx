@@ -235,6 +235,35 @@ export default function HomeScreen() {
               </TouchableOpacity>
             </View>
 
+            {/* Quick search trigger — jumps to the Search tab with focus */}
+            <TouchableOpacity
+              style={[
+                styles.searchBar,
+                {
+                  backgroundColor: colors.surfaceElevated,
+                  borderColor: colors.borderSoft,
+                  borderRadius: radius.xl,
+                },
+                shadowSm,
+              ]}
+              activeOpacity={0.8}
+              onPress={() => navigation.navigate("Search", { focusSearch: true })}
+            >
+              <LinearGradient
+                colors={["rgba(255,255,255,0.06)", "transparent"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.glassHighlight}
+              />
+              <MaterialCommunityIcons name="magnify" size={22} color={colors.accent} />
+              <Text style={[styles.searchPlaceholder, { color: colors.muted, fontSize: font.md }]}>
+                Search files, folders and content…
+              </Text>
+              <View style={[styles.searchPill, { backgroundColor: colors.accentSoft }]}>
+                <MaterialCommunityIcons name="keyboard-outline" size={16} color={colors.accent} />
+              </View>
+            </TouchableOpacity>
+
 
 
             {error ? (

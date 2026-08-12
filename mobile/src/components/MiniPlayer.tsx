@@ -4,27 +4,36 @@ import {
   View,
   Text,
   TouchableOpacity,
+  Pressable,
+  FlatList,
   Animated,
   Modal,
   Dimensions,
   ActivityIndicator,
+  Alert,
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { Image } from "expo-image";
 import { BlurView } from "expo-blur";
+import * as Haptics from "expo-haptics";
+import { File, Paths } from "expo-file-system";
+import * as Sharing from "expo-sharing";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import type { FileItem } from "../api/types";
 import { useAudio } from "../store/AudioContext";
 import { useTheme } from "../store/ThemeContext";
 import { useSession } from "../store/SessionContext";
 import { EqBars } from "./EqBars";
+import { BottomSheet } from "./BottomSheet";
 import { AudioQualityPill } from "./AudioQualityBadge";
 import { AudioQualityDetail } from "./AudioQualityDetail";
+import { copyShareLink } from "../lib/shareLink";
 
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 
 export function MiniPlayer() {
-  const { currentTrack, player, nextTrack, prevTrack, closePlayer, shuffle, setShuffle } = useAudio();
+  const { currentTrack, player, nextTrack, prevTrack, closePlayer, shuffle, setShuffle, playTrack, playlist, queueIndex } = useAudio();
   const { colors, font, gradients, radius, shadow, isDark } = useTheme();
   const { api } = useSession();
   const insets = useSafeAreaInsets();
@@ -36,8 +45,34 @@ export function MiniPlayer() {
   const [repeat, setRepeat] = useState<"off" | "all" | "one">("off");
   const [modalVisible, setModalVisible] = useState(false);
   const [scrubberWidth, setScrubberWidth] = useState(1);
+  const [moreSheet, setMoreSheet] = useState(false);
+  const [queueOpen, setQueueOpen] = useState(false);
+  const [favorited, setFavorited] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   const artworkScaleAnim = useRef(new Animated.Value(0.92)).current;
+
+  const haptic = (style: "light" | "medium" = "light") =>
+    Haptics.impactAsync(
+      style === "light" ? Haptics.ImpactFeedbackStyle.Light : Haptics.ImpactFeedbackStyle.Medium
+    ).catch(() => {});
+
+  // Sync the favorite state for the current track.
+  useEffect(() => {
+    let cancelled = false;
+    setFavorited(false);
+    if (!currentTrack || !api) return;
+    api
+      .listFavorites()
+      .then((res) => {
+        if (cancelled) return;
+        setFavorited(res.items.some((f) => f.root_id === currentTrack.root_id && f.path === currentTrack.path));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [currentTrack, api]);
 
   // ─── Listen to player state & sync timeline ──────────────────────────
   useEffect(() => {
@@ -151,6 +186,65 @@ export function MiniPlayer() {
     }
   };
 
+  // ── Track actions (favorite / share / download / link) ──────────────
+  const toggleFavorite = () => {
+    if (!currentTrack || !api) return;
+    haptic();
+    if (favorited) {
+      api
+        .removeFavorite(currentTrack.root_id, currentTrack.path)
+        .then(() => setFavorited(false))
+        .catch(() => {});
+    } else {
+      api
+        .addFavorite(currentTrack.root_id, currentTrack.path)
+        .then(() => {
+          setFavorited(true);
+          haptic("medium");
+        })
+        .catch(() => {});
+    }
+  };
+
+  const downloadAndShare = async (share: boolean) => {
+    if (!currentTrack || !api) return;
+    setDownloading(true);
+    try {
+      const target = new File(
+        Paths.cache,
+        "nexora-" + currentTrack.name.replace(/[^\w.\-]+/g, "_")
+      );
+      await File.downloadFileAsync(
+        api.rawFileUrl(currentTrack.root_id, currentTrack.path),
+        target
+      );
+      if (share && (await Sharing.isAvailableAsync())) {
+        await Sharing.shareAsync(target.uri, { mimeType: currentTrack.mime || undefined });
+      } else {
+        Alert.alert("Downloaded", `"${currentTrack.name}" saved to the app cache.`);
+      }
+    } catch (e: any) {
+      Alert.alert("Download failed", e?.message || "Something went wrong.");
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  const copyLink = async () => {
+    if (!currentTrack || !api) return;
+    haptic();
+    const url = await copyShareLink(api, currentTrack.root_id, currentTrack.path);
+    if (url) Alert.alert("Link copied", url);
+  };
+
+  const jumpTo = (item: FileItem) => {
+    haptic();
+    setQueueOpen(false);
+    if (!currentTrack || item.path !== currentTrack.path) {
+      playTrack(item, playlist);
+    }
+  };
+
   // ─── RENDER ──────────────────────────────────────────────────────────
   return (
     <>
@@ -208,7 +302,7 @@ export function MiniPlayer() {
             </View>
           </View>
 
-          <TouchableOpacity style={styles.miniBtn} onPress={togglePlay}>
+          <TouchableOpacity style={styles.miniBtn} onPress={() => { haptic(); togglePlay(); }}>
             {status === "loading" ? (
               <ActivityIndicator color={colors.content} size="small" />
             ) : (
@@ -219,7 +313,7 @@ export function MiniPlayer() {
               />
             )}
           </TouchableOpacity>
-          <TouchableOpacity style={styles.miniBtn} onPress={closePlayer}>
+          <TouchableOpacity style={styles.miniBtn} onPress={() => { haptic(); closePlayer(); }}>
             <MaterialCommunityIcons name="close" size={28} color={colors.content} />
           </TouchableOpacity>
         </TouchableOpacity>
@@ -296,6 +390,10 @@ export function MiniPlayer() {
 
               <TouchableOpacity
                 style={styles.headerBtn}
+                onPress={() => {
+                  haptic();
+                  setMoreSheet(true);
+                }}
                 hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
               >
                 <MaterialCommunityIcons
@@ -387,6 +485,10 @@ export function MiniPlayer() {
                         : "rgba(0,0,0,0.06)",
                     },
                   ]}
+                  onPress={() => {
+                    haptic();
+                    setMoreSheet(true);
+                  }}
                 >
                   <MaterialCommunityIcons
                     name="dots-horizontal"
@@ -508,58 +610,178 @@ export function MiniPlayer() {
                 </TouchableOpacity>
               </View>
 
-              {/* ── Secondary Controls Row ── */}
+              {/* ── Secondary Controls Row: shuffle / repeat / queue ── */}
               <View style={styles.secondaryControlsRow}>
                 <TouchableOpacity
                   style={styles.secondaryBtn}
-                  onPress={() => setShuffle(!shuffle)}
+                  onPress={() => {
+                    haptic();
+                    setShuffle(!shuffle);
+                  }}
                   hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 >
                   <MaterialCommunityIcons
                     name="shuffle-variant"
                     size={22}
-                    color={shuffle ? colors.content : colors.muted}
+                    color={shuffle ? colors.accent : colors.muted}
                   />
                 </TouchableOpacity>
 
                 <TouchableOpacity
                   style={styles.secondaryBtn}
-                  onPress={toggleRepeat}
+                  onPress={() => {
+                    haptic();
+                    toggleRepeat();
+                  }}
                   hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 >
                   <MaterialCommunityIcons
                     name={repeat === "one" ? "repeat-once" : "repeat"}
                     size={22}
-                    color={repeat !== "off" ? colors.content : colors.muted}
+                    color={repeat !== "off" ? colors.accent : colors.muted}
                   />
                 </TouchableOpacity>
 
                 <TouchableOpacity
                   style={styles.secondaryBtn}
-                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                >
-                  <MaterialCommunityIcons
-                    name="cast-connected"
-                    size={22}
-                    color={colors.muted}
-                  />
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.secondaryBtn}
+                  onPress={() => {
+                    haptic();
+                    setQueueOpen(true);
+                  }}
                   hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 >
                   <MaterialCommunityIcons
                     name="playlist-music"
                     size={22}
-                    color={colors.muted}
+                    color={queueOpen ? colors.accent : colors.muted}
+                  />
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.secondaryBtn}
+                  onPress={toggleFavorite}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <MaterialCommunityIcons
+                    name={favorited ? "heart" : "heart-outline"}
+                    size={22}
+                    color={favorited ? colors.danger : colors.muted}
                   />
                 </TouchableOpacity>
               </View>
             </View>
+
+            {/* ── Queue panel (slide-up overlay) ── */}
+            {queueOpen && (
+              <View style={styles.queueOverlay}>
+                <Pressable style={StyleSheet.absoluteFill} onPress={() => setQueueOpen(false)} />
+                <View
+                  style={[
+                    styles.queuePanel,
+                    {
+                      backgroundColor: isDark ? "rgba(16,18,26,0.96)" : "rgba(255,255,255,0.98)",
+                      borderColor: colors.borderSoft,
+                      paddingBottom: insets.bottom + 16,
+                    },
+                  ]}
+                >
+                  <View style={styles.queueHeader}>
+                    <View style={styles.queueHeaderLeft}>
+                      <MaterialCommunityIcons name="playlist-music" size={18} color={colors.accent} />
+                      <Text style={[styles.queueTitle, { color: colors.content, fontSize: font.md }]}>Up Next</Text>
+                      <Text style={[styles.queueCount, { color: colors.muted, fontSize: font.xs }]}>
+                        {playlist.length} track{playlist.length === 1 ? "" : "s"}
+                      </Text>
+                    </View>
+                    <TouchableOpacity onPress={() => setQueueOpen(false)} hitSlop={10} style={styles.queueClose}>
+                      <MaterialCommunityIcons name="close" size={20} color={colors.muted} />
+                    </TouchableOpacity>
+                  </View>
+
+                  <FlatList
+                    data={playlist}
+                    keyExtractor={(it, i) => it.root_id + it.path + i}
+                    style={styles.queueList}
+                    contentContainerStyle={{ paddingBottom: 8 }}
+                    ListEmptyComponent={
+                      <Text style={[styles.queueEmpty, { color: colors.muted, fontSize: font.sm }]}>
+                        The queue is empty — add tracks from your library.
+                      </Text>
+                    }
+                    renderItem={({ item, index }) => {
+                      const isCur = index === queueIndex;
+                      return (
+                        <TouchableOpacity
+                          style={[
+                            styles.queueRow,
+                            isCur && { backgroundColor: colors.accentSoft },
+                          ]}
+                          onPress={() => jumpTo(item)}
+                          activeOpacity={0.7}
+                        >
+                          <View style={styles.queueIndexWrap}>
+                            {isCur && playing ? (
+                              <EqBars playing barCount={3} tint={colors.accent} />
+                            ) : (
+                              <Text style={[styles.queueIndex, { color: isCur ? colors.accent : colors.muted }]}>
+                                {String(index + 1).padStart(2, "0")}
+                              </Text>
+                            )}
+                          </View>
+                          <View style={styles.queueText}>
+                            <Text
+                              style={[
+                                styles.queueName,
+                                { color: isCur ? colors.accent : colors.content, fontSize: font.sm },
+                              ]}
+                              numberOfLines={1}
+                            >
+                              {item.name.replace(/\.[^.]+$/, "")}
+                            </Text>
+                            <Text style={[styles.queueSub, { color: colors.muted, fontSize: font.xs }]} numberOfLines={1}>
+                              {(item.extension || "").toUpperCase()} · {item.path}
+                            </Text>
+                          </View>
+                          <MaterialCommunityIcons name="play" size={16} color={isCur ? colors.accent : "transparent"} />
+                        </TouchableOpacity>
+                      );
+                    }}
+                  />
+                </View>
+              </View>
+            )}
           </Animated.View>
         </Modal>
       )}
+
+      {/* ── Track actions sheet ── */}
+      <BottomSheet
+        visible={moreSheet}
+        onClose={() => setMoreSheet(false)}
+        title={currentTrack?.name}
+        actions={[
+          {
+            label: favorited ? "Remove from favorites" : "Add to favorites",
+            icon: favorited ? "heart" : "heart-outline",
+            onPress: toggleFavorite,
+          },
+          {
+            label: "Download",
+            icon: "download",
+            onPress: () => downloadAndShare(false),
+          },
+          {
+            label: "Share",
+            icon: "share-variant",
+            onPress: () => downloadAndShare(true),
+          },
+          {
+            label: "Copy share link",
+            icon: "link-variant",
+            onPress: copyLink,
+          },
+        ]}
+      />
     </>
   );
 }
@@ -805,4 +1027,58 @@ const styles = StyleSheet.create({
   secondaryBtn: {
     padding: 8,
   },
+
+  /* Queue Panel */
+  queueOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: "flex-end",
+    zIndex: 50,
+  },
+  queuePanel: {
+    maxHeight: "70%",
+    borderTopLeftRadius: 26,
+    borderTopRightRadius: 26,
+    borderWidth: 1,
+    borderBottomWidth: 0,
+    paddingTop: 10,
+    paddingHorizontal: 16,
+  },
+  queueHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 10,
+    paddingHorizontal: 4,
+  },
+  queueHeaderLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  queueTitle: { fontWeight: "700" },
+  queueCount: { fontWeight: "600" },
+  queueClose: { padding: 4 },
+  queueList: { flexGrow: 0 },
+  queueEmpty: { textAlign: "center", paddingVertical: 24 },
+  queueRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+  },
+  queueIndexWrap: {
+    width: 28,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  queueIndex: { fontFamily: "monospace", fontSize: 11, fontWeight: "700" },
+  queueText: { flex: 1 },
+  queueName: { fontWeight: "600" },
+  queueSub: { marginTop: 2, fontWeight: "500" },
 });
