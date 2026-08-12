@@ -152,3 +152,37 @@ export interface ShareInfo {
   download_count: number;
   created_at: string;
 }
+
+// ── Playlists (synced with the web app) ──────────────────────────────
+
+export interface PlaylistItem {
+  id: string;
+  playlist_id: string;
+  root_id: string;
+  path: string;
+  created_at: string;
+  name: string;
+  extension: string;
+  mime: string;
+}
+
+export interface Playlist {
+  id: string;
+  name: string;
+  cover_root_id: string;
+  cover_path: string;
+  is_public: boolean;
+  created_at: string;
+  updated_at: string;
+  items: PlaylistItem[];
+}
+
+export interface PlaylistListResponse {
+  items: Playlist[];
+}
+
+export interface PlaylistMutationResponse {
+  ok: boolean;
+  added?: number;
+  skipped?: number;
+}

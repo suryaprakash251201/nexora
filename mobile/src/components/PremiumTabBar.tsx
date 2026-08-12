@@ -13,6 +13,13 @@ const TAB_ICONS: Record<string, string> = {
   Settings: "cog-outline",
 };
 
+/** Fixed height of the pill container — MiniPlayer uses this to sit flush above. */
+export const TAB_BAR_BASE_HEIGHT = 68;
+/** Extra space reserved below the pill for the home indicator. */
+export function tabBarTotalHeight(bottomInset: number): number {
+  return TAB_BAR_BASE_HEIGHT + Math.max(bottomInset, 18);
+}
+
 export function PremiumTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const { bottom } = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
@@ -130,13 +137,14 @@ const styles = StyleSheet.create({
   wrapper: {
     position: "absolute",
     bottom: 0,
-    width: "100%",
+    left: 16,
+    right: 16,
     alignItems: "center",
   },
   container: {
     flexDirection: "row",
-    width: "84%", // 82-86% of screen width
-    height: 68,
+    width: "100%",
+    height: TAB_BAR_BASE_HEIGHT,
     borderRadius: 34,
     borderWidth: 1,
     shadowColor: "#000",

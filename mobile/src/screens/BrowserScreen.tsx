@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   ActivityIndicator,
   Alert,
+  BackHandler,
   FlatList,
   RefreshControl,
   ScrollView,
@@ -372,6 +373,40 @@ export default function BrowserScreen({ route, navigation }: Props) {
 
   const breadcrumbs = path.split("/").filter(Boolean);
 
+  // ── Back navigation ────────────────────────────────────────────────
+  // One folder level up while browsing; otherwise pop the screen. This is the
+  // "back button + back function" for the file browser: the top-left back
+  // arrow AND the Android hardware/gesture back behave identically.
+  const goBackOneLevel = useCallback(() => {
+    if (!path) return false;
+    setPath(path.split("/").slice(0, -1).join("/"));
+    return true;
+  }, [path]);
+
+  const goBack = useCallback(() => {
+    if (selectMode) {
+      setSelectMode(false);
+      setSelectedPaths(new Set());
+      return;
+    }
+    if (!goBackOneLevel() && navigation.canGoBack()) {
+      navigation.goBack();
+    }
+  }, [selectMode, goBackOneLevel, navigation]);
+
+  useEffect(() => {
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      if (selectMode) {
+        setSelectMode(false);
+        setSelectedPaths(new Set());
+        return true;
+      }
+      if (goBackOneLevel()) return true;
+      return false; // let the stack pop
+    });
+    return () => sub.remove();
+  }, [selectMode, goBackOneLevel]);
+
   const renderListItem = useCallback(
     ({ item }: { item: FileItem }) => (
       <View style={{ borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.borderSoft }}>
@@ -441,6 +476,15 @@ export default function BrowserScreen({ route, navigation }: Props) {
         </View>
       ) : (
         <View style={styles.crumbsContainer}>
+          {/* Back button — folder level up, or pop the screen at root */}
+          <TouchableOpacity
+            style={[styles.backBtn, { backgroundColor: colors.surfaceElevated }]}
+            onPress={goBack}
+            hitSlop={8}
+            activeOpacity={0.7}
+          >
+            <MaterialCommunityIcons name="chevron-left" size={26} color={colors.content} />
+          </TouchableOpacity>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ alignItems: "center", paddingRight: 16 }}>
             <TouchableOpacity onPress={() => setPath("")} style={{ flexDirection: "row", alignItems: "center" }} activeOpacity={0.7}>
               <MaterialCommunityIcons name={path === "" ? "home" : "home-outline"} size={path === "" ? 24 : 22} color={path === "" ? colors.content : colors.muted} />
@@ -816,9 +860,20 @@ const styles = StyleSheet.create({
 
   // Crumbs
   crumbsContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
     paddingHorizontal: 20,
-    paddingTop: 16,
+    paddingTop: 12,
     paddingBottom: 10,
+  },
+  backBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
   },
   crumbsCard: {
     flexDirection: "row",

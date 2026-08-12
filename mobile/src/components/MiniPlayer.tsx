@@ -24,6 +24,7 @@ import type { FileItem } from "../api/types";
 import { useAudio } from "../store/AudioContext";
 import { useTheme } from "../store/ThemeContext";
 import { useSession } from "../store/SessionContext";
+import { tabBarTotalHeight } from "./PremiumTabBar";
 import { EqBars } from "./EqBars";
 import { BottomSheet } from "./BottomSheet";
 import { AudioQualityPill } from "./AudioQualityBadge";
@@ -249,10 +250,15 @@ export function MiniPlayer() {
   return (
     <>
       {/* ═══════════════════════════════════════════════════════════════
-          MINI PLAYER (bottom bar)
+          MINI PLAYER (bottom bar — sits flush above the aligned tab bar)
           ═══════════════════════════════════════════════════════════════ */}
-      <View style={[styles.miniContainer, shadow]}>
-        <TouchableOpacity
+      <View
+        style={[
+          styles.miniContainer,
+          { bottom: tabBarTotalHeight(insets.bottom) + 10 },
+          shadow,
+        ]}
+      >        <TouchableOpacity
           style={[
             styles.miniInner,
             { backgroundColor: colors.surfaceElevated, borderColor: colors.borderSoft },
@@ -794,9 +800,9 @@ const styles = StyleSheet.create({
   /* ── Mini Player ─────────────────────────────────────────────────── */
   miniContainer: {
     position: "absolute",
-    bottom: 100,
     left: 16,
     right: 16,
+    bottom: 0, // overridden at runtime: tab bar height + gap
     zIndex: 999,
   },
   miniInner: {

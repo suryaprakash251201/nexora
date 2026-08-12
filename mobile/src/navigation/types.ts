@@ -1,9 +1,10 @@
-import type { FileItem } from "../api/types";
+import type { FileItem, Playlist } from "../api/types";
 
 export type RootStackParamList = {
   Main: undefined;
   Browser: { rootId: string; rootName: string; path?: string; initialItem?: FileItem };
   Preview: { item: FileItem; rootId: string };
+  Playlist: { playlist: Playlist };
   Admin: undefined;
   Favorites: undefined;
   Trash: undefined;

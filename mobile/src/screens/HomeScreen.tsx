@@ -21,7 +21,7 @@ import { useTheme } from "../store/ThemeContext";
 import { FileRow, EmptyState, SectionLabel, Chevron } from "../components/FileRow";
 import { ListSkeleton, GridCardSkeleton } from "../components/Skeletons";
 import { previewKind } from "../api/client";
-import type { Root, FileItem } from "../api/types";
+import type { Root, FileItem, Playlist, FavoriteItem } from "../api/types";
 import type { RootStackParamList, MainTabParamList } from "../navigation/types";
 import { useAudio } from "../store/AudioContext";
 
@@ -52,6 +52,19 @@ const ROOT_ICONS: Record<string, string> = {
   default: "database-outline",
 };
 
+function favoriteToFile(f: FavoriteItem): FileItem {
+  return {
+    name: f.name,
+    path: f.path,
+    size: 0,
+    is_dir: false,
+    modified: f.created_at,
+    mime: "",
+    root_id: f.root_id,
+    extension: f.name.includes(".") ? f.name.split(".").pop() || "" : "",
+  };
+}
+
 export default function HomeScreen() {
   const navigation = useNavigation<Nav>();
   const insets = useSafeAreaInsets();
@@ -61,6 +74,8 @@ export default function HomeScreen() {
 
   const [roots, setRoots] = useState<Root[]>([]);
   const [recents, setRecents] = useState<FileItem[]>([]);
+  const [playlists, setPlaylists] = useState<Playlist[]>([]);
+  const [likedSongs, setLikedSongs] = useState<FileItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -71,9 +86,22 @@ export default function HomeScreen() {
     else setLoading(true);
     setError(null);
     try {
-      const [r, rc] = await Promise.all([api.listRoots(), api.listRecents()]);
+      const [r, rc, pl, fav] = await Promise.all([
+        api.listRoots(),
+        api.listRecents(),
+        api.listPlaylists(),
+        api.listFavorites(),
+      ]);
       setRoots(r.roots.filter((x) => x.enabled));
       setRecents(rc.items.slice(0, 6));
+      setPlaylists(pl.items || []);
+      // “Liked Songs” = favorited audio files, newest first.
+      const songs = (fav.items || [])
+        .filter((f) => previewKind(favoriteToFile(f)) === "audio")
+        .sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
+        .slice(0, 10)
+        .map(favoriteToFile);
+      setLikedSongs(songs);
     } catch (e: any) {
       setError(e?.message || "Failed to load storage system.");
     } finally {
@@ -104,6 +132,12 @@ export default function HomeScreen() {
       }
     },
     [navigation, playTrack, recents]
+  );
+
+  // Liked songs queue together so hearts play as a continuous list.
+  const playLikedSong = useCallback(
+    (item: FileItem) => playTrack(item, likedSongs),
+    [playTrack, likedSongs]
   );
 
   const greeting = useMemo(() => {
@@ -357,6 +391,41 @@ export default function HomeScreen() {
       }
       ListFooterComponent={
         <View style={{ marginTop: 12 }}>
+          {/* Playlists — created in the web app, synced via /playlists */}
+          {playlists.length > 0 && (
+            <View style={{ marginBottom: 24 }}>
+              <View style={styles.sectionRow}>
+                <SectionLabel>Your Playlists</SectionLabel>
+                <Text style={[styles.playlistSync, { color: colors.muted, fontSize: font.xs }]}>synced with web</Text>
+              </View>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: spacing.lg, gap: 12 }}>
+                {playlists.map((p) => (
+                  <TouchableOpacity
+                    key={p.id}
+                    style={[styles.playlistCard, { backgroundColor: colors.surface, borderColor: colors.borderSoft, borderRadius: radius.xl }, shadowSm]}
+                    activeOpacity={0.8}
+                    onPress={() => navigation.navigate("Playlist", { playlist: p })}
+                  >
+                    <LinearGradient colors={["rgba(255,255,255,0.06)", "transparent"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+                    <View style={styles.playlistCover}>
+                      <MaterialCommunityIcons name="playlist-music" size={30} color={colors.accent} />
+                      <View style={[styles.playlistCount, { backgroundColor: colors.accentSoft }]}>
+                        <MaterialCommunityIcons name="music-note" size={11} color={colors.accent} />
+                        <Text style={[styles.playlistCountText, { color: colors.accent, fontSize: font.xs }]}>{p.items.length}</Text>
+                      </View>
+                    </View>
+                    <Text style={[styles.playlistTitle, { color: colors.content, fontSize: font.sm }]} numberOfLines={1}>
+                      {p.name}
+                    </Text>
+                    <Text style={[styles.playlistSub, { color: colors.muted, fontSize: font.xs }]}>
+                      {p.items.length} track{p.items.length === 1 ? "" : "s"}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          )}
+
           {recents.filter(f => previewKind(f) === "audio").length > 0 && (
             <View style={{ marginBottom: 24 }}>
               <View style={styles.sectionRow}>
@@ -376,6 +445,32 @@ export default function HomeScreen() {
                     </View>
                     <Text style={[styles.audioTitle, { color: colors.content, fontSize: font.sm }]} numberOfLines={1}>{f.name}</Text>
                     <Text style={[styles.audioSub, { color: colors.muted, fontSize: font.xs }]}>Music</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          )}
+
+          {/* Liked Songs — favorited audio, newest first */}
+          {likedSongs.length > 0 && (
+            <View style={{ marginBottom: 24 }}>
+              <View style={styles.sectionRow}>
+                <SectionLabel>Liked Songs</SectionLabel>
+              </View>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: spacing.lg, gap: 12 }}>
+                {likedSongs.map(f => (
+                  <TouchableOpacity
+                    key={f.root_id + f.path}
+                    style={[styles.audioCard, { backgroundColor: colors.surface, borderColor: colors.borderSoft, borderRadius: radius.xl }, shadowSm]}
+                    activeOpacity={0.8}
+                    onPress={() => playLikedSong(f)}
+                  >
+                    <LinearGradient colors={["rgba(255,255,255,0.06)", "transparent"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+                    <View style={[styles.audioIcon, { backgroundColor: "rgba(244,63,94,0.12)" }]}>
+                      <MaterialCommunityIcons name="heart" size={28} color={colors.danger} />
+                    </View>
+                    <Text style={[styles.audioTitle, { color: colors.content, fontSize: font.sm }]} numberOfLines={1}>{f.name}</Text>
+                    <Text style={[styles.audioSub, { color: colors.muted, fontSize: font.xs }]}>Liked</Text>
                   </TouchableOpacity>
                 ))}
               </ScrollView>
@@ -578,6 +673,39 @@ const styles = StyleSheet.create({
     paddingRight: 24,
     marginBottom: 8,
   },
+  playlistSync: { fontWeight: "600", marginTop: 18 },
+  playlistCard: {
+    width: 150,
+    padding: 16,
+    borderWidth: 1,
+    overflow: "hidden",
+    alignItems: "flex-start",
+  },
+  playlistCover: {
+    width: 56,
+    height: 56,
+    borderRadius: 18,
+    backgroundColor: "rgba(255,255,255,0.05)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 12,
+    position: "relative",
+  },
+  playlistCount: {
+    position: "absolute",
+    bottom: -4,
+    right: -6,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  playlistCountText: { fontWeight: "700" },
+  playlistTitle: { fontWeight: "700", marginBottom: 2, maxWidth: 116 },
+  playlistSub: { fontWeight: "600" },
+
   seeAll: { flexDirection: "row", alignItems: "center", gap: 2, padding: 4, marginTop: 18 },
   seeAllText: { fontWeight: "700" },
   recentsCard: {

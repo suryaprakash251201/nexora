@@ -12,6 +12,9 @@ import type {
   FavoriteItem,
   TrashItem,
   ShareInfo,
+  Playlist,
+  PlaylistListResponse,
+  PlaylistMutationResponse,
 } from "./types";
 import { needsAudioTranscode } from "../lib/audioQuality";
 
@@ -448,6 +451,31 @@ export class Api {
 
   revokeShare(id: string): Promise<{ ok: boolean }> {
     return this.del(`/shares/${id}`);
+  }
+
+  // ── Playlists (shared with the web app) ─────────────────────────────
+  listPlaylists(): Promise<PlaylistListResponse> {
+    return this.get("/playlists");
+  }
+
+  createPlaylist(name: string, items?: { root_id: string; path: string }[]): Promise<Playlist> {
+    return this.post("/playlists", { name, items: items || [] });
+  }
+
+  renamePlaylist(id: string, name: string): Promise<{ ok: boolean }> {
+    return this.put(`/playlists/${id}`, { name });
+  }
+
+  deletePlaylist(id: string): Promise<{ ok: boolean }> {
+    return this.del(`/playlists/${id}`);
+  }
+
+  addPlaylistItems(id: string, items: { root_id: string; path: string }[]): Promise<PlaylistMutationResponse> {
+    return this.post(`/playlists/${id}/items`, { items });
+  }
+
+  removePlaylistItem(id: string, itemId: string): Promise<{ ok: boolean }> {
+    return this.del(`/playlists/${id}/items`, { item_id: itemId });
   }
 }
 
