@@ -13,11 +13,12 @@ import {
   X,
   ChevronUp,
   Music,
+  AlertTriangle,
 } from "lucide-react";
 import type { FileItem } from "../api/types";
 import { usePlayer, engine } from "../store/player";
 import { useShallow } from "zustand/react/shallow";
-import { thumbUrl, rawUrl, audioTranscodeUrl, generateSessionId, serverSupportsTranscode, isLosslessExtension, isTauriRuntime, getAudioQuality } from "../lib/preview";
+import { thumbUrl, rawUrl, audioTranscodeUrl, generateSessionId, serverSupportsTranscode, isLosslessExtension, isTauriRuntime, needsAudioTranscode } from "../lib/preview";
 import type { AudioTranscodeFormat } from "../lib/preview";
 import { AudioInfoPanel, EqualizerBars } from "./LosslessPlayer";
 import MediaPlayer from "./MediaPlayer";
@@ -45,7 +46,7 @@ function Cover({ item }: { item: FileItem | null }) {
 export default function PlayerBar() {
   const audioRef = useRef<HTMLAudioElement>(null);
   const bound = useRef(false);
-  const { current, isPlaying, buffering, volume, muted, primaryOpen, currentTime, duration, queueLength, index, shuffle, repeat } = usePlayer(
+  const { current, isPlaying, buffering, volume, muted, primaryOpen, currentTime, duration, queueLength, index, shuffle, repeat, audioError } = usePlayer(
     useShallow((s) => ({
       current: s.current(),
       isPlaying: s.isPlaying,
@@ -59,6 +60,7 @@ export default function PlayerBar() {
       index: s.index,
       shuffle: s.shuffle,
       repeat: s.repeat,
+      audioError: s.audioError,
     }))
   );
   const [expanded, setExpanded] = useState(false);
@@ -114,19 +116,24 @@ export default function PlayerBar() {
   const sessionIdRef = useRef(generateSessionId());
 
   // Reset fallback + transcode seek state when the track changes, and
-  // pre-route codecs the webview cannot decode natively (ALAC, WMA, …)
-  // straight to the transcode pipeline instead of failing on the raw stream
-  // first — that removes a full error round-trip from start latency.
+  // pre-route codecs the webview cannot decode natively (ALAC inside .m4a/
+  // .m4b, WMA, …) straight to the transcode pipeline instead of failing on
+  // the raw stream first — that removes a full error round-trip from start
+  // latency and makes ALAC .m4a reliably playable in the browser.
   useEffect(() => {
     setFallbackStage(-1);
     setSeekStart(0);
     engine.timeOffset = 0;
+    usePlayer.getState().setAudioError("");
     if (!current) return;
-    if (getAudioQuality(current).needsTranscode) {
+    let cancelled = false;
+    needsAudioTranscode(current).then((needs) => {
+      if (!needs || cancelled) return;
       serverSupportsTranscode().then((supp) => {
-        if (supp) setFallbackStage(0);
+        if (supp && !cancelled) setFallbackStage(0);
       });
-    }
+    });
+    return () => { cancelled = true; };
   }, [current?.path]);
 
   // Transcoded streams can't be seeked via HTTP Range; route seeks through a
@@ -211,16 +218,21 @@ export default function PlayerBar() {
         serverSupportsTranscode().then((supp) => {
           if (supp) {
             console.warn(`PlayerBar: stream failed (stage ${fallbackStage}), trying ${fallbackFormats[next]}...`);
+            usePlayer.getState().setAudioError("");
             setFallbackStage(next);
+          } else {
+            usePlayer.getState().setAudioError(`Could not play "${current.name}" — audio transcoding is unavailable on this server.`);
           }
         });
+      } else {
+        usePlayer.getState().setAudioError(`Could not play "${current.name}" in any available format.`);
       }
     }
   };
 
   const showMini = !primaryOpen || expanded;
   // Only show mini player when music is actually playing or recently active
-  const hasActivePlayer = current && (isPlaying || currentTime > 0);
+  const hasActivePlayer = current && (isPlaying || currentTime > 0 || !!audioError);
 
   return (
     <>
@@ -235,7 +247,7 @@ export default function PlayerBar() {
                 <div className="absolute inset-0 bg-glass-bg-strong opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer rounded-full dark:bg-black/40" onClick={openExpanded}>
                   <ChevronUp className="h-4 w-4 text-white" />
                 </div>
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-2.5 h-2.5 bg-black/50 dark:bg-black/80 rounded-full border border-border/20 shadow-inner" />
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-2.5 h-2.5 bg-black/50 dark:bg-black/80 rounded-full border border-border/20 shadow-inner z-[2]" />
               </div>
 
               <div className="min-w-0 flex-1 cursor-pointer" onClick={openExpanded}>
@@ -258,6 +270,15 @@ export default function PlayerBar() {
                 </p>
               </div>
 
+              {audioError && (
+                <button
+                  onClick={() => usePlayer.getState().next(false)}
+                  className="shrink-0 px-2.5 py-1.5 rounded-lg bg-danger/10 text-danger border border-danger/20 text-xs font-medium hover:bg-danger/20 transition-colors"
+                  title="Skip to next track"
+                >
+                  Skip
+                </button>
+              )}
               <div className="flex items-center gap-0.5 shrink-0">
                 <button onClick={() => usePlayer.getState().prev()} className="p-1.5 rounded-full text-content-muted hover:text-content hover:bg-white/10 transition-colors" title="Previous">
                   <SkipBack className="h-4 w-4" />
@@ -316,7 +337,7 @@ export default function PlayerBar() {
                     <div className="relative h-1.5 w-full rounded-full bg-white/20">
                       <div className="absolute inset-y-0 left-0" style={{
                         width: `${(muted ? 0 : volume) * 100}%`,
-                        background: muted || volume === 0 ? '#73809A' : volume < 0.3 ? 'linear-gradient(90deg, #F59E0B, #FB923C)' : volume < 0.7 ? 'linear-gradient(90deg, #5B8CFF, #7A5CFF)' : 'linear-gradient(90deg, #22C55E, #2DD4BF)',
+                        background: muted || volume === 0 ? 'var(--color-text-quaternary)' : 'linear-gradient(90deg, var(--color-accent), var(--color-accent-secondary))',
                         borderRadius: 'inherit',
                         transition: 'all 0.1s ease-out'
                       }} />
@@ -339,6 +360,12 @@ export default function PlayerBar() {
               </div>
             </div>
 
+            {audioError && (
+              <div className="mt-2 flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-danger/10 border border-danger/20">
+                <AlertTriangle className="h-3.5 w-3.5 text-danger shrink-0" />
+                <p className="text-[11px] font-medium text-danger leading-tight truncate">{audioError}</p>
+              </div>
+            )}
             <div className="mt-2">
               <div className="relative h-1.5 rounded-full bg-white/20 overflow-hidden cursor-pointer group">
                 {bufferedPct > 0 && (

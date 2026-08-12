@@ -464,6 +464,10 @@ body {
   to { transform: rotate(360deg); }
 }
 
+/* Vinyl disc — photo-disc style: the cover art IS the record face, with
+   concentric grooves and a glossy sheen overlaid on top. The pseudo-elements
+   are children of the spinning disc, so the highlights rotate with the record
+   exactly like real light reflections on a turntable. */
 .audio-disc {
   animation: n-disc-spin 45s linear infinite;
   animation-play-state: running;
@@ -471,9 +475,65 @@ body {
 
 .audio-disc.paused { animation-play-state: paused; }
 
-/* Mini player (PlayerBar) vinyl thumb — same slow turntable motion, 40s/rev */
+/* Concentric groove rings + rim shading — makes the disc read as vinyl */
+.audio-disc::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: repeating-radial-gradient(circle at 50% 50%,
+    rgba(0, 0, 0, 0.30) 0px,
+    rgba(0, 0, 0, 0.30) 1px,
+    transparent 1px,
+    transparent 3.5px);
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 255, 255, 0.07),
+    inset 0 0 18px rgba(0, 0, 0, 0.55),
+    inset 0 0 60px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Glossy sheen that sweeps across the record as it spins */
+.audio-disc::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 30% 22%, rgba(255, 255, 255, 0.32), rgba(255, 255, 255, 0.06) 38%, transparent 55%),
+    conic-gradient(from 210deg,
+      transparent 0deg,
+      rgba(255, 255, 255, 0.14) 24deg,
+      transparent 52deg,
+      transparent 170deg,
+      rgba(255, 255, 255, 0.07) 200deg,
+      transparent 230deg,
+      transparent 360deg);
+  mix-blend-mode: screen;
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* Mini player (PlayerBar) vinyl thumb — same turntable motion, 30s/rev,
+   with a lighter groove treatment at small scale */
 .audio-disc-mini {
   animation: n-disc-spin 30s linear infinite;
+}
+
+.audio-disc-mini::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: repeating-radial-gradient(circle at 50% 50%,
+    rgba(0, 0, 0, 0.25) 0px,
+    rgba(0, 0, 0, 0.25) 0.5px,
+    transparent 0.5px,
+    transparent 2px);
+  box-shadow: inset 0 0 8px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+  z-index: 1;
 }
 
 /* ============================================================
@@ -594,8 +654,8 @@ body {
   --z-player-bar: 45;
   --z-selection-bar: 50;
   --z-dropdown: 55;
-  --z-modal: 60;
-  --z-toast: 70;
+  --z-modal: 100;
+  --z-toast: 130;
 }
 
 /* Selection bar animation */
@@ -1157,18 +1217,6 @@ body {
    Phase 1: Enhanced Card Effects & Folder Animations
    ============================================================ */
 
-/* Card parallax tilt on hover — applied via style transform in JS */
-.card-tilt {
-  perspective: 800px;
-  transform-style: preserve-3d;
-}
-
-.card-tilt-inner {
-  transition: transform 0.3s ease-out;
-  transform-style: preserve-3d;
-  will-change: transform;
-}
-
 /* Folder hover — flap lift animation */
 .nexora-folder {
   position: relative;
@@ -1221,136 +1269,6 @@ body {
   0%, 100% { left: -100%; }
   50% { left: 100%; }
 }
-
-/* Grid zoom card sizing */
-.grid-zoom-compact .file-card {
-  padding: 0.75rem;
-}
-
-.grid-zoom-compact .file-card .file-card-icon {
-  height: 2.5rem;
-  width: 2.5rem;
-}
-
-.grid-zoom-gallery .file-card {
-  padding: 1.25rem;
-}
-
-.grid-zoom-gallery .file-card .file-card-icon {
-  height: 5rem;
-  width: 5rem;
-}
-
-/* List view alternating rows */
-.list-row-even {
-  background: rgba(255,255,255,0.01);
-}
-
-.list-row-even:hover {
-  background: rgba(255,255,255,0.04);
-}
-
-/* File type badge on thumbnails */
-.file-type-badge {
-  position: absolute;
-  bottom: 4px;
-  right: 4px;
-  padding: 1px 6px;
-  border-radius: 6px;
-  font-size: 9px;
-  font-weight: 700;
-  text-transform: uppercase;
-  background: rgba(0,0,0,0.65);
-  color: rgba(255,255,255,0.8);
-  backdrop-filter: blur(8px);
-  letter-spacing: 0.5px;
-}
-
-/* Enhanced accent stripe for cards */
-.card-accent-stripe {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 2px;
-  border-radius: 999px 999px 0 0;
-  opacity: 0.6;
-  transition: opacity 0.3s;
-}
-
-.group:hover .card-accent-stripe {
-  opacity: 0.9;
-}
-
-/* Circular progress ring for stats */
-.progress-ring {
-  transform: rotate(-90deg);
-  transform-origin: 50% 50%;
-}
-
-.progress-ring circle {
-  transition: stroke-dashoffset 0.8s ease-in-out;
-}
-
-/* ============================================================
-   Density Utilities
-   ============================================================ */
-
-/* List View Density */
-.density-compact .list-row { padding: 0.25rem 0.75rem; }
-.density-compact .list-row .file-name { font-size: 0.8125rem; }
-.density-compact .list-row .file-meta { font-size: 0.6875rem; }
-.density-compact .list-row .file-icon { width: 1.5rem; height: 1.5rem; }
-.density-compact .list-row .file-icon svg { width: 1rem; height: 1rem; }
-.density-compact .list-header { padding: 0.25rem 0.75rem; font-size: 0.625rem; }
-.density-compact .list-checkbox { width: 1rem; height: 1rem; }
-
-.density-comfortable .list-row { padding: 0.5rem 1rem; }
-.density-comfortable .list-row .file-name { font-size: 0.875rem; }
-.density-comfortable .list-row .file-meta { font-size: 0.75rem; }
-.density-comfortable .list-row .file-icon { width: 2rem; height: 2rem; }
-.density-comfortable .list-row .file-icon svg { width: 1.25rem; height: 1.25rem; }
-.density-comfortable .list-header { padding: 0.5rem 1rem; font-size: 0.6875rem; }
-.density-comfortable .list-checkbox { width: 1rem; height: 1rem; }
-
-.density-spacious .list-row { padding: 0.75rem 1.25rem; }
-.density-spacious .list-row .file-name { font-size: 1rem; }
-.density-spacious .list-row .file-meta { font-size: 0.8125rem; }
-.density-spacious .list-row .file-icon { width: 2.5rem; height: 2.5rem; }
-.density-spacious .list-row .file-icon svg { width: 1.5rem; height: 1.5rem; }
-.density-spacious .list-header { padding: 0.75rem 1.25rem; font-size: 0.75rem; }
-.density-spacious .list-checkbox { width: 1.25rem; height: 1.25rem; }
-
-/* Grid View Density */
-.density-compact .grid-item { padding: 0.5rem; }
-.density-compact .grid-item .file-icon { width: 2.5rem; height: 2.5rem; }
-.density-compact .grid-item .file-icon svg { width: 1.5rem; height: 1.5rem; }
-.density-compact .grid-item .file-name { font-size: 0.75rem; }
-.density-compact .grid-item .file-meta { font-size: 0.625rem; }
-
-.density-comfortable .grid-item { padding: 1rem; }
-.density-comfortable .grid-item .file-icon { width: 4rem; height: 4rem; }
-.density-comfortable .grid-item .file-icon svg { width: 2.5rem; height: 2.5rem; }
-.density-comfortable .grid-item .file-name { font-size: 0.875rem; }
-.density-comfortable .grid-item .file-meta { font-size: 0.75rem; }
-
-.density-spacious .grid-item { padding: 1.5rem; }
-.density-spacious .grid-item .file-icon { width: 5rem; height: 5rem; }
-.density-spacious .grid-item .file-icon svg { width: 3rem; height: 3rem; }
-.density-spacious .grid-item .file-name { font-size: 1rem; }
-.density-spacious .grid-item .file-meta { font-size: 0.8125rem; }
-
-/* Apply density to root */
-:root[data-density="compact"] .file-browser,
-:root[data-density="comfortable"] .file-browser,
-:root[data-density="spacious"] .file-browser {
-  /* density applied via class on container */
-}
-
-/* Utility to apply density via class on a wrapper */
-.density-compact { --density: compact; }
-.density-comfortable { --density: comfortable; }
-.density-spacious { --density: spacious; }
 
 /* PDF reader backdrop — subtle dotted grid behind the page canvas */
 .bg-grid {

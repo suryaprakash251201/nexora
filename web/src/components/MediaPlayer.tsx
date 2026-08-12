@@ -24,9 +24,10 @@ import {
   Info,
   ListMusic,
   Trash2,
+  AlertTriangle,
 } from "lucide-react";
 import type { FileItem } from "../api/types";
-import { thumbUrl, needsTranscode, transcodeUrl, audioTranscodeUrl, serverSupportsTranscode, rawUrl, generateSessionId, isLosslessExtension } from "../lib/preview";
+import { thumbUrl, needsTranscode, transcodeUrl, audioTranscodeUrl, serverSupportsTranscode, rawUrl, generateSessionId, isLosslessExtension, needsAudioTranscode } from "../lib/preview";
 import type { AudioTranscodeFormat } from "../lib/preview";
 import { AudioInfoPanel, EqualizerBars, OutputDevicePicker, useAudioContext } from "./LosslessPlayer";
 import { startDownload } from "../lib/transfer";
@@ -141,6 +142,11 @@ function AudioPlayer({
 
   const [fs, setFs] = useState(startFullscreen || false);
   const [bgFailed, setBgFailed] = useState(false);
+  // Uncontrolled players own their <audio> and track errors locally; the
+  // controlled (PlayerBar) audio element is shared, so its error lives in the store.
+  const [audioError, setAudioErrorLocal] = useState("");
+  const storeAudioError = usePlayer((s) => s.audioError);
+  const audioErrorMsg = controlled ? storeAudioError : audioError;
   const [showRates, setShowRates] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
   const [showQueue, setShowQueue] = useState(false);
@@ -158,15 +164,32 @@ function AudioPlayer({
   const [fallbackStage, setFallbackStage] = useState(-1);
   // Transcoded streams are restarted via ?start= (no HTTP Range support).
   const [seekStart, setSeekStart] = useState(0);
+  // Uncontrolled players display el.currentTime + offset for transcode streams
+  // (?start= resets stream timestamps to 0, so the seek target is re-added).
+  const offsetRef = useRef(0);
   const fallbackFormats: AudioTranscodeFormat[] = isTauri ? ["flac", "flac24", "aac"] : ["aac", "flac"];
   const sessionIdRef = useRef(generateSessionId());
 
   useEffect(() => {
     setFallbackStage(-1);
     setSeekStart(0);
+    offsetRef.current = 0;
     setDragTime(null);
     dragTimeRef.current = null;
-  }, [cur?.path]);
+    if (!controlled) setAudioErrorLocal("");
+    // Pre-route codecs the webview cannot decode natively (ALAC inside .m4a/
+    // .m4b, WMA, …) straight to the transcode pipeline so they start playing
+    // without a failed-play round trip.
+    if (!cur) return;
+    let cancelled = false;
+    needsAudioTranscode(cur).then((needs) => {
+      if (!needs || cancelled) return;
+      serverSupportsTranscode().then((supp) => {
+        if (supp && !cancelled) setFallbackStage(0);
+      });
+    });
+    return () => { cancelled = true; };
+  }, [cur?.path, controlled]);
 
   const resolvedUrl = cur
     ? fallbackStage >= 0
@@ -204,7 +227,9 @@ function AudioPlayer({
     if (controlled) return;
     const a = ref.current;
     if (!a) return;
-    const onTime = () => setLCur(a.currentTime);
+    // Transcoded streams restart timestamps at 0 (?start=), so re-add the
+    // offset to match the position the user actually seeked to.
+    const onTime = () => setLCur(a.currentTime + offsetRef.current);
     const onMeta = () => setLDur(a.duration);
     const onPlay = () => setLPlaying(true);
     const onPause = () => setLPlaying(false);
@@ -238,9 +263,11 @@ function AudioPlayer({
     const a = ref.current;
     if (!a) return;
     a.load();
-    setLCur(0);
+    // Keep the displayed position (offset-corrected) after reloads — e.g.
+    // switching to a transcode fallback or a ?start= seek.
+    setLCur(offsetRef.current);
     if (autoPlay) a.play().catch(() => {});
-  }, [url, controlled]);
+  }, [resolvedUrl, controlled]);
 
   // Reset the blurred-background error flag whenever the track changes so a
   // failed cover on one track doesn't permanently disable the backdrop.
@@ -264,6 +291,7 @@ function AudioPlayer({
     // Transcoded streams don't support HTTP Range; restart via ?start= instead.
     const a = ref.current;
     if (a && a.src.includes("/files/transcode")) {
+      offsetRef.current = Math.max(0, v);
       setSeekStart(Math.max(0, v));
       setLCur(v);
       return;
@@ -343,10 +371,8 @@ function AudioPlayer({
   const volFillStyle = (v: number, m: boolean) => {
     const pctW = (m ? 0 : v) * 100;
     let bg: string;
-    if (m || v === 0) bg = '#73809A';
-    else if (v < 0.3) bg = 'linear-gradient(90deg, #F59E0B, #FB923C)';
-    else if (v < 0.7) bg = 'linear-gradient(90deg, #5B8CFF, #7A5CFF)';
-    else bg = 'linear-gradient(90deg, #22C55E, #2DD4BF)';
+    if (m || v === 0) bg = 'var(--color-text-quaternary)';
+    else bg = 'linear-gradient(90deg, var(--color-accent), var(--color-accent-secondary))';
     return { width: `${pctW}%`, background: bg, borderRadius: 'inherit', transition: 'all 0.1s ease-out' };
   };
   const openFs = () => {
@@ -710,8 +736,10 @@ function AudioPlayer({
                 <Music className="h-24 w-24 text-white/80" />
               </div>
             )}
-            {/* Center hole like a record */}
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/80 ring-1 ring-white/15" />
+            {/* Spindle — translucent hub ring + deep centre hole (grooves and
+                sheen are painted by the .audio-disc ::before/::after layers) */}
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[3] h-10 w-10 rounded-full bg-gradient-to-br from-white/25 via-white/5 to-transparent ring-1 ring-white/10 shadow-[inset_0_2px_8px_rgba(0,0,0,0.55)]" />
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[4] h-4 w-4 rounded-full bg-[#050506] ring-1 ring-white/25 shadow-[inset_0_1px_3px_rgba(0,0,0,0.95),0_0_3px_rgba(255,255,255,0.25)]" />
           </div>
         </div>
 
@@ -759,9 +787,8 @@ function AudioPlayer({
                 <div className="absolute inset-y-0 left-0 bg-white/15 transition-all duration-300" style={{ width: `${bufferedPct}%` }} />
               )}
               <div className="absolute inset-y-0 left-0 progress-fill" style={{ width: `${pct}%` }} />
-              <div className={`absolute inset-0 flex items-center justify-center transition-opacity ${dragTime !== null || playing ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
-                <div className={`h-3 w-3 sm:h-4 sm:w-4 rounded-full shadow-lg ${dragTime !== null ? "bg-accent scale-125" : "bg-white"}`} style={{ marginLeft: `${pct}%`, transform: 'translateX(-50%)' }} />
-              </div>
+              {/* No moving thumb: position is shown by the progress fill and the
+                  exact timestamps below (drag preview updates them live). */}
             </div>
             <div className="flex justify-between text-xs font-medium text-white/55 font-mono tabular-nums">
               <span>{fmt(dragTime ?? curTime)}</span>
@@ -929,17 +956,22 @@ function AudioPlayer({
           )}
           </div>
 
-          {/* Keyboard shortcut hints */}
-          <div className="absolute bottom-4 inset-x-0 z-20 flex justify-center px-4">
-            <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 rounded-full bg-black/30 px-4 py-1.5 text-[10px] font-medium tracking-wide text-white/40 backdrop-blur-sm">
-              <span><b className="text-white/60">Space</b> Play</span>
-              <span><b className="text-white/60">←/→</b> Seek</span>
-              <span><b className="text-white/60">↑/↓</b> Vol</span>
-              <span><b className="text-white/60">M</b> Mute</span>
-              <span><b className="text-white/60">F</b> Fullscreen</span>
-              <span><b className="text-white/60">Esc</b> Exit</span>
+          {audioErrorMsg && (
+            <div className="absolute bottom-14 inset-x-0 z-20 flex justify-center px-4">
+              <div className="flex items-center gap-3 rounded-2xl bg-black/60 backdrop-blur-md border border-danger/30 px-4 py-3 max-w-md">
+                <AlertTriangle className="h-5 w-5 text-danger shrink-0" />
+                <p className="text-xs font-medium text-white/90 leading-snug">{audioErrorMsg}</p>
+                {multi && (
+                  <button
+                    onClick={() => usePlayer.getState().next(false)}
+                    className="shrink-0 px-3 py-1.5 rounded-lg bg-danger/20 text-danger border border-danger/30 text-xs font-semibold hover:bg-danger/30 transition-colors"
+                  >
+                    Skip track
+                  </button>
+                )}
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
   );
@@ -962,6 +994,20 @@ function AudioPlayer({
             </div>
           )}
           <p className="text-content-muted text-sm mt-1">{multi ? `Track ${qIndex + 1} of ${queue.length}` : "Audio playback"}</p>
+          {audioErrorMsg && (
+            <div className="mt-4 flex items-center gap-3 rounded-xl bg-danger/10 border border-danger/20 px-3.5 py-2.5 text-left">
+              <AlertTriangle className="h-4 w-4 text-danger shrink-0" />
+              <p className="text-xs font-medium text-danger leading-snug">{audioErrorMsg}</p>
+              {multi && (
+                <button
+                  onClick={() => usePlayer.getState().next(false)}
+                  className="ml-auto shrink-0 px-2.5 py-1 rounded-lg bg-danger/15 text-danger border border-danger/25 text-xs font-semibold hover:bg-danger/25 transition-colors"
+                >
+                  Skip
+                </button>
+              )}
+            </div>
+          )}
         </div>
         
         <div className="w-full space-y-2">
@@ -1061,9 +1107,14 @@ function AudioPlayer({
               serverSupportsTranscode().then(supp => {
                 if (supp) {
                   console.warn(`MediaPlayer: stream failed (stage ${fallbackStage}), trying ${fallbackFormats[next]}...`);
+                  setAudioErrorLocal("");
                   setFallbackStage(next);
+                } else {
+                  setAudioErrorLocal(`Could not play "${cur.name}" — audio transcoding is unavailable on this server.`);
                 }
               });
+            } else {
+              setAudioErrorLocal(`Could not play "${cur.name}" in any available format.`);
             }
           }
         }}

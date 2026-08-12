@@ -1,5 +1,6 @@
 import type { FileItem } from "../api/types";
 import { get, getMediaUrl } from "../api/client";
+import { getAudioQuality, fetchAudioInfo } from "./audioQuality";
 
 export type PreviewKind = "image" | "video" | "audio" | "pdf" | "markdown" | "text" | "none";
 
@@ -114,6 +115,28 @@ export function transcodeUrl(rootId: string, path: string, opts?: { start?: numb
 // desktop shell (as opposed to a plain web browser).
 export function isTauriRuntime(): boolean {
   return typeof window !== "undefined" && (!!(window as any).__TAURI_INTERNALS__ || !!(window as any).isTauri);
+}
+
+// needsAudioTranscode reports whether the webview cannot decode this audio
+// file natively and playback must be routed through the server transcode
+// pipeline.
+//
+// The extension check is fast, but .m4a/.m4b are ambiguous: they may carry
+// native AAC (plays everywhere) or ALAC (Apple Lossless — no browser decoder).
+// For those we probe real ffprobe metadata via /audio/info so ALAC files are
+// pre-routed to transcoding instead of failing on the raw stream first (which
+// cost a full error round-trip and a visible stutter on every ALAC track).
+export function needsAudioTranscode(item: { extension?: string; root_id: string; path: string }): Promise<boolean> {
+  const q = getAudioQuality(item);
+  if (q.needsTranscode) return Promise.resolve(true);
+  const ext = (item.extension || "").toLowerCase();
+  if (ext === "m4a" || ext === "m4b") {
+    return fetchAudioInfo(item.root_id, item.path).then((info) => {
+      if (!info) return false; // no ffprobe metadata — let onError fallback catch it
+      return getAudioQuality(item, info).needsTranscode;
+    });
+  }
+  return Promise.resolve(false);
 }
 
 export function audioTranscodeUrl(rootId: string, path: string, opts?: { start?: number; session?: string; format?: AudioTranscodeFormat; quality?: AudioTranscodeQuality }): string {
