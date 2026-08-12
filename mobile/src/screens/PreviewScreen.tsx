@@ -456,10 +456,15 @@ function AudioPlayer({ name, size, ext, mime, rootId, path, onShare }: { name: s
     };
   }, [api, rootId, path, ext, mime]);
 
-  // Load the resolved stream once ready.
+  // Load the resolved stream once ready. replaceAsync avoids the synchronous
+  // iOS main-thread load (expo-video deprecates the sync `replace`).
   const player = useVideoPlayer(null);
   useEffect(() => {
-    if (resolvedUri) {
+    if (!resolvedUri) return;
+    const p = (player as any).replaceAsync?.(resolvedUri);
+    if (p && typeof p.then === "function") {
+      p.catch(() => {});
+    } else {
       player.replace(resolvedUri);
     }
   }, [resolvedUri]);

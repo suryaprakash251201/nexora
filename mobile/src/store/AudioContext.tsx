@@ -53,8 +53,16 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       })
       .then((url) => {
         if (cancelled) return;
-        player.replace(url);
-        player.play();
+        // replaceAsync: `replace` loads synchronously on the iOS main thread,
+        // which can stutter the UI mid-transition and interleave with React
+        // commits. The async variant is the supported path.
+        const p = (player as any).replaceAsync?.(url);
+        if (p && typeof p.then === "function") {
+          p.then(() => player.play()).catch(() => {});
+        } else {
+          player.replace(url);
+          player.play();
+        }
       });
     return () => {
       cancelled = true;

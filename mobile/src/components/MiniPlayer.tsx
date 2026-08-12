@@ -33,7 +33,7 @@ import { copyShareLink } from "../lib/shareLink";
 
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 
-export function MiniPlayer() {
+export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
   const { currentTrack, player, nextTrack, prevTrack, closePlayer, shuffle, setShuffle, playTrack, playlist, queueIndex } = useAudio();
   const { colors, font, gradients, radius, shadow, isDark } = useTheme();
   const { api } = useSession();
@@ -250,12 +250,17 @@ export function MiniPlayer() {
   return (
     <>
       {/* ═══════════════════════════════════════════════════════════════
-          MINI PLAYER (bottom bar — sits flush above the aligned tab bar)
+          MINI PLAYER (bottom bar — flush above the tab bar on tab screens,
+          at the very bottom on pushed screens with no tab bar)
           ═══════════════════════════════════════════════════════════════ */}
       <View
         style={[
           styles.miniContainer,
-          { bottom: tabBarTotalHeight(insets.bottom) + 10 },
+          {
+            bottom: tabVisible
+              ? tabBarTotalHeight(insets.bottom) + 10
+              : insets.bottom + 10,
+          },
           shadow,
         ]}
       >        <TouchableOpacity

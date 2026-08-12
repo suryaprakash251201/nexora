@@ -1,7 +1,8 @@
-import React from "react";
+import React, { Component, useEffect, useRef, useState } from "react";
 import { StyleSheet, View, Text } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { NavigationContainer, DefaultTheme } from "@react-navigation/native";
+import type { NavigationContainerRef } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -100,6 +101,22 @@ function Splash() {
 function RootNavigation() {
   const { user, booting, api } = useSession();
   const { colors, isDark } = useTheme();
+  // Whether the current screen shows the tab bar — the mini player uses this
+  // to sit flush above the tab bar on tab screens and at the very bottom on
+  // pushed screens (Browser, Preview, Playlist, …) where there is no tab bar.
+  const [tabVisible, setTabVisible] = useState(true);
+  const navRef = useRef<NavigationContainerRef<RootStackParamList> | null>(null);
+
+  useEffect(() => {
+    const syncTab = () => {
+      const route = navRef.current?.getCurrentRoute();
+      setTabVisible(route?.name === "Main");
+    };
+    // First paint + every navigation state change.
+    syncTab();
+    const unsub = navRef.current?.addListener("state", syncTab);
+    return () => unsub?.();
+  }, []);
 
   if (booting) {
     return (
@@ -132,7 +149,7 @@ function RootNavigation() {
   };
 
   return (
-    <NavigationContainer theme={dynamicNavTheme}>
+    <NavigationContainer ref={navRef} theme={dynamicNavTheme}>
       <StatusBar style={isDark ? "light" : "dark"} />
       <Stack.Navigator
         screenOptions={{
@@ -151,9 +168,48 @@ function RootNavigation() {
         <Stack.Screen name="Favorites" component={FavoritesScreen} options={{ title: "Favorites" }} />
         <Stack.Screen name="Trash" component={TrashScreen} options={{ title: "Trash" }} />
       </Stack.Navigator>
-      <MiniPlayer />
+      <MiniPlayer tabVisible={tabVisible} />
     </NavigationContainer>
   );
+}
+
+/**
+ * Root error boundary — catches render crashes (e.g. the RN "Text strings
+ * must be rendered within a <Text> component" invariant) so the app stays
+ * usable instead of unmounting to a blank screen, and logs the full
+ * component stack to the Metro console for precise diagnosis.
+ */
+class AppErrorBoundary extends Component<{ children: React.ReactNode }, { error: Error | null }> {
+  state = { error: null as Error | null };
+
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+
+  componentDidCatch(error: Error, info: { componentStack?: string }) {
+    // Full component stack goes to the Metro/dev console.
+    console.error("[AppErrorBoundary]", error?.message || error, "\nComponent stack:\n" + (info?.componentStack || "(none)"));
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <View style={crashStyles.crashRoot}>
+          <View style={crashStyles.crashIcon}>
+            <MaterialCommunityIcons name="alert-decagram-outline" size={40} color="#8B5CF6" />
+          </View>
+          <Text style={crashStyles.crashTitle}>Something went wrong</Text>
+          <Text style={crashStyles.crashMsg} numberOfLines={6}>
+            {this.state.error?.message || "Unknown error"}
+          </Text>
+          <Text style={crashStyles.crashHint}>
+            The error details were logged to the Metro console. Pull the app down to reload.
+          </Text>
+        </View>
+      );
+    }
+    return this.props.children;
+  }
 }
 
 export default function App() {
@@ -162,13 +218,30 @@ export default function App() {
       <ThemeProvider>
         <SessionProvider>
           <AudioProvider>
-            <RootNavigation />
+            <AppErrorBoundary>
+              <RootNavigation />
+            </AppErrorBoundary>
           </AudioProvider>
         </SessionProvider>
       </ThemeProvider>
     </SafeAreaProvider>
   );
 }
+
+const crashStyles = StyleSheet.create({
+  crashRoot: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 32,
+    gap: 12,
+    backgroundColor: "#040508",
+  },
+  crashIcon: { marginBottom: 4 },
+  crashTitle: { color: "#fff", fontSize: 20, fontWeight: "800" },
+  crashMsg: { color: "rgba(255,255,255,0.7)", fontSize: 13, textAlign: "center", lineHeight: 20 },
+  crashHint: { color: "rgba(255,255,255,0.4)", fontSize: 11, textAlign: "center", lineHeight: 16, marginTop: 8 },
+});
 
 const styles = StyleSheet.create({
   splash: { flex: 1, alignItems: "center", justifyContent: "center" },
