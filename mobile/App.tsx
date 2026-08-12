@@ -32,6 +32,11 @@ import TrashScreen from "./src/screens/TrashScreen";
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tabs = createBottomTabNavigator<MainTabParamList>();
 
+// getCurrentRoute() returns the DEEPEST focused route, so on the tab
+// navigator it reports the active tab name (Home/Search/Recents/Settings) —
+// not the stack screen name "Main".
+const TAB_ROUTES = new Set(["Home", "Search", "Recents", "Settings"]);
+
 function MainTabs() {
   const { colors } = useTheme();
 
@@ -107,16 +112,27 @@ function RootNavigation() {
   const [tabVisible, setTabVisible] = useState(true);
   const navRef = useRef<NavigationContainerRef<RootStackParamList> | null>(null);
 
+  // CRITICAL: the NavigationContainer only mounts AFTER the user is signed in
+  // (LoginScreen renders without it). A one-shot effect would run while
+  // navRef.current is still null — leaving tabVisible stuck at false and the
+  // mini player permanently overlapping the bottom nav bar. Re-run whenever
+  // auth state flips so we always attach the state listener to the live
+  // container and capture the initial route.
   useEffect(() => {
+    if (!user || !api) return;
     const syncTab = () => {
       const route = navRef.current?.getCurrentRoute();
-      setTabVisible(route?.name === "Main");
+      setTabVisible(!!route && TAB_ROUTES.has(route.name));
     };
-    // First paint + every navigation state change.
-    syncTab();
+    // The container may not have finished initializing its navigation state
+    // during this commit — sample it on the next tick, then keep listening.
+    const t = setTimeout(syncTab, 0);
     const unsub = navRef.current?.addListener("state", syncTab);
-    return () => unsub?.();
-  }, []);
+    return () => {
+      clearTimeout(t);
+      unsub?.();
+    };
+  }, [user, api]);
 
   if (booting) {
     return (
