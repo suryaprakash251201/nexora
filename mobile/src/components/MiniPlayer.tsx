@@ -29,6 +29,8 @@ import { EqBars } from "./EqBars";
 import { BottomSheet } from "./BottomSheet";
 import { AudioQualityPill } from "./AudioQualityBadge";
 import { AudioQualityDetail } from "./AudioQualityDetail";
+import { LosslessBadge } from "./LosslessBadge";
+import { detectAudioQuality } from "../lib/audioQuality";
 import { copyShareLink } from "../lib/shareLink";
 
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
@@ -165,6 +167,11 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
   const coverUrl = api ? api.thumbnailUrl(currentTrack.root_id, currentTrack.path, 512) : null;
   const ext = currentTrack.extension || "";
 
+  // Lossless / hi-res detection for the wave badge (Apple Music style).
+  const qInfo = detectAudioQuality(ext, currentTrack.mime, currentTrack.size);
+  const isLossless = qInfo.isLossless;
+  const isHiRes = qInfo.isHiRes;
+
   const formatTime = (s: number) => {
     if (!s || isNaN(s)) return "0:00";
     const m = Math.floor(s / 60);
@@ -300,11 +307,15 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
               {currentTrack.name}
             </Text>
             <View style={styles.miniSubRow}>
-              <AudioQualityPill
-                extension={ext}
-                mime={currentTrack.mime}
-                fileSize={currentTrack.size}
-              />
+              {isLossless ? (
+                <LosslessBadge label={isHiRes ? "HI-RES" : "LOSSLESS"} />
+              ) : (
+                <AudioQualityPill
+                  extension={ext}
+                  mime={currentTrack.mime}
+                  fileSize={currentTrack.size}
+                />
+              )}
               <Text
                 style={[styles.miniSub, { color: colors.muted, fontSize: font.xs }]}
                 numberOfLines={1}
@@ -510,14 +521,19 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
                 </TouchableOpacity>
               </View>
 
-              {/* ── Audio Quality Detail ── */}
+              {/* ── Audio Quality Detail + lossless wave badge ── */}
               <View style={styles.qualityRow}>
-                <AudioQualityDetail
-                  extension={ext}
-                  mime={currentTrack.mime}
-                  fileSize={currentTrack.size}
-                  duration={duration > 0 ? duration : undefined}
-                />
+                <View style={styles.qualityBadgeRow}>
+                  {isLossless && (
+                    <LosslessBadge label={isHiRes ? "HI-RES" : "LOSSLESS"} size="md" />
+                  )}
+                  <AudioQualityDetail
+                    extension={ext}
+                    mime={currentTrack.mime}
+                    fileSize={currentTrack.size}
+                    duration={duration > 0 ? duration : undefined}
+                  />
+                </View>
               </View>
 
               {/* ── Progress Scrubber (Apple Music thin style, no thumb) ── */}
@@ -975,6 +991,13 @@ const styles = StyleSheet.create({
   qualityRow: {
     marginBottom: 20,
     marginTop: 2,
+  },
+  qualityBadgeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    flexWrap: "wrap",
+    gap: 8,
   },
 
   /* Scrubber */

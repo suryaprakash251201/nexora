@@ -26,6 +26,8 @@ import { GlyphTile } from "../components/AppIcon";
 import { previewKind, formatBytes, formatDate } from "../api/client";
 import { copyShareLink } from "../lib/shareLink";
 import { EqBars } from "../components/EqBars";
+import { LosslessBadge } from "../components/LosslessBadge";
+import { detectAudioQuality } from "../lib/audioQuality";
 import { BottomSheet } from "../components/BottomSheet";
 import type { RootStackParamList } from "../navigation/types";
 
@@ -494,6 +496,11 @@ function AudioPlayer({ name, size, ext, mime, rootId, path, onShare }: { name: s
   const [loop, setLoop] = useState(false);
   const [isEnded, setIsEnded] = useState(false);
 
+  // Lossless / hi-res badge (Apple Music style wave icon).
+  const qInfo = detectAudioQuality(ext, mime, size);
+  const isLossless = qInfo.isLossless;
+  const isHiRes = qInfo.isHiRes;
+
   // Scrubbing state.
   const [scrubPos, setScrubPos] = useState<number | null>(null);
   const barRef = useRef<View>(null);
@@ -674,9 +681,13 @@ function AudioPlayer({ name, size, ext, mime, rootId, path, onShare }: { name: s
             <>
               <Text style={[styles.trackName, { fontSize: font.xl }]} numberOfLines={2}>{name}</Text>
               <View style={styles.trackMetaRow}>
-                <Text style={[styles.trackMeta, { color: "rgba(218, 226, 253, 0.7)", fontSize: font.sm, textTransform: "uppercase", letterSpacing: 2 }]}>
-                  {ext.toUpperCase()} AUDIO
-                </Text>
+                {isLossless ? (
+                  <LosslessBadge label={isHiRes ? "HI-RES" : "LOSSLESS"} size="md" />
+                ) : (
+                  <Text style={[styles.trackMeta, { color: "rgba(218, 226, 253, 0.7)", fontSize: font.sm, textTransform: "uppercase", letterSpacing: 2 }]}>
+                    {ext.toUpperCase()} AUDIO
+                  </Text>
+                )}
                 <EqBars playing={playing && !error} tint={colors.accent} />
               </View>
             </>

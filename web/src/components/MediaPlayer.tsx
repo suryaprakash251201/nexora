@@ -27,7 +27,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import type { FileItem } from "../api/types";
-import { thumbUrl, needsTranscode, transcodeUrl, audioTranscodeUrl, serverSupportsTranscode, rawUrl, generateSessionId, isLosslessExtension, needsAudioTranscode } from "../lib/preview";
+import { thumbUrl, needsTranscode, transcodeUrl, audioTranscodeUrl, serverSupportsTranscode, rawUrl, generateSessionId, isLosslessExtension, needsAudioTranscode, getAudioQuality } from "../lib/preview";
 import type { AudioTranscodeFormat } from "../lib/preview";
 import { AudioInfoPanel, EqualizerBars, OutputDevicePicker, useAudioContext } from "./LosslessPlayer";
 import { startDownload } from "../lib/transfer";
@@ -733,6 +733,7 @@ function AudioPlayer({
           </div>
 
           {/* Vinyl disc with realistic grooves */}
+          <div className="relative">
           <div
             onClick={(e) => { e.stopPropagation(); toggle(); }}
             className={`audio-disc ${playing ? "" : "paused"} relative w-[45vw] max-w-[220px] sm:w-[280px] sm:max-w-[300px] md:w-[340px] md:max-w-[340px] aspect-square rounded-full overflow-hidden shadow-2xl shadow-black/60 ring-1 ring-white/10 transition-transform duration-500 ${playing ? "scale-100" : "scale-95"} cursor-pointer`}
@@ -748,6 +749,18 @@ function AudioPlayer({
                 sheen are painted by the .audio-disc ::before/::after layers) */}
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[3] h-10 w-10 rounded-full bg-gradient-to-br from-white/25 via-white/5 to-transparent ring-1 ring-white/10 shadow-[inset_0_2px_8px_rgba(0,0,0,0.55)]" />
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[4] h-4 w-4 rounded-full bg-[#050506] ring-1 ring-white/25 shadow-[inset_0_1px_3px_rgba(0,0,0,0.95),0_0_3px_rgba(255,255,255,0.25)]" />
+          </div>
+
+          {/* Lossless wave badge — Apple Music style, placed at the centre of
+              the vinyl (static — sits above the spinning disc, doesn't rotate) */}
+          {cur && getAudioQuality(cur).isLossless && (
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-30 pointer-events-none">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-black/70 backdrop-blur-md pl-3 pr-3.5 py-1.5 text-[10px] font-bold tracking-[0.18em] text-white ring-1 ring-white/25 shadow-[0_4px_16px_rgba(0,0,0,0.5)]">
+                <LosslessWaveGlyph className="h-3 w-auto" />
+                {getAudioQuality(cur).tier === "lossless-hi-res" ? "HI-RES" : "LOSSLESS"}
+              </span>
+            </div>
+          )}
           </div>
         </div>
 
@@ -1604,5 +1617,15 @@ function VideoPlayer({ url, item, autoPlay }: { url?: string; item?: FileItem; a
         </div>
       )}
     </div>
+  );
+}
+
+/** LosslessWaveGlyph — the lossless sound-wave icon (dark + light variants). */
+function LosslessWaveGlyph({ className = "h-2.5 w-auto" }: { className?: string }) {
+  return (
+    <>
+      <img src="/lossless-wave-light.png" alt="" className={`${className} dark:hidden`} />
+      <img src="/lossless-wave.png" alt="" className={`${className} hidden dark:block`} />
+    </>
   );
 }

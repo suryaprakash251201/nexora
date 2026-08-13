@@ -26,6 +26,7 @@ export default function AudioInfoPanel({ item, compact = false }: Props) {
         title={q.detail ? `${q.label} · ${q.detail}` : q.label}
         className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wide bg-white/10 ${q.color}`}
       >
+        {q.isLossless && <LosslessWave />}
         {q.badge}
         {q.needsTranscode && <span className="text-white/50 font-medium">· stream</span>}
       </span>
@@ -55,7 +56,10 @@ export default function AudioInfoPanel({ item, compact = false }: Props) {
   return (
     <div className="w-full max-w-sm rounded-2xl glass-strong border border-white/10 p-3 sm:p-4 text-left space-y-3 animate-scale-in">
       <div className="flex items-center justify-between gap-2">
-        <span className={`text-[11px] font-black tracking-[0.14em] ${q.color}`}>{q.badge}</span>
+        <span className={`inline-flex items-center gap-1.5 text-[11px] font-black tracking-[0.14em] ${q.color}`}>
+          {q.isLossless && <LosslessWave />}
+          {q.badge}
+        </span>
         <span className="text-[10px] font-medium text-white/45 uppercase tracking-wider">
           {loading ? "reading metadata…" : q.label}
         </span>
@@ -91,5 +95,18 @@ export default function AudioInfoPanel({ item, compact = false }: Props) {
         </p>
       )}
     </div>
+  );
+}
+
+/**
+ * LosslessWave — the lossless sound-wave glyph. Ships dark + light variants
+ * so it reads correctly in both the dark and light web themes.
+ */
+function LosslessWave({ className = "h-2.5 w-auto" }: { className?: string }) {
+  return (
+    <>
+      <img src="/lossless-wave-light.png" alt="" className={`${className} dark:hidden`} />
+      <img src="/lossless-wave.png" alt="" className={`${className} hidden dark:block`} />
+    </>
   );
 }
