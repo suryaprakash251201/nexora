@@ -85,32 +85,44 @@ export const lightGradients: AppGradients = {
   danger: ["#E11D48", "#9F1239"],
 };
 
+/**
+ * Android compact mode — Android phones render the full-size tokens ~10–15%
+ * tighter (and Android also applies the system font scale on top), so the
+ * home dashboard, grid cards and rows don't balloon the way they do on iOS.
+ * iOS keeps the exact original values; these helpers are no-ops there.
+ */
+const compactFor = (mult: number) => (v: number) =>
+  Platform.OS === "android" ? Math.max(1, Math.round(v * mult)) : v;
+const compactSpacing = compactFor(0.85);
+const compactRadius = compactFor(0.85);
+const compactFont = compactFor(0.9);
+
 export const spacing = {
-  xs: 6,
-  sm: 10,
-  md: 14,
-  lg: 20,
-  xl: 28,
-  xxl: 36,
+  xs: compactSpacing(6),
+  sm: compactSpacing(10),
+  md: compactSpacing(14),
+  lg: compactSpacing(20),
+  xl: compactSpacing(28),
+  xxl: compactSpacing(36),
 };
 
 export const radius = {
-  sm: 8,
-  md: 12,
-  lg: 18,
-  xl: 24,
-  xxl: 32,
+  sm: compactRadius(8),
+  md: compactRadius(12),
+  lg: compactRadius(18),
+  xl: compactRadius(24),
+  xxl: compactRadius(32),
   pill: 999,
 };
 
 export const font = {
-  xs: 12,
-  sm: 14,
-  md: 16,
-  lg: 18,
-  xl: 24,
-  xxl: 32,
-  xxxl: 40,
+  xs: compactFont(12),
+  sm: compactFont(14),
+  md: compactFont(16),
+  lg: compactFont(18),
+  xl: compactFont(24),
+  xxl: compactFont(32),
+  xxxl: compactFont(40),
 };
 
 export const shadow = Platform.select({

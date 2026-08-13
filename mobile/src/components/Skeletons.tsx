@@ -1,8 +1,9 @@
 import React, { useEffect, useRef } from "react";
-import { Animated, StyleSheet, View } from "react-native";
+import { Animated, Platform, StyleSheet, View } from "react-native";
 import { useTheme } from "../store/ThemeContext";
 
 /** Pulsing placeholder blocks shown while lists load. */
+const IS_ANDROID = Platform.OS === "android";
 function usePulse() {
   const opacity = useRef(new Animated.Value(0.35)).current;
   useEffect(() => {
@@ -102,16 +103,16 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: "row",
     alignItems: "center",
-    height: 68,
+    height: IS_ANDROID ? 58 : 68,
   },
-  icon: { width: 46, height: 46 },
+  icon: { width: IS_ANDROID ? 40 : 46, height: IS_ANDROID ? 40 : 46 },
   body: { flex: 1 },
   gridCard: {
     flex: 1,
     borderWidth: 1,
   },
   gridIcon: {
-    width: 48,
-    height: 48,
+    width: IS_ANDROID ? 42 : 48,
+    height: IS_ANDROID ? 42 : 48,
   },
 });

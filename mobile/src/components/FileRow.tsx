@@ -1,5 +1,5 @@
 import React, { memo, useState } from "react";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { Image } from "expo-image";
@@ -8,6 +8,8 @@ import { formatBytes, formatDate, previewKind, mediaThumbnailUrl } from "../api/
 import { fileIconFor, isAudioFile } from "../lib/fileMeta";
 import { AudioCover } from "./AudioCover";
 import type { FileItem } from "../api/types";
+
+const IS_ANDROID = Platform.OS === "android";
 
 const folderImage = require("../../assets/folder.png");
 
@@ -100,10 +102,10 @@ export const FileRow = memo(function FileRow({
       </View>
 
       <View style={styles.body}>
-        <Text style={[styles.title, { color: colors.content, fontSize: font.md }]} numberOfLines={1}>
+        <Text style={[styles.title, { color: colors.content, fontSize: font.md }]} numberOfLines={1} maxFontSizeMultiplier={1.15}>
           {item.name}
         </Text>
-        <Text style={[styles.sub, { color: colors.muted, fontSize: font.xs }]} numberOfLines={1}>
+        <Text style={[styles.sub, { color: colors.muted, fontSize: font.xs }]} numberOfLines={1} maxFontSizeMultiplier={1.15}>
           {sub}
         </Text>
       </View>
@@ -192,13 +194,13 @@ export function SectionLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
-const ROW_HEIGHT = 68;
+const ROW_HEIGHT = IS_ANDROID ? 58 : 68;
 
 const styles = StyleSheet.create({
   row: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: IS_ANDROID ? 10 : 12,
     height: ROW_HEIGHT,
   },
   checkbox: {
@@ -210,9 +212,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   iconWrap: {
-    width: 46,
-    height: 46,
-    borderRadius: 14,
+    width: IS_ANDROID ? 40 : 46,
+    height: IS_ANDROID ? 40 : 46,
+    borderRadius: IS_ANDROID ? 12 : 14,
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",

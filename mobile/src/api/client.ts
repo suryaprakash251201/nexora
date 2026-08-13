@@ -16,7 +16,8 @@ import type {
   PlaylistListResponse,
   PlaylistMutationResponse,
 } from "./types";
-import { needsAudioTranscode, detectAudioQuality } from "../lib/audioQuality";
+import { needsAudioTranscode, detectAudioQuality, androidBelow11 } from "../lib/audioQuality";
+import { Platform } from "react-native";
 
 /**
  * Nexora mobile API client.
@@ -35,6 +36,24 @@ export class NexoraError extends Error {
     this.code = code;
     this.status = status;
   }
+}
+
+/**
+ * Lossy codecs that never need the lossless (FLAC) transcode output. Used to
+ * decide the transcode output format when the server reports the real codec.
+ */
+const LOSSY_NATIVE_CODECS = new Set(["aac", "mp3", "vorbis", "opus", "mp2", "ac3", "eac3"]);
+
+/**
+ * Containers whose audio codec is ambiguous from the extension/MIME alone
+ * (.m4a can hold AAC or ALAC). These trigger a server-side codec probe on
+ * Android so ALAC is transcoded and AAC is streamed raw.
+ */
+function isAmbiguousAudioContainer(extension?: string, mime?: string): boolean {
+  const ext = (extension || "").toLowerCase().replace(/^\./, "");
+  if (ext === "m4a" || ext === "m4b" || ext === "m4p") return true;
+  const m = (mime || "").toLowerCase();
+  return m === "audio/mp4" || m === "audio/x-m4a" || m === "audio/m4a";
 }
 
 export interface RequestOptions {
@@ -145,12 +164,34 @@ export class Api {
   async audioStreamUrl(
     rootId: string,
     path: string,
-    opts?: { extension?: string; mime?: string; session?: string; quality?: "auto" | "lossless" | "high" }
+    opts?: { extension?: string; mime?: string; session?: string; quality?: "auto" | "lossless" | "high"; size?: number }
   ): Promise<string> {
     const ext = opts?.extension;
     const mime = opts?.mime;
-    const q = detectAudioQuality(ext || "", mime || "");
-    const needs = needsAudioTranscode(ext, mime);
+
+    // `.m4a` is ambiguous: AAC plays raw everywhere, ALAC decodes nowhere on
+    // Android (iOS AVPlayer handles both natively). On Android, ask the
+    // server's ffprobe (/audio/info) for the real codec so an ALAC .m4a is
+    // transcoded instead of served raw, while AAC .m4a stays raw. iOS skips
+    // the probe — raw ALAC/AAC is exactly what AVPlayer wants, so its
+    // behavior is unchanged. Falls back to the size heuristic when the
+    // server has no ffprobe.
+    let realCodec: string | undefined;
+    if (Platform.OS === "android" && isAmbiguousAudioContainer(ext, mime)) {
+      try {
+        const info = await this.get<{ codec?: string }>("/audio/info", { root: rootId, path });
+        realCodec = info?.codec;
+      } catch {
+        // ffprobe unavailable or probe failed → size heuristic below
+      }
+    }
+
+    // Android < 11: use the real file size for the heuristic fallback so
+    // large .m4a (likely ALAC) is classified lossless. iOS/Android 11+ keep
+    // the exact pre-existing detection (no size) when no codec is reported.
+    const sizeForDetection = androidBelow11() ? opts?.size : undefined;
+    const q = detectAudioQuality(ext || "", mime || "", sizeForDetection);
+    const needs = needsAudioTranscode(ext, mime, sizeForDetection, realCodec);
     if (!needs) return this.rawFileUrl(rootId, path);
     const supports = await this.serverSupportsTranscode();
     if (!supports) return this.rawFileUrl(rootId, path); // onError will surface it
@@ -158,7 +199,13 @@ export class Api {
     const pref = opts?.quality || "auto";
     // Lossless source → lossless FLAC transcode (quality preserved);
     // everything else → high-quality AAC. User preference can force either.
-    if (q.isLossless || pref === "lossless") {
+    // Android < 11 (no FLAC transcode assurance on older devices): emit
+    // high-quality AAC (320k), which every Android decodes.
+    const losslessSource = q.isLossless || (realCodec ? !LOSSY_NATIVE_CODECS.has(realCodec.toLowerCase()) : false);
+    if (losslessSource || pref === "lossless") {
+      if (androidBelow11()) {
+        return this.transcodeUrl(rootId, path, { session, quality: "high" });
+      }
       return this.transcodeUrl(rootId, path, { session, format: "flac" });
     }
     if (pref === "high") {

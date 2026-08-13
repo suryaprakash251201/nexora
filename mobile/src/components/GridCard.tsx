@@ -1,5 +1,5 @@
 import React, { memo } from "react";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { Image } from "expo-image";
@@ -8,6 +8,8 @@ import { fileIconFor, isAudioFile } from "../lib/fileMeta";
 import { AudioCover } from "./AudioCover";
 import { previewKind, formatBytes, formatDate } from "../api/client";
 import type { FileItem } from "../api/types";
+
+const IS_ANDROID = Platform.OS === "android";
 
 const folderImage = require("../../assets/folder.png");
 
@@ -44,7 +46,7 @@ export const GridCard = memo(function GridCard({
         {
           backgroundColor: selected ? colors.accentSoft : colors.surface,
           borderColor: selected ? colors.accent : colors.borderSoft,
-          borderRadius: 20,
+          borderRadius: IS_ANDROID ? 18 : 20,
         },
         shadowSm,
       ]}
@@ -70,7 +72,7 @@ export const GridCard = memo(function GridCard({
           />
         ) : isAudioFile(item) ? (
           <View style={styles.audioCoverWrap}>
-            <AudioCover item={item} size={384} iconSize={40} />
+            <AudioCover item={item} size={384} iconSize={IS_ANDROID ? 34 : 40} />
             {/* Music badge so audio is recognizable even when cover art is subtle */}
             <View style={[styles.audioBadge, { backgroundColor: "rgba(0,0,0,0.55)" }]}>
               <MaterialCommunityIcons name="music-note" size={14} color="#fff" />
@@ -82,7 +84,7 @@ export const GridCard = memo(function GridCard({
           </View>
         ) : (
           <View style={[styles.iconBox, { backgroundColor: `${iconColor}18`, borderRadius: 18 }]}>
-            <MaterialCommunityIcons name={iconName as any} size={36} color={iconColor} />
+            <MaterialCommunityIcons name={iconName as any} size={IS_ANDROID ? 30 : 36} color={iconColor} />
           </View>
         )}
 
@@ -116,10 +118,10 @@ export const GridCard = memo(function GridCard({
 
       {/* Info Body */}
       <View style={styles.info}>
-        <Text style={[styles.title, { color: colors.content, fontSize: font.sm }]} numberOfLines={1}>
+        <Text style={[styles.title, { color: colors.content, fontSize: font.sm }]} numberOfLines={1} maxFontSizeMultiplier={1.15}>
           {item.name}
         </Text>
-        <Text style={[styles.meta, { color: colors.muted, fontSize: font.xs }]}>
+        <Text style={[styles.meta, { color: colors.muted, fontSize: font.xs }]} maxFontSizeMultiplier={1.15}>
           {item.is_dir ? "Folder" : formatBytes(item.size)}
         </Text>
       </View>
@@ -130,9 +132,9 @@ export const GridCard = memo(function GridCard({
 const styles = StyleSheet.create({
   card: {
     flex: 1,
-    margin: 6,
+    margin: IS_ANDROID ? 5 : 6,
     borderWidth: 1,
-    minHeight: 140,
+    minHeight: IS_ANDROID ? 118 : 140,
     overflow: "hidden",
   },
   glassHighlight: {
@@ -145,7 +147,7 @@ const styles = StyleSheet.create({
     pointerEvents: "none",
   },
   previewArea: {
-    height: 110,
+    height: IS_ANDROID ? 92 : 110,
     width: "100%",
     alignItems: "center",
     justifyContent: "center",
@@ -157,8 +159,8 @@ const styles = StyleSheet.create({
     height: "100%",
   },
   iconBox: {
-    width: 60,
-    height: 60,
+    width: IS_ANDROID ? 50 : 60,
+    height: IS_ANDROID ? 50 : 60,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -199,8 +201,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   info: {
-    padding: 12,
-    paddingTop: 8,
+    padding: IS_ANDROID ? 10 : 12,
+    paddingTop: IS_ANDROID ? 6 : 8,
     gap: 2,
   },
   title: {

@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"/>
+<title>PDF — Nexora</title>
+<script src="pdf.min.js"></script>
+<style>
+  :root { --bg:#0B0E17; --surface:#141826; --border:#232A3B; --text:#E6EAF5; --muted:#8A93AB; --accent:#8B5CF6; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html,body { margin:0; padding:0; background:var(--bg); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    height:100%; overflow:hidden; }
+  #app { display:flex; flex-direction:column; height:100%; }
+  #toolbar { display:flex; align-items:center; gap:8px; padding:8px 12px;
+    background:var(--surface); border-bottom:1px solid var(--border); flex-shrink:0; }
+  #toolbar .spacer { flex:1; }
+  button { background:var(--surface); color:var(--text); border:1px solid var(--border);
+    border-radius:8px; padding:8px 12px; font-size:15px; cursor:pointer; min-width:36px; }
+  button:disabled { opacity:.3; }
+  #pageInfo { font-size:13px; color:var(--muted); min-width:78px; text-align:center;
+    font-variant-numeric: tabular-nums; }
+  #title { font-size:12px; color:var(--muted); max-width:34vw; white-space:nowrap;
+    overflow:hidden; text-overflow:ellipsis; }
+  #zoomInfo { font-size:12px; color:var(--muted); min-width:42px; text-align:center; }
+  #canvasWrap { flex:1; overflow:auto; display:flex; justify-content:center;
+    background:var(--bg); -webkit-overflow-scrolling:touch; }
+  #canvas { margin:auto; box-shadow:0 4px 24px rgba(0,0,0,.5); background:#fff; }
+  #loading, #error { position:absolute; inset:0; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; gap:12px; color:var(--muted); font-size:14px;
+    background:var(--bg); z-index:5; }
+  .spinner { width:28px; height:28px; border:3px solid var(--border);
+    border-top-color:var(--accent); border-radius:50%; animation:spin 1s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="toolbar">
+    <span id="title">PDF</span>
+    <button id="prev" disabled>&#8592;</button>
+    <span id="pageInfo">&ndash; / &ndash;</span>
+    <button id="next" disabled>&#8594;</button>
+    <div class="spacer"></div>
+    <button id="zoomOut">&#8722;</button>
+    <span id="zoomInfo">100%</span>
+    <button id="zoomIn">&#43;</button>
+  </div>
+  <div id="canvasWrap"><canvas id="canvas"></canvas></div>
+  <div id="loading" style="display:none"><div class="spinner"></div><span>Loading PDF…</span></div>
+  <div id="error" style="display:none"><span style="font-size:34px">&#9888;</span><span>Could not open this PDF.</span></div>
+</div>
+<script>
+(function(){
+  var params = new URLSearchParams(location.search);
+  var src = params.get("file") || "";
+  var name = params.get("name") || "PDF";
+  var canvas = document.getElementById("canvas");
+  var ctx = canvas.getContext("2d");
+  var wrap = document.getElementById("canvasWrap");
+  var loading = document.getElementById("loading");
+  var errorEl = document.getElementById("error");
+  var pageInfo = document.getElementById("pageInfo");
+  var titleEl = document.getElementById("title");
+  var prevBtn = document.getElementById("prev");
+  var nextBtn = document.getElementById("next");
+  var zoomOutBtn = document.getElementById("zoomOut");
+  var zoomInBtn = document.getElementById("zoomIn");
+  var zoomInfo = document.getElementById("zoomInfo");
+  var pdfDoc = null, pageNum = 1, scale = 1.25;
+  var rendering = false, pending = null;
+  titleEl.textContent = name;
+  function showError(){ errorEl.style.display = "flex"; }
+  if (!src) { showError(); return; }
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "pdf.worker.min.js";
+  loading.style.display = "flex";
+  pdfjsLib.getDocument(src).promise.then(function(doc){
+    pdfDoc = doc;
+    loading.style.display = "none";
+    pageInfo.textContent = "1 / " + doc.numPages;
+    prevBtn.disabled = true;
+    nextBtn.disabled = doc.numPages <= 1;
+    renderPage(1);
+  }).catch(function(){ loading.style.display = "none"; showError(); });
+
+  function renderPage(n){
+    if (!pdfDoc) return;
+    if (rendering) { pending = n; return; }
+    rendering = true;
+    pdfDoc.getPage(n).then(function(page){
+      var viewport = page.getViewport({ scale: scale });
+      var dpr = window.devicePixelRatio || 1;
+      canvas.width = viewport.width * dpr;
+      canvas.height = viewport.height * dpr;
+      canvas.style.width = viewport.width + "px";
+      canvas.style.height = viewport.height + "px";
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      return page.render({ canvasContext: ctx, viewport: viewport }).promise;
+    }).then(function(){
+      rendering = false;
+      zoomInfo.textContent = Math.round(scale * 100) + "%";
+      pageInfo.textContent = pageNum + " / " + pdfDoc.numPages;
+      prevBtn.disabled = pageNum <= 1;
+      nextBtn.disabled = pageNum >= pdfDoc.numPages;
+      if (pending) { var p = pending; pending = null; renderPage(p); }
+    }).catch(function(){
+      rendering = false;
+      if (pending) { var q = pending; pending = null; renderPage(q); }
+    });
+  }
+  function go(n){
+    n = Math.max(1, Math.min(pdfDoc.numPages, n));
+    if (n === pageNum) return;
+    pageNum = n;
+    canvas.width = 1; canvas.height = 1;
+    renderPage(n);
+  }
+  prevBtn.onclick = function(){ go(pageNum - 1); };
+  nextBtn.onclick = function(){ go(pageNum + 1); };
+  zoomInBtn.onclick = function(){ scale = Math.min(4, scale * 1.2); renderPage(pageNum); };
+  zoomOutBtn.onclick = function(){ scale = Math.max(0.4, scale / 1.2); renderPage(pageNum); };
+  window.addEventListener("resize", function(){ renderPage(pageNum); });
+  // Touch swipe flips pages
+  var startX = null;
+  wrap.addEventListener("touchstart", function(e){ startX = e.touches[0].clientX; }, {passive:true});
+  wrap.addEventListener("touchend", function(e){
+    if (startX === null) return;
+    var dx = e.changedTouches[0].clientX - startX;
+    startX = null;
+    if (Math.abs(dx) > 60) go(pageNum + (dx < 0 ? 1 : -1));
+  }, {passive:true});
+})();
+</script>
+</body>
+</html>

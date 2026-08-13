@@ -1,16 +1,22 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
+  Modal,
   RefreshControl,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
+  useWindowDimensions,
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import { Image } from "expo-image";
 import * as Haptics from "expo-haptics";
+import { File, Paths } from "expo-file-system";
+import * as Sharing from "expo-sharing";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useSession } from "../store/SessionContext";
@@ -87,6 +93,9 @@ export default function CategoryScreen({ route, navigation }: Props) {
   const [hasMore, setHasMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"list" | "grid">(prefs.viewMode);
+  // Fullscreen photo pager — index into `items` (image gallery only).
+  const [pagerIndex, setPagerIndex] = useState<number | null>(null);
+  const { width: winW } = useWindowDimensions();
   const offsetRef = useRef(0);
   const seqRef = useRef(0);
 
@@ -170,6 +179,52 @@ export default function CategoryScreen({ route, navigation }: Props) {
   const isCurrent = (r: SearchResult) =>
     !!currentTrack && currentTrack.root_id === r.root_id && currentTrack.path === r.path;
 
+  // ── Gallery helpers (kind === "image") ──────────────────────────────
+  const pagerItem = pagerIndex !== null ? items[pagerIndex] : null;
+  const downloadOrSharePhoto = async (share: boolean) => {
+    if (!api || !pagerItem) return;
+    try {
+      const target = new File(
+        Paths.cache,
+        "nexora-" + pagerItem.name.replace(/[^\w.\-]+/g, "_")
+      );
+      await File.downloadFileAsync(
+        api.rawFileUrl(pagerItem.root_id, pagerItem.path),
+        target
+      );
+      if (share && (await Sharing.isAvailableAsync())) {
+        await Sharing.shareAsync(target.uri, { mimeType: pagerItem.mime || undefined });
+      } else {
+        Alert.alert("Downloaded", `"${pagerItem.name}" saved to the app cache.`);
+      }
+    } catch (e: any) {
+      Alert.alert("Download failed", e?.message || "Something went wrong.");
+    }
+  };
+
+  const galleryList = useMemo(() => items.filter((it) => !it.is_dir), [items]);
+
+  const renderGalleryCell = useCallback(
+    (item: SearchResult, index: number) => (
+      <TouchableOpacity
+        style={styles.galCell}
+        activeOpacity={0.85}
+        onPress={() => setPagerIndex(index)}
+        onLongPress={() => openItem(item)}
+        delayLongPress={350}
+      >
+        <Image
+          source={{ uri: api?.thumbnailUrl(item.root_id, item.path, 512) }}
+          style={styles.galImg}
+          contentFit="cover"
+          transition={150}
+          cachePolicy="memory-disk"
+        />
+      </TouchableOpacity>
+    ),
+    [api, openItem]
+  );
+
   const renderItemRow = useCallback(
     (item: SearchResult) => (
       <View
@@ -234,29 +289,31 @@ export default function CategoryScreen({ route, navigation }: Props) {
           <LinearGradient colors={["rgba(255,255,255,0.04)", "transparent"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
           <MaterialCommunityIcons name={(KIND_ICON[kind] || "folder") as any} size={18} color={colors.accent} />
           <Text style={[styles.summaryText, { color: colors.content, fontSize: font.sm }]}>
-            {items.length} file{items.length === 1 ? "" : "s"} across your storage
+            {items.length} photo{items.length === 1 ? "" : "s"} · tap to view
           </Text>
           <View style={{ flex: 1 }} />
-          {/* View mode toggle — list / grid */}
-          <TouchableOpacity
-            style={[styles.viewToggle, { backgroundColor: colors.surfaceElevated }]}
-            onPress={() => {
-              haptic();
-              const next = viewMode === "list" ? "grid" : "list";
-              setViewMode(next);
-              setPref("viewMode", next);
-            }}
-            hitSlop={8}
-          >
-            <MaterialCommunityIcons
-              name={viewMode === "list" ? "view-grid-outline" : "format-list-bulleted"}
-              size={18}
-              color={colors.content}
-            />
-          </TouchableOpacity>
+          {/* View mode toggle — hidden in gallery mode (photos are always a gallery) */}
+          {kind !== "image" && (
+            <TouchableOpacity
+              style={[styles.viewToggle, { backgroundColor: colors.surfaceElevated }]}
+              onPress={() => {
+                haptic();
+                const next = viewMode === "list" ? "grid" : "list";
+                setViewMode(next);
+                setPref("viewMode", next);
+              }}
+              hitSlop={8}
+            >
+              <MaterialCommunityIcons
+                name={viewMode === "list" ? "view-grid-outline" : "format-list-bulleted"}
+                size={18}
+                color={colors.content}
+              />
+            </TouchableOpacity>
+          )}
         </View>
       ) : null,
-    [items.length, colors, font.sm, kind, radius.xl, spacing.lg, viewMode]
+    [items.length, colors, font.sm, kind, radius.xl, spacing.lg, viewMode, setPref]
   );
 
   const empty = useCallback(
@@ -284,20 +341,113 @@ export default function CategoryScreen({ route, navigation }: Props) {
 
   return (
     <View style={[styles.root, { backgroundColor: colors.bg }]}>
-      <FlatList
-        key={viewMode}
-        data={viewMode === "list" ? (sections as any) : items}
-        keyExtractor={(it) => (viewMode === "list" ? (it as any).key : (it as SearchResult).root_id + (it as SearchResult).path)}
-        numColumns={viewMode === "grid" ? 2 : 1}
-        renderItem={viewMode === "list" ? ({ item }) => renderSection(item as any) : ({ item }) => renderGridItem(item as SearchResult)}
-        contentContainerStyle={{ paddingBottom: insets.bottom + 120, paddingHorizontal: viewMode === "grid" ? 6 : 0 }}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={colors.accent} />}
-        onEndReached={loadMore}
-        onEndReachedThreshold={0.5}
-        ListHeaderComponent={header()}
-        ListEmptyComponent={empty()}
-        ListFooterComponent={loadingMore ? <ActivityIndicator style={{ marginVertical: 16 }} color={colors.accent} /> : null}
-      />
+      {kind === "image" ? (
+        /* ══ IMAGE GALLERY — dense 3-column grid + fullscreen pager ══ */
+        <>
+          <FlatList
+            data={galleryList}
+            numColumns={3}
+            keyExtractor={(it) => it.root_id + it.path}
+            renderItem={({ item, index }) => renderGalleryCell(item, index)}
+            contentContainerStyle={{ paddingBottom: insets.bottom + 120, paddingHorizontal: 2 }}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={colors.accent} />}
+            onEndReached={loadMore}
+            onEndReachedThreshold={0.5}
+            ListHeaderComponent={header()}
+            ListEmptyComponent={empty()}
+            ListFooterComponent={
+              loadingMore ? <ActivityIndicator style={{ marginVertical: 16 }} color={colors.accent} /> : null
+            }
+          />
+
+          {/* Fullscreen photo pager — swipe between photos, zoom-free gallery */}
+          <Modal
+            visible={pagerIndex !== null}
+            transparent={false}
+            animationType="fade"
+            onRequestClose={() => setPagerIndex(null)}
+            statusBarTranslucent
+          >
+            <View style={styles.pagerRoot}>
+              <FlatList
+                data={galleryList}
+                horizontal
+                pagingEnabled
+                initialScrollIndex={pagerIndex ?? 0}
+                getItemLayout={(_, i) => ({ length: winW, offset: winW * i, index: i })}
+                onMomentumScrollEnd={(e) =>
+                  setPagerIndex(Math.round(e.nativeEvent.contentOffset.x / winW))
+                }
+                keyExtractor={(it) => it.root_id + it.path}
+                renderItem={({ item }) => (
+                  <View style={[styles.pagerPage, { width: winW }]}>
+                    <Image
+                      source={{ uri: api?.thumbnailUrl(item.root_id, item.path, 1600) }}
+                      style={styles.pagerImg}
+                      contentFit="contain"
+                      transition={150}
+                      cachePolicy="memory-disk"
+                    />
+                  </View>
+                )}
+              />
+
+              {/* Top bar: close + counter */}
+              <View style={[styles.pagerTop, { paddingTop: insets.top + 10 }]}>
+                <TouchableOpacity style={styles.pagerClose} onPress={() => setPagerIndex(null)} activeOpacity={0.8}>
+                  <MaterialCommunityIcons name="close" size={24} color="#fff" />
+                </TouchableOpacity>
+                <Text style={styles.pagerCount}>
+                  {(pagerIndex ?? 0) + 1} / {galleryList.length}
+                </Text>
+                <View style={{ width: 44 }} />
+              </View>
+
+              {/* Bottom bar: download / share current photo */}
+              <View style={[styles.pagerFooter, { paddingBottom: insets.bottom + 20 }]}>
+                <TouchableOpacity style={styles.pagerBtn} onPress={() => downloadOrSharePhoto(false)} activeOpacity={0.85}>
+                  <MaterialCommunityIcons name="download" size={20} color="#fff" />
+                  <Text style={styles.pagerBtnText}>Save</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.pagerBtn} onPress={() => downloadOrSharePhoto(true)} activeOpacity={0.85}>
+                  <MaterialCommunityIcons name="share-variant" size={20} color="#fff" />
+                  <Text style={styles.pagerBtnText}>Share</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.pagerBtn}
+                  onPress={() => {
+                    if (pagerItem) {
+                      setPagerIndex(null);
+                      navigation.navigate("Preview", { item: toFileItem(pagerItem), rootId: pagerItem.root_id });
+                    }
+                  }}
+                  activeOpacity={0.85}
+                >
+                  <MaterialCommunityIcons name="open-in-new" size={20} color="#fff" />
+                  <Text style={styles.pagerBtnText}>Info</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </Modal>
+        </>
+      ) : (
+        <FlatList
+          key={viewMode}
+          data={viewMode === "list" ? (sections as any) : items}
+          keyExtractor={(it) => (viewMode === "list" ? (it as any).key : (it as SearchResult).root_id + (it as SearchResult).path)}
+          numColumns={viewMode === "grid" ? 2 : 1}
+          renderItem={viewMode === "list" ? ({ item }) => renderSection(item as any) : ({ item }) => renderGridItem(item as SearchResult)}
+          contentContainerStyle={{ paddingBottom: insets.bottom + 120, paddingHorizontal: viewMode === "grid" ? 6 : 0 }}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={colors.accent} />}
+          onEndReached={loadMore}
+          onEndReachedThreshold={0.5}
+          ListHeaderComponent={header()}
+          ListEmptyComponent={empty()}
+          ListFooterComponent={
+            loadingMore ? <ActivityIndicator style={{ marginVertical: 16 }} color={colors.accent} /> : null
+          }
+        />
+      )}
     </View>
   );
 }
@@ -316,6 +466,61 @@ function EqBarsInline() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+
+  // ── Image gallery (kind === "image") ──
+  galCell: {
+    flex: 1,
+    aspectRatio: 1,
+    margin: 1.5,
+    borderRadius: 4,
+    overflow: "hidden",
+    backgroundColor: "rgba(128,128,128,0.12)",
+  },
+  galImg: { width: "100%", height: "100%" },
+  pagerRoot: { flex: 1, backgroundColor: "#000" },
+  pagerPage: { height: "100%", alignItems: "center", justifyContent: "center" },
+  pagerImg: { width: "100%", height: "100%" },
+  pagerTop: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingBottom: 10,
+  },
+  pagerClose: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  pagerCount: { color: "#fff", fontWeight: "700", fontSize: 15, fontVariant: ["tabular-nums"] },
+  pagerFooter: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 14,
+    paddingTop: 16,
+  },
+  pagerBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    borderRadius: 999,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  pagerBtnText: { color: "#fff", fontWeight: "600", fontSize: 13 },
+
   summaryCard: {
     flexDirection: "row",
     alignItems: "center",

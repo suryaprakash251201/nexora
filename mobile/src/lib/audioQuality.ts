@@ -1,3 +1,5 @@
+import { Platform } from "react-native";
+
 /**
  * Nexora Audio Quality Detection Engine
  * ──────────────────────────────────────
@@ -5,6 +7,21 @@
  * from file metadata (extension, MIME, size). Single source of truth
  * for all quality badge UI across the app.
  */
+
+/**
+ * Android 10 and below (API < 30): the platform FLAC decoder (MediaCodec
+ * "audio/flac") only ships with Android 11+, and expo-video does not bundle
+ * Media3's FFmpeg extension. Used to pick the TRANSCODE OUTPUT codec: below
+ * API 30, lossless sources are transcoded to high-quality AAC (320k) instead
+ * of FLAC so every Android can decode the stream. Raw .flac files are still
+ * served raw — many devices decode FLAC natively even below API 30.
+ */
+export function androidBelow11(): boolean {
+  return (
+    Platform.OS === "android" &&
+    (typeof Platform.Version === "number" ? Platform.Version < 30 : true)
+  );
+}
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -458,17 +475,39 @@ function mkWma(
 // pipeline (AAC-in-MP4) to be playable on both platforms.
 const NON_NATIVE_CODECS = new Set(["ALAC", "WMA", "DSD", "APE", "WV", "TTA", "OGG", "OPUS"]);
 
+// Codecs decodable by BOTH iOS AVPlayer and Android ExoPlayer/Media3 — safe
+// to stream raw. When the server reports one of these, never transcode.
+const NATIVE_SAFE_CODECS = new Set([
+  "aac", "mp3", "flac", "vorbis", "opus", "aiff", "mp2", "ac3", "eac3",
+  "pcm_s16le", "pcm_s24le", "pcm_s32le", "pcm_f32le", "pcm_f64le",
+  "pcm_u8", "pcm_s8", "pcm_alaw", "pcm_mulaw",
+]);
+
 /**
  * needsAudioTranscode reports whether this audio file must be streamed
  * through the server transcode endpoint instead of played raw.
  *
- * Extension/MIME heuristics: `.m4a` is ambiguous (AAC plays everywhere, ALAC
- * nowhere), so large M4A files (likely ALAC / hi-res) are pre-routed — the
- * same rule detectAudioQuality uses to label them lossless. WMA, DSD-family,
- * APE and Ogg/Opus are never decodable by the native players.
+ * When the server supplies the real codec (ffprobe via /audio/info), it is
+ * authoritative: ALAC/WMA/DSD/APE/… must transcode, while AAC/MP3/FLAC/
+ * PCM/… decode natively on both platforms. Without it, the extension/MIME
+ * heuristics apply: `.m4a` is ambiguous (AAC plays everywhere, ALAC
+ * nowhere), so large M4A files (likely ALAC / hi-res) are pre-routed when
+ * the file size is available — the same rule detectAudioQuality uses.
+ *
+ * NOTE: FLAC is intentionally served raw on every Android — the platform
+ * (or OEM) FLAC decoder handles it below API 30 on many devices, and raw
+ * FLAC is proven to work where a FLAC transcode stream may not.
  */
-export function needsAudioTranscode(extension?: string, mime?: string): boolean {
-  const q = detectAudioQuality(extension || "", mime || "");
+export function needsAudioTranscode(extension?: string, mime?: string, fileSizeBytes?: number, realCodec?: string): boolean {
+  const rc = (realCodec || "").toLowerCase();
+  if (rc) {
+    // Server-provided codec is authoritative.
+    if (NON_NATIVE_CODECS.has(rc.toUpperCase())) return true;
+    if (NATIVE_SAFE_CODECS.has(rc)) return false;
+    // Unknown codec — conservative: transcode rather than fail playback.
+    return true;
+  }
+  const q = detectAudioQuality(extension || "", mime || "", fileSizeBytes);
   if (NON_NATIVE_CODECS.has(q.codec)) return true;
   return false;
 }

@@ -12,6 +12,10 @@ import {
   ActivityIndicator,
   Alert,
   TextInput,
+  Platform,
+  PanResponder,
+  ScrollView,
+  useWindowDimensions,
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -28,7 +32,6 @@ import { useSession } from "../store/SessionContext";
 import { tabBarTotalHeight } from "./PremiumTabBar";
 import { EqBars } from "./EqBars";
 import { PressScale } from "./motion";
-import { BottomSheet } from "./BottomSheet";
 import { AudioQualityPill } from "./AudioQualityBadge";
 import { AudioQualityDetail } from "./AudioQualityDetail";
 import { LosslessWave } from "./LosslessBadge";
@@ -36,13 +39,22 @@ import { detectAudioQuality } from "../lib/audioQuality";
 import { cleanTrackTitle } from "../lib/fileMeta";
 import { copyShareLink } from "../lib/shareLink";
 
-const { height: SCREEN_HEIGHT } = Dimensions.get("window");
+const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get("window");
+
+/** Horizontal swipe distance (px) on the artwork that triggers prev/next. */
+const SWIPE_X_THRESHOLD = 70;
+/** Vertical swipe distance (px) that triggers queue-up / collapse-down. */
+const SWIPE_Y_THRESHOLD = 60;
 
 export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
   const { currentTrack, player, nextTrack, prevTrack, closePlayer, shuffle, setShuffle, playTrack, playlist, queueIndex } = useAudio();
   const { colors, font, gradients, radius, shadow, isDark } = useTheme();
   const { api } = useSession();
   const insets = useSafeAreaInsets();
+  // Adaptive layout: landscape phones get a side-by-side player (artwork
+  // left, controls right) instead of the stacked portrait layout.
+  const { width: winW, height: winH } = useWindowDimensions();
+  const isLandscape = winW > winH;
 
   const [playing, setPlaying] = useState(false);
   const [status, setStatus] = useState("idle");
@@ -84,10 +96,117 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
   const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   const artworkScaleAnim = useRef(new Animated.Value(0.92)).current;
 
+  // ── Fullscreen swipe gestures ───────────────────────────────────────
+  // Horizontal swipe on the artwork → previous/next track (artwork slides
+  // out in the drag direction). Vertical swipe up → open the Up Next
+  // queue; swipe down → collapse the player. Direction-locked so a
+  // horizontal drag never fights a vertical one.
+  const panX = useRef(new Animated.Value(0)).current;
+  const panY = useRef(new Animated.Value(0)).current;
+  const swipeLock = useRef<"h" | "v" | null>(null);
+  const gestureActions = useRef<{
+    next: () => void;
+    prev: () => void;
+    close: () => void;
+    openQueue: () => void;
+  }>({ next: () => {}, prev: () => {}, close: () => {}, openQueue: () => {} });
+
+  // ── Queue panel slide-in + drag-to-dismiss ──────────────────────────
+  const queueAnim = useRef(new Animated.Value(0)).current;
+  const queueDrag = useRef(new Animated.Value(0)).current;
+
   const haptic = (style: "light" | "medium" = "light") =>
     Haptics.impactAsync(
       style === "light" ? Haptics.ImpactFeedbackStyle.Light : Haptics.ImpactFeedbackStyle.Medium
     ).catch(() => {});
+
+  // Artwork swipe responder — created once; actions are read from
+  // gestureActions.current so the callbacks always see fresh closures.
+  const swipeResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 6 || Math.abs(g.dy) > 6,
+      onPanResponderGrant: () => {
+        swipeLock.current = null;
+      },
+      onPanResponderMove: (_, g) => {
+        if (!swipeLock.current) {
+          if (Math.abs(g.dx) < 8 && Math.abs(g.dy) < 8) return;
+          swipeLock.current = Math.abs(g.dx) > Math.abs(g.dy) ? "h" : "v";
+        }
+        if (swipeLock.current === "h") {
+          panX.setValue(g.dx);
+        } else {
+          panY.setValue(g.dy);
+        }
+      },
+      onPanResponderRelease: (_, g) => {
+        const lock = swipeLock.current;
+        swipeLock.current = null;
+        if (lock === "h") {
+          const dir = g.dx < -SWIPE_X_THRESHOLD ? -1 : g.dx > SWIPE_X_THRESHOLD ? 1 : 0;
+          if (dir !== 0) {
+            // Slide the artwork out in the drag direction, then change track.
+            Animated.timing(panX, {
+              toValue: dir * SCREEN_WIDTH,
+              duration: 190,
+              useNativeDriver: true,
+            }).start(() => {
+              panX.setValue(0);
+              if (dir < 0) gestureActions.current.next();
+              else gestureActions.current.prev();
+            });
+          } else {
+            Animated.spring(panX, { toValue: 0, damping: 18, stiffness: 200, useNativeDriver: true }).start();
+          }
+        } else if (lock === "v") {
+          if (g.dy < -SWIPE_Y_THRESHOLD) {
+            gestureActions.current.openQueue();
+          } else if (g.dy > SWIPE_Y_THRESHOLD) {
+            gestureActions.current.close();
+          }
+          Animated.spring(panY, { toValue: 0, damping: 18, stiffness: 200, useNativeDriver: true }).start();
+        }
+      },
+      onPanResponderTerminate: () => {
+        swipeLock.current = null;
+        Animated.spring(panX, { toValue: 0, damping: 18, stiffness: 200, useNativeDriver: true }).start();
+        Animated.spring(panY, { toValue: 0, damping: 18, stiffness: 200, useNativeDriver: true }).start();
+      },
+    })
+  ).current;
+
+  // Queue panel drag-to-dismiss (only claims the gesture once a downward
+  // move starts, so taps on the header buttons still work).
+  const queueSwipe = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_, g) => g.dy > 8,
+      onPanResponderMove: (_, g) => {
+        if (g.dy > 0) queueDrag.setValue(g.dy);
+      },
+      onPanResponderRelease: (_, g) => {
+        if (g.dy > 70) setQueueOpen(false);
+        Animated.timing(queueDrag, { toValue: 0, duration: 150, useNativeDriver: true }).start();
+      },
+      onPanResponderTerminate: () => {
+        Animated.timing(queueDrag, { toValue: 0, duration: 150, useNativeDriver: true }).start();
+      },
+    })
+  ).current;
+
+  // Queue slide-up entrance.
+  useEffect(() => {
+    if (queueOpen) {
+      queueAnim.setValue(0);
+      Animated.spring(queueAnim, {
+        toValue: 1,
+        damping: 26,
+        stiffness: 240,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [queueOpen, queueAnim]);
 
   // Sync the favorite state for the current track.
   useEffect(() => {
@@ -147,24 +266,20 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
 
   // ─── Artwork scale animation (Apple Music style) ─────────────────────
   useEffect(() => {
-    if (playing && modalVisible) {
-      Animated.spring(artworkScaleAnim, {
-        toValue: 1.0,
-        damping: 15,
-        stiffness: 150,
-        mass: 1,
-        useNativeDriver: true,
-      }).start();
-    } else {
-      Animated.spring(artworkScaleAnim, {
-        toValue: 0.92,
-        damping: 15,
-        stiffness: 150,
-        mass: 1,
-        useNativeDriver: true,
-      }).start();
+    // Reset to a slightly smaller scale on every track change so the
+    // artwork does a subtle pop when the song switches (also after a
+    // swipe gesture).
+    if (currentTrack?.path) {
+      artworkScaleAnim.setValue(0.9);
     }
-  }, [playing, modalVisible]);
+    Animated.spring(artworkScaleAnim, {
+      toValue: playing && modalVisible ? 1.0 : 0.92,
+      damping: 15,
+      stiffness: 150,
+      mass: 1,
+      useNativeDriver: true,
+    }).start();
+  }, [playing, modalVisible, currentTrack?.path, artworkScaleAnim]);
 
   if (!currentTrack) return null;
 
@@ -194,6 +309,7 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
     setModalVisible(false);
     setMoreSheet(false);
     setQueueOpen(false);
+    setPlaylistPicker(false);
     // Fire-and-forget slide-down so the view doesn't snap abruptly when the
     // player is reopened during the same frame.
     slideAnim.setValue(SCREEN_HEIGHT);
@@ -201,6 +317,23 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
 
   const coverUrl = api ? api.thumbnailUrl(currentTrack.root_id, currentTrack.path, 512) : null;
   const ext = currentTrack.extension || "";
+
+  // Keep the swipe actions pointing at the live handlers (defined above).
+  gestureActions.current = {
+    next: () => {
+      haptic("medium");
+      nextTrack();
+    },
+    prev: () => {
+      haptic("medium");
+      prevTrack();
+    },
+    close: () => closeModal(),
+    openQueue: () => {
+      haptic();
+      setQueueOpen(true);
+    },
+  };
 
   const formatTime = (s: number) => {
     if (!s || isNaN(s)) return "0:00";
@@ -451,24 +584,27 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
                 style={StyleSheet.absoluteFill}
                 contentFit="cover"
                 blurRadius={90}
+                pointerEvents="none"
               />
             ) : (
-              <LinearGradient colors={[...gradients.player]} style={StyleSheet.absoluteFill} />
+              <LinearGradient colors={[...gradients.player]} style={StyleSheet.absoluteFill} pointerEvents="none" />
             )}
             <View
               style={[
                 StyleSheet.absoluteFill,
                 { backgroundColor: isDark ? "rgba(0,0,0,0.55)" : "rgba(255,255,255,0.45)" },
               ]}
+              pointerEvents="none"
             />
             <BlurView
               intensity={60}
               tint={isDark ? "dark" : "light"}
               style={StyleSheet.absoluteFill}
+              pointerEvents="none"
             />
 
             {/* ── Header: chevron-down / source label / more ── */}
-            <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+            <View style={[styles.header, isLandscape && styles.headerLandscape, { paddingTop: insets.top + (isLandscape ? 4 : 8) }]}>
               <TouchableOpacity
                 style={styles.headerBtn}
                 onPress={closeModal}
@@ -477,25 +613,27 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
                 <MaterialCommunityIcons name="chevron-down" size={30} color={colors.content} />
               </TouchableOpacity>
 
-              <View style={styles.headerCenter}>
-                <Text
-                  style={[
-                    styles.headerLabel,
-                    { color: colors.content, opacity: 0.55 },
-                  ]}
-                >
-                  PLAYING FROM
-                </Text>
-                <Text
-                  style={[
-                    styles.headerSource,
-                    { color: colors.content, opacity: 0.85 },
-                  ]}
-                  numberOfLines={1}
-                >
-                  Nexora
-                </Text>
-              </View>
+              {!isLandscape && (
+                <View style={styles.headerCenter}>
+                  <Text
+                    style={[
+                      styles.headerLabel,
+                      { color: colors.content, opacity: 0.55 },
+                    ]}
+                  >
+                    PLAYING FROM
+                  </Text>
+                  <Text
+                    style={[
+                      styles.headerSource,
+                      { color: colors.content, opacity: 0.85 },
+                    ]}
+                    numberOfLines={1}
+                  >
+                    Nexora
+                  </Text>
+                </View>
+              )}
 
               <TouchableOpacity
                 style={styles.headerBtn}
@@ -515,10 +653,19 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
             </View>
 
             {/* ── Main Content Area ── */}
-            <View style={styles.modalContent}>
+            <View style={[styles.modalContent, isLandscape && styles.modalContentLandscape]}>
               {/* ── Artwork ── */}
-              <View style={styles.artworkSection}>
-                <View style={styles.artworkShadowWrap}>
+              <Animated.View
+                style={[
+                  styles.artworkSection,
+                  isLandscape && styles.artworkSectionLandscape,
+                  {
+                    transform: [{ translateX: panX }, { translateY: panY }],
+                  },
+                ]}
+                {...swipeResponder.panHandlers}
+              >
+                <View style={[styles.artworkShadowWrap, isLandscape && styles.artworkShadowWrapLandscape]}>
                   <Animated.View
                     style={[
                       styles.artworkBox,
@@ -561,7 +708,7 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
                     )}
                   </Animated.View>
                 </View>
-              </View>
+              </Animated.View>
 
               {/* ── Track Info + More Button ── */}
               <View style={styles.trackInfoRow}>
@@ -585,6 +732,28 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
                     {ext.toUpperCase() || "AUDIO"} · Nexora
                   </Text>
                 </View>
+                <TouchableOpacity
+                  style={[
+                    styles.trackMoreBtn,
+                    {
+                      backgroundColor: isDark
+                        ? "rgba(255,255,255,0.06)"
+                        : "rgba(0,0,0,0.04)",
+                    },
+                  ]}
+                  onPress={() => {
+                    haptic();
+                    setMoreSheet(true);
+                  }}
+                  hitSlop={10}
+                >
+                  <MaterialCommunityIcons
+                    name="dots-horizontal"
+                    size={22}
+                    color={colors.content}
+                    style={{ opacity: 0.6 }}
+                  />
+                </TouchableOpacity>
               </View>
 
               {/* ── Lossless wave — centered below title; tap to toggle the
@@ -859,10 +1028,27 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
               </View>
             </View>
 
-            {/* ── Queue panel (slide-up overlay) ── */}
+            {/* ── Queue panel (slide-up overlay — swipe down to dismiss) ── */}
             {queueOpen && (
               <View style={styles.queueOverlay}>
-                <Pressable style={StyleSheet.absoluteFill} onPress={() => setQueueOpen(false)} />
+                <Animated.View style={[StyleSheet.absoluteFill, { opacity: queueAnim }]}>
+                  <Pressable style={StyleSheet.absoluteFill} onPress={() => setQueueOpen(false)} />
+                </Animated.View>
+                <Animated.View
+                  style={[
+                    styles.queueSheet,
+                    {
+                      transform: [
+                        {
+                          translateY: Animated.add(
+                            queueAnim.interpolate({ inputRange: [0, 1], outputRange: [600, 0] }),
+                            queueDrag
+                          ),
+                        },
+                      ],
+                    },
+                  ]}
+                >
                 <View
                   style={[
                     styles.queuePanel,
@@ -873,13 +1059,22 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
                     },
                   ]}
                 >
-                  <View style={styles.queueHeader}>
+                  {/* Grabber — drag down to close the queue */}
+                  <View
+                    {...queueSwipe.panHandlers}
+                    style={[styles.queueGrabber, { backgroundColor: isDark ? "rgba(255,255,255,0.22)" : "rgba(0,0,0,0.14)" }]}
+                  />
+                  <View style={styles.queueHeader} {...queueSwipe.panHandlers}>
                     <View style={styles.queueHeaderLeft}>
-                      <MaterialCommunityIcons name="playlist-music" size={18} color={colors.accent} />
+                      <View style={[styles.queueTitleIcon, { backgroundColor: colors.accentSoft }]}>
+                        <MaterialCommunityIcons name="playlist-music" size={16} color={colors.accent} />
+                      </View>
                       <Text style={[styles.queueTitle, { color: colors.content, fontSize: font.md }]}>Up Next</Text>
-                      <Text style={[styles.queueCount, { color: colors.muted, fontSize: font.xs }]}>
-                        {playlist.length} track{playlist.length === 1 ? "" : "s"}
-                      </Text>
+                      <View style={[styles.queueCountPill, { backgroundColor: colors.surfaceMuted }]}>
+                        <Text style={[styles.queueCount, { color: colors.muted, fontSize: font.xs }]}>
+                          {playlist.length} track{playlist.length === 1 ? "" : "s"}
+                        </Text>
+                      </View>
                     </View>
                     <TouchableOpacity onPress={() => setQueueOpen(false)} hitSlop={10} style={styles.queueClose}>
                       <MaterialCommunityIcons name="close" size={20} color={colors.muted} />
@@ -936,108 +1131,215 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
                     }}
                   />
                 </View>
+                </Animated.View>
+              </View>
+            )}
+
+            {/* ════════════════════════════════════════════════════════
+                INLINE ACTION SHEETS (inside the modal — iOS-safe: a second
+                Modal would stack BELOW this one on iOS; these overlays live
+                in the same window so they always appear on top).
+                ════════════════════════════════════════════════════════ */}
+
+            {/* ── Track actions ("...") sheet ── */}
+            {moreSheet && (
+              <View style={styles.inlineOverlay}>
+                <Pressable style={StyleSheet.absoluteFill} onPress={() => setMoreSheet(false)} />
+                <View
+                  style={[
+                    styles.inlineSheet,
+                    {
+                      backgroundColor: colors.surfaceElevated,
+                      borderColor: colors.borderSoft,
+                      paddingBottom: insets.bottom + 24,
+                    },
+                  ]}
+                >
+                  <View
+                    style={[styles.sheetGrabber, { backgroundColor: isDark ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.15)" }]}
+                  />
+                  <Text
+                    style={[styles.inlineSheetTitle, { color: colors.content, fontSize: font.md }]}
+                    numberOfLines={1}
+                  >
+                    {cleanTrackTitle(currentTrack.name)}
+                  </Text>
+                  {[
+                    {
+                      label: favorited ? "Remove from favorites" : "Add to favorites",
+                      icon: favorited ? "heart" : "heart-outline",
+                      danger: false,
+                      onPress: toggleFavorite,
+                    },
+                    {
+                      label: "Add to playlist",
+                      icon: "playlist-plus",
+                      danger: false,
+                      onPress: openPlaylistPicker,
+                    },
+                    {
+                      label: "Download",
+                      icon: "download",
+                      danger: false,
+                      onPress: () => downloadAndShare(false),
+                    },
+                    {
+                      label: "Share",
+                      icon: "share-variant",
+                      danger: false,
+                      onPress: () => downloadAndShare(true),
+                    },
+                    {
+                      label: "Copy share link",
+                      icon: "link-variant",
+                      danger: false,
+                      onPress: copyLink,
+                    },
+                  ].map((a, i, arr) => (
+                    <TouchableOpacity
+                      key={a.label}
+                      style={[
+                        styles.inlineAction,
+                        i < arr.length - 1 && {
+                          borderBottomWidth: StyleSheet.hairlineWidth,
+                          borderBottomColor: colors.borderSoft,
+                        },
+                      ]}
+                      onPress={() => {
+                        try {
+                          a.onPress();
+                        } finally {
+                          setMoreSheet(false);
+                        }
+                      }}
+                      activeOpacity={0.6}
+                    >
+                      <View
+                        style={[
+                          styles.inlineActionIcon,
+                          { backgroundColor: a.danger ? "rgba(239,68,68,0.12)" : colors.accentSoft },
+                        ]}
+                      >
+                        <MaterialCommunityIcons name={a.icon as any} size={18} color={a.danger ? colors.danger : colors.accent} />
+                      </View>
+                      <Text
+                        style={[
+                          styles.inlineActionText,
+                          { color: a.danger ? colors.danger : colors.content, fontSize: font.md },
+                        ]}
+                      >
+                        {a.label}
+                      </Text>
+                      <MaterialCommunityIcons name="chevron-right" size={18} color={colors.muted} style={{ opacity: 0.5 }} />
+                    </TouchableOpacity>
+                  ))}
+                  <TouchableOpacity
+                    style={[styles.inlineCancel, { backgroundColor: colors.card }]}
+                    onPress={() => setMoreSheet(false)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.inlineCancelText, { color: colors.muted, fontSize: font.md }]}>Cancel</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+
+            {/* ── Add to playlist / create playlist picker (inline) ── */}
+            {playlistPicker && (
+              <View style={styles.inlineOverlay}>
+                <Pressable
+                  style={StyleSheet.absoluteFill}
+                  onPress={() => {
+                    setPlaylistPicker(false);
+                    setNewPlaylistName("");
+                  }}
+                />
+                <View
+                  style={[
+                    styles.inlineSheet,
+                    {
+                      backgroundColor: colors.surfaceElevated,
+                      borderColor: colors.borderSoft,
+                      paddingBottom: insets.bottom + 24,
+                    },
+                  ]}
+                >
+                  <View
+                    style={[styles.sheetGrabber, { backgroundColor: isDark ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.15)" }]}
+                  />
+                  <Text style={[styles.inlineSheetTitle, { color: colors.content, fontSize: font.md }]}>
+                    Add to playlist
+                  </Text>
+                  <View style={styles.pickerCreateRow}>
+                    <TextInput
+                      style={[styles.pickerInput, { backgroundColor: colors.surfaceMuted, borderColor: colors.border, color: colors.content, borderRadius: radius.md }]}
+                      value={newPlaylistName}
+                      onChangeText={setNewPlaylistName}
+                      placeholder="New playlist name…"
+                      placeholderTextColor={colors.muted}
+                      autoCapitalize="sentences"
+                      selectionColor={colors.accent}
+                      onSubmitEditing={createPlaylistWithTrack}
+                    />
+                    <TouchableOpacity
+                      style={[styles.pickerCreateBtn, { backgroundColor: colors.accent, borderRadius: radius.md }, (!newPlaylistName.trim() || playlistBusy) && { opacity: 0.5 }]}
+                      disabled={!newPlaylistName.trim() || playlistBusy}
+                      onPress={createPlaylistWithTrack}
+                    >
+                      {playlistBusy ? (
+                        <ActivityIndicator size="small" color="#fff" />
+                      ) : (
+                        <MaterialCommunityIcons name="plus" size={20} color="#fff" />
+                      )}
+                    </TouchableOpacity>
+                  </View>
+
+                  <Text style={[styles.pickerSection, { color: colors.muted, fontSize: font.xs }]}>YOUR PLAYLISTS</Text>
+                  {playlists.length === 0 ? (
+                    <Text style={[styles.pickerEmpty, { color: colors.muted, fontSize: font.sm }]}>
+                      No playlists yet — create one above.
+                    </Text>
+                  ) : (
+                    <ScrollView style={{ maxHeight: 320, flexGrow: 0 }} keyboardShouldPersistTaps="handled">
+                      {playlists.map((pl) => (
+                        <TouchableOpacity
+                          key={pl.id}
+                          style={[styles.pickerRow, { borderBottomColor: colors.borderSoft }]}
+                          onPress={() => addToPlaylist(pl.id)}
+                          activeOpacity={0.6}
+                        >
+                          <View style={[styles.pickerRowIcon, { backgroundColor: colors.accentSoft }]}>
+                            <MaterialCommunityIcons name="playlist-music" size={18} color={colors.accent} />
+                          </View>
+                          <View style={styles.pickerRowBody}>
+                            <Text style={[styles.pickerRowTitle, { color: colors.content, fontSize: font.md }]} numberOfLines={1}>
+                              {pl.name}
+                            </Text>
+                            <Text style={[styles.pickerRowSub, { color: colors.muted, fontSize: font.xs }]}>
+                              {pl.items.length} track{pl.items.length === 1 ? "" : "s"}
+                            </Text>
+                          </View>
+                          <MaterialCommunityIcons name="plus-circle-outline" size={20} color={colors.accent} />
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  )}
+                  <TouchableOpacity
+                    style={[styles.inlineCancel, { backgroundColor: colors.card }]}
+                    onPress={() => {
+                      setPlaylistPicker(false);
+                      setNewPlaylistName("");
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.inlineCancelText, { color: colors.muted, fontSize: font.md }]}>Cancel</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             )}
           </Animated.View>
         </Modal>
       )}
-
-      {/* ── Track actions sheet ── */}
-      <BottomSheet
-        visible={moreSheet}
-        onClose={() => setMoreSheet(false)}
-        title={currentTrack?.name}
-        actions={[
-          {
-            label: favorited ? "Remove from favorites" : "Add to favorites",
-            icon: favorited ? "heart" : "heart-outline",
-            onPress: toggleFavorite,
-          },
-          {
-            label: "Add to playlist",
-            icon: "playlist-plus",
-            onPress: openPlaylistPicker,
-          },
-          {
-            label: "Download",
-            icon: "download",
-            onPress: () => downloadAndShare(false),
-          },
-          {
-            label: "Share",
-            icon: "share-variant",
-            onPress: () => downloadAndShare(true),
-          },
-          {
-            label: "Copy share link",
-            icon: "link-variant",
-            onPress: copyLink,
-          },
-        ]}
-      />
-
-      {/* ── Add to playlist / create playlist picker ── */}
-      <BottomSheet
-        visible={playlistPicker}
-        onClose={() => {
-          setPlaylistPicker(false);
-          setNewPlaylistName("");
-        }}
-        title="Add to playlist"
-      >
-        <View style={styles.pickerCreateRow}>
-          <TextInput
-            style={[styles.pickerInput, { backgroundColor: colors.surfaceMuted, borderColor: colors.border, color: colors.content, borderRadius: radius.md }]}
-            value={newPlaylistName}
-            onChangeText={setNewPlaylistName}
-            placeholder="New playlist name…"
-            placeholderTextColor={colors.muted}
-            autoCapitalize="sentences"
-            selectionColor={colors.accent}
-            onSubmitEditing={createPlaylistWithTrack}
-          />
-          <TouchableOpacity
-            style={[styles.pickerCreateBtn, { backgroundColor: colors.accent, borderRadius: radius.md }, (!newPlaylistName.trim() || playlistBusy) && { opacity: 0.5 }]}
-            disabled={!newPlaylistName.trim() || playlistBusy}
-            onPress={createPlaylistWithTrack}
-          >
-            {playlistBusy ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <MaterialCommunityIcons name="plus" size={20} color="#fff" />
-            )}
-          </TouchableOpacity>
-        </View>
-
-        <Text style={[styles.pickerSection, { color: colors.muted, fontSize: font.xs }]}>YOUR PLAYLISTS</Text>
-        {playlists.length === 0 ? (
-          <Text style={[styles.pickerEmpty, { color: colors.muted, fontSize: font.sm }]}>
-            No playlists yet — create one above.
-          </Text>
-        ) : (
-          playlists.map((pl) => (
-            <TouchableOpacity
-              key={pl.id}
-              style={[styles.pickerRow, { borderBottomColor: colors.borderSoft }]}
-              onPress={() => addToPlaylist(pl.id)}
-              activeOpacity={0.6}
-            >
-              <View style={[styles.pickerRowIcon, { backgroundColor: colors.accentSoft }]}>
-                <MaterialCommunityIcons name="playlist-music" size={18} color={colors.accent} />
-              </View>
-              <View style={styles.pickerRowBody}>
-                <Text style={[styles.pickerRowTitle, { color: colors.content, fontSize: font.md }]} numberOfLines={1}>
-                  {pl.name}
-                </Text>
-                <Text style={[styles.pickerRowSub, { color: colors.muted, fontSize: font.xs }]}>
-                  {pl.items.length} track{pl.items.length === 1 ? "" : "s"}
-                </Text>
-              </View>
-              <MaterialCommunityIcons name="plus-circle-outline" size={20} color={colors.accent} />
-            </TouchableOpacity>
-          ))
-        )}
-      </BottomSheet>
     </>
   );
 }
@@ -1072,8 +1374,8 @@ const styles = StyleSheet.create({
     pointerEvents: "none",
   },
   miniIconWrap: {
-    width: 44,
-    height: 44,
+    width: Platform.OS === "android" ? 40 : 44,
+    height: Platform.OS === "android" ? 40 : 44,
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
@@ -1092,8 +1394,8 @@ const styles = StyleSheet.create({
   miniTitle: { fontWeight: "700" },
   miniSub: {},
   miniBtn: {
-    width: 44,
-    height: 44,
+    width: Platform.OS === "android" ? 40 : 44,
+    height: Platform.OS === "android" ? 40 : 44,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1120,6 +1422,10 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: 20,
     paddingBottom: 4,
+  },
+  headerLandscape: {
+    paddingHorizontal: 12,
+    paddingBottom: 0,
   },
   headerBtn: {
     width: 40,
@@ -1150,6 +1456,15 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
     paddingBottom: 48,
   },
+  // Landscape: artwork pinned to the left half, controls in the right
+  // column (centered), so nothing overflows on short screens.
+  modalContentLandscape: {
+    justifyContent: "center",
+    paddingHorizontal: 0,
+    paddingBottom: 0,
+    paddingLeft: "44%",
+    paddingRight: 20,
+  },
 
   /* Artwork */
   artworkSection: {
@@ -1157,6 +1472,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 8,
+  },
+  artworkSectionLandscape: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: "42%",
+    flex: undefined,
+    paddingVertical: 0,
+    justifyContent: "center",
   },
   artworkShadowWrap: {
     width: "100%",
@@ -1166,6 +1491,10 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.55,
     shadowRadius: 40,
     elevation: 28,
+  },
+  artworkShadowWrapLandscape: {
+    width: undefined,
+    height: "74%",
   },
   artworkBox: {
     width: "100%",
@@ -1199,6 +1528,13 @@ const styles = StyleSheet.create({
   trackTextCol: {
     flex: 1,
     paddingRight: 12,
+  },
+  trackMoreBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
   },
   trackName: {
     fontWeight: "800",
@@ -1362,13 +1698,31 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
     zIndex: 50,
   },
+  // The height cap lives HERE — this wrapper's parent is the full-screen
+  // overlay, so "56%" is a true screen-relative half view. (A percentage
+  // maxHeight on the inner panel resolves against an auto-height parent and
+  // gets ignored, which made the card grow to fit every track.)
+  queueSheet: {
+    width: "100%",
+    maxHeight: "56%",
+  },
+  queueGrabber: {
+    alignSelf: "center",
+    width: 48,
+    height: 5,
+    borderRadius: 3,
+    marginTop: 8,
+    marginBottom: 4,
+  },
   queuePanel: {
-    maxHeight: "70%",
-    borderTopLeftRadius: 26,
-    borderTopRightRadius: 26,
+    maxHeight: "100%",
+    flexShrink: 1,
+    overflow: "hidden",
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
     borderWidth: 1,
     borderBottomWidth: 0,
-    paddingTop: 10,
+    paddingTop: 4,
     paddingHorizontal: 16,
   },
   queueHeader: {
@@ -1383,11 +1737,87 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
   },
-  queueTitle: { fontWeight: "700" },
+  queueTitle: { fontWeight: "800", letterSpacing: 0.2 },
   queueCount: { fontWeight: "600" },
-  queueClose: { padding: 4 },
-  queueList: { flexGrow: 0 },
+  queueCountPill: {
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  queueTitleIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  queueClose: { padding: 6 },
+  // flexShrink lets the list scroll when the queue exceeds the half-view cap.
+  queueList: { flexGrow: 0, flexShrink: 1 },
   queueEmpty: { textAlign: "center", paddingVertical: 24 },
+
+  /* Inline action sheets (inside the fullscreen modal — iOS-safe) */
+  inlineOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: "flex-end",
+    zIndex: 60,
+  },
+  inlineSheet: {
+    borderTopLeftRadius: 26,
+    borderTopRightRadius: 26,
+    borderWidth: 1,
+    borderBottomWidth: 0,
+    paddingTop: 12,
+    paddingHorizontal: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: -6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 18,
+    elevation: 24,
+  },
+  sheetGrabber: {
+    alignSelf: "center",
+    width: 42,
+    height: 5,
+    borderRadius: 3,
+    marginBottom: 16,
+  },
+  inlineSheetTitle: {
+    fontWeight: "700",
+    paddingHorizontal: 4,
+    marginBottom: 8,
+  },
+  inlineAction: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 4,
+  },
+  inlineActionIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  inlineActionText: {
+    fontWeight: "600",
+    flex: 1,
+  },
+  inlineCancel: {
+    paddingVertical: 15,
+    alignItems: "center",
+    borderRadius: 18,
+    marginTop: 12,
+  },
+  inlineCancelText: {
+    fontWeight: "600",
+  },
 
   /* Playlist picker (from "..." menu) */
   pickerCreateRow: {

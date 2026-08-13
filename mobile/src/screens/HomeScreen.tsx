@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  Platform,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -30,6 +31,9 @@ type Nav = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, "Home">,
   NativeStackNavigationProp<RootStackParamList>
 >;
+
+/** Android renders ~15% tighter so the dashboard doesn't balloon. */
+const IS_ANDROID = Platform.OS === "android";
 
 type QuickAction =
   | { id: string; title: string; icon: string; kind: string; gradient: readonly [string, string] }
@@ -157,10 +161,10 @@ export default function HomeScreen() {
           <LinearGradient colors={[...gradients.hero]} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={StyleSheet.absoluteFill} pointerEvents="none" />
           <View style={styles.headerRow}>
             <View>
-              <View style={{ width: 120, height: 16, borderRadius: 8, backgroundColor: colors.card }} />
-              <View style={{ width: 160, height: 32, borderRadius: 8, backgroundColor: colors.card, marginTop: 10 }} />
+              <View style={{ width: IS_ANDROID ? 100 : 120, height: 16, borderRadius: 8, backgroundColor: colors.card }} />
+              <View style={{ width: IS_ANDROID ? 140 : 160, height: IS_ANDROID ? 26 : 32, borderRadius: 8, backgroundColor: colors.card, marginTop: 10 }} />
             </View>
-            <View style={{ width: 52, height: 52, borderRadius: 26, backgroundColor: colors.card }} />
+            <View style={{ width: IS_ANDROID ? 44 : 52, height: IS_ANDROID ? 44 : 52, borderRadius: IS_ANDROID ? 22 : 26, backgroundColor: colors.card }} />
           </View>
         </View>
         <View style={{ paddingHorizontal: spacing.xl, gap: spacing.md, flexDirection: "row", marginTop: spacing.xl }}>
@@ -217,17 +221,17 @@ export default function HomeScreen() {
               </View>
             </View>
 
-            <View style={{ marginTop: 20 }}>
-              <Text style={[styles.rootName, { color: colors.content, fontSize: font.lg }]} numberOfLines={1}>
+            <View style={{ marginTop: IS_ANDROID ? 14 : 20 }}>
+              <Text style={[styles.rootName, { color: colors.content, fontSize: font.lg }]} numberOfLines={1} maxFontSizeMultiplier={1.15}>
                 {item.name}
               </Text>
-              <Text style={[styles.rootType, { color: colors.muted, fontSize: font.sm }]}>
+              <Text style={[styles.rootType, { color: colors.muted, fontSize: font.sm }]} maxFontSizeMultiplier={1.15}>
                 {item.type.toUpperCase()} Storage
               </Text>
             </View>
 
             <View style={styles.rootCardFooter}>
-              <Text style={[styles.rootActionLabel, { color: colors.accent, fontSize: font.sm }]}>Browse</Text>
+              <Text style={[styles.rootActionLabel, { color: colors.accent, fontSize: font.sm }]} maxFontSizeMultiplier={1.15}>Browse</Text>
               <View style={[styles.rootArrowWrap, { backgroundColor: colors.accentSoft }]}>
                 <MaterialCommunityIcons name="arrow-right" size={16} color={colors.accent} />
               </View>
@@ -245,8 +249,8 @@ export default function HomeScreen() {
 
             <View style={styles.headerRow}>
               <View style={{ flex: 1 }}>
-                <Text style={[styles.greeting, { color: colors.muted, fontSize: font.md }]}>{greeting}</Text>
-                <Text style={[styles.heroName, { color: colors.content }]}>{firstName || "Explorer"}</Text>
+                <Text style={[styles.greeting, { color: colors.muted, fontSize: font.md }]} maxFontSizeMultiplier={1.15}>{greeting}</Text>
+                <Text style={[styles.heroName, { color: colors.content }]} maxFontSizeMultiplier={1.15}>{firstName || "Explorer"}</Text>
               </View>
               <TouchableOpacity
                 style={[styles.avatarBtn, shadowSm]}
@@ -286,9 +290,9 @@ export default function HomeScreen() {
                       end={{ x: 1, y: 1 }}
                       style={StyleSheet.absoluteFill}
                     />
-                    <MaterialCommunityIcons name={cat.icon as any} size={28} color="#fff" />
+                    <MaterialCommunityIcons name={cat.icon as any} size={IS_ANDROID ? 24 : 28} color="#fff" />
                   </View>
-                  <Text style={[styles.quickLabel, { color: colors.content, fontSize: font.sm }]}>{cat.title}</Text>
+                  <Text style={[styles.quickLabel, { color: colors.content, fontSize: font.sm }]} maxFontSizeMultiplier={1.15}>{cat.title}</Text>
                     </TouchableOpacity>
                   </PressScale>
                 </FadeSlideIn>
@@ -371,7 +375,7 @@ export default function HomeScreen() {
                 <LinearGradient colors={["rgba(255,255,255,0.06)", "transparent"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
                 <View style={styles.playlistCover}>
                   <LinearGradient colors={[...gradients.brand]} style={StyleSheet.absoluteFill} />
-                  <MaterialCommunityIcons name="playlist-music" size={26} color="#fff" />
+                  <MaterialCommunityIcons name="playlist-music" size={IS_ANDROID ? 22 : 26} color="#fff" />
                 </View>
                 <View style={styles.playlistBody}>
                   <Text style={[styles.playlistTitle, { color: colors.content, fontSize: font.md }]}>Playlists</Text>
@@ -423,7 +427,7 @@ export default function HomeScreen() {
                 <LinearGradient colors={["rgba(255,255,255,0.06)", "transparent"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
                 <View style={styles.likedCover}>
                   <LinearGradient colors={["#F43F5E", "#BE123C"]} style={StyleSheet.absoluteFill} />
-                  <MaterialCommunityIcons name="heart" size={30} color="#fff" />
+                  <MaterialCommunityIcons name="heart" size={IS_ANDROID ? 26 : 30} color="#fff" />
                 </View>
                 <View style={styles.likedBody}>
                   <Text style={[styles.likedTitle, { color: colors.content, fontSize: font.md }]}>Liked Songs</Text>
@@ -455,27 +459,27 @@ const styles = StyleSheet.create({
 
   // ── Hero Header ──
   hero: {
-    paddingHorizontal: 24,
-    paddingBottom: 28,
+    paddingHorizontal: IS_ANDROID ? 20 : 24,
+    paddingBottom: IS_ANDROID ? 22 : 28,
     overflow: "hidden",
   },
   headerRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 24,
+    marginBottom: IS_ANDROID ? 18 : 24,
   },
   greeting: { fontWeight: "600", letterSpacing: 0.5 },
-  heroName: { fontSize: 34, fontWeight: "800", letterSpacing: 0.2, marginTop: 4 },
+  heroName: { fontSize: IS_ANDROID ? 28 : 34, fontWeight: "800", letterSpacing: 0.2, marginTop: 4 },
   avatarBtn: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    width: IS_ANDROID ? 44 : 52,
+    height: IS_ANDROID ? 44 : 52,
+    borderRadius: IS_ANDROID ? 22 : 26,
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
   },
-  avatarText: { color: "#fff", fontSize: 20, fontWeight: "800" },
+  avatarText: { color: "#fff", fontSize: IS_ANDROID ? 18 : 20, fontWeight: "800" },
 
   // ── Search Trigger ──
   searchBar: {
@@ -509,16 +513,16 @@ const styles = StyleSheet.create({
   errorText: { fontWeight: "600" },
 
   // ── Quick Categories ──
-  quickWrap: { marginTop: 16, marginBottom: 16 },
+  quickWrap: { marginTop: IS_ANDROID ? 12 : 16, marginBottom: IS_ANDROID ? 12 : 16 },
   quickCard: {
     alignItems: "center",
-    width: 84,
-    gap: 10,
+    width: IS_ANDROID ? 72 : 84,
+    gap: IS_ANDROID ? 8 : 10,
   },
   quickIconWrap: {
-    width: 64,
-    height: 64,
-    borderRadius: 22,
+    width: IS_ANDROID ? 54 : 64,
+    height: IS_ANDROID ? 54 : 64,
+    borderRadius: IS_ANDROID ? 18 : 22,
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
@@ -528,10 +532,10 @@ const styles = StyleSheet.create({
   // ── Stats Bar ──
   statsBar: {
     flexDirection: "row",
-    marginTop: 16,
-    marginBottom: 16,
+    marginTop: IS_ANDROID ? 12 : 16,
+    marginBottom: IS_ANDROID ? 12 : 16,
     borderWidth: 1,
-    paddingVertical: 18,
+    paddingVertical: IS_ANDROID ? 13 : 18,
     overflow: "hidden",
   },
   statItem: { flex: 1, alignItems: "center", gap: 4 },
@@ -551,9 +555,9 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
   },
   rootIconWrap: {
-    width: 52,
-    height: 52,
-    borderRadius: 16,
+    width: IS_ANDROID ? 44 : 52,
+    height: IS_ANDROID ? 44 : 52,
+    borderRadius: IS_ANDROID ? 14 : 16,
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
@@ -564,13 +568,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginTop: 18,
+    marginTop: IS_ANDROID ? 12 : 18,
   },
   rootActionLabel: { fontWeight: "700" },
   rootArrowWrap: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: IS_ANDROID ? 24 : 28,
+    height: IS_ANDROID ? 24 : 28,
+    borderRadius: IS_ANDROID ? 12 : 14,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -593,9 +597,9 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   likedCover: {
-    width: 56,
-    height: 56,
-    borderRadius: 16,
+    width: IS_ANDROID ? 48 : 56,
+    height: IS_ANDROID ? 48 : 56,
+    borderRadius: IS_ANDROID ? 14 : 16,
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
@@ -612,9 +616,9 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   playlistCover: {
-    width: 52,
-    height: 52,
-    borderRadius: 16,
+    width: IS_ANDROID ? 46 : 52,
+    height: IS_ANDROID ? 46 : 52,
+    borderRadius: IS_ANDROID ? 14 : 16,
     backgroundColor: "rgba(255,255,255,0.05)",
     alignItems: "center",
     justifyContent: "center",
@@ -632,20 +636,20 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   audioCard: {
-    width: 140,
-    padding: 16,
+    width: IS_ANDROID ? 124 : 140,
+    padding: IS_ANDROID ? 12 : 16,
     borderWidth: 1,
     overflow: "hidden",
     alignItems: "flex-start",
   },
   audioIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: IS_ANDROID ? 40 : 48,
+    height: IS_ANDROID ? 40 : 48,
+    borderRadius: IS_ANDROID ? 20 : 24,
     backgroundColor: "rgba(255,255,255,0.05)",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 12,
+    marginBottom: IS_ANDROID ? 10 : 12,
   },
   audioTitle: { fontWeight: "700", marginBottom: 2 },
   audioSub: { fontWeight: "600" },

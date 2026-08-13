@@ -63,6 +63,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
         return api.audioStreamUrl(item.root_id, item.path, {
           extension: item.extension,
           mime: item.mime,
+          size: item.size,
           session: sessionRef.current,
           quality: qualityRef.current,
         });
@@ -162,7 +163,18 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       // Failed track → auto-advance to the next track instead of dying
       // silently (e.g. unsupported codec and no server transcode).
       const { currentTrack: ct, playlist: pl } = stateRef.current;
-      if (!ct || pl.length <= 1) return;
+      if (!ct || pl.length <= 1) {
+        // Single-track failure: reset to “no media” so the player doesn't stay
+        // wedged in a permanent error state — codec init failures on old
+        // Android (e.g. FLAC below API 30) can otherwise crash MediaCodec or
+        // leave every retry dead.
+        try {
+          (player as any).replace?.(null);
+        } catch {
+          /* ignore */
+        }
+        return;
+      }
       const next = step(pl, ct, 1);
       if (next && next.path !== ct.path) setCurrentTrack(next);
     });

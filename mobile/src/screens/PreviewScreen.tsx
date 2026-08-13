@@ -30,6 +30,7 @@ import { LosslessWave } from "../components/LosslessBadge";
 import { detectAudioQuality } from "../lib/audioQuality";
 import { cleanTrackTitle } from "../lib/fileMeta";
 import { BottomSheet } from "../components/BottomSheet";
+import PdfViewer from "../components/PdfViewer";
 import type { RootStackParamList } from "../navigation/types";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Preview">;
@@ -271,7 +272,34 @@ export default function PreviewScreen({ route }: Props) {
         </View>
       )}
 
-      {(kind === "pdf" || kind === "other") && (
+      {kind === "pdf" && api && (
+        <View style={styles.pdfRoot}>
+          <View style={[styles.pdfBar, { backgroundColor: colors.surfaceElevated, borderColor: colors.borderSoft }]}>
+            <View style={styles.pdfBarInfo}>
+              <MaterialCommunityIcons name="file-pdf-box" size={18} color={colors.danger} />
+              <Text style={[styles.pdfBarName, { color: colors.content, fontSize: font.sm }]} numberOfLines={1}>
+                {item.name}
+              </Text>
+            </View>
+            <TouchableOpacity style={[styles.pdfBarBtn, { backgroundColor: colors.surfaceMuted }]} onPress={downloadAndOpen} activeOpacity={0.7}>
+              <MaterialCommunityIcons name="open-in-new" size={18} color={colors.content} />
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.pdfBarBtn, { backgroundColor: colors.surfaceMuted }]} onPress={handleShareLink} activeOpacity={0.7}>
+              <MaterialCommunityIcons name="link-variant" size={18} color={colors.content} />
+            </TouchableOpacity>
+          </View>
+          <View style={{ flex: 1 }}>
+            <PdfViewer
+              baseUrl={api.baseUrl}
+              pdfUrl={rawUrl}
+              fileName={item.name}
+              onOpenExternal={downloadAndOpen}
+            />
+          </View>
+        </View>
+      )}
+
+      {(kind === "other") && (
         <View style={styles.center}>
           <View style={[styles.fileCard, { backgroundColor: colors.surface, borderRadius: radius.xxl, borderColor: colors.borderSoft }, shadow]}>
             <LinearGradient
@@ -281,7 +309,7 @@ export default function PreviewScreen({ route }: Props) {
               style={styles.glassHighlight}
             />
             <View style={styles.fileCardIconWrap}>
-              <GlyphTile icon={kind === "pdf" ? "file-pdf-box" : "file-outline"} color={kind === "pdf" ? colors.red : colors.muted} size={56} />
+              <GlyphTile icon="file-outline" color={colors.muted} size={56} />
             </View>
             <Text style={[styles.fileCardTitle, { color: colors.content, fontSize: font.xl }]}>{item.name}</Text>
             <Text style={[styles.fileCardSub, { color: colors.muted, fontSize: font.sm }]}>
@@ -449,6 +477,7 @@ function AudioPlayer({ name, size, ext, mime, rootId, path, onShare }: { name: s
       .audioStreamUrl(rootId, path, {
         extension: ext,
         mime,
+        size,
         session: generateSessionId(),
       })
       .then((url) => {
@@ -880,6 +909,26 @@ const styles = StyleSheet.create({
     bottom: 0,
     borderRadius: 24,
     pointerEvents: "none",
+  },
+
+  // PDF viewer
+  pdfRoot: { flex: 1 },
+  pdfBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+  },
+  pdfBarInfo: { flex: 1, flexDirection: "row", alignItems: "center", gap: 8 },
+  pdfBarName: { fontWeight: "600" },
+  pdfBarBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: "center",
+    justifyContent: "center",
   },
 
   // PDF / Other File Card

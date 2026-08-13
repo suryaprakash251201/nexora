@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, TouchableOpacity, StyleSheet, Animated } from "react-native";
+import { Platform, View, Text, TouchableOpacity, StyleSheet, Animated } from "react-native";
 import { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -14,11 +14,14 @@ const TAB_ICONS: Record<string, string> = {
 };
 
 /** Fixed height of the pill container — MiniPlayer uses this to sit flush above. */
-export const TAB_BAR_BASE_HEIGHT = 68;
+export const TAB_BAR_BASE_HEIGHT = Platform.OS === "android" ? 60 : 68;
 /** Extra space reserved below the pill for the home indicator. */
 export function tabBarTotalHeight(bottomInset: number): number {
   return TAB_BAR_BASE_HEIGHT + Math.max(bottomInset, 18);
 }
+
+/** Height of the sliding active pill inside the bar. */
+const PILL_HEIGHT = Platform.OS === "android" ? 44 : 50;
 
 export function PremiumTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const { bottom } = useSafeAreaInsets();
@@ -33,7 +36,7 @@ export function PremiumTabBar({ state, descriptors, navigation }: BottomTabBarPr
   const availableWidth = Math.max(0, containerWidth - paddingHorizontal * 2);
   const tabWidth = availableWidth / tabCount;
   const pillWidth = tabWidth - 16; // soft horizontal inset
-  const pillHeight = 50;
+  const pillHeight = PILL_HEIGHT;
 
   useEffect(() => {
     if (tabWidth > 0) {
@@ -110,7 +113,7 @@ export function PremiumTabBar({ state, descriptors, navigation }: BottomTabBarPr
             >
               <MaterialCommunityIcons
                 name={iconName as any}
-                size={22}
+                size={Platform.OS === "android" ? 20 : 22}
                 color={isFocused ? colors.accent : (isDark ? "rgba(255,255,255,0.82)" : "rgba(0,0,0,0.6)")}
                 style={[
                   styles.icon,
@@ -158,9 +161,9 @@ const styles = StyleSheet.create({
   activePill: {
     position: "absolute",
     left: 0,
-    top: 9, // vertically center (68 - 50) / 2
-    height: 50,
-    borderRadius: 25, // capsule
+    top: (TAB_BAR_BASE_HEIGHT - PILL_HEIGHT) / 2,
+    height: PILL_HEIGHT,
+    borderRadius: PILL_HEIGHT / 2, // capsule
   },
   tabButton: {
     flex: 1,
@@ -173,7 +176,7 @@ const styles = StyleSheet.create({
     marginBottom: 2, // tight spacing below icon
   },
   label: {
-    fontSize: 12,
+    fontSize: Platform.OS === "android" ? 11 : 12,
     fontWeight: "500",
   },
 });
