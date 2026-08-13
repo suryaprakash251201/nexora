@@ -1,5 +1,13 @@
 name: 'Build Mobile App'
 
+# Builds the mobile app:
+#   • Android  — release APK (debug-signed, installable directly)
+#   • iOS      — UNSIGNED .ipa for sideloading with a FREE Apple ID
+#                (Sideloadly / AltStore, see SIDELOAD.md) + a simulator
+#                .app for testing without any signing at all.
+# Optional paid-account signing is documented in SIDELOAD.md — free-account
+# signing requires interactive Apple ID auth and cannot run unattended in CI.
+
 on:
   push:
     branches:
@@ -12,6 +20,11 @@ on:
         description: 'Tag to create a release for (leave empty for build-only)'
         required: false
         type: string
+      build_ios:
+        description: 'Also build the iOS unsigned IPA (sideload)'
+        required: false
+        type: boolean
+        default: true
 
 permissions: {}
 
@@ -35,14 +48,14 @@ jobs:
           distribution: 'temurin'
 
       - name: install dependencies
-        run: npm install
+        run: npm ci
         working-directory: ./mobile
 
-      - name: expo prebuild
+      - name: expo prebuild (android)
         run: npx expo prebuild -p android --no-install
         working-directory: ./mobile
 
-      - name: build APK
+      - name: build release APK
         run: ./gradlew assembleRelease
         working-directory: ./mobile/android
 
@@ -52,11 +65,94 @@ jobs:
           name: nexora-mobile-android
           path: mobile/android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: warn
-          retention-days: 7
+          retention-days: 14
+
+  build-ios:
+    # iOS requires macOS (Xcode). Produces:
+    #   1. nexora-mobile-unsigned.ipa   — sideload with free Apple ID
+    #   2. nexora-mobile-simulator.app  — runs in the iOS Simulator,
+    #      zero signing required
+    if: >-
+      github.event_name != 'workflow_dispatch' ||
+      github.event.inputs.build_ios == 'true'
+    runs-on: macos-15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: setup node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: install dependencies
+        run: npm ci
+        working-directory: ./mobile
+
+      - name: expo prebuild (ios)
+        run: npx expo prebuild -p ios --no-install
+        working-directory: ./mobile
+
+      - name: install CocoaPods
+        run: pod install
+        working-directory: ./mobile/ios
+
+      # ── Device build (unsigned) — for sideloading via Sideloadly/AltStore ──
+      - name: build unsigned device app
+        run: >-
+          xcodebuild -workspace Nexora.xcworkspace -scheme Nexora
+          -configuration Release -sdk iphoneos
+          -derivedDataPath build
+          CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=
+          build
+        working-directory: ./mobile/ios
+
+      - name: package unsigned IPA
+        run: |
+          set -e
+          mkdir -p Payload
+          cp -R build/Build/Products/Release-iphoneos/Nexora.app Payload/
+          zip -qry nexora-mobile-unsigned.ipa Payload
+          rm -rf Payload
+        working-directory: ./mobile/ios
+
+      - name: upload unsigned IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexora-mobile-ios-ipa
+          path: mobile/ios/nexora-mobile-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 14
+
+      # ── Simulator build (unsigned, no Apple ID needed to run) ─────────
+      - name: build simulator app
+        run: >-
+          xcodebuild -workspace Nexora.xcworkspace -scheme Nexora
+          -configuration Debug -sdk iphonesimulator
+          -derivedDataPath build-sim
+          CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=
+          build
+        working-directory: ./mobile/ios
+
+      - name: zip simulator app
+        run: |
+          set -e
+          cp -R build-sim/Build/Products/Debug-iphonesimulator/Nexora.app .
+          zip -qry nexora-mobile-simulator.app.zip Nexora.app
+        working-directory: ./mobile/ios
+
+      - name: upload simulator app artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexora-mobile-ios-simulator
+          path: mobile/ios/nexora-mobile-simulator.app.zip
+          if-no-files-found: warn
+          retention-days: 14
 
   release:
     if: startsWith(github.ref, 'refs/tags/') || github.event.inputs.release_tag != ''
-    needs: build-android
+    needs: [build-android, build-ios]
     permissions:
       contents: write
     runs-on: ubuntu-latest
@@ -71,8 +167,23 @@ jobs:
         with:
           tag_name: ${{ github.event.inputs.release_tag || github.ref_name }}
           name: Nexora Mobile ${{ github.event.inputs.release_tag || github.ref_name }}
-          body: 'See the assets to download this version and install.'
+          body: |
+            ## Install
+
+            - **Android**: download the `.apk` and install it (allow unknown sources).
+            - **iOS (free Apple ID)**: download the `.ipa` and sideload with
+              [Sideloadly](https://sideloadly.io) or
+              [AltStore](https://altstore.io) — see `SIDELOAD.md`.
+            - **iOS Simulator**: download `nexora-mobile-simulator.app.zip`,
+              unzip, and drag `Nexora.app` onto a running simulator.
+
+            > iOS builds are unsigned on purpose — no paid Apple Developer
+            > account is used in CI. Free-account sideloads expire after 7 days
+            > and need a re-sign (AltStore can automate this while the
+            > computer + AltServer are reachable).
           draft: false
           prerelease: false
           files: |
             bundles/**/*.apk
+            bundles/**/*.ipa
+            bundles/**/*.app.zip
