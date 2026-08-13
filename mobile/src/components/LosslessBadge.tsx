@@ -12,15 +12,16 @@ const lightIcon = require("../../assets/lossless-wave.png");
  * player, fullscreen player and the vinyl preview player for lossless
  * tracks. Picks the white glyph on dark themes and the dark glyph on light.
  */
-export function LosslessWave({ size = "sm" }: { size?: "sm" | "md" }) {
+export function LosslessWave({ size = "sm" }: { size?: "sm" | "md" | "lg" }) {
   const { isDark } = useTheme();
   const md = size === "md";
+  const lg = size === "lg";
 
   return (
-    <View style={md ? styles.wrapMd : styles.wrap}>
+    <View style={lg ? styles.wrapLg : md ? styles.wrapMd : styles.wrap}>
       <Image
         source={isDark ? darkIcon : lightIcon}
-        style={md ? styles.waveMd : styles.wave}
+        style={lg ? styles.waveLg : md ? styles.waveMd : styles.wave}
         contentFit="contain"
       />
     </View>
@@ -38,6 +39,10 @@ const styles = StyleSheet.create({
     height: 22,
     justifyContent: "center",
   },
+  wrapLg: {
+    height: 30,
+    justifyContent: "center",
+  },
   wave: {
     width: 50,
     height: 14,
@@ -45,5 +50,9 @@ const styles = StyleSheet.create({
   waveMd: {
     width: 80,
     height: 22,
+  },
+  waveLg: {
+    width: 108,
+    height: 30,
   },
 });

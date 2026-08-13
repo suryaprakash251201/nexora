@@ -520,12 +520,16 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
                 </TouchableOpacity>
               </View>
 
-              {/* ── Audio Quality Detail + lossless wave badge ── */}
+              {/* ── Lossless wave — centered, below the title ── */}
+              {isLossless && (
+                <View style={styles.titleWaveWrap}>
+                  <LosslessWave size="lg" />
+                </View>
+              )}
+
+              {/* ── Audio Quality Detail ── */}
               <View style={styles.qualityRow}>
                 <View style={styles.qualityBadgeRow}>
-                  {isLossless && (
-                    <LosslessWave size="md" />
-                  )}
                   <AudioQualityDetail
                     extension={ext}
                     mime={currentTrack.mime}
@@ -984,6 +988,13 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
+  },
+
+  /* Lossless wave under the title */
+  titleWaveWrap: {
+    alignItems: "center",
+    marginTop: 10,
+    marginBottom: 2,
   },
 
   /* Audio Quality */
