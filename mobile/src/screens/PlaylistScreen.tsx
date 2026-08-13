@@ -21,6 +21,7 @@ import { FileRow, EmptyState, ROW_HEIGHT } from "../components/FileRow";
 import { BottomSheet } from "../components/BottomSheet";
 import { AudioCover } from "../components/AudioCover";
 import { EqBars } from "../components/EqBars";
+import { PressScale } from "../components/motion";
 import { isAudioFile } from "../lib/fileMeta";
 import type { FileItem, Playlist, PlaylistItem } from "../api/types";
 import type { RootStackParamList } from "../navigation/types";
@@ -31,9 +32,9 @@ function toFileItem(p: PlaylistItem): FileItem {
   return {
     name: p.name,
     path: p.path,
-    size: 0,
+    size: p.size || 0,
     is_dir: false,
-    modified: p.created_at,
+    modified: p.modified || p.created_at,
     mime: p.mime,
     root_id: p.root_id,
     extension: p.extension,
@@ -241,6 +242,7 @@ export default function PlaylistScreen({ route, navigation }: Props) {
               </Text>
 
               <View style={styles.heroButtons}>
+                <PressScale scaleTo={0.94}>
                 <TouchableOpacity
                   style={[styles.playBtn, { borderRadius: radius.pill }]}
                   activeOpacity={0.85}
@@ -251,7 +253,9 @@ export default function PlaylistScreen({ route, navigation }: Props) {
                   <MaterialCommunityIcons name="play" size={20} color="#fff" />
                   <Text style={[styles.playBtnText, { fontSize: font.sm }]}>Play all</Text>
                 </TouchableOpacity>
+                </PressScale>
 
+                <PressScale scaleTo={0.94}>
                 <TouchableOpacity
                   style={[styles.shuffleBtn, { borderRadius: radius.pill, borderColor: colors.border }]}
                   activeOpacity={0.85}
@@ -261,6 +265,7 @@ export default function PlaylistScreen({ route, navigation }: Props) {
                   <MaterialCommunityIcons name="shuffle-variant" size={18} color={colors.content} />
                   <Text style={[styles.shuffleBtnText, { color: colors.content, fontSize: font.sm }]}>Shuffle</Text>
                 </TouchableOpacity>
+                </PressScale>
               </View>
             </View>
           </View>

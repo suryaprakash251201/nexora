@@ -3,6 +3,7 @@ package api
 import (
 	"mime"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/nexora/nexora/internal/auth"
@@ -12,6 +13,12 @@ import (
 )
 
 func (s *Server) hydratePlaylistItems(pls []playlists.Playlist) {
+	// Collect unique (root, path) pairs to batch-hydrate size/modified from
+	// the search index (single query instead of per-item stats).
+	type key struct{ root, path string }
+	seen := map[key]bool{}
+	var keys []key
+
 	for i, p := range pls {
 		for j, item := range p.Items {
 			name := storage.NameFromPath(item.Path)
@@ -23,6 +30,58 @@ func (s *Server) hydratePlaylistItems(pls []playlists.Playlist) {
 			}
 			if pls[i].Items[j].Mime == "" {
 				pls[i].Items[j].Mime = "application/octet-stream"
+			}
+			k := key{item.RootID, item.Path}
+			if !seen[k] {
+				seen[k] = true
+				keys = append(keys, k)
+			}
+		}
+	}
+	if len(keys) == 0 {
+		return
+	}
+
+	// Batch lookup in search_index (indexed on root_id+path). Items that
+	// aren't indexed keep size 0 — the mobile client stats those on play.
+	var sb strings.Builder
+	sb.WriteString(`SELECT root_id, path, size, modified FROM search_index WHERE `)
+	args := make([]any, 0, len(keys)*2)
+	for i, k := range keys {
+		if i > 0 {
+			sb.WriteString(" OR ")
+		}
+		sb.WriteString("(root_id = ? AND path = ?)")
+		args = append(args, k.root, k.path)
+	}
+	rows, err := s.DB.Query(sb.String(), args...)
+	if err != nil {
+		return // non-fatal: size/modified simply stay 0
+	}
+	defer rows.Close()
+
+	sizeByKey := map[key]struct {
+		size     int64
+		modified string
+	}{}
+	for rows.Next() {
+		var root, path, modified string
+		var size int64
+		if err := rows.Scan(&root, &path, &size, &modified); err != nil {
+			continue
+		}
+		sizeByKey[key{root, path}] = struct {
+			size     int64
+			modified string
+		}{size, modified}
+	}
+	rows.Close()
+
+	for i, p := range pls {
+		for j, item := range p.Items {
+			if m, ok := sizeByKey[key{item.RootID, item.Path}]; ok {
+				pls[i].Items[j].Size = m.size
+				pls[i].Items[j].Modified = m.modified
 			}
 		}
 	}

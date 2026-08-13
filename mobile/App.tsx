@@ -12,6 +12,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { SessionProvider, useSession } from "./src/store/SessionContext";
 import { ThemeProvider, useTheme } from "./src/store/ThemeContext";
 import { AudioProvider } from "./src/store/AudioContext";
+import { SettingsProvider } from "./src/store/SettingsContext";
 import { AppIcon } from "./src/components/AppIcon";
 import { MiniPlayer } from "./src/components/MiniPlayer";
 import { PremiumTabBar } from "./src/components/PremiumTabBar";
@@ -236,13 +237,15 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <ThemeProvider>
-        <SessionProvider>
-          <AudioProvider>
-            <AppErrorBoundary>
-              <RootNavigation />
-            </AppErrorBoundary>
-          </AudioProvider>
-        </SessionProvider>
+        <SettingsProvider>
+          <SessionProvider>
+            <AudioProvider>
+              <AppErrorBoundary>
+                <RootNavigation />
+              </AppErrorBoundary>
+            </AudioProvider>
+          </SessionProvider>
+        </SettingsProvider>
       </ThemeProvider>
     </SafeAreaProvider>
   );

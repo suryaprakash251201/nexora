@@ -164,6 +164,8 @@ export interface PlaylistItem {
   name: string;
   extension: string;
   mime: string;
+  size: number;
+  modified: string;
 }
 
 export interface Playlist {

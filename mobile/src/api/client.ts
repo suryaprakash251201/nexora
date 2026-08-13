@@ -16,7 +16,7 @@ import type {
   PlaylistListResponse,
   PlaylistMutationResponse,
 } from "./types";
-import { needsAudioTranscode } from "../lib/audioQuality";
+import { needsAudioTranscode, detectAudioQuality } from "../lib/audioQuality";
 
 /**
  * Nexora mobile API client.
@@ -114,7 +114,7 @@ export class Api {
   transcodeUrl(
     rootId: string,
     path: string,
-    opts?: { start?: number; session?: string; quality?: string }
+    opts?: { start?: number; session?: string; quality?: string; format?: string }
   ): string {
     return this.mediaUrl("/files/transcode", {
       root: rootId,
@@ -122,6 +122,7 @@ export class Api {
       start: opts?.start && opts.start > 0 ? opts.start : undefined,
       session: opts?.session,
       quality: opts?.quality || "medium",
+      format: opts?.format,
     });
   }
 
@@ -135,24 +136,35 @@ export class Api {
 
   /**
    * Resolves the best playback URL for an audio file: the raw file when the
-   * codec is natively decodable, otherwise the server's transcode endpoint
-   * (AAC-in-MP4 via ffmpeg) so ALAC .m4a / WMA / Ogg etc. play on both iOS
-   * and Android. Pass a stable `session` id per playback session so the
-   * server can kill stale ffmpeg processes.
+   * codec is natively decodable, otherwise the server's transcode pipeline.
+   * Lossless sources (ALAC .m4a) are transcoded to LOSSLESS FLAC (format
+   * "flac") so hi-res quality is preserved end-to-end instead of being
+   * crushed to AAC; lossy sources use high-quality AAC. Pass a stable
+   * `session` id per playback session so the server can kill stale ffmpeg.
    */
   async audioStreamUrl(
     rootId: string,
     path: string,
-    opts?: { extension?: string; mime?: string; session?: string }
+    opts?: { extension?: string; mime?: string; session?: string; quality?: "auto" | "lossless" | "high" }
   ): Promise<string> {
     const ext = opts?.extension;
     const mime = opts?.mime;
+    const q = detectAudioQuality(ext || "", mime || "");
     const needs = needsAudioTranscode(ext, mime);
     if (!needs) return this.rawFileUrl(rootId, path);
     const supports = await this.serverSupportsTranscode();
     if (!supports) return this.rawFileUrl(rootId, path); // onError will surface it
     const session = opts?.session || Math.random().toString(36).slice(2) + Date.now().toString(36);
-    return this.transcodeUrl(rootId, path, { session, quality: "medium" });
+    const pref = opts?.quality || "auto";
+    // Lossless source → lossless FLAC transcode (quality preserved);
+    // everything else → high-quality AAC. User preference can force either.
+    if (q.isLossless || pref === "lossless") {
+      return this.transcodeUrl(rootId, path, { session, format: "flac" });
+    }
+    if (pref === "high") {
+      return this.transcodeUrl(rootId, path, { session, quality: "high" });
+    }
+    return this.transcodeUrl(rootId, path, { session, quality: "high" });
   }
 
   private transcodeSupport: boolean | null = null;

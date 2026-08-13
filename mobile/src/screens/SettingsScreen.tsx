@@ -15,6 +15,7 @@ import * as Haptics from "expo-haptics";
 import Constants from "expo-constants";
 import { useSession } from "../store/SessionContext";
 import { useTheme } from "../store/ThemeContext";
+import { useSettings, haptic } from "../store/SettingsContext";
 import { AppIcon } from "../components/AppIcon";
 import { useNavigation } from "@react-navigation/native";
 import type { CompositeNavigationProp } from "@react-navigation/native";
@@ -30,6 +31,7 @@ type SettingsNav = CompositeNavigationProp<
 export default function SettingsScreen() {
   const { serverUrl, user, api, connect, logout } = useSession();
   const { colors, font, gradients, radius, spacing, shadow, shadowSm, isDark, setTheme } = useTheme();
+  const { prefs, setPref, toggleHaptics } = useSettings();
   const navigation = useNavigation<SettingsNav>();
 
   const [urlDraft, setUrlDraft] = useState(serverUrl || "");
@@ -106,6 +108,83 @@ export default function SettingsScreen() {
           <Text style={{ fontSize: font.xs, fontWeight: "700", color: user?.role === "admin" ? colors.accent : colors.muted }}>
             {user?.role === "admin" ? "Administrator" : "Standard User"}
           </Text>
+        </View>
+      </View>
+
+      {/* Preferences — available to everyone */}
+      <Text style={[styles.section, { color: colors.muted }]}>Preferences</Text>
+      <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.borderSoft, borderRadius: radius.xl }, shadow]}>
+        <LinearGradient
+          colors={["rgba(255,255,255,0.04)", "transparent"]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.glassHighlight}
+        />
+
+        <Text style={[styles.prefLabel, { color: colors.muted, fontSize: font.xs }]}>DEFAULT FILE VIEW</Text>
+        <View style={styles.prefChips}>
+          {([
+            { id: "list", label: "List", icon: "format-list-bulleted" },
+            { id: "grid", label: "Grid", icon: "view-grid-outline" },
+          ] as const).map((o) => (
+            <TouchableOpacity
+              key={o.id}
+              style={[
+                styles.prefChip,
+                {
+                  backgroundColor: prefs.viewMode === o.id ? colors.accent : colors.card,
+                  borderColor: prefs.viewMode === o.id ? colors.accent : colors.borderSoft,
+                },
+              ]}
+              onPress={() => {
+                haptic();
+                setPref("viewMode", o.id);
+              }}
+            >
+              <MaterialCommunityIcons name={o.icon as any} size={14} color={prefs.viewMode === o.id ? "#fff" : colors.muted} />
+              <Text style={{ color: prefs.viewMode === o.id ? "#fff" : colors.content, fontSize: font.xs, fontWeight: "700" }}>{o.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <View style={[styles.divider, { backgroundColor: colors.borderSoft }]} />
+
+        <Text style={[styles.prefLabel, { color: colors.muted, fontSize: font.xs }]}>PLAYBACK QUALITY (transcoded audio)</Text>
+        <View style={styles.prefChips}>
+          {([
+            { id: "auto", label: "Auto", icon: "auto-fix" },
+            { id: "lossless", label: "Lossless", icon: "disc" },
+            { id: "high", label: "High", icon: "speedometer" },
+          ] as const).map((o) => (
+            <TouchableOpacity
+              key={o.id}
+              style={[
+                styles.prefChip,
+                {
+                  backgroundColor: prefs.playbackQuality === o.id ? colors.accent : colors.card,
+                  borderColor: prefs.playbackQuality === o.id ? colors.accent : colors.borderSoft,
+                },
+              ]}
+              onPress={() => {
+                haptic();
+                setPref("playbackQuality", o.id);
+              }}
+            >
+              <MaterialCommunityIcons name={o.icon as any} size={14} color={prefs.playbackQuality === o.id ? "#fff" : colors.muted} />
+              <Text style={{ color: prefs.playbackQuality === o.id ? "#fff" : colors.content, fontSize: font.xs, fontWeight: "700" }}>{o.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <View style={[styles.divider, { backgroundColor: colors.borderSoft }]} />
+
+        <View style={styles.row}>
+          <View style={[styles.rowIcon, { backgroundColor: colors.accentSoft }]}>
+            <MaterialCommunityIcons name="vibrate" size={17} color={colors.accent} />
+          </View>
+          <Text style={[styles.rowLabel, { color: colors.content, fontSize: font.sm }]}>Haptic feedback</Text>
+          <Text style={[styles.rowValue, { color: colors.muted, fontSize: font.sm }]}>{prefs.haptics ? "On" : "Off"}</Text>
+          <CustomSwitch value={prefs.haptics} onValueChange={toggleHaptics} />
         </View>
       </View>
 
@@ -396,6 +475,17 @@ const styles = StyleSheet.create({
     pointerEvents: "none",
   },
   label: { fontWeight: "600" },
+  prefLabel: { fontWeight: "700", letterSpacing: 0.8, marginBottom: 8 },
+  prefChips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  prefChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
   input: {
     borderWidth: 1,
     paddingHorizontal: 14,

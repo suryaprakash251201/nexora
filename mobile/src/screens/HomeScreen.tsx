@@ -24,6 +24,7 @@ import { previewKind } from "../api/client";
 import type { Root, FileItem, Playlist, FavoriteItem } from "../api/types";
 import type { RootStackParamList, MainTabParamList } from "../navigation/types";
 import { useAudio } from "../store/AudioContext";
+import { PressScale, FadeSlideIn } from "../components/motion";
 
 type Nav = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, "Home">,
@@ -183,20 +184,21 @@ export default function HomeScreen() {
       renderItem={({ item }) => {
         const iconName = ROOT_ICONS[item.type.toLowerCase()] || ROOT_ICONS.default;
         return (
-          <TouchableOpacity
-            style={[
-              styles.rootCard,
-              {
-                backgroundColor: colors.surface,
-                borderColor: colors.borderSoft,
-                borderRadius: radius.xl,
-                padding: spacing.lg,
-              },
-              shadow,
-            ]}
-            activeOpacity={0.8}
-            onPress={() => openRoot(item)}
-          >
+          <PressScale style={{ flex: 1 }}>
+            <TouchableOpacity
+              style={[
+                styles.rootCard,
+                {
+                  backgroundColor: colors.surface,
+                  borderColor: colors.borderSoft,
+                  borderRadius: radius.xl,
+                  padding: spacing.lg,
+                },
+                shadow,
+              ]}
+              activeOpacity={0.8}
+              onPress={() => openRoot(item)}
+            >
             <LinearGradient
               colors={["rgba(255,255,255,0.05)", "transparent"]}
               start={{ x: 0, y: 0 }}
@@ -243,10 +245,12 @@ export default function HomeScreen() {
                 <MaterialCommunityIcons name="arrow-right" size={16} color={colors.accent} />
               </View>
             </View>
-          </TouchableOpacity>
+            </TouchableOpacity>
+          </PressScale>
         );
       }}
       ListHeaderComponent={
+        <FadeSlideIn distance={18}>
         <View>
           {/* Dashboard Header */}
           <View style={[styles.hero, { paddingTop: insets.top + 24 }]}>
@@ -280,13 +284,14 @@ export default function HomeScreen() {
           {/* Quick Categories Bar */}
           <View style={styles.quickWrap}>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: spacing.lg, gap: 16 }}>
-              {QUICK_CATEGORIES.map((cat) => (
-                <TouchableOpacity
-                  key={cat.id}
-                  style={styles.quickCard}
-                  activeOpacity={0.75}
-                  onPress={() => ("screen" in cat ? navigation.navigate(cat.screen) : openCategory(cat.kind, cat.title))}
-                >
+              {QUICK_CATEGORIES.map((cat, ci) => (
+                <FadeSlideIn key={cat.id} delay={120 + ci * 60} distance={10}>
+                  <PressScale scaleTo={0.93}>
+                    <TouchableOpacity
+                      style={styles.quickCard}
+                      activeOpacity={0.75}
+                      onPress={() => ("screen" in cat ? navigation.navigate(cat.screen) : openCategory(cat.kind, cat.title))}
+                    >
                   <View style={[styles.quickIconWrap, shadowSm]}>
                     <LinearGradient
                       colors={[...cat.gradient]}
@@ -297,7 +302,9 @@ export default function HomeScreen() {
                     <MaterialCommunityIcons name={cat.icon as any} size={28} color="#fff" />
                   </View>
                   <Text style={[styles.quickLabel, { color: colors.content, fontSize: font.sm }]}>{cat.title}</Text>
-                </TouchableOpacity>
+                    </TouchableOpacity>
+                  </PressScale>
+                </FadeSlideIn>
               ))}
             </ScrollView>
           </View>
@@ -348,6 +355,7 @@ export default function HomeScreen() {
 
           <SectionLabel>Storage Locations</SectionLabel>
         </View>
+        </FadeSlideIn>
       }
       ListEmptyComponent={
         !loading && roots.length === 0 ? (

@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useRef, useCallb
 import { useVideoPlayer, VideoPlayer } from "expo-video";
 import type { FileItem } from "../api/types";
 import { useSession } from "./SessionContext";
+import { useSettings } from "./SettingsContext";
 
 type AudioContextType = {
   player: VideoPlayer | null;
@@ -38,6 +39,11 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   // (An empty string is an invalid URI on both iOS and Android and logs errors.)
   const player = useVideoPlayer(null);
   const sessionRef = useRef(newSession());
+  const { prefs } = useSettings();
+  const qualityRef = useRef(prefs.playbackQuality);
+  useEffect(() => {
+    qualityRef.current = prefs.playbackQuality;
+  }, [prefs.playbackQuality]);
 
   // Stream through the server transcode pipeline when the codec is not
   // natively decodable (ALAC .m4a, WMA, Ogg/Opus, …) — mirrors the web app.
@@ -45,14 +51,24 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     if (!currentTrack || !api) return;
     let cancelled = false;
     sessionRef.current = newSession();
-    api
-      .audioStreamUrl(currentTrack.root_id, currentTrack.path, {
-        extension: currentTrack.extension,
-        mime: currentTrack.mime,
-        session: sessionRef.current,
+    // Playlist/favorite/trash items may carry size:0 (no metadata in those
+    // APIs). Stat the file so codec classification (lossless vs AAC) and the
+    // transcode-vs-raw routing use REAL metadata — otherwise a hi-res FLAC
+    // from a playlist would be mislabeled and an ALAC .m4a misrouted.
+    const needStat = !currentTrack.is_dir && !currentTrack.size && !currentTrack.mime;
+    (needStat ? api.stat(currentTrack.root_id, currentTrack.path).catch(() => null) : Promise.resolve(null))
+      .then((real) => {
+        if (cancelled) return;
+        const item = real || currentTrack;
+        return api.audioStreamUrl(item.root_id, item.path, {
+          extension: item.extension,
+          mime: item.mime,
+          session: sessionRef.current,
+          quality: qualityRef.current,
+        });
       })
       .then((url) => {
-        if (cancelled) return;
+        if (cancelled || !url) return;
         // Set intent here (not at effect start) so a stale playingChange
         // from the just-ended track can't clear it mid-transition.
         wantPlayRef.current = true;

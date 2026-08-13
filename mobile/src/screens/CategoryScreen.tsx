@@ -16,6 +16,7 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useSession } from "../store/SessionContext";
 import { useTheme } from "../store/ThemeContext";
 import { useAudio } from "../store/AudioContext";
+import { useSettings, haptic } from "../store/SettingsContext";
 import { FileRow, EmptyState, ROW_HEIGHT } from "../components/FileRow";
 import { GridCard } from "../components/GridCard";
 import { ListSkeleton, GridCardSkeleton } from "../components/Skeletons";
@@ -76,6 +77,7 @@ export default function CategoryScreen({ route, navigation }: Props) {
   const { api } = useSession();
   const { colors, font, gradients, radius, spacing } = useTheme();
   const { playTrack, currentTrack } = useAudio();
+  const { prefs, setPref } = useSettings();
   const insets = useSafeAreaInsets();
 
   const [items, setItems] = useState<SearchResult[]>([]);
@@ -84,7 +86,7 @@ export default function CategoryScreen({ route, navigation }: Props) {
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<"list" | "grid">("list");
+  const [viewMode, setViewMode] = useState<"list" | "grid">(prefs.viewMode);
   const offsetRef = useRef(0);
   const seqRef = useRef(0);
 
@@ -148,7 +150,7 @@ export default function CategoryScreen({ route, navigation }: Props) {
   const openItem = useCallback(
     (r: SearchResult) => {
       const item = toFileItem(r);
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+      haptic();
       if (item.is_dir) {
         // Open folders inside the file explorer.
         navigation.navigate("Browser", {
@@ -239,8 +241,10 @@ export default function CategoryScreen({ route, navigation }: Props) {
           <TouchableOpacity
             style={[styles.viewToggle, { backgroundColor: colors.surfaceElevated }]}
             onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-              setViewMode(viewMode === "list" ? "grid" : "list");
+              haptic();
+              const next = viewMode === "list" ? "grid" : "list";
+              setViewMode(next);
+              setPref("viewMode", next);
             }}
             hitSlop={8}
           >

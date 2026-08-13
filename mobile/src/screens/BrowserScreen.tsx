@@ -22,6 +22,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 
 import { useSession } from "../store/SessionContext";
+import { useSettings, haptic as hapticPref } from "../store/SettingsContext";
 import { useTheme } from "../store/ThemeContext";
 import { FileRow, EmptyState, ROW_HEIGHT } from "../components/FileRow";
 import { GridCard } from "../components/GridCard";
@@ -40,12 +41,13 @@ type SortField = "name" | "size" | "modified" | "extension";
 type SortOrder = "asc" | "desc";
 type FilterCategory = "all" | "image" | "document" | "audio" | "video";
 
-const haptic = () => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+const haptic = () => hapticPref();
 
 export default function BrowserScreen({ route, navigation }: Props) {
   const { rootId, rootName } = route.params;
   const { api } = useSession();
   const { colors, font, gradients, radius, spacing, shadow, shadowSm, isDark } = useTheme();
+  const { prefs, setPref } = useSettings();
   const { playTrack } = useAudio();
   const insets = useSafeAreaInsets();
 
@@ -59,8 +61,8 @@ export default function BrowserScreen({ route, navigation }: Props) {
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // View Mode: "list" | "grid"
-  const [viewMode, setViewMode] = useState<"list" | "grid">("list");
+  // View Mode: "list" | "grid" — defaulted from & persisted to user prefs.
+  const [viewMode, setViewMode] = useState<"list" | "grid">(prefs.viewMode);
 
   // Selection state
   const [selectMode, setSelectMode] = useState(false);
@@ -526,7 +528,9 @@ export default function BrowserScreen({ route, navigation }: Props) {
             style={[styles.actionCircleBtn, { backgroundColor: colors.surfaceElevated }, shadowSm]}
             onPress={() => {
               haptic();
-              setViewMode(viewMode === "list" ? "grid" : "list");
+              const next = viewMode === "list" ? "grid" : "list";
+              setViewMode(next);
+              setPref("viewMode", next);
             }}
           >
             <MaterialCommunityIcons name={viewMode === "list" ? "view-grid-outline" : "format-list-bulleted"} size={20} color={colors.content} />

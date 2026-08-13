@@ -39,6 +39,11 @@ type PlaylistItem struct {
 	Name      string `json:"name"`
 	Extension string `json:"extension"`
 	Mime      string `json:"mime"`
+	// Size/Modified are hydrated from the search index so clients can
+	// classify codecs correctly (lossless FLAC/ALAC detection depends on
+	// real file size — a 0 here would mislabel hi-res as plain AAC).
+	Size     int64  `json:"size"`
+	Modified string `json:"modified"`
 }
 
 type Collaborator struct {
