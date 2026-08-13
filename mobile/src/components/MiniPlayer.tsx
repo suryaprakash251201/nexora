@@ -29,7 +29,7 @@ import { EqBars } from "./EqBars";
 import { BottomSheet } from "./BottomSheet";
 import { AudioQualityPill } from "./AudioQualityBadge";
 import { AudioQualityDetail } from "./AudioQualityDetail";
-import { LosslessBadge } from "./LosslessBadge";
+import { LosslessWave } from "./LosslessBadge";
 import { detectAudioQuality } from "../lib/audioQuality";
 import { copyShareLink } from "../lib/shareLink";
 
@@ -170,7 +170,6 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
   // Lossless / hi-res detection for the wave badge (Apple Music style).
   const qInfo = detectAudioQuality(ext, currentTrack.mime, currentTrack.size);
   const isLossless = qInfo.isLossless;
-  const isHiRes = qInfo.isHiRes;
 
   const formatTime = (s: number) => {
     if (!s || isNaN(s)) return "0:00";
@@ -308,7 +307,7 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
             </Text>
             <View style={styles.miniSubRow}>
               {isLossless ? (
-                <LosslessBadge label={isHiRes ? "HI-RES" : "LOSSLESS"} />
+                <LosslessWave />
               ) : (
                 <AudioQualityPill
                   extension={ext}
@@ -525,7 +524,7 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
               <View style={styles.qualityRow}>
                 <View style={styles.qualityBadgeRow}>
                   {isLossless && (
-                    <LosslessBadge label={isHiRes ? "HI-RES" : "LOSSLESS"} size="md" />
+                    <LosslessWave size="md" />
                   )}
                   <AudioQualityDetail
                     extension={ext}

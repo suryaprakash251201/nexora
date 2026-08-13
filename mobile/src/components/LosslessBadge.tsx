@@ -1,5 +1,5 @@
 import React from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { Image } from "expo-image";
 import { useTheme } from "../store/ThemeContext";
 
@@ -7,79 +7,43 @@ const darkIcon = require("../../assets/lossless-wave-light.png");
 const lightIcon = require("../../assets/lossless-wave.png");
 
 /**
- * LosslessBadge — Apple Music style "LOSSLESS" capsule: a rounded pill with
- * the lossless wave glyph + label. Shown in the mini player, fullscreen
- * player and the vinyl preview player whenever the current track is lossless.
+ * LosslessWave — the lossless sound-wave glyph, image only (no text label),
+ * sized up so it reads as a prominent quality mark. Shown in the mini
+ * player, fullscreen player and the vinyl preview player for lossless
+ * tracks. Picks the white glyph on dark themes and the dark glyph on light.
  */
-export function LosslessBadge({
-  label = "LOSSLESS",
-  size = "sm",
-}: {
-  label?: string;
-  size?: "sm" | "md";
-}) {
-  const { colors, isDark } = useTheme();
+export function LosslessWave({ size = "sm" }: { size?: "sm" | "md" }) {
+  const { isDark } = useTheme();
   const md = size === "md";
 
   return (
-    <View
-      style={[
-        styles.badge,
-        md && styles.badgeMd,
-        {
-          backgroundColor: isDark ? "rgba(255,255,255,0.09)" : "rgba(0,0,0,0.06)",
-          borderColor: isDark ? "rgba(255,255,255,0.18)" : "rgba(0,0,0,0.12)",
-        },
-      ]}
-    >
+    <View style={md ? styles.wrapMd : styles.wrap}>
       <Image
         source={isDark ? darkIcon : lightIcon}
-        style={[styles.wave, md && styles.waveMd]}
+        style={md ? styles.waveMd : styles.wave}
         contentFit="contain"
       />
-      <Text
-        style={[
-          styles.label,
-          md && styles.labelMd,
-          { color: colors.content },
-        ]}
-      >
-        {label}
-      </Text>
     </View>
   );
 }
 
+export default LosslessWave;
+
 const styles = StyleSheet.create({
-  badge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    borderRadius: 999,
-    borderWidth: 1,
-    paddingHorizontal: 9,
-    paddingVertical: 3,
+  wrap: {
+    height: 14,
+    justifyContent: "center",
   },
-  badgeMd: {
-    gap: 7,
-    paddingHorizontal: 12,
-    paddingVertical: 5,
+  wrapMd: {
+    height: 22,
+    justifyContent: "center",
   },
   wave: {
-    width: 22,
-    height: 10,
+    width: 50,
+    height: 14,
   },
   waveMd: {
-    width: 34,
-    height: 15,
-  },
-  label: {
-    fontSize: 9,
-    fontWeight: "800",
-    letterSpacing: 0.8,
-  },
-  labelMd: {
-    fontSize: 11,
-    letterSpacing: 1,
+    width: 80,
+    height: 22,
   },
 });

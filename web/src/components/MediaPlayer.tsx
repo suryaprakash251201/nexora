@@ -751,14 +751,11 @@ function AudioPlayer({
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[4] h-4 w-4 rounded-full bg-[#050506] ring-1 ring-white/25 shadow-[inset_0_1px_3px_rgba(0,0,0,0.95),0_0_3px_rgba(255,255,255,0.25)]" />
           </div>
 
-          {/* Lossless wave badge — Apple Music style, placed at the centre of
-              the vinyl (static — sits above the spinning disc, doesn't rotate) */}
+          {/* Lossless wave — image only, placed at the centre of the vinyl
+              (static — sits above the spinning disc, doesn't rotate) */}
           {cur && getAudioQuality(cur).isLossless && (
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-30 pointer-events-none">
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-black/70 backdrop-blur-md pl-3 pr-3.5 py-1.5 text-[10px] font-bold tracking-[0.18em] text-white ring-1 ring-white/25 shadow-[0_4px_16px_rgba(0,0,0,0.5)]">
-                <LosslessWaveGlyph className="h-3 w-auto" />
-                {getAudioQuality(cur).tier === "lossless-hi-res" ? "HI-RES" : "LOSSLESS"}
-              </span>
+              <LosslessWaveGlyph className="w-28 sm:w-36 h-auto drop-shadow-[0_2px_10px_rgba(0,0,0,0.6)]" />
             </div>
           )}
           </div>
