@@ -50,6 +50,20 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
   const [scrubberWidth, setScrubberWidth] = useState(1);
   const [moreSheet, setMoreSheet] = useState(false);
   const [queueOpen, setQueueOpen] = useState(false);
+  // Tap the lossless wave in the fullscreen player to reveal/hide the
+  // track's audio details (codec · bit depth · sample rate).
+  const [showQuality, setShowQuality] = useState(false);
+  const qualityAnim = useRef(new Animated.Value(0)).current;
+
+  // Animate the quality details panel in/out (always visible for
+  // non-lossless tracks, which have no wave toggle).
+  useEffect(() => {
+    Animated.timing(qualityAnim, {
+      toValue: isLossless ? (showQuality ? 1 : 0) : 1,
+      duration: 240,
+      useNativeDriver: true,
+    }).start();
+  }, [showQuality, qualityAnim, isLossless]);
   const [favorited, setFavorited] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
@@ -520,24 +534,55 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
                 </TouchableOpacity>
               </View>
 
-              {/* ── Lossless wave — centered, below the title ── */}
+              {/* ── Lossless wave — centered below title; tap to toggle the
+                    audio details (codec · bit depth · sample rate) ── */}
               {isLossless && (
-                <View style={styles.titleWaveWrap}>
+                <TouchableOpacity
+                  style={styles.titleWaveWrap}
+                  onPress={() => {
+                    haptic();
+                    setShowQuality((v) => !v);
+                  }}
+                  activeOpacity={0.7}
+                >
                   <LosslessWave size="lg" />
-                </View>
+                </TouchableOpacity>
               )}
 
-              {/* ── Audio Quality Detail ── */}
-              <View style={styles.qualityRow}>
-                <View style={styles.qualityBadgeRow}>
-                  <AudioQualityDetail
-                    extension={ext}
-                    mime={currentTrack.mime}
-                    fileSize={currentTrack.size}
-                    duration={duration > 0 ? duration : undefined}
-                  />
-                </View>
-              </View>
+              {/* ── Audio quality details (hidden by default for lossless;
+                    revealed by tapping the wave icon) ── */}
+              {(isLossless ? showQuality : true) && (
+                <Animated.View
+                  style={[
+                    styles.qualityRow,
+                    {
+                      opacity: qualityAnim,
+                      transform: [
+                        {
+                          translateY: qualityAnim.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [6, 0],
+                          }),
+                        },
+                      ],
+                    },
+                  ]}
+                >
+                  <View style={styles.qualityBadgeRow}>
+                    <AudioQualityDetail
+                      extension={ext}
+                      mime={currentTrack.mime}
+                      fileSize={currentTrack.size}
+                      duration={duration > 0 ? duration : undefined}
+                    />
+                  </View>
+                  {isLossless && (
+                    <Text style={[styles.qualitySummary, { color: colors.content, opacity: 0.55, fontSize: font.xs }]}>
+                      {qInfo.isHiRes ? "HI-RES" : "LOSSLESS"} {qInfo.codec} · {qInfo.detail || qInfo.label}
+                    </Text>
+                  )}
+                </Animated.View>
+              )}
 
               {/* ── Progress Scrubber (Apple Music thin style, no thumb) ── */}
               <View style={styles.scrubberWrap}>
@@ -1000,7 +1045,9 @@ const styles = StyleSheet.create({
   /* Audio Quality */
   qualityRow: {
     marginBottom: 20,
-    marginTop: 2,
+    marginTop: 4,
+    alignItems: "center",
+    gap: 6,
   },
   qualityBadgeRow: {
     flexDirection: "row",
@@ -1008,6 +1055,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     flexWrap: "wrap",
     gap: 8,
+  },
+  qualitySummary: {
+    fontWeight: "600",
+    letterSpacing: 0.3,
+    textAlign: "center",
   },
 
   /* Scrubber */
