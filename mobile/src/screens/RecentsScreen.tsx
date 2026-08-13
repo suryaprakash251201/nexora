@@ -47,6 +47,9 @@ export default function RecentsScreen({ variant = "recents" }: { variant?: "rece
   const [searchResults, setSearchResults] = useState<FileItem[]>([]);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [activeFilter, setActiveFilter] = useState<FilterTag>("all");
+  // Hidden “show everything” mode: tapping a category chip with an empty box
+  // searches "." (all files) server-side WITHOUT typing "." into the input.
+  const [searchAll, setSearchAll] = useState(false);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchSeq = useRef(0);
@@ -79,12 +82,14 @@ export default function RecentsScreen({ variant = "recents" }: { variant?: "rece
   useEffect(() => {
     if (route.params?.filter && VALID_FILTERS.includes(route.params.filter as FilterTag)) {
       setActiveFilter(route.params.filter as FilterTag);
-      // Auto-trigger a search to fetch all matching files from the server, 
+      // Auto-trigger a search to fetch all matching files from the server,
       // rather than just filtering the limited "recents" list.
-      if (!query.trim()) {
-        onChangeQuery(".");
+      if (!query.trim() && !searchAll) {
+        setSearchAll(true);
+        runSearch(".");
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [route.params?.filter]);
 
   useEffect(() => {
@@ -115,6 +120,7 @@ export default function RecentsScreen({ variant = "recents" }: { variant?: "rece
   const onChangeQuery = useCallback(
     (q: string) => {
       setQuery(q);
+      setSearchAll(false); // typing exits “show all files” mode
       if (debounceRef.current) clearTimeout(debounceRef.current);
       if (!q.trim()) {
         setSearchResults([]);
@@ -131,15 +137,19 @@ export default function RecentsScreen({ variant = "recents" }: { variant?: "rece
     (tag: FilterTag) => {
       setActiveFilter(tag);
       // In search mode a chip tap should fetch matching files from the server,
-      // not just filter an empty (no-query) list.
-      if (variant === "search" && !query.trim()) {
-        onChangeQuery(".");
+      // not just filter an empty (no-query) list — without typing "." into the box.
+      if (variant === "search" && !query.trim() && !searchAll) {
+        setSearchAll(true);
+        runSearch(".");
       }
     },
-    [variant, query, onChangeQuery]
+    [variant, query, searchAll, runSearch]
   );
 
-  const baseItems = useMemo(() => (query.trim() ? searchResults : items), [query, searchResults, items]);
+  const baseItems = useMemo(
+    () => (query.trim() || searchAll ? searchResults : items),
+    [query, searchAll, searchResults, items]
+  );
 
   const displayItems = useMemo(() => {
     if (activeFilter === "all") return baseItems;
@@ -201,7 +211,7 @@ export default function RecentsScreen({ variant = "recents" }: { variant?: "rece
   );
 
   const emptyState =
-    variant === "search" && !query.trim() ? (
+    variant === "search" && !query.trim() && !searchAll ? (
       <EmptyState
         icon="magnify"
         title={searchError || "Search your files"}
@@ -243,35 +253,51 @@ export default function RecentsScreen({ variant = "recents" }: { variant?: "rece
 
         {/* Filter Category Chips */}
         <View style={styles.filterRow}>
-          {(["all", "image", "document", "video", "audio"] as FilterTag[]).map((tag) => (
+          {(
+            [
+              { id: "all", label: "All", icon: "view-grid-outline" },
+              { id: "image", label: "Photos", icon: "image-multiple" },
+              { id: "document", label: "Docs", icon: "file-document" },
+              { id: "video", label: "Videos", icon: "play-circle" },
+              { id: "audio", label: "Audio", icon: "music-note" },
+            ] as { id: FilterTag; label: string; icon: string }[]
+          ).map((tag) => (
             <TouchableOpacity
-              key={tag}
+              key={tag.id}
               style={[
                 styles.filterTagPill,
                 {
-                  backgroundColor: activeFilter === tag ? colors.accent : colors.card,
-                  borderColor: activeFilter === tag ? colors.accent : colors.borderSoft,
+                  backgroundColor: activeFilter === tag.id ? colors.accent : colors.card,
+                  borderColor: activeFilter === tag.id ? colors.accent : colors.borderSoft,
                 },
               ]}
-              onPress={() => selectFilter(tag)}
+              onPress={() => selectFilter(tag.id)}
             >
+              <MaterialCommunityIcons
+                name={tag.icon as any}
+                size={13}
+                color={activeFilter === tag.id ? "#fff" : colors.muted}
+              />
               <Text
                 style={{
-                  color: activeFilter === tag ? "#fff" : colors.muted,
+                  color: activeFilter === tag.id ? "#fff" : colors.muted,
                   fontSize: font.xs,
                   fontWeight: "700",
-                  textTransform: "capitalize",
                 }}
               >
-                {tag === "image" ? "Photos" : tag === "document" ? "Docs" : tag}
+                {tag.label}
               </Text>
             </TouchableOpacity>
           ))}
         </View>
 
-        {query.trim() !== "" && (
+        {(query.trim() !== "" || searchAll) && (
           <Text style={[styles.resultCount, { color: colors.muted, fontSize: font.xs }]}>
-            {searching ? "Searching server…" : `${displayItems.length} result${displayItems.length !== 1 ? "s" : ""}`}
+            {searching
+              ? "Searching server…"
+              : searchAll && !query.trim()
+                ? `Showing all ${displayItems.length} file${displayItems.length === 1 ? "" : "s"}`
+                : `${displayItems.length} result${displayItems.length !== 1 ? "s" : ""}`}
           </Text>
         )}
       </View>
@@ -293,6 +319,7 @@ export default function RecentsScreen({ variant = "recents" }: { variant?: "rece
             onRefresh={() => {
               if (variant === "search") {
                 if (query.trim()) runSearch(query);
+                else if (searchAll) runSearch(".");
               } else {
                 load(true);
               }
@@ -349,9 +376,12 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   filterTagPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
     paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
+    paddingVertical: 7,
+    borderRadius: 14,
     borderWidth: 1,
   },
   resultCount: {

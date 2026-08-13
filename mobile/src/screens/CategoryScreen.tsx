@@ -17,7 +17,8 @@ import { useSession } from "../store/SessionContext";
 import { useTheme } from "../store/ThemeContext";
 import { useAudio } from "../store/AudioContext";
 import { FileRow, EmptyState, ROW_HEIGHT } from "../components/FileRow";
-import { ListSkeleton } from "../components/Skeletons";
+import { GridCard } from "../components/GridCard";
+import { ListSkeleton, GridCardSkeleton } from "../components/Skeletons";
 import { previewKind } from "../api/client";
 import type { FileItem, SearchResult } from "../api/types";
 import type { RootStackParamList } from "../navigation/types";
@@ -83,6 +84,7 @@ export default function CategoryScreen({ route, navigation }: Props) {
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<"list" | "grid">("list");
   const offsetRef = useRef(0);
   const seqRef = useRef(0);
 
@@ -188,51 +190,108 @@ export default function CategoryScreen({ route, navigation }: Props) {
     [colors.borderSoft, openItem, isCurrent]
   );
 
+  const renderGridItem = useCallback(
+    (item: SearchResult) => {
+      const file = toFileItem(item);
+      return (
+        <GridCard
+          key={item.root_id + item.path}
+          item={file}
+          rawUrl={api && previewKind(file) === "image" ? api.thumbnailUrl(file.root_id, file.path, 512) : undefined}
+          onPress={() => openItem(item)}
+          onLongPress={() => openItem(item)}
+          onMorePress={() => openItem(item)}
+        />
+      );
+    },
+    [api, openItem]
+  );
+
+  const renderSection = useCallback(
+    (section: { key: string; label: string; items: SearchResult[] }) => (
+      <View>
+        <View style={[styles.sectionHeader, { paddingHorizontal: spacing.lg }]}>
+          <MaterialCommunityIcons name="calendar-month-outline" size={14} color={colors.accent} />
+          <Text style={[styles.sectionTitle, { color: colors.content, fontSize: font.sm }]}>
+            {section.label}
+          </Text>
+          <Text style={[styles.sectionCount, { color: colors.muted, fontSize: font.xs }]}>
+            {section.items.length}
+          </Text>
+        </View>
+        {section.items.map(renderItemRow)}
+      </View>
+    ),
+    [spacing.lg, font.sm, font.xs, colors, renderItemRow]
+  );
+
+  const header = useCallback(
+    () =>
+      items.length > 0 ? (
+        <View style={[styles.summaryCard, { backgroundColor: colors.surface, borderColor: colors.borderSoft, borderRadius: radius.xl, marginHorizontal: spacing.lg }]}>
+          <LinearGradient colors={["rgba(255,255,255,0.04)", "transparent"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+          <MaterialCommunityIcons name={(KIND_ICON[kind] || "folder") as any} size={18} color={colors.accent} />
+          <Text style={[styles.summaryText, { color: colors.content, fontSize: font.sm }]}>
+            {items.length} file{items.length === 1 ? "" : "s"} across your storage
+          </Text>
+          <View style={{ flex: 1 }} />
+          {/* View mode toggle — list / grid */}
+          <TouchableOpacity
+            style={[styles.viewToggle, { backgroundColor: colors.surfaceElevated }]}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+              setViewMode(viewMode === "list" ? "grid" : "list");
+            }}
+            hitSlop={8}
+          >
+            <MaterialCommunityIcons
+              name={viewMode === "list" ? "view-grid-outline" : "format-list-bulleted"}
+              size={18}
+              color={colors.content}
+            />
+          </TouchableOpacity>
+        </View>
+      ) : null,
+    [items.length, colors, font.sm, kind, radius.xl, spacing.lg, viewMode]
+  );
+
+  const empty = useCallback(
+    () =>
+      loading ? (
+        viewMode === "grid" ? (
+          <View style={styles.gridSkeleton}>
+            <GridCardSkeleton />
+            <GridCardSkeleton />
+            <GridCardSkeleton />
+            <GridCardSkeleton />
+          </View>
+        ) : (
+          <ListSkeleton rows={8} />
+        )
+      ) : (
+        <EmptyState
+          icon={error ? "alert-circle-outline" : KIND_ICON[kind] || "folder-outline"}
+          title={error || `No ${title.toLowerCase()} found`}
+          hint={error ? "Pull down to retry." : `Files in ${title} across all your storage will appear here.`}
+        />
+      ),
+    [loading, viewMode, error, kind, title]
+  );
+
   return (
     <View style={[styles.root, { backgroundColor: colors.bg }]}>
       <FlatList
-        data={sections}
-        keyExtractor={(s) => s.key}
-        renderItem={({ item: section }) => (
-          <View>
-            <View style={[styles.sectionHeader, { paddingHorizontal: spacing.lg }]}>
-              <MaterialCommunityIcons name="calendar-month-outline" size={14} color={colors.accent} />
-              <Text style={[styles.sectionTitle, { color: colors.content, fontSize: font.sm }]}>
-                {section.label}
-              </Text>
-              <Text style={[styles.sectionCount, { color: colors.muted, fontSize: font.xs }]}>
-                {section.items.length}
-              </Text>
-            </View>
-            {section.items.map(renderItemRow)}
-          </View>
-        )}
-        contentContainerStyle={{ paddingBottom: insets.bottom + 120 }}
+        key={viewMode}
+        data={viewMode === "list" ? (sections as any) : items}
+        keyExtractor={(it) => (viewMode === "list" ? (it as any).key : (it as SearchResult).root_id + (it as SearchResult).path)}
+        numColumns={viewMode === "grid" ? 2 : 1}
+        renderItem={viewMode === "list" ? ({ item }) => renderSection(item as any) : ({ item }) => renderGridItem(item as SearchResult)}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 120, paddingHorizontal: viewMode === "grid" ? 6 : 0 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={colors.accent} />}
         onEndReached={loadMore}
         onEndReachedThreshold={0.5}
-        ListHeaderComponent={
-          items.length > 0 ? (
-            <View style={[styles.summaryCard, { backgroundColor: colors.surface, borderColor: colors.borderSoft, borderRadius: radius.xl, marginHorizontal: spacing.lg }]}>
-              <LinearGradient colors={["rgba(255,255,255,0.04)", "transparent"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
-              <MaterialCommunityIcons name={(KIND_ICON[kind] || "folder") as any} size={18} color={colors.accent} />
-              <Text style={[styles.summaryText, { color: colors.content, fontSize: font.sm }]}>
-                {items.length} file{items.length === 1 ? "" : "s"} across your storage
-              </Text>
-            </View>
-          ) : null
-        }
-        ListEmptyComponent={
-          loading ? (
-            <ListSkeleton rows={8} />
-          ) : (
-            <EmptyState
-              icon={error ? "alert-circle-outline" : KIND_ICON[kind] || "folder-outline"}
-              title={error || `No ${title.toLowerCase()} found`}
-              hint={error ? "Pull down to retry." : `Files in ${title} across all your storage will appear here.`}
-            />
-          )
-        }
+        ListHeaderComponent={header()}
+        ListEmptyComponent={empty()}
         ListFooterComponent={loadingMore ? <ActivityIndicator style={{ marginVertical: 16 }} color={colors.accent} /> : null}
       />
     </View>
@@ -264,6 +323,18 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   summaryText: { fontWeight: "600" },
+  viewToggle: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  gridSkeleton: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    padding: 6,
+  },
   sectionHeader: {
     flexDirection: "row",
     alignItems: "center",

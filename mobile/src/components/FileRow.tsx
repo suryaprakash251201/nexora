@@ -1,10 +1,10 @@
-import React, { memo } from "react";
+import React, { memo, useState } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { Image } from "expo-image";
 import { useTheme } from "../store/ThemeContext";
-import { formatBytes, formatDate } from "../api/client";
+import { formatBytes, formatDate, previewKind, mediaThumbnailUrl } from "../api/client";
 import { fileIconFor, isAudioFile } from "../lib/fileMeta";
 import { AudioCover } from "./AudioCover";
 import type { FileItem } from "../api/types";
@@ -85,6 +85,15 @@ export const FileRow = memo(function FileRow({
           <Image source={folderImage} style={{ width: 38, height: 38 }} contentFit="contain" />
         ) : isAudioFile(item) ? (
           <AudioCover item={item} size={160} />
+        ) : previewKind(item) === "image" ? (
+          <FileThumb item={item} iconName={name} iconColor={color} />
+        ) : previewKind(item) === "video" ? (
+          <>
+            <MaterialCommunityIcons name={name as any} size={22} color={color} />
+            <View style={styles.videoBadge}>
+              <MaterialCommunityIcons name="play" size={9} color="#fff" />
+            </View>
+          </>
         ) : (
           <MaterialCommunityIcons name={name as any} size={22} color={color} />
         )}
@@ -103,6 +112,32 @@ export const FileRow = memo(function FileRow({
     </TouchableOpacity>
   );
 });
+
+/**
+ * Real thumbnail for image files (server-generated), with the file icon
+ * rendered underneath so the icon shows while the image streams in and as a
+ * graceful fallback when the server has no thumbnail for the file.
+ */
+function FileThumb({ item, iconName, iconColor }: { item: FileItem; iconName: string; iconColor: string }) {
+  const [failed, setFailed] = useState(false);
+  const uri = mediaThumbnailUrl(item.root_id, item.path, 160);
+  return (
+    <View style={StyleSheet.absoluteFill}>
+      <View style={styles.thumbFallback}>
+        <MaterialCommunityIcons name={iconName as any} size={22} color={iconColor} />
+      </View>
+      {!failed && (
+        <Image
+          source={{ uri }}
+          style={StyleSheet.absoluteFill}
+          contentFit="cover"
+          transition={150}
+          onError={() => setFailed(true)}
+        />
+      )}
+    </View>
+  );
+}
 
 export function Chevron() {
   const { colors } = useTheme();
@@ -181,6 +216,23 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
+    position: "relative",
+  },
+  thumbFallback: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  videoBadge: {
+    position: "absolute",
+    bottom: 3,
+    right: 3,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    alignItems: "center",
+    justifyContent: "center",
   },
   body: { flex: 1, marginLeft: 2 },
   title: { fontWeight: "600", letterSpacing: 0.1 },

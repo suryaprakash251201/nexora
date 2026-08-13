@@ -18,7 +18,7 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useSession } from "../store/SessionContext";
 import { useTheme } from "../store/ThemeContext";
-import { FileRow, EmptyState, SectionLabel, Chevron } from "../components/FileRow";
+import { EmptyState, SectionLabel } from "../components/FileRow";
 import { ListSkeleton, GridCardSkeleton } from "../components/Skeletons";
 import { previewKind } from "../api/client";
 import type { Root, FileItem, Playlist, FavoriteItem } from "../api/types";
@@ -136,11 +136,7 @@ export default function HomeScreen() {
     [navigation, playTrack, recents]
   );
 
-  // Liked songs queue together so hearts play as a continuous list.
-  const playLikedSong = useCallback(
-    (item: FileItem) => playTrack(item, likedSongs),
-    [playTrack, likedSongs]
-  );
+  // Liked songs open from the single “Liked Songs” card on Home.
 
   const greeting = useMemo(() => {
     const h = new Date().getHours();
@@ -424,71 +420,30 @@ export default function HomeScreen() {
             </View>
           )}
 
-          {/* Liked Songs — favorited audio, newest first */}
+          {/* Liked Songs — one cover card that opens the full liked list */}
           {likedSongs.length > 0 && (
             <View style={{ marginBottom: 24 }}>
               <View style={styles.sectionRow}>
                 <SectionLabel>Liked Songs</SectionLabel>
               </View>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: spacing.lg, gap: 12 }}>
-                {likedSongs.map(f => (
-                  <TouchableOpacity
-                    key={f.root_id + f.path}
-                    style={[styles.audioCard, { backgroundColor: colors.surface, borderColor: colors.borderSoft, borderRadius: radius.xl }, shadowSm]}
-                    activeOpacity={0.8}
-                    onPress={() => playLikedSong(f)}
-                  >
-                    <LinearGradient colors={["rgba(255,255,255,0.06)", "transparent"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
-                    <View style={[styles.audioIcon, { backgroundColor: "rgba(244,63,94,0.12)" }]}>
-                      <MaterialCommunityIcons name="heart" size={28} color={colors.danger} />
-                    </View>
-                    <Text style={[styles.audioTitle, { color: colors.content, fontSize: font.sm }]} numberOfLines={1}>{f.name}</Text>
-                    <Text style={[styles.audioSub, { color: colors.muted, fontSize: font.xs }]}>Liked</Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            </View>
-          )}
-
-          {recents.length > 0 && (
-            <View>
-              <View style={styles.sectionRow}>
-                <SectionLabel>Last Opened Files</SectionLabel>
-                <TouchableOpacity
-                  style={styles.seeAll}
-                  onPress={() => navigation.navigate("Recents")}
-                >
-                  <Text style={[styles.seeAllText, { color: colors.accent, fontSize: font.md }]}>See all</Text>
-                  <Chevron />
-                </TouchableOpacity>
-              </View>
-              <View
-                style={[
-                  styles.recentsCard,
-                  {
-                    backgroundColor: colors.surface,
-                    borderColor: colors.borderSoft,
-                    borderRadius: radius.xxl,
-                    marginHorizontal: spacing.lg,
-                  },
-                  shadow,
-                ]}
+              <TouchableOpacity
+                style={[styles.likedCard, { backgroundColor: colors.surface, borderColor: colors.borderSoft, borderRadius: radius.xl, marginHorizontal: spacing.lg }, shadowSm]}
+                activeOpacity={0.8}
+                onPress={() => navigation.navigate("Liked")}
               >
-                <LinearGradient
-                  colors={["rgba(255,255,255,0.03)", "transparent"]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.glassHighlight}
-                />
-                {recents.slice(0, 5).map((f, i, arr) => (
-                  <View
-                    key={f.root_id + f.path}
-                    style={i < arr.length - 1 ? { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.borderSoft } : undefined}
-                  >
-                    <FileRow item={f} onPress={openFile} showDate />
-                  </View>
-                ))}
-              </View>
+                <LinearGradient colors={["rgba(255,255,255,0.06)", "transparent"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+                <View style={styles.likedCover}>
+                  <LinearGradient colors={["#F43F5E", "#BE123C"]} style={StyleSheet.absoluteFill} />
+                  <MaterialCommunityIcons name="heart" size={30} color="#fff" />
+                </View>
+                <View style={styles.likedBody}>
+                  <Text style={[styles.likedTitle, { color: colors.content, fontSize: font.md }]}>Liked Songs</Text>
+                  <Text style={[styles.likedSub, { color: colors.muted, fontSize: font.xs }]}>
+                    {likedSongs.length} song{likedSongs.length === 1 ? "" : "s"} · tap to open
+                  </Text>
+                </View>
+                <MaterialCommunityIcons name="chevron-right" size={22} color={colors.muted} style={{ opacity: 0.5 }} />
+              </TouchableOpacity>
             </View>
           )}
         </View>
@@ -647,6 +602,25 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   playlistSync: { fontWeight: "600", marginTop: 18 },
+  likedCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    padding: 14,
+    borderWidth: 1,
+    overflow: "hidden",
+  },
+  likedCover: {
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+  likedBody: { flex: 1 },
+  likedTitle: { fontWeight: "700" },
+  likedSub: { marginTop: 3, fontWeight: "500" },
   playlistCard: {
     width: 150,
     padding: 16,

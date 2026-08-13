@@ -6,6 +6,7 @@ export type RootStackParamList = {
   Preview: { item: FileItem; rootId: string };
   Playlist: { playlist: Playlist };
   Category: { kind: string; title: string };
+  Liked: undefined;
   Admin: undefined;
   Favorites: undefined;
   Trash: undefined;
