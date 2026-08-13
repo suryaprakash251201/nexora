@@ -55,6 +55,11 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
   const [showQuality, setShowQuality] = useState(false);
   const qualityAnim = useRef(new Animated.Value(0)).current;
 
+  // Lossless / hi-res detection for the wave badge — computed early so the
+  // quality-toggle effect below can read it.
+  const qInfo = detectAudioQuality(currentTrack?.extension || "", currentTrack?.mime, currentTrack?.size);
+  const isLossless = qInfo.isLossless;
+
   // Animate the quality details panel in/out (always visible for
   // non-lossless tracks, which have no wave toggle).
   useEffect(() => {
@@ -180,10 +185,6 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
 
   const coverUrl = api ? api.thumbnailUrl(currentTrack.root_id, currentTrack.path, 512) : null;
   const ext = currentTrack.extension || "";
-
-  // Lossless / hi-res detection for the wave badge (Apple Music style).
-  const qInfo = detectAudioQuality(ext, currentTrack.mime, currentTrack.size);
-  const isLossless = qInfo.isLossless;
 
   const formatTime = (s: number) => {
     if (!s || isNaN(s)) return "0:00";
