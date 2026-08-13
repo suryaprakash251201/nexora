@@ -26,6 +26,7 @@ import { useTheme } from "../store/ThemeContext";
 import { useSession } from "../store/SessionContext";
 import { tabBarTotalHeight } from "./PremiumTabBar";
 import { EqBars } from "./EqBars";
+import { PressScale } from "./motion";
 import { BottomSheet } from "./BottomSheet";
 import { AudioQualityPill } from "./AudioQualityBadge";
 import { AudioQualityDetail } from "./AudioQualityDetail";
@@ -54,6 +55,7 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
   // Tap the lossless wave in the fullscreen player to reveal/hide the
   // track's audio details (codec · bit depth · sample rate).
   const [showQuality, setShowQuality] = useState(false);
+  const [scrubbing, setScrubbing] = useState(false);
   const qualityAnim = useRef(new Animated.Value(0)).current;
 
   // Lossless / hi-res detection for the wave badge — computed early so the
@@ -570,42 +572,64 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
                 </Animated.View>
               )}
 
-              {/* ── Progress Scrubber (Apple Music thin style, no thumb) ── */}
+              {/* ── Progress Scrubber — gradient fill, drag knob ── */}
               <View style={styles.scrubberWrap}>
                 <View
                   style={styles.scrubberHitbox}
                   onLayout={(e) => setScrubberWidth(e.nativeEvent.layout.width)}
                   onStartShouldSetResponder={() => true}
                   onMoveShouldSetResponder={() => true}
-                  onResponderGrant={(e) => handleScrub(e.nativeEvent.locationX)}
+                  onResponderGrant={(e) => {
+                    setScrubbing(true);
+                    handleScrub(e.nativeEvent.locationX);
+                  }}
                   onResponderMove={(e) => handleScrub(e.nativeEvent.locationX)}
+                  onResponderRelease={() => setScrubbing(false)}
+                  onResponderTerminate={() => setScrubbing(false)}
                 >
                   <View
                     style={[
                       styles.scrubberTrack,
                       {
                         backgroundColor: isDark
-                          ? "rgba(255,255,255,0.20)"
-                          : "rgba(0,0,0,0.12)",
+                          ? "rgba(255,255,255,0.14)"
+                          : "rgba(0,0,0,0.10)",
                       },
                     ]}
                   >
-                    <View
+                    <LinearGradient
+                      colors={[...gradients.brand]}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
                       style={[
                         styles.scrubberFill,
-                        {
-                          width: `${progressPct}%`,
-                          backgroundColor: colors.content,
-                        },
+                        { width: `${progressPct}%` },
                       ]}
                     />
                   </View>
+                  {/* Drag knob — appears while scrubbing (Apple Music style) */}
+                  {scrubbing && (
+                    <View style={[styles.scrubberThumb, { left: `${progressPct}%` }]}>
+                      <View
+                        style={[
+                          styles.scrubberThumbGlow,
+                          { backgroundColor: colors.accent },
+                        ]}
+                      />
+                      <View
+                        style={[
+                          styles.scrubberThumbCore,
+                          { backgroundColor: colors.accent },
+                        ]}
+                      />
+                    </View>
+                  )}
                 </View>
                 <View style={styles.timeRow}>
                   <Text
                     style={[
                       styles.timeText,
-                      { color: colors.content, opacity: 0.5 },
+                      { color: colors.content, opacity: 0.9, fontSize: 12 },
                     ]}
                   >
                     {formatTime(currentTime)}
@@ -613,7 +637,7 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
                   <Text
                     style={[
                       styles.timeText,
-                      { color: colors.content, opacity: 0.5 },
+                      { color: colors.content, opacity: 0.45, fontSize: 12 },
                     ]}
                   >
                     {duration > 0 ? `-${formatTime(duration - currentTime)}` : "-:--"}
@@ -623,113 +647,150 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
 
               {/* ── Main Controls: skip-back / play-pause / skip-forward ── */}
               <View style={styles.mainControlsRow}>
-                <TouchableOpacity
-                  style={styles.skipBtn}
-                  onPress={prevTrack}
-                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                >
-                  <MaterialCommunityIcons
-                    name="skip-previous"
-                    size={38}
-                    color={colors.content}
-                  />
-                </TouchableOpacity>
+                <PressScale scaleTo={0.9}>
+                  <TouchableOpacity
+                    style={[
+                      styles.skipBtn,
+                      {
+                        backgroundColor: isDark
+                          ? "rgba(255,255,255,0.08)"
+                          : "rgba(0,0,0,0.05)",
+                        borderColor: isDark
+                          ? "rgba(255,255,255,0.12)"
+                          : "rgba(0,0,0,0.08)",
+                      },
+                    ]}
+                    onPress={prevTrack}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
+                    <MaterialCommunityIcons
+                      name="skip-previous"
+                      size={30}
+                      color={colors.content}
+                    />
+                  </TouchableOpacity>
+                </PressScale>
 
-                <TouchableOpacity
-                  style={styles.playPauseBtn}
-                  onPress={togglePlay}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                >
-                  {status === "loading" ? (
-                    <ActivityIndicator color={colors.content} size="large" />
-                  ) : (
-                    <View
-                      style={[
-                        styles.playPauseCircle,
-                        { backgroundColor: colors.content },
-                      ]}
-                    >
-                      <MaterialCommunityIcons
-                        name={playing ? "pause" : "play"}
-                        size={34}
-                        color={isDark ? "#000" : "#fff"}
-                        style={playing ? undefined : { marginLeft: 3 }}
-                      />
-                    </View>
-                  )}
-                </TouchableOpacity>
+                <PressScale scaleTo={0.94}>
+                  <TouchableOpacity
+                    style={styles.playPauseBtn}
+                    onPress={togglePlay}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    {status === "loading" ? (
+                      <ActivityIndicator color="#fff" size="large" />
+                    ) : (
+                      <View style={styles.playPauseCircle}>
+                        <LinearGradient
+                          colors={[...gradients.brand]}
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 1, y: 1 }}
+                          style={StyleSheet.absoluteFill}
+                        />
+                        {/* Inner highlight ring for depth */}
+                        <View style={styles.playPauseRing} />
+                        <MaterialCommunityIcons
+                          name={playing ? "pause" : "play"}
+                          size={36}
+                          color="#fff"
+                          style={playing ? undefined : { marginLeft: 4 }}
+                        />
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                </PressScale>
 
-                <TouchableOpacity
-                  style={styles.skipBtn}
-                  onPress={nextTrack}
-                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                >
-                  <MaterialCommunityIcons
-                    name="skip-next"
-                    size={38}
-                    color={colors.content}
-                  />
-                </TouchableOpacity>
+                <PressScale scaleTo={0.9}>
+                  <TouchableOpacity
+                    style={[
+                      styles.skipBtn,
+                      {
+                        backgroundColor: isDark
+                          ? "rgba(255,255,255,0.08)"
+                          : "rgba(0,0,0,0.05)",
+                        borderColor: isDark
+                          ? "rgba(255,255,255,0.12)"
+                          : "rgba(0,0,0,0.08)",
+                      },
+                    ]}
+                    onPress={nextTrack}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
+                    <MaterialCommunityIcons
+                      name="skip-next"
+                      size={30}
+                      color={colors.content}
+                    />
+                  </TouchableOpacity>
+                </PressScale>
               </View>
 
-              {/* ── Secondary Controls Row: shuffle / repeat / queue ── */}
+              {/* ── Secondary Controls Row: shuffle / repeat / queue / like ── */}
               <View style={styles.secondaryControlsRow}>
-                <TouchableOpacity
-                  style={styles.secondaryBtn}
-                  onPress={() => {
-                    haptic();
-                    setShuffle(!shuffle);
-                  }}
-                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                >
-                  <MaterialCommunityIcons
-                    name="shuffle-variant"
-                    size={22}
-                    color={shuffle ? colors.accent : colors.muted}
-                  />
-                </TouchableOpacity>
+                <PressScale scaleTo={0.88}>
+                  <TouchableOpacity
+                    style={[styles.secondaryBtn, shuffle && styles.secondaryBtnActive]}
+                    onPress={() => {
+                      haptic();
+                      setShuffle(!shuffle);
+                    }}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
+                    <MaterialCommunityIcons
+                      name="shuffle-variant"
+                      size={22}
+                      color={shuffle ? colors.accent : colors.muted}
+                    />
+                  </TouchableOpacity>
+                </PressScale>
 
-                <TouchableOpacity
-                  style={styles.secondaryBtn}
-                  onPress={() => {
-                    haptic();
-                    toggleRepeat();
-                  }}
-                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                >
-                  <MaterialCommunityIcons
-                    name={repeat === "one" ? "repeat-once" : "repeat"}
-                    size={22}
-                    color={repeat !== "off" ? colors.accent : colors.muted}
-                  />
-                </TouchableOpacity>
+                <PressScale scaleTo={0.88}>
+                  <TouchableOpacity
+                    style={[styles.secondaryBtn, repeat !== "off" && styles.secondaryBtnActive]}
+                    onPress={() => {
+                      haptic();
+                      toggleRepeat();
+                    }}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
+                    <MaterialCommunityIcons
+                      name={repeat === "one" ? "repeat-once" : "repeat"}
+                      size={22}
+                      color={repeat !== "off" ? colors.accent : colors.muted}
+                    />
+                  </TouchableOpacity>
+                </PressScale>
 
-                <TouchableOpacity
-                  style={styles.secondaryBtn}
-                  onPress={() => {
-                    haptic();
-                    setQueueOpen(true);
-                  }}
-                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                >
-                  <MaterialCommunityIcons
-                    name="playlist-music"
-                    size={22}
-                    color={queueOpen ? colors.accent : colors.muted}
-                  />
-                </TouchableOpacity>
+                <PressScale scaleTo={0.88}>
+                  <TouchableOpacity
+                    style={[styles.secondaryBtn, queueOpen && styles.secondaryBtnActive]}
+                    onPress={() => {
+                      haptic();
+                      setQueueOpen(true);
+                    }}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
+                    <MaterialCommunityIcons
+                      name="playlist-music"
+                      size={22}
+                      color={queueOpen ? colors.accent : colors.muted}
+                    />
+                  </TouchableOpacity>
+                </PressScale>
 
-                <TouchableOpacity
-                  style={styles.secondaryBtn}
-                  onPress={toggleFavorite}
-                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                >
-                  <MaterialCommunityIcons
-                    name={favorited ? "heart" : "heart-outline"}
-                    size={22}
-                    color={favorited ? colors.danger : colors.muted}
-                  />
-                </TouchableOpacity>
+                <PressScale scaleTo={0.88}>
+                  <TouchableOpacity
+                    style={[styles.secondaryBtn, favorited && styles.secondaryBtnActive]}
+                    onPress={toggleFavorite}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
+                    <MaterialCommunityIcons
+                      name={favorited ? "heart" : "heart-outline"}
+                      size={22}
+                      color={favorited ? colors.danger : colors.muted}
+                    />
+                  </TouchableOpacity>
+                </PressScale>
               </View>
             </View>
 
@@ -1045,27 +1106,54 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   scrubberHitbox: {
-    height: 28,
+    height: 32,
     justifyContent: "center",
   },
   scrubberTrack: {
-    height: 4,
-    borderRadius: 2,
+    height: 5,
+    borderRadius: 3,
     overflow: "hidden",
   },
   scrubberFill: {
     height: "100%",
-    borderRadius: 2,
+    borderRadius: 3,
+  },
+  scrubberThumb: {
+    position: "absolute",
+    width: 22,
+    height: 22,
+    marginLeft: -11,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  scrubberThumbGlow: {
+    position: "absolute",
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    opacity: 0.18,
+  },
+  scrubberThumbCore: {
+    width: 13,
+    height: 13,
+    borderRadius: 7,
+    borderWidth: 2.5,
+    borderColor: "#fff",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.4,
+    shadowRadius: 4,
+    elevation: 4,
   },
   timeRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     marginTop: 6,
+    paddingHorizontal: 2,
   },
   timeText: {
-    fontSize: 11,
     fontVariant: ["tabular-nums"],
-    fontWeight: "600",
+    fontWeight: "700",
   },
 
   /* Main Controls */
@@ -1073,23 +1161,44 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 40,
+    gap: 30,
     marginBottom: 28,
     marginTop: 8,
   },
   skipBtn: {
-    padding: 4,
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
   },
   playPauseBtn: {
     alignItems: "center",
     justifyContent: "center",
   },
   playPauseCircle: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 74,
+    height: 74,
+    borderRadius: 37,
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
+    shadowColor: "#4F46E5",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.45,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  playPauseRing: {
+    position: "absolute",
+    top: 3,
+    left: 3,
+    right: 3,
+    bottom: 3,
+    borderRadius: 34,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.25)",
   },
 
   /* Secondary Controls */
@@ -1100,7 +1209,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   secondaryBtn: {
-    padding: 8,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  secondaryBtnActive: {
+    backgroundColor: "rgba(79,70,229,0.14)",
   },
 
   /* Queue Panel */
