@@ -88,7 +88,10 @@ export default function Setup({ onSuccess }: { onSuccess: () => void }) {
           <form onSubmit={step === 1 ? (e) => { e.preventDefault(); if (canProceedToStep2) setStep(2); } : submit}>
             <div className="relative overflow-hidden" style={{ minHeight: '260px' }}>
               {/* Step 1: Profile */}
-              <div className={`absolute inset-0 transition-all duration-500 ease-in-out ${step === 1 ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-full pointer-events-none'}`}>
+              <div
+                className={`absolute inset-0 transition-all duration-500 ease-in-out ${step === 1 ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-full pointer-events-none'}`}
+                {...(step === 1 ? {} : { inert: true, "aria-hidden": true, tabIndex: -1 })}
+              >
                 <div className="space-y-4">
                   <div className="space-y-1.5">
                     <label htmlFor="setup-username" className="text-xs font-bold text-content-muted uppercase tracking-wider">Username</label>
@@ -140,11 +143,19 @@ export default function Setup({ onSuccess }: { onSuccess: () => void }) {
                   >
                     Continue
                   </Button>
+                  {!canProceedToStep2 && (
+                    <p className="mt-2 text-center text-xs text-content-muted">
+                      Username must be at least 3 characters and email must contain "@".
+                    </p>
+                  )}
                 </div>
               </div>
 
               {/* Step 2: Security */}
-              <div className={`absolute inset-0 transition-all duration-500 ease-in-out ${step === 2 ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-full pointer-events-none'}`}>
+              <div
+                className={`absolute inset-0 transition-all duration-500 ease-in-out ${step === 2 ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-full pointer-events-none'}`}
+                {...(step === 2 ? {} : { inert: true, "aria-hidden": true, tabIndex: -1 })}
+              >
                 <div className="space-y-4">
                   <div className="space-y-1.5">
                     <label htmlFor="setup-password" className="text-xs font-bold text-content-muted uppercase tracking-wider">Secure Password</label>

@@ -247,7 +247,7 @@ export function MobileNav({
                 )}
                 <button
                   onClick={() => { onLogout(); setMoreOpen(false); }}
-                  className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-rose-400/80 hover:bg-rose-500/10 transition-all min-h-[48px]"
+                  className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-danger/80 hover:bg-danger/10 transition-all min-h-[48px]"
                 >
                   <LogOut className="h-5 w-5" />
                   <span>Log out</span>

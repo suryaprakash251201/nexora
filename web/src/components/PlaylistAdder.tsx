@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { Plus, Music } from "lucide-react";
+import { Plus, Music, X } from "lucide-react";
 import { usePlaylists } from "../store/playlists";
 import { useUI } from "../store";
 import type { FileItem } from "../api/types";
@@ -40,6 +40,9 @@ export function PlaylistPickerList({ items, onClose }: { items: FileItem[]; onCl
   const pushToast = useUI((s) => s.pushToast);
   const audio = audioOnly(items);
 
+  const [creatingNew, setCreatingNew] = useState(false);
+  const [newName, setNewName] = useState("");
+
   const add = async (id?: string) => {
     if (!audio.length) {
       pushToast("error", "No audio files selected");
@@ -50,13 +53,14 @@ export function PlaylistPickerList({ items, onClose }: { items: FileItem[]; onCl
       addItems(id, audio);
       const pl = playlists.find((p) => p.id === id);
       pushToast("success", `Added ${audio.length} to "${pl?.name ?? "playlist"}"`);
-    } else {
-      const name = window.prompt("New playlist name", `Playlist ${playlists.length + 1}`);
-      if (name !== null) {
-        const pl = await create(name.trim() || `Playlist ${playlists.length + 1}`, audio);
-        pushToast("success", `Created "${pl.name}" with ${audio.length} track${audio.length === 1 ? "" : "s"}`);
-      }
+      onClose();
     }
+  };
+
+  const createNew = async () => {
+    const name = newName.trim() || `Playlist ${playlists.length + 1}`;
+    const pl = await create(name, audio);
+    pushToast("success", `Created "${pl.name}" with ${audio.length} track${audio.length === 1 ? "" : "s"}`);
     onClose();
   };
 
@@ -83,15 +87,37 @@ export function PlaylistPickerList({ items, onClose }: { items: FileItem[]; onCl
           <span className="text-xs text-content-muted tabular-nums">{pl.items.length}</span>
         </button>
       ))}
-      <button
-        onClick={() => add(undefined)}
-        className="w-full flex items-center gap-2.5 px-3 py-2 text-left glass-hover border-t glass-divider mt-1"
-      >
-        <div className="h-8 w-8 rounded-lg grid place-items-center bg-accent/10 text-accent shrink-0">
-          <Plus className="h-4 w-4" />
-        </div>
-        New playlist…
-      </button>
+      {creatingNew ? (
+        <form
+          onSubmit={(e) => { e.preventDefault(); createNew(); }}
+          className="flex items-center gap-2 px-3 py-2 border-t glass-divider mt-1"
+        >
+          <input
+            autoFocus
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            placeholder={`Playlist ${playlists.length + 1}`}
+            className="flex-1 min-w-0 rounded-lg glass-input px-2.5 py-1.5 text-sm outline-none"
+            aria-label="New playlist name"
+          />
+          <button type="submit" disabled={!newName.trim()} className="px-2.5 py-1.5 rounded-lg accent-glass text-xs font-medium disabled:opacity-40">
+            Create
+          </button>
+          <button type="button" onClick={() => { setCreatingNew(false); setNewName(""); }} className="p-1.5 text-content-muted hover:text-content" aria-label="Cancel">
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </form>
+      ) : (
+        <button
+          onClick={() => setCreatingNew(true)}
+          className="w-full flex items-center gap-2.5 px-3 py-2 text-left glass-hover border-t glass-divider mt-1"
+        >
+          <div className="h-8 w-8 rounded-lg grid place-items-center bg-accent/10 text-accent shrink-0">
+            <Plus className="h-4 w-4" />
+          </div>
+          New playlist…
+        </button>
+      )}
     </div>
   );
 }

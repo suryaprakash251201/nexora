@@ -211,6 +211,7 @@ func (s *Server) Routes() http.Handler {
 	authed.Delete("/favorites", s.handleRemoveFavorite)
 	authed.Get("/recents", s.handleListRecents)
 	authed.Get("/home", s.handleHome)
+	authed.Get("/home/usage", s.handleHomeUsage)
 
 	// Tags
 	authed.Get("/tags", s.handleListTags)

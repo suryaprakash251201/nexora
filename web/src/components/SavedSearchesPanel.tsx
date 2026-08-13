@@ -13,6 +13,8 @@ import { Button } from "./ui/Button";
 import { Modal } from "./Modal";
 import { Input } from "./ui/Input";
 import { toast } from "sonner";
+import { ConfirmDialog } from "./ui/ConfirmDialog";
+import { QueryError } from "./ui/QueryError";
 
 interface SavedSearchesPanelProps {
   roots: { id: string; name: string }[];
@@ -35,7 +37,7 @@ export default function SavedSearchesPanel({ roots, onSearch, onClose }: SavedSe
   const [filterOpen, setFilterOpen] = useState(false);
   const [filters, setFilters] = useState(defaultFilters);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["saved-searches"],
     queryFn: () => savedSearchesApi.list(),
   });
@@ -88,10 +90,10 @@ export default function SavedSearchesPanel({ roots, onSearch, onClose }: SavedSe
     updateMutation.mutate({ id, input });
   };
 
-  const handleDelete = (id: string) => {
-    if (confirm("Delete this saved search?")) {
-      deleteMutation.mutate(id);
-    }
+  const [pendingDelete, setPendingDelete] = useState<SavedSearch | null>(null);
+
+  const handleDelete = (search: SavedSearch) => {
+    setPendingDelete(search);
   };
 
   const handleExecute = (search: SavedSearch) => {
@@ -107,8 +109,11 @@ export default function SavedSearchesPanel({ roots, onSearch, onClose }: SavedSe
     handleUpdate(search.id, { ...search, is_pinned: !search.is_pinned });
   };
 
+  const [draft, setDraft] = useState<SavedSearchInput | null>(null);
+
   const openCreate = () => {
     setEditingSearch(null);
+    setDraft({ name: "", query: "", filters: "{}", sort: "name", sort_order: "asc", root_id: "", icon: "", color: "", is_pinned: false });
     setCreating(true);
   };
 
@@ -119,7 +124,12 @@ export default function SavedSearchesPanel({ roots, onSearch, onClose }: SavedSe
 
   const formData: SavedSearchInput = editingSearch
     ? { name: editingSearch.name, query: editingSearch.query, filters: editingSearch.filters, sort: editingSearch.sort, sort_order: editingSearch.sort_order, root_id: editingSearch.root_id, icon: editingSearch.icon, color: editingSearch.color, is_pinned: editingSearch.is_pinned }
-    : { name: "", query: "", filters: "{}", sort: "name", sort_order: "asc", root_id: "", icon: "", color: "", is_pinned: false };
+    : draft ?? { name: "", query: "", filters: "{}", sort: "name", sort_order: "asc", root_id: "", icon: "", color: "", is_pinned: false };
+
+  const updateField = (patch: Partial<SavedSearchInput>) => {
+    if (editingSearch) setEditingSearch({ ...editingSearch, ...patch });
+    else setDraft((d) => (d ? { ...d, ...patch } : d));
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -129,6 +139,10 @@ export default function SavedSearchesPanel({ roots, onSearch, onClose }: SavedSe
       handleCreate(formData);
     }
   };
+
+  if (isError) {
+    return <div className="p-4"><QueryError message="Could not load saved searches." onRetry={() => refetch()} /></div>;
+  }
 
   if (isLoading) {
     return <div className="p-4"><div className="animate-pulse space-y-3"><div className="h-12 bg-surface/50 rounded-xl" /><div className="h-12 bg-surface/50 rounded-xl" /></div></div>;
@@ -243,10 +257,10 @@ export default function SavedSearchesPanel({ roots, onSearch, onClose }: SavedSe
       {(creating || editingSearch) && (
         <Modal
           title={editingSearch ? "Edit Smart Folder" : "New Smart Folder"}
-          onClose={() => { setCreating(false); setEditingSearch(null); }}
+          onClose={() => { setCreating(false); setEditingSearch(null); setDraft(null); }}
           footer={
             <div className="flex justify-end gap-2">
-              <Button variant="ghost" onClick={() => { setCreating(false); setEditingSearch(null); }}>Cancel</Button>
+              <Button variant="ghost" onClick={() => { setCreating(false); setEditingSearch(null); setDraft(null); }}>Cancel</Button>
               <Button onClick={handleSubmit} disabled={!formData.name.trim()}>
                 {editingSearch ? "Save" : "Create"}
               </Button>
@@ -258,7 +272,7 @@ export default function SavedSearchesPanel({ roots, onSearch, onClose }: SavedSe
               <label className="block text-sm mb-1 opacity-80">Name</label>
               <Input
                 value={formData.name}
-                onChange={(e) => setEditingSearch(editingSearch ? { ...editingSearch, name: e.target.value } : null)}
+                onChange={(e) => updateField({ name: e.target.value })}
                 placeholder="My smart folder"
                 required
                 autoFocus
@@ -268,7 +282,7 @@ export default function SavedSearchesPanel({ roots, onSearch, onClose }: SavedSe
               <label className="block text-sm mb-1 opacity-80">Search Query</label>
               <Input
                 value={formData.query}
-                onChange={(e) => setEditingSearch(editingSearch ? { ...editingSearch, query: e.target.value } : null)}
+                onChange={(e) => updateField({ query: e.target.value })}
                 placeholder="e.g. vacation photos"
               />
             </div>
@@ -276,7 +290,7 @@ export default function SavedSearchesPanel({ roots, onSearch, onClose }: SavedSe
               <label className="block text-sm mb-1 opacity-80">Root (optional)</label>
               <select
                 value={formData.root_id}
-                onChange={(e) => setEditingSearch(editingSearch ? { ...editingSearch, root_id: e.target.value } : null)}
+                onChange={(e) => updateField({ root_id: e.target.value })}
                 className="w-full rounded-lg glass-input px-3 py-2 outline-none"
               >
                 <option value="">All roots</option>
@@ -288,7 +302,7 @@ export default function SavedSearchesPanel({ roots, onSearch, onClose }: SavedSe
                 <label className="block text-sm mb-1 opacity-80">Sort</label>
                 <select
                   value={formData.sort}
-                  onChange={(e) => setEditingSearch(editingSearch ? { ...editingSearch, sort: e.target.value } : null)}
+                  onChange={(e) => updateField({ sort: e.target.value })}
                   className="w-full rounded-lg glass-input px-3 py-2 outline-none"
                 >
                   <option value="name">Name</option>
@@ -301,7 +315,7 @@ export default function SavedSearchesPanel({ roots, onSearch, onClose }: SavedSe
                 <label className="block text-sm mb-1 opacity-80">Order</label>
                 <select
                   value={formData.sort_order}
-                  onChange={(e) => setEditingSearch(editingSearch ? { ...editingSearch, sort_order: e.target.value } : null)}
+                  onChange={(e) => updateField({ sort_order: e.target.value })}
                   className="w-full rounded-lg glass-input px-3 py-2 outline-none"
                 >
                   <option value="asc">Ascending</option>
@@ -314,7 +328,7 @@ export default function SavedSearchesPanel({ roots, onSearch, onClose }: SavedSe
                 type="checkbox"
                 id="pinned"
                 checked={formData.is_pinned}
-                onChange={(e) => setEditingSearch(editingSearch ? { ...editingSearch, is_pinned: e.target.checked } : null)}
+                onChange={(e) => updateField({ is_pinned: e.target.checked })}
                 className="w-4 h-4 rounded border-surface/50 bg-surface text-accent focus:ring-accent"
               />
               <label htmlFor="pinned" className="text-sm">Pin to top</label>
@@ -322,6 +336,15 @@ export default function SavedSearchesPanel({ roots, onSearch, onClose }: SavedSe
           </form>
         </Modal>
       )}
+      <ConfirmDialog
+        open={!!pendingDelete}
+        title="Delete smart folder?"
+        description={pendingDelete ? `"${pendingDelete.name}" will be permanently deleted.` : ""}
+        confirmLabel="Delete"
+        danger
+        onConfirm={() => { if (pendingDelete) deleteMutation.mutate(pendingDelete.id); setPendingDelete(null); }}
+        onCancel={() => setPendingDelete(null)}
+      />
     </div>
   );
 }
@@ -339,7 +362,7 @@ function SavedSearchItem({
   roots: { id: string; name: string }[];
   onExecute: (s: SavedSearch) => void;
   onEdit: (s: SavedSearch) => void;
-  onDelete: (id: string) => void;
+  onDelete: (s: SavedSearch) => void;
   onPin: (s: SavedSearch) => void;
   isPinned: boolean;
 }) {
@@ -402,7 +425,7 @@ function SavedSearchItem({
         <button onClick={(e) => { e.stopPropagation(); onEdit(search); }} className="p-1.5 rounded-lg hover:bg-white/5 transition-colors" title="Edit">
           <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
         </button>
-        <button onClick={(e) => { e.stopPropagation(); onDelete(search.id); }} className="p-1.5 rounded-lg hover:bg-red-500/10 hover:text-red-400 transition-colors" title="Delete">
+        <button onClick={(e) => { e.stopPropagation(); onDelete(search); }} className="p-1.5 rounded-lg hover:bg-red-500/10 hover:text-red-400 transition-colors" title="Delete" aria-label={`Delete ${search.name}`}>
           <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
         </button>
       </div>

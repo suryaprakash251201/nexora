@@ -2,6 +2,14 @@ import { useState, useEffect, useMemo } from "react";
 import { motion } from "motion/react";
 import { Search, Clock, Sparkles, FileText, Music, Film, Plus, FilePlus, Upload, FolderUp, HardDrive, FolderPlus, Play, Sun, FolderOpen, Share, TrendingUp, Sunrise, Sunset, CloudMoon } from "lucide-react";
 import type { RecentItem, FileItem, HomeData, User } from "../api/types";
+
+interface HomeUsage {
+  total: number;
+  available: number;
+  used: number;
+  file_count: number;
+  breakdown: Record<string, { count: number; size: number }>;
+}
 import { FileThumb } from "./FileThumb";
 import { formatRelative } from "../lib/format";
 import { Input } from "./ui/Input";
@@ -27,41 +35,41 @@ function mediaKind(item: RecentItem): "music" | "video" | "doc" | "file" {
 }
 
 function StatsBar() {
-  const usage = useQuery({ queryKey: ["storage-usage"], queryFn: () => get<{ total: number; used: number; available: number }>("/admin/usage"), staleTime: 60000 });
+  const usage = useQuery({ queryKey: ["home-usage"], queryFn: () => get<HomeUsage>("/home/usage"), staleTime: 60000 });
   const home = useQuery({ queryKey: ["home"], queryFn: () => get<HomeData>("/home"), staleTime: 30000 });
-  
+
   const stats = [
     {
       label: "Storage Used",
-      value: usage.data ? formatBytes(usage.data.used) : "—",
-      sub: usage.data ? `of ${formatBytes(usage.data.total)}` : "",
+      value: usage.data && usage.data.total > 0 ? formatBytes(usage.data.used) : "—",
+      sub: usage.data && usage.data.total > 0 ? `of ${formatBytes(usage.data.total)}` : "no quota info",
       icon: HardDrive,
-      color: "from-blue-500 to-indigo-500",
-      glow: "shadow-blue-500/20",
+      color: "from-accent to-accent-secondary",
+      glow: "shadow-accent/20",
     },
     {
       label: "Total Files",
-      value: home.data ? `${(home.data.recent?.length ?? 0)}+` : "—",
-      sub: "files tracked",
+      value: usage.data?.file_count != null ? usage.data.file_count.toLocaleString() : "—",
+      sub: "indexed files",
       icon: FolderOpen,
-      color: "from-emerald-500 to-teal-500",
-      glow: "shadow-emerald-500/20",
+      color: "from-accent-emerald to-accent-teal",
+      glow: "shadow-accent-emerald/20",
     },
     {
       label: "Recent Activity",
       value: home.data?.recent?.length?.toString() ?? "0",
       sub: "recent items",
       icon: TrendingUp,
-      color: "from-purple-500 to-violet-500",
-      glow: "shadow-purple-500/20",
+      color: "from-accent-purple to-accent-pink",
+      glow: "shadow-accent-purple/20",
     },
     {
       label: "Shared Items",
-      value: home.data?.playlists?.length?.toString() ?? "0",
-      sub: "active shares",
+      value: home.data?.share_count != null ? home.data.share_count.toLocaleString() : "0",
+      sub: "active share links",
       icon: Share,
-      color: "from-amber-500 to-orange-500",
-      glow: "shadow-amber-500/20",
+      color: "from-accent-amber to-accent-orange",
+      glow: "shadow-accent-amber/20",
     },
   ];
 
@@ -91,16 +99,25 @@ function StatsBar() {
 }
 
 function StorageBreakdown() {
-  const home = useQuery({ queryKey: ["home"], queryFn: () => get<HomeData>("/home"), staleTime: 30000 });
-  const usage = useQuery({ queryKey: ["storage-usage"], queryFn: () => get<{ total: number; used: number; available: number }>("/admin/usage"), staleTime: 60000 });
+  const usage = useQuery({ queryKey: ["home-usage"], queryFn: () => get<HomeUsage>("/home/usage"), staleTime: 60000 });
 
-  if (!usage.data || usage.data.total === 0) return null;
+  const b = usage.data?.breakdown;
+  const totalBytes = b ? Object.values(b).reduce((acc, c) => acc + c.size, 0) : 0;
 
-  const usedPercent = Math.min(100, Math.round((usage.data.used / usage.data.total) * 100));
-  const docsCount = home.data?.documents?.length ?? 0;
-  const musicCount = home.data?.music?.length ?? 0;
-  const videoCount = home.data?.video?.length ?? 0;
-  const recentCount = home.data?.recent?.length ?? 0;
+  if (!usage.data || totalBytes === 0) return null;
+
+  const segments = [
+    { key: "images", label: "Images", color: "from-accent to-accent-secondary", dot: "bg-accent" },
+    { key: "videos", label: "Videos", color: "from-accent-purple to-accent-pink", dot: "bg-accent-purple" },
+    { key: "audio", label: "Music", color: "from-accent-emerald to-accent-teal", dot: "bg-accent-emerald" },
+    { key: "documents", label: "Documents", color: "from-accent-amber to-accent-orange", dot: "bg-accent-amber" },
+    { key: "archives", label: "Archives", color: "from-accent-cyan to-accent-blue", dot: "bg-accent-cyan" },
+    { key: "code", label: "Code", color: "from-accent-rose to-accent-purple", dot: "bg-accent-rose" },
+    { key: "other", label: "Other", color: "from-surface-strong to-surface-muted", dot: "bg-content-muted" },
+  ].filter((s) => (b?.[s.key]?.size ?? 0) > 0);
+
+  const usedPercent = usage.data.total > 0 ? Math.min(100, Math.round((usage.data.used / usage.data.total) * 100)) : 0;
+  const totalBytesSafe = totalBytes || 1;
 
   return (
     <motion.div
@@ -113,35 +130,41 @@ function StorageBreakdown() {
         <div className="flex items-center gap-2 min-w-0">
           <HardDrive className="h-4 w-4 text-accent" />
           <h3 className="font-semibold text-sm truncate">Storage Distribution</h3>
+          <span className="hidden sm:inline text-[10px] font-medium text-content-muted/70 uppercase tracking-wider">by indexed size</span>
         </div>
-        <span className="max-w-full truncate text-xs font-mono text-content-muted">
-          {formatBytes(usage.data.used)} / {formatBytes(usage.data.total)} ({usedPercent}%)
-        </span>
+        {usage.data.total > 0 && (
+          <span className="max-w-full truncate text-xs font-mono text-content-muted">
+            {formatBytes(usage.data.used)} / {formatBytes(usage.data.total)} ({usedPercent}%)
+          </span>
+        )}
       </div>
 
-      <div className="h-3 w-full bg-surface-muted rounded-full overflow-hidden flex gap-0.5 p-0.5 border border-glass-border-soft">
-        <div className="h-full bg-gradient-to-r from-blue-500 to-indigo-500 rounded-l-full transition-all duration-500" style={{ width: `${Math.max(5, usedPercent * 0.4)}%` }} title="Documents" />
-        <div className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 transition-all duration-500" style={{ width: `${Math.max(5, usedPercent * 0.3)}%` }} title="Music" />
-        <div className="h-full bg-gradient-to-r from-purple-500 to-violet-500 transition-all duration-500" style={{ width: `${Math.max(5, usedPercent * 0.2)}%` }} title="Video" />
-        <div className="h-full bg-gradient-to-r from-amber-500 to-orange-500 rounded-r-full flex-1 transition-all duration-500" title="Free Space" />
+      <div className="h-3 w-full bg-surface-muted rounded-full overflow-hidden flex gap-0.5 p-0.5 border border-glass-border-soft" role="img" aria-label="Storage distribution by file category">
+        {segments.map((s, i) => {
+          const size = b?.[s.key]?.size ?? 0;
+          const pct = (size / totalBytesSafe) * 100;
+          return (
+            <div
+              key={s.key}
+              className={`h-full bg-gradient-to-r ${s.color} ${i === 0 ? "rounded-l-full" : ""} ${i === segments.length - 1 ? "rounded-r-full" : ""} transition-all duration-500`}
+              style={{ width: `${Math.max(2, pct)}%` }}
+              title={`${s.label}: ${formatBytes(size)}`}
+            />
+          );
+        })}
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4 text-xs">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 mt-4 text-xs">
+        {segments.map((s) => (
+          <div key={s.key} className="flex items-center gap-2" title={`${formatBytes(b?.[s.key]?.size ?? 0)}`}>
+            <span className={`h-2.5 w-2.5 rounded-full ${s.dot}`} />
+            <span className="text-content-muted truncate">{s.label}</span>
+            <span className="ml-auto font-medium text-content-muted/80 tabular-nums">{formatBytes(b?.[s.key]?.size ?? 0)}</span>
+          </div>
+        ))}
         <div className="flex items-center gap-2">
-          <span className="h-2.5 w-2.5 rounded-full bg-blue-500" />
-          <span className="text-content-muted">Documents ({docsCount})</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
-          <span className="text-content-muted">Music ({musicCount})</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="h-2.5 w-2.5 rounded-full bg-purple-500" />
-          <span className="text-content-muted">Video ({videoCount})</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="h-2.5 w-2.5 rounded-full bg-amber-500" />
-          <span className="text-content-muted">Other Files ({recentCount})</span>
+          <span className="h-2.5 w-2.5 rounded-full bg-accent-amber" />
+          <span className="text-content-muted truncate">{usage.data.file_count.toLocaleString()} files</span>
         </div>
       </div>
     </motion.div>
@@ -208,7 +231,7 @@ function Section({ title, icon, items, onOpen, action, color = "accent" }: {
   return (
     <motion.section variants={staggerContainer} initial="initial" animate="animate">
       <motion.div variants={slideUp} className="flex items-center gap-3 mb-4 px-1">
-        <div className="p-1.5 rounded-lg" style={{ backgroundColor: `${color}18`, color }}>
+        <div className="p-1.5 rounded-lg" style={{ backgroundColor: `color-mix(in srgb, ${color} 12%, transparent)`, color }}>
           {icon}
         </div>
         <h2 className="font-bold text-lg">{title}</h2>
@@ -418,7 +441,7 @@ export default function HomePanel({
             {playlists.length > 0 && (
               <motion.section variants={staggerItem}>
                 <div className="flex items-center gap-3 mb-6 px-1">
-                  <div className="p-1.5 rounded-lg" style={{ backgroundColor: "#F472B618", color: "#F472B6" }}>
+                  <div className="p-1.5 rounded-lg" style={{ backgroundColor: "color-mix(in srgb, var(--color-accent-pink) 12%, transparent)", color: "var(--color-accent-pink)" }}>
                     <Music className="h-5 w-5" />
                   </div>
                   <h2 className="font-bold text-lg">Public Playlists</h2>
@@ -440,7 +463,7 @@ export default function HomePanel({
                             className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-500"
                           />
                         ) : (
-                          <div className="h-full w-full grid place-items-center bg-gradient-to-br from-accent/40 via-purple-500/30 to-pink-500/20 group-hover:scale-105 transition-transform duration-500">
+                          <div className="h-full w-full grid place-items-center bg-gradient-to-br from-accent/40 via-accent-purple/30 to-accent-pink/20 group-hover:scale-105 transition-transform duration-500">
                             <Music className="h-8 w-8 text-white/80" />
                           </div>
                         )}
@@ -461,7 +484,7 @@ export default function HomePanel({
 
             <motion.section variants={staggerItem}>
               <div className="flex items-center gap-3 mb-6 px-1">
-                <div className="p-1.5 rounded-lg" style={{ backgroundColor: "#5B8CFF18", color: "#5B8CFF" }}>
+                <div className="p-1.5 rounded-lg" style={{ backgroundColor: "color-mix(in srgb, var(--color-accent) 12%, transparent)", color: "var(--color-accent)" }}>
                   <Plus className="h-5 w-5" />
                 </div>
                 <h2 className="font-bold text-lg">Quick Actions</h2>
@@ -480,19 +503,19 @@ export default function HomePanel({
             </motion.section>
 
             {recent.length > 0 && (
-              <Section title="Recently Opened" icon={<Clock className="h-5 w-5" />} items={recent} onOpen={onOpenRecent} color="#A78BFA" />
+              <Section title="Recently Opened" icon={<Clock className="h-5 w-5" />} items={recent} onOpen={onOpenRecent} color="var(--color-accent-purple)" />
             )}
             {documents.length > 0 && (
-              <Section title="Recent Documents" icon={<FileText className="h-5 w-5" />} items={documents} onOpen={onOpenRecent} color="#FBBF24" />
+              <Section title="Recent Documents" icon={<FileText className="h-5 w-5" />} items={documents} onOpen={onOpenRecent} color="var(--color-accent-amber)" />
             )}
             {music.length > 0 && (
-              <Section title="Recent Music" icon={<Music className="h-5 w-5" />} items={music} onOpen={onOpenRecent} color="#F472B6" />
+              <Section title="Recent Music" icon={<Music className="h-5 w-5" />} items={music} onOpen={onOpenRecent} color="var(--color-accent-pink)" />
             )}
             {video.length > 0 && (
-              <Section title="Recent Videos" icon={<Film className="h-5 w-5" />} items={video} onOpen={onOpenRecent} color="#2DD4BF" />
+              <Section title="Recent Videos" icon={<Film className="h-5 w-5" />} items={video} onOpen={onOpenRecent} color="var(--color-accent-teal)" />
             )}
             {added.length > 0 && (
-              <Section title="Newly Added" icon={<Sparkles className="h-5 w-5" />} items={added} onOpen={onOpenRecent} color="#34D399" />
+              <Section title="Newly Added" icon={<Sparkles className="h-5 w-5" />} items={added} onOpen={onOpenRecent} color="var(--color-accent-emerald)" />
             )}
           </motion.div>
         )}

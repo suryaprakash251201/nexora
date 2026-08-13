@@ -46,6 +46,15 @@ interface CommandPaletteProps {
   setSort: (s: string) => void;
   order: string;
   setOrder: (s: string) => void;
+  onOpenPath: (rootId: string, path: string, isDir: boolean) => void;
+  onDownload: () => void;
+  onShare: () => void;
+  onFavorite: () => void;
+  onRename: () => void;
+  onMove: () => void;
+  onCopy: () => void;
+  onArchive: () => void;
+  onDelete: () => void;
 }
 
 export default function CommandPalette({
@@ -77,6 +86,15 @@ export default function CommandPalette({
   setSort,
   order,
   setOrder,
+  onOpenPath,
+  onDownload,
+  onShare,
+  onFavorite,
+  onRename,
+  onMove,
+  onCopy,
+  onArchive,
+  onDelete,
 }: CommandPaletteProps) {
   const [query, setQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -97,19 +115,19 @@ export default function CommandPalette({
       { id: "go-search", label: "Search", description: "Open global search", icon: <Search className="h-4 w-4" />, shortcut: "G /", category: "navigation", action: () => { setView("search"); onClose(); }, keywords: ["search", "find"] },
 
       // File operations
-      { id: "new-folder", label: "New Folder", description: "Create a new folder", icon: <FolderPlus className="h-4 w-4" />, shortcut: "⌘N", category: "file", action: () => { onNewFolder(); onClose(); }, keywords: ["new", "folder", "create", "mkdir"] },
-      { id: "new-file", label: "New Text File", description: "Create a new text file", icon: <FilePlus className="h-4 w-4" />, shortcut: "⌘⇧N", category: "file", action: () => { onNewFile(); onClose(); }, keywords: ["new", "file", "create", "text"] },
-      { id: "upload", label: "Upload Files", description: "Upload files to current location", icon: <Upload className="h-4 w-4" />, shortcut: "⌘U", category: "file", action: () => { onUpload(); onClose(); }, keywords: ["upload", "add", "import"] },
-      ...(onUploadFolder ? [{ id: "upload-folder", label: "Upload Folder", description: "Upload an entire folder structure", icon: <FolderUp className="h-4 w-4" />, shortcut: "⌘⇧U", category: "file" as const, action: () => { onUploadFolder(); onClose(); }, keywords: ["upload", "folder", "directory", "import"] }] : []),
+      { id: "new-folder", label: "New Folder", description: "Create a new folder", icon: <FolderPlus className="h-4 w-4" />, shortcut: "⌘N", category: "file", action: () => { onNewFolder(); onClose(); }, keywords: ["new", "folder", "create", "mkdir"], disabled: !canWrite },
+      { id: "new-file", label: "New Text File", description: "Create a new text file", icon: <FilePlus className="h-4 w-4" />, shortcut: "⌘⇧N", category: "file", action: () => { onNewFile(); onClose(); }, keywords: ["new", "file", "create", "text"], disabled: !canWrite },
+      { id: "upload", label: "Upload Files", description: "Upload files to current location", icon: <Upload className="h-4 w-4" />, shortcut: "⌘U", category: "file", action: () => { onUpload(); onClose(); }, keywords: ["upload", "add", "import"], disabled: !canWrite },
+      ...(onUploadFolder ? [{ id: "upload-folder", label: "Upload Folder", description: "Upload an entire folder structure", icon: <FolderUp className="h-4 w-4" />, shortcut: "⌘⇧U", category: "file" as const, action: () => { onUploadFolder(); onClose(); }, keywords: ["upload", "folder", "directory", "import"], disabled: !canWrite }] : []),
       { id: "refresh", label: "Refresh", description: "Reload current view", icon: <RefreshCw className="h-4 w-4" />, shortcut: "F5", category: "file", action: () => { onRefresh(); onClose(); }, keywords: ["refresh", "reload", "update"] },
-      { id: "download", label: "Download", description: "Download selected items", icon: <Download className="h-4 w-4" />, shortcut: "⌘D", category: "file", action: () => { onClose(); }, keywords: ["download", "save", "export"], disabled: selection.size === 0 },
-      { id: "share", label: "Share", description: "Create share link for selection", icon: <Share2 className="h-4 w-4" />, shortcut: "⌘⇧S", category: "file", action: () => { onClose(); }, keywords: ["share", "link", "public"], disabled: selection.size === 0 },
-      { id: "favorite", label: "Toggle Favorite", description: "Star or unstar selected items", icon: <Star className="h-4 w-4" />, shortcut: "⌘⇧F", category: "file", action: () => { onClose(); }, keywords: ["favorite", "star", "bookmark"], disabled: selection.size === 0 },
-      { id: "rename", label: "Rename", description: "Rename selected item", icon: <Pencil className="h-4 w-4" />, shortcut: "F2", category: "file", action: () => { onClose(); }, keywords: ["rename", "edit"], disabled: selection.size !== 1 },
-      { id: "move", label: "Move to…", description: "Move selected items to another folder", icon: <Move className="h-4 w-4" />, shortcut: "⌘⇧M", category: "file", action: () => { onClose(); }, keywords: ["move", "relocate"], disabled: selection.size === 0 },
-      { id: "copy", label: "Copy to…", description: "Copy selected items to another folder", icon: <Copy className="h-4 w-4" />, shortcut: "⌘⇧C", category: "file", action: () => { onClose(); }, keywords: ["copy", "duplicate"], disabled: selection.size === 0 },
-      { id: "archive", label: "Create Archive", description: "Create ZIP archive of selection", icon: <Archive className="h-4 w-4" />, shortcut: "⌘⇧A", category: "file", action: () => { onClose(); }, keywords: ["archive", "zip", "compress"], disabled: selection.size === 0 },
-      { id: "delete", label: "Delete", description: "Move selected items to trash", icon: <Trash2 className="h-4 w-4" />, shortcut: "Delete", category: "file", action: () => { onClose(); }, keywords: ["delete", "remove", "trash"], disabled: selection.size === 0 },
+      { id: "download", label: "Download", description: "Download selected items", icon: <Download className="h-4 w-4" />, shortcut: "⌘D", category: "file", action: () => { onDownload(); onClose(); }, keywords: ["download", "save", "export"], disabled: selection.size === 0 },
+      { id: "share", label: "Share", description: "Create share link for selection", icon: <Share2 className="h-4 w-4" />, shortcut: "⌘⇧S", category: "file", action: () => { onShare(); onClose(); }, keywords: ["share", "link", "public"], disabled: selection.size === 0 },
+      { id: "favorite", label: "Toggle Favorite", description: "Star or unstar selected items", icon: <Star className="h-4 w-4" />, shortcut: "⌘⇧F", category: "file", action: () => { onFavorite(); onClose(); }, keywords: ["favorite", "star", "bookmark"], disabled: selection.size === 0 },
+      { id: "rename", label: "Rename", description: "Rename selected item", icon: <Pencil className="h-4 w-4" />, shortcut: "F2", category: "file", action: () => { onRename(); onClose(); }, keywords: ["rename", "edit"], disabled: selection.size !== 1 || !canWrite },
+      { id: "move", label: "Move to…", description: "Move selected items to another folder", icon: <Move className="h-4 w-4" />, shortcut: "⌘⇧M", category: "file", action: () => { onMove(); onClose(); }, keywords: ["move", "relocate"], disabled: selection.size === 0 || !canWrite },
+      { id: "copy", label: "Copy to…", description: "Copy selected items to another folder", icon: <Copy className="h-4 w-4" />, shortcut: "⌘⇧C", category: "file", action: () => { onCopy(); onClose(); }, keywords: ["copy", "duplicate"], disabled: selection.size === 0 || !canWrite },
+      { id: "archive", label: "Create Archive", description: "Create ZIP archive of selection", icon: <Archive className="h-4 w-4" />, shortcut: "⌘⇧A", category: "file", action: () => { onArchive(); onClose(); }, keywords: ["archive", "zip", "compress"], disabled: selection.size === 0 || !canWrite },
+      { id: "delete", label: "Delete", description: "Move selected items to trash", icon: <Trash2 className="h-4 w-4" />, shortcut: "Delete", category: "file", action: () => { onDelete(); onClose(); }, keywords: ["delete", "remove", "trash"], disabled: selection.size === 0 || !canWrite },
 
       // View
       { id: "toggle-view", label: "Toggle View", description: "Switch between list and grid view", icon: viewMode === "grid" ? <List className="h-4 w-4" /> : <LayoutGrid className="h-4 w-4" />, shortcut: "⌘⇧V", category: "view", action: () => { setViewMode(viewMode === "grid" ? "list" : "grid"); onClose(); }, keywords: ["view", "list", "grid", "layout"] },
@@ -133,7 +151,8 @@ export default function CommandPalette({
     view, setView, rootId, path, canWrite, selection, items, activeRoot,
     onNewFolder, onNewFile, onUpload, onRefresh, onLogout, onAdmin,
     clearSelection, toggleSelectMode, selectMode, viewMode, setViewMode,
-    sort, setSort, order, setOrder
+    sort, setSort, order, setOrder, onDownload, onShare, onFavorite,
+    onRename, onMove, onCopy, onArchive, onDelete,
   ]);
 
   // Filter commands based on query
@@ -157,10 +176,7 @@ export default function CommandPalette({
       icon: item.is_dir ? <FolderOpen className="h-4 w-4" /> : <File className="h-4 w-4" />,
       category: "files" as const,
       action: () => {
-        // Navigate to file
-        if (item.is_dir) {
-          // Navigate into folder - would need navigation logic
-        }
+        if (rootId) onOpenPath(rootId, item.path, item.is_dir);
         onClose();
       },
       keywords: [item.name.toLowerCase()],
@@ -168,7 +184,7 @@ export default function CommandPalette({
     }));
     
     return [...fileResults, ...cmdResults];
-  }, [commands, query, items, activeRoot, onClose]);
+  }, [commands, query, items, activeRoot, onClose, onOpenPath, rootId]);
 
   // Group commands by category (moved before early return to keep hook order stable)
   const groupedCommands = useMemo(() => {
@@ -236,6 +252,9 @@ export default function CommandPalette({
   // Collect all unique shortcuts from commands
   const shortcutsList = commands.filter((c) => c.shortcut);
 
+  // Flat index counter so keyboard highlight matches the visible row
+  let flatIndex = -1;
+
   return (
     <>
       {shortcutsOpen && createPortal(
@@ -287,13 +306,16 @@ export default function CommandPalette({
               className="w-full glass-input px-10 py-3 text-base outline-none bg-transparent"
               autoFocus
               aria-label="Command palette"
+              role="combobox"
+              aria-expanded="true"
+              aria-controls="command-palette-list"
             />
             <kbd className="absolute right-3 top-1/2 -translate-y-1/2 px-2 py-1 text-[10px] font-mono text-content-muted bg-surface/50 rounded">
               ⌘K
             </kbd>
           </div>
         </div>
-        <div className="max-h-[60vh] overflow-y-auto custom-scrollbar">
+        <div id="command-palette-list" role="listbox" aria-label="Commands" className="max-h-[60vh] overflow-y-auto custom-scrollbar">
           {filteredCommands.length === 0 ? (
             <div className="p-8 text-center text-content-muted">
               <X className="h-10 w-10 mx-auto mb-3 opacity-40" />
@@ -307,18 +329,22 @@ export default function CommandPalette({
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-content-muted py-2 px-2">
                     {categoryLabels[category] || category}
                   </p>
-                  {cmds.map((cmd, idx) => (
+                  {cmds.map((cmd) => {
+                    flatIndex += 1;
+                    const isActive = flatIndex === selectedIndex;
+                    return (
                     <button
                       key={cmd.id}
+                      id={`command-${cmd.id}`}
                       onClick={() => { if (!cmd.disabled) cmd.action(); }}
                       disabled={cmd.disabled}
+                      role="option"
+                      aria-selected={isActive}
                       className={`w-full flex items-center gap-3 px-3 py-2.5 text-left rounded-xl transition-colors ${
-                        selectedIndex === cmds.findIndex(c => c.id === cmd.id) && filteredCommands.indexOf(cmd) === cmds.indexOf(cmd)
+                        isActive
                           ? "bg-surface/50 text-content"
                           : "text-content-muted hover:bg-surface/50 hover:text-content"
                       } ${cmd.disabled ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}`}
-                      role="menuitem"
-                      aria-disabled={cmd.disabled}
                     >
                       <span className="w-5 h-5 flex items-center justify-center shrink-0">
                         {cmd.icon}
@@ -333,7 +359,8 @@ export default function CommandPalette({
                         </kbd>
                       )}
                     </button>
-                  ))}
+                    );
+                  })}
                 </div>
               ))}
             </div>

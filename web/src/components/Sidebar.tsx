@@ -224,7 +224,7 @@ export default function Sidebar({
           )}
 
           <button onClick={onLogout} title={collapsed ? "Log out" : undefined}
-            className={cn("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-sm font-medium transition-all duration-200 min-h-[44px] group", collapsed ? "justify-center px-0" : "pl-3", "text-rose-400/70 hover:bg-rose-500/10 hover:text-rose-400")}>
+            className={cn("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-sm font-medium transition-all duration-200 min-h-[44px] group", collapsed ? "justify-center px-0" : "pl-3", "text-danger/70 hover:bg-danger/10 hover:text-danger")}>
             <LogOut className="h-5 w-5 shrink-0" />
             {!collapsed && <span>Log out</span>}
           </button>

@@ -332,7 +332,6 @@ export default function FileBrowser({
                     transition={{ duration: 0.3, ease: [0.25, 0.1, 0.25, 1], delay: Math.min(index * 0.03, 0.6) }}
                     tabIndex={0}
                     onClick={(e) => handleItemClick(item, e)}
-                    onDoubleClick={() => onOpen(item)}
                     onContextMenu={(e) => onContextMenu(e, item)}
                     onKeyDown={(e) => handleKeyDown(e, item, index)}
                     onDragOver={(e) => { if (canDrop && item.is_dir) { e.preventDefault(); setDropTarget(item.path); } }}
@@ -413,7 +412,7 @@ export default function FileBrowser({
                       )}
 
                       <div className="w-full min-w-0">
-                        <p className={cn("truncate font-medium leading-tight group-hover:text-accent-purple transition-colors", dc.gridName[d])} title={item.name}>
+                        <p className={cn("truncate font-medium leading-tight group-hover:text-accent transition-colors", dc.gridName[d])} title={item.name}>
                           {item.name}
                         </p>
                         {item.tags && item.tags.length > 0 && (
@@ -490,7 +489,6 @@ export default function FileBrowser({
                     transition={{ duration: 0.2, delay: Math.min(index * 0.02, 0.4) }}
                     tabIndex={0}
                     onClick={(e) => handleItemClick(item, e)}
-                    onDoubleClick={() => onOpen(item)}
                     onContextMenu={(e) => onContextMenu(e, item)}
                     onKeyDown={(e) => handleKeyDown(e, item, index)}
                     onDragOver={(e) => { if (canDrop && item.is_dir) { e.preventDefault(); setDropTarget(item.path); } }}
@@ -532,7 +530,7 @@ export default function FileBrowser({
                       <div className={cn("shrink-0 flex items-center justify-center", dc.listIcon[d])}>
                         <FileIconForItem item={item} className={dc.listIconInner[d]} />
                       </div>
-                      <span className={cn("truncate font-medium transition-colors", dc.listName[d], selected ? "text-foreground" : "text-text-primary group-hover:text-accent-purple")} title={item.name}>
+                      <span className={cn("truncate font-medium transition-colors", dc.listName[d], selected ? "text-foreground" : "text-text-primary group-hover:text-accent")} title={item.name}>
                         {item.name}
                       </span>
 

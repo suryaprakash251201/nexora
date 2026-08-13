@@ -5,6 +5,7 @@ import { useUI } from "../store";
 import { codeLanguage } from "../lib/preview";
 import type { FileItem } from "../api/types";
 import { Button } from "./ui/Button";
+import { ConfirmDialog } from "./ui/ConfirmDialog";
 import { useFocusTrap } from "../lib/useFocusTrap";
 
 interface ContentResponse {
@@ -56,9 +57,7 @@ export default function Editor({ item, rootId, onClose }: { item: FileItem; root
       pushToast("success", "File saved successfully");
     } catch (e: any) {
       if (e.code === "version_conflict") {
-        if (confirm("This file changed on disk since you opened it. Overwrite with your version?")) {
-          await save(true);
-        }
+        setConflictOpen(true);
       } else {
         pushToast("error", e.message || "Save failed");
       }
@@ -97,8 +96,14 @@ export default function Editor({ item, rootId, onClose }: { item: FileItem; root
     return () => window.removeEventListener("beforeunload", beforeUnload);
   }, [dirty]);
 
+  const [conflictOpen, setConflictOpen] = useState(false);
+  const [closeConfirmOpen, setCloseConfirmOpen] = useState(false);
+
   const tryClose = () => {
-    if (dirty && !confirm("Discard unsaved changes?")) return;
+    if (dirty) {
+      setCloseConfirmOpen(true);
+      return;
+    }
     onClose();
   };
 
@@ -223,6 +228,25 @@ export default function Editor({ item, rootId, onClose }: { item: FileItem; root
           </div>
         </div>
       </div>
+      <ConfirmDialog
+        open={conflictOpen}
+        title="File changed on disk"
+        description="This file was modified since you opened it. Overwrite it with your version?"
+        confirmLabel="Overwrite"
+        danger
+        loading={saving}
+        onConfirm={() => { setConflictOpen(false); save(true); }}
+        onCancel={() => setConflictOpen(false)}
+      />
+      <ConfirmDialog
+        open={closeConfirmOpen}
+        title="Discard unsaved changes?"
+        description="You have unsaved edits that will be lost if you close this editor."
+        confirmLabel="Discard changes"
+        danger
+        onConfirm={() => { setCloseConfirmOpen(false); onClose(); }}
+        onCancel={() => setCloseConfirmOpen(false)}
+      />
     </div>
   );
 }

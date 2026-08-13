@@ -75,7 +75,8 @@ export default function SettingsModal({ user, onClose }: { user: User; onClose: 
   const [pwBusy, setPwBusy] = useState(false);
   const [pwError, setPwError] = useState<string | null>(null);
 
-  const [totpStep, setTotpStep] = useState<"intro" | "qr" | "verify">("intro");
+  const [totpStep, setTotpStep] = useState<"intro" | "qr" | "verify" | "disable">("intro");
+  const [totpPw, setTotpPw] = useState("");
   const [totpSecret, setTotpSecret] = useState("");
   const [totpQR, setTotpQR] = useState("");
   const [totpCode, setTotpCode] = useState("");
@@ -118,21 +119,21 @@ export default function SettingsModal({ user, onClose }: { user: User; onClose: 
   };
 
   const disableTotp = async () => {
-    const pw = prompt("Enter your password to disable two-factor authentication:");
-    if (!pw) return;
-    setTotpBusy(true);
+    if (!totpPw) return;
+    setTotpBusy(true); setTotpError(null);
     try {
-      await post("/auth/totp/disable", { password: pw });
+      await post("/auth/totp/disable", { password: totpPw });
       useUI.getState().pushToast("success", "Two-factor authentication disabled");
       setTotpStatus(false);
-    } catch (e: any) { useUI.getState().pushToast("error", e.message || "Failed to disable TOTP"); }
+      setTotpStep("intro"); setTotpPw("");
+    } catch (e: any) { setTotpError(e.message || "Failed to disable TOTP"); }
     finally { setTotpBusy(false); }
   };
 
   const resetView = () => {
     setView("main");
     setPwCurrent(""); setPwNew(""); setPwConfirm(""); setPwError(null);
-    setTotpStep("intro"); setTotpCode(""); setTotpError(null);
+    setTotpStep("intro"); setTotpCode(""); setTotpError(null); setTotpPw("");
   };
 
   const title = view === "password" ? "Change Password" : view === "totp" ? "Two-Factor Authentication" : "Settings";
@@ -189,6 +190,9 @@ export default function SettingsModal({ user, onClose }: { user: User; onClose: 
                     </div>
                     <button
                       onClick={() => setTheme(isDark ? "light" : "dark")}
+                      role="switch"
+                      aria-checked={isDark}
+                      aria-label="Toggle color mode"
                       className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                         isDark ? "bg-accent" : "bg-surface-muted border border-border"
                       }`}
@@ -251,6 +255,9 @@ export default function SettingsModal({ user, onClose }: { user: User; onClose: 
                       {autoStart !== null && (
                         <button
                           onClick={toggleAutoStart}
+                          role="switch"
+                          aria-checked={autoStart}
+                          aria-label="Launch at startup"
                           className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                             autoStart ? "bg-accent" : "bg-surface-muted border border-border"
                           }`}
@@ -302,32 +309,32 @@ export default function SettingsModal({ user, onClose }: { user: User; onClose: 
           )}
 
           {view === "password" && (
-            <div className="space-y-4">
+            <form onSubmit={(e) => { e.preventDefault(); changePassword(); }} className="space-y-4">
               <div>
-                <label className="text-xs font-bold text-content-muted uppercase tracking-wider ml-1">Current Password</label>
-                <input type="password" value={pwCurrent} onChange={(e) => setPwCurrent(e.target.value)}
+                <label className="text-xs font-bold text-content-muted uppercase tracking-wider ml-1" htmlFor="settings-pw-current">Current Password</label>
+                <input id="settings-pw-current" type="password" value={pwCurrent} onChange={(e) => setPwCurrent(e.target.value)}
                   className="w-full mt-1 rounded-lg border border-border/60 bg-surface/50 px-3 py-2.5 text-sm text-content outline-none focus:ring-2 focus:ring-accent/40 focus:border-accent/50 transition-colors"
                   placeholder="Current password" />
               </div>
               <div>
-                <label className="text-xs font-bold text-content-muted uppercase tracking-wider ml-1">New Password</label>
-                <input type="password" value={pwNew} onChange={(e) => setPwNew(e.target.value)}
+                <label className="text-xs font-bold text-content-muted uppercase tracking-wider ml-1" htmlFor="settings-pw-new">New Password</label>
+                <input id="settings-pw-new" type="password" value={pwNew} onChange={(e) => setPwNew(e.target.value)}
                   className="w-full mt-1 rounded-lg border border-border/60 bg-surface/50 px-3 py-2.5 text-sm text-content outline-none focus:ring-2 focus:ring-accent/40 focus:border-accent/50 transition-colors"
                   placeholder="Min 8 characters" />
               </div>
               <div>
-                <label className="text-xs font-bold text-content-muted uppercase tracking-wider ml-1">Confirm New Password</label>
-                <input type="password" value={pwConfirm} onChange={(e) => setPwConfirm(e.target.value)}
+                <label className="text-xs font-bold text-content-muted uppercase tracking-wider ml-1" htmlFor="settings-pw-confirm">Confirm New Password</label>
+                <input id="settings-pw-confirm" type="password" value={pwConfirm} onChange={(e) => setPwConfirm(e.target.value)}
                   className="w-full mt-1 rounded-lg border border-border/60 bg-surface/50 px-3 py-2.5 text-sm text-content outline-none focus:ring-2 focus:ring-accent/40 focus:border-accent/50 transition-colors"
                   placeholder="Repeat new password" />
               </div>
               {pwError && <p className="text-sm text-danger flex items-center gap-1.5"><AlertCircle className="h-4 w-4" /> {pwError}</p>}
               <div className="pt-2">
-                <Button variant="primary" onClick={changePassword} loading={pwBusy} disabled={!pwCurrent || !pwNew || !pwConfirm} className="w-full">
+                <Button type="submit" variant="primary" onClick={changePassword} loading={pwBusy} disabled={!pwCurrent || !pwNew || !pwConfirm} className="w-full">
                   Change Password
                 </Button>
               </div>
-            </div>
+            </form>
           )}
 
           {view === "totp" && (
@@ -340,7 +347,7 @@ export default function SettingsModal({ user, onClose }: { user: User; onClose: 
                       <div className="flex items-center gap-2 text-success text-sm font-medium">
                         <Check className="h-4 w-4" /> Two-factor authentication is enabled
                       </div>
-                      <Button variant="danger" onClick={disableTotp} loading={totpBusy}>
+                      <Button variant="danger" onClick={() => { setTotpError(null); setTotpPw(""); setTotpStep("disable"); }}>
                         Disable Two-Factor Auth
                       </Button>
                     </div>
@@ -406,6 +413,30 @@ export default function SettingsModal({ user, onClose }: { user: User; onClose: 
                     </Button>
                   </div>
                 </div>
+              )}
+
+              {totpStep === "disable" && (
+                <form onSubmit={(e) => { e.preventDefault(); disableTotp(); }} className="space-y-3">
+                  <p className="text-sm text-content-muted">Enter your password to disable two-factor authentication.</p>
+                  <label className="text-xs font-bold text-content-muted uppercase tracking-wider ml-1">Password</label>
+                  <input
+                    autoFocus
+                    type="password"
+                    value={totpPw}
+                    onChange={(e) => { setTotpPw(e.target.value); setTotpError(null); }}
+                    className="w-full rounded-lg border border-border/60 bg-surface/50 px-3 py-2.5 text-sm text-content outline-none focus:ring-2 focus:ring-accent/40 focus:border-accent/50 transition-colors"
+                    placeholder="Current password"
+                  />
+                  {totpError && <p className="text-sm text-danger flex items-center gap-1.5"><AlertCircle className="h-4 w-4" /> {totpError}</p>}
+                  <div className="flex gap-2 pt-1">
+                    <Button variant="ghost" type="button" onClick={() => { setTotpError(null); setTotpStep("intro"); setTotpPw(""); }} className="flex-1">
+                      Cancel
+                    </Button>
+                    <Button variant="danger" type="submit" loading={totpBusy} disabled={!totpPw} className="flex-1">
+                      Disable TOTP
+                    </Button>
+                  </div>
+                </form>
               )}
             </div>
           )}

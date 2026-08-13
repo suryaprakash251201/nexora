@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { X, Download, Eye, Pencil, Trash2, Scissors, Copy, Info, Star, Share2, Activity, FileText, Share, Clock, Link, FolderOpen } from "lucide-react";
 import { get, post, del } from "../api/client";
@@ -6,6 +6,8 @@ import { formatBytes, formatDate } from "../lib/format";
 import { useUI } from "../store";
 import { FileThumb, FolderTile } from "./FileThumb";
 import { Button } from "./ui/Button";
+import { ConfirmDialog } from "./ui/ConfirmDialog";
+import { QueryError } from "./ui/QueryError";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetClose } from "./ui/sheet";
 import { revealInFileManager } from "../lib/desktop";
 
@@ -35,33 +37,33 @@ export default function DetailsDrawer({
   rootName, rootId, path, canWrite, isFavorite, revealPath, onClose, onDownload, onPreview, onRename, onDelete, onMove, onCopy, onShare, onFavorite, onEdit,
 }: DetailsDrawerProps) {
   const [activeTab, setActiveTab] = useState<Tab>("details");
-  const [renaming, setRenaming] = useState(false);
-  const [_renameValue, setRenameValue] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const pushToast = useUI((s) => s.pushToast);
   const qc = useQueryClient();
 
-  const { data: stat, isLoading } = useQuery({
+  const { data: stat, isLoading, isError, refetch } = useQuery({
     queryKey: ["stat", rootId, path],
     queryFn: () => get<any>("/files/stat", { root: rootId, path }),
     enabled: !!path,
   });
 
   const handleDelete = async () => {
-    if (!window.confirm(`Delete "${stat?.name}"? This moves it to trash.`)) return;
+    if (!stat) return;
+    setDeleting(true);
     try {
-      await del("/files", { root: rootId, path: stat!.path });
+      await del("/files", { root: rootId, path: stat.path });
       pushToast("success", "Moved to trash");
       onClose();
       qc?.invalidateQueries({ queryKey: ["files", rootId] });
       qc?.invalidateQueries({ queryKey: ["trash"] });
     } catch (e: any) {
       pushToast("error", e.message);
+    } finally {
+      setDeleting(false);
+      setConfirmDelete(false);
     }
   };
-
-  useEffect(() => {
-    if (stat && !renaming) setRenameValue(stat.name);
-  }, [stat, renaming]);
 
   return (
     <Sheet open={!!path} onOpenChange={(open) => { if (!open) onClose(); }}>
@@ -90,6 +92,10 @@ export default function DetailsDrawer({
               <div className="skeleton h-4 w-2/3 rounded" />
             </div>
           </div>
+        ) : isError ? (
+          <div className="flex-1">
+            <QueryError message="Could not load file details." onRetry={() => refetch()} />
+          </div>
         ) : stat ? (
           <div className="flex flex-col flex-1 overflow-hidden">
             {/* Header / Preview */}
@@ -117,7 +123,7 @@ export default function DetailsDrawer({
             </div>
 
             {/* Tabs */}
-            <div className="flex p-2 bg-surface-muted/50 border-y border-border/50">
+            <div role="tablist" aria-label="File details" className="flex p-2 bg-surface-muted/50 border-y border-border/50">
               <TabButton active={activeTab === "details"} onClick={() => setActiveTab("details")} icon={<FileText className="h-3.5 w-3.5" />} label="Details" />
               <TabButton active={activeTab === "activity"} onClick={() => setActiveTab("activity")} icon={<Activity className="h-3.5 w-3.5" />} label="Activity" />
               <TabButton active={activeTab === "shares"} onClick={() => setActiveTab("shares")} icon={<Share className="h-3.5 w-3.5" />} label="Shares" />
@@ -145,7 +151,7 @@ export default function DetailsDrawer({
                         <p className="text-[10px] font-bold uppercase tracking-wider text-content-muted mb-1">SHA-256</p>
                         <div className="flex items-center gap-2">
                           <code className="flex-1 text-xs font-mono break-all bg-surface/50 px-2 py-1 rounded">{stat.checksum}</code>
-                          <button onClick={() => { navigator.clipboard.writeText(stat.checksum); pushToast("success", "Checksum copied"); }}
+                          <button onClick={async () => { try { await navigator.clipboard.writeText(stat.checksum); pushToast("success", "Checksum copied"); } catch { pushToast("error", "Could not copy checksum"); } }}
                             className="p-1.5 rounded-lg glass-hover text-content-muted hover:text-content transition-colors" title="Copy checksum">
                             <Link className="h-3.5 w-3.5" />
                           </button>
@@ -191,12 +197,12 @@ export default function DetailsDrawer({
                 <div className="pt-2 mt-2 border-t border-border/50 space-y-2">
                   {!stat.is_dir && <Button size="sm" onClick={onEdit} icon={<Pencil className="h-4 w-4" />}>Edit</Button>}
                   <div className="grid grid-cols-2 gap-2">
-                    <Button size="sm" onClick={() => { setRenameValue(stat.name); setRenaming(true); }} icon={<Pencil className="h-4 w-4" />}>Rename</Button>
+                    <Button size="sm" onClick={onRename} icon={<Pencil className="h-4 w-4" />}>Rename</Button>
                     <Button size="sm" onClick={onMove} icon={<Scissors className="h-4 w-4" />}>Move</Button>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <Button size="sm" onClick={onCopy} icon={<Copy className="h-4 w-4" />}>Copy</Button>
-                    <Button variant="danger" size="sm" onClick={handleDelete} icon={<Trash2 className="h-4 w-4" />}>Delete</Button>
+                    <Button variant="danger" size="sm" onClick={() => setConfirmDelete(true)} icon={<Trash2 className="h-4 w-4" />}>Delete</Button>
                   </div>
                 </div>
               )}
@@ -209,13 +215,23 @@ export default function DetailsDrawer({
           </div>
         ) : null}
       </SheetContent>
+      <ConfirmDialog
+        open={confirmDelete}
+        title="Move to trash?"
+        description={stat ? `"${stat.name}" will be moved to trash. You can restore it later.` : ""}
+        confirmLabel="Move to trash"
+        danger
+        loading={deleting}
+        onConfirm={handleDelete}
+        onCancel={() => setConfirmDelete(false)}
+      />
     </Sheet>
   );
 }
 
 function TabButton({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string }) {
   return (
-    <button onClick={onClick}
+    <button role="tab" aria-selected={active} onClick={onClick}
       className={`flex-1 flex items-center justify-center gap-2 py-2 text-xs font-medium rounded-lg transition-all ${
         active ? "bg-surface shadow-sm text-content" : "text-content-muted hover:text-content hover:bg-surface/50"
       }`}>
@@ -234,7 +250,7 @@ function InfoTile({ label, value, mono }: { label: string; value: string; mono?:
 }
 
 function ActivityFeed({ rootId, path }: { rootId: string; path: string }) {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["activity", rootId, path],
     queryFn: () => get<{ items: any[] }>("/activity", { root: rootId, path }),
     enabled: !!path,
@@ -245,6 +261,7 @@ function ActivityFeed({ rootId, path }: { rootId: string; path: string }) {
     time: formatDate(a.created_at), detail: a.detail,
   }));
 
+  if (isError) return <QueryError message="Could not load activity." onRetry={() => refetch()} />;
   if (isLoading) return <div className="p-4 text-center text-content-muted">Loading activity&hellip;</div>;
   if (!activity.length) return <div className="flex flex-col items-center justify-center h-full text-center opacity-60">
     <Activity className="h-10 w-10 mb-3 text-content-muted" /><p className="text-sm font-medium">No activity yet</p>
@@ -274,7 +291,7 @@ function SharesList({ rootId, path }: { rootId: string; path: string }) {
   const qc = useQueryClient();
   const shareKey = ["shares", rootId, path];
 
-  const { data: shares, isLoading } = useQuery({
+  const { data: shares, isLoading, isError, refetch } = useQuery({
     queryKey: shareKey,
     queryFn: () => get<{ items: any[] }>("/shares", { root: rootId, path }),
     enabled: !!path,
@@ -299,6 +316,7 @@ function SharesList({ rootId, path }: { rootId: string; path: string }) {
   };
 
   const items = shares?.items || [];
+  if (isError) return <QueryError message="Could not load shares." onRetry={() => refetch()} />;
   if (isLoading) return <div className="p-4 text-center text-content-muted">Loading shares&hellip;</div>;
 
   return (
@@ -322,7 +340,7 @@ function SharesList({ rootId, path }: { rootId: string; path: string }) {
                   <Link className="h-4 w-4 text-accent" />
                   <span className="text-xs font-mono text-content-muted">{`/s/${s.token}`}</span>
                 </div>
-                <button onClick={() => { navigator.clipboard.writeText(`/s/${s.token}`); pushToast("success", "Link copied"); }}
+                <button onClick={async () => { try { await navigator.clipboard.writeText(new URL(`/s/${s.token}`, window.location.origin).toString()); pushToast("success", "Link copied"); } catch { pushToast("error", "Could not copy link"); } }}
                   className="p-1.5 rounded-lg glass-hover text-content-muted hover:text-content transition-colors" title="Copy link">
                   <Link className="h-3.5 w-3.5" />
                 </button>

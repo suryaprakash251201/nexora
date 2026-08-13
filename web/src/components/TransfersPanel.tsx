@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
-import { Upload, Download, X, CheckCircle2, AlertCircle, Trash2, Maximize2, Minimize2, Activity } from "lucide-react";
+import { Upload, Download, X, CheckCircle2, AlertCircle, Trash2, Maximize2, Minimize2, Activity, Square } from "lucide-react";
 import { useTransfers, type Transfer } from "../store/transfers";
+import { cancelTransfer, isCancellable } from "../lib/transfer";
 import { speedLabel } from "../lib/transfer";
 import { formatBytes } from "../lib/format";
 
@@ -40,13 +41,25 @@ function Row({ t, onDismiss }: { t: Transfer; onDismiss: () => void }) {
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between mb-1">
             <span className="text-sm font-medium text-content truncate pr-2">{t.name}</span>
-            <button 
-              onClick={(e) => { e.stopPropagation(); remove(t.id); }} 
-              className="p-1 rounded-md text-content-muted hover:text-content hover:bg-surface opacity-0 group-hover:opacity-100 transition-opacity shrink-0" 
-              title="Dismiss"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
+            <div className="flex items-center gap-1 shrink-0">
+              {isActive && isCancellable(t.id) && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); cancelTransfer(t.id); }}
+                  className="p-1 rounded-md text-content-muted hover:text-danger hover:bg-danger/10 transition-colors"
+                  title="Cancel transfer"
+                  aria-label={`Cancel ${t.name}`}
+                >
+                  <Square className="h-3 w-3" />
+                </button>
+              )}
+              <button 
+                onClick={(e) => { e.stopPropagation(); remove(t.id); }} 
+                className="p-1 rounded-md text-content-muted hover:text-content hover:bg-surface opacity-0 group-hover:opacity-100 transition-opacity shrink-0" 
+                title="Dismiss"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
           </div>
           
           <div className="flex justify-between items-center text-[10px] text-content-muted font-mono mb-1.5">

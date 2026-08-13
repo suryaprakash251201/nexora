@@ -18,6 +18,9 @@ interface PlayerState {
   playbackRate: number;
   muted: boolean;
   primaryOpen: boolean;
+  /** User-facing message when the current track failed to play in every
+   *  available format (codec + transcode fallbacks exhausted). */
+  audioError: string;
   play: (queue: FileItem[], index?: number) => void;
   toggle: () => void;
   next: (auto?: boolean) => void;
@@ -29,6 +32,7 @@ interface PlayerState {
   setPlaybackRate: (r: number) => void;
   toggleMute: () => void;
   setPrimaryOpen: (b: boolean) => void;
+  setAudioError: (msg: string) => void;
   setShuffle: (s: boolean) => void;
   cycleRepeat: () => void;
   current: () => FileItem | null;
@@ -122,6 +126,7 @@ export const usePlayer = create<PlayerState>((set, get) => ({
   playbackRate: persisted.playbackRate || 1,
   muted: false,
   primaryOpen: false,
+  audioError: "",
 
   current: () => {
     const { queue, index } = get();
@@ -131,7 +136,7 @@ export const usePlayer = create<PlayerState>((set, get) => ({
   play: (queue, index = 0) => {
     if (!queue.length) return;
     engine.timeOffset = 0;
-    set({ queue, index: Math.max(0, Math.min(index, queue.length - 1)), isPlaying: true, currentTime: 0, duration: 0 });
+    set({ queue, index: Math.max(0, Math.min(index, queue.length - 1)), isPlaying: true, currentTime: 0, duration: 0, audioError: "" });
     persist();
   },
 
@@ -149,7 +154,7 @@ export const usePlayer = create<PlayerState>((set, get) => ({
       else { set({ isPlaying: false }); return; }
     }
     engine.timeOffset = 0;
-    set({ index: ni, currentTime: 0, isPlaying: true });
+    set({ index: ni, currentTime: 0, isPlaying: true, audioError: "" });
     persist();
   },
 
@@ -160,11 +165,11 @@ export const usePlayer = create<PlayerState>((set, get) => ({
     let pi = index - 1;
     if (pi < 0) pi = queue.length - 1;
     engine.timeOffset = 0;
-    set({ index: pi, currentTime: 0, isPlaying: true });
+    set({ index: pi, currentTime: 0, isPlaying: true, audioError: "" });
     persist();
   },
 
-  setIndex: (i) => { engine.timeOffset = 0; set({ index: i, currentTime: 0, isPlaying: true }); persist(); },
+  setIndex: (i) => { engine.timeOffset = 0; set({ index: i, currentTime: 0, isPlaying: true, audioError: "" }); persist(); },
 
   removeFromQueue: (i) => {
     const { queue, index } = get();
@@ -207,6 +212,8 @@ export const usePlayer = create<PlayerState>((set, get) => ({
   },
 
   setPrimaryOpen: (b) => set({ primaryOpen: b }),
+
+  setAudioError: (msg) => set({ audioError: msg }),
 
   setShuffle: (s) => { set({ shuffle: s }); persist(); },
 

@@ -8,6 +8,7 @@ import { FileThumb, FolderTile } from "./FileThumb";
 import { Input } from "./ui/Input";
 import { EmptyState } from "./ui/EmptyState";
 import { SkeletonList } from "./ui/Skeleton";
+import { QueryError } from "./ui/QueryError";
 
 export default function SearchView({
   initialQuery,
@@ -37,7 +38,7 @@ export default function SearchView({
     return () => clearTimeout(t);
   }, [q]);
 
-  const { data, isFetching } = useQuery({
+  const { data, isFetching, isLoading, isError, refetch } = useQuery({
     queryKey: ["search", debounced, root, kind, ext, sort],
     queryFn: () =>
       get<{ items: SearchResult[] }>("/search", {
@@ -116,7 +117,9 @@ export default function SearchView({
 
       <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
         <div className="max-w-4xl mx-auto">
-          {isFetching ? (
+          {isError ? (
+            <div className="mt-4"><QueryError message="Search failed. The index may be unavailable." onRetry={() => refetch()} /></div>
+          ) : isLoading || isFetching ? (
             <div className="mt-4"><SkeletonList /></div>
           ) : results.length === 0 ? (
             <div className="mt-12">

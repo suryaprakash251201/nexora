@@ -7,26 +7,39 @@ import type { ShareItem } from "../api/types";
 import { Button } from "./ui/Button";
 import { SkeletonList } from "./ui/Skeleton";
 import { EmptyState } from "./ui/EmptyState";
+import { ConfirmDialog } from "./ui/ConfirmDialog";
+import { QueryError } from "./ui/QueryError";
+import { useState } from "react";
 
 export default function SharesPanel() {
   const qc = useQueryClient();
   const pushToast = useUI((s) => s.pushToast);
-  const { data, isLoading } = useQuery({ queryKey: ["shares"], queryFn: () => get<{ items: ShareItem[] }>("/shares") });
+  const { data, isLoading, isError, refetch } = useQuery({ queryKey: ["shares"], queryFn: () => get<{ items: ShareItem[] }>("/shares") });
+  const [pendingRevoke, setPendingRevoke] = useState<ShareItem | null>(null);
+  const [revoking, setRevoking] = useState(false);
 
-  const revoke = async (id: string, name: string) => {
-    if (!confirm(`Revoke share link for "${name}"? It will stop working immediately.`)) return;
+  const revoke = async () => {
+    if (!pendingRevoke) return;
+    setRevoking(true);
     try {
-      await del(`/shares/${id}`);
+      await del(`/shares/${pendingRevoke.id}`);
       pushToast("success", "Share link revoked");
       qc.invalidateQueries({ queryKey: ["shares"] });
+      setPendingRevoke(null);
     } catch (e: any) {
       pushToast("error", e.message);
+    } finally {
+      setRevoking(false);
     }
   };
 
-  const copy = (url: string) => {
-    navigator.clipboard.writeText(url);
-    pushToast("success", "Link copied to clipboard");
+  const copy = async (url: string) => {
+    try {
+      await navigator.clipboard.writeText(url);
+      pushToast("success", "Link copied to clipboard");
+    } catch {
+      pushToast("error", "Could not copy link");
+    }
   };
 
   const items = data?.items || [];
@@ -52,7 +65,9 @@ export default function SharesPanel() {
       </div>
 
       <div className="max-w-4xl mx-auto p-6 pb-28 md:pb-24">
-        {isLoading ? (
+        {isError ? (
+          <QueryError message="Could not load your shared links." onRetry={() => refetch()} />
+        ) : isLoading ? (
           <SkeletonList />
         ) : items.length === 0 ? (
           <div className="py-12 animate-fade-in">
@@ -93,7 +108,7 @@ export default function SharesPanel() {
                         </span>
                         
                         {s.has_password && (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-surface border border-border/50 text-amber-500">
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-surface border border-border/50 text-warning">
                             <Shield className="h-3 w-3" />
                             Password
                           </span>
@@ -120,7 +135,7 @@ export default function SharesPanel() {
                           <span className="sm:hidden">Open</span>
                         </Button>
                       </a>
-                      <Button variant="danger" onClick={() => revoke(s.id, s.name)} icon={<Trash2 className="h-4 w-4 sm:mr-0" />}>
+                      <Button variant="danger" onClick={() => setPendingRevoke(s)} icon={<Trash2 className="h-4 w-4 sm:mr-0" />}>
                         <span className="sm:hidden">Revoke</span>
                       </Button>
                     </div>
@@ -131,6 +146,16 @@ export default function SharesPanel() {
           </div>
         )}
       </div>
+      <ConfirmDialog
+        open={!!pendingRevoke}
+        title="Revoke share link?"
+        description={pendingRevoke ? `"${pendingRevoke.name}" will stop working immediately for anyone who has the link.` : ""}
+        confirmLabel="Revoke"
+        danger
+        loading={revoking}
+        onConfirm={revoke}
+        onCancel={() => setPendingRevoke(null)}
+      />
     </div>
   );
 }

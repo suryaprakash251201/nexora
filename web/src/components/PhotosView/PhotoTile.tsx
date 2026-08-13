@@ -31,7 +31,7 @@ function PhotoTileInner({ photo, aspect, selecting, selected, onOpen, onToggleSe
       title={photo.name}
     >
       <img
-        src={photoThumb(photo.root_id, photo.path, 640)}
+        src={photoThumb(photo.root_id, photo.path, 480)}
         alt={photo.name}
         loading="lazy"
         draggable={false}

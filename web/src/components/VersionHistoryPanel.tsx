@@ -8,6 +8,8 @@ import { formatBytes, formatDate } from "../lib/format";
 import { Button } from "./ui/Button";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { ConfirmDialog } from "./ui/ConfirmDialog";
+import { QueryError } from "./ui/QueryError";
 
 interface VersionHistoryProps {
   rootId: string;
@@ -59,19 +61,8 @@ export function VersionHistoryPanel({ rootId, path, fileName, onClose }: Version
     createMutation.mutate();
   };
 
-  const handleRestore = (version: FileVersion) => {
-    if (version.id === "current") return;
-    if (confirm(`Restore version ${version.version} of "${fileName}"? Current file will be overwritten.`)) {
-      restoreMutation.mutate(version.id);
-    }
-  };
-
-  const handleDelete = (version: FileVersion) => {
-    if (version.id === "current") return;
-    if (confirm(`Delete version ${version.version}?`)) {
-      deleteMutation.mutate(version.id);
-    }
-  };
+  const [pendingRestore, setPendingRestore] = useState<FileVersion | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<FileVersion | null>(null);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={onClose}>
@@ -131,8 +122,8 @@ export function VersionHistoryPanel({ rootId, path, fileName, onClose }: Version
               <p className="text-sm">Loading versions...</p>
             </div>
           ) : error ? (
-            <div className="p-8 text-center text-red-400">
-              <p className="text-sm">Failed to load versions</p>
+            <div className="p-4">
+              <QueryError message="Could not load version history." onRetry={() => qc.refetchQueries({ queryKey: ["file-versions", rootId, path] })} />
             </div>
           ) : data?.versions?.length === 0 ? (
             <div className="p-8 text-center text-content-muted">
@@ -181,16 +172,18 @@ export function VersionHistoryPanel({ rootId, path, fileName, onClose }: Version
                   {version.id !== "current" && (
                     <div className="flex items-center gap-1">
                       <button
-                        onClick={() => handleRestore(version)}
+                        onClick={() => setPendingRestore(version)}
                         className="p-1.5 rounded-lg hover:bg-accent/10 hover:text-accent transition-colors"
                         title="Restore this version"
+                        aria-label={`Restore version ${version.version}`}
                       >
                         <RotateCcw className="h-4 w-4" />
                       </button>
                       <button
-                        onClick={() => handleDelete(version)}
+                        onClick={() => setPendingDelete(version)}
                         className="p-1.5 rounded-lg hover:bg-red-500/10 hover:text-red-400 transition-colors"
                         title="Delete this version"
+                        aria-label={`Delete version ${version.version}`}
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>
@@ -201,6 +194,25 @@ export function VersionHistoryPanel({ rootId, path, fileName, onClose }: Version
             </ul>
           )}
         </div>
+      <ConfirmDialog
+        open={!!pendingRestore}
+        title="Restore this version?"
+        description={pendingRestore ? `Version ${pendingRestore.version} of "${fileName}" will overwrite the current file.` : ""}
+        confirmLabel="Restore"
+        loading={restoreMutation.isPending}
+        onConfirm={() => { if (pendingRestore) restoreMutation.mutate(pendingRestore.id); setPendingRestore(null); }}
+        onCancel={() => setPendingRestore(null)}
+      />
+      <ConfirmDialog
+        open={!!pendingDelete}
+        title="Delete this version?"
+        description={pendingDelete ? `Version ${pendingDelete.version} will be permanently deleted.` : ""}
+        confirmLabel="Delete"
+        danger
+        loading={deleteMutation.isPending}
+        onConfirm={() => { if (pendingDelete) deleteMutation.mutate(pendingDelete.id); setPendingDelete(null); }}
+        onCancel={() => setPendingDelete(null)}
+      />
       </div>
     </div>
   );

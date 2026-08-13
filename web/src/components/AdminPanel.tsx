@@ -14,6 +14,8 @@ import { Button } from "./ui/Button";
 import { Input } from "./ui/Input";
 import { SkeletonList } from "./ui/Skeleton";
 import { EmptyState } from "./ui/EmptyState";
+import { ConfirmDialog } from "./ui/ConfirmDialog";
+import { QueryError } from "./ui/QueryError";
 
 type Tab = "users" | "audit" | "settings";
 
@@ -93,9 +95,11 @@ function AuditBadge({ action }: { action: string }) {
 function UsersTab() {
   const qc = useQueryClient();
   const pushToast = useUI((s) => s.pushToast);
-  const { data, isLoading } = useQuery({ queryKey: ["admin-users"], queryFn: () => get<{ users: User[] }>("/admin/users") });
+  const { data, isLoading, isError, refetch } = useQuery({ queryKey: ["admin-users"], queryFn: () => get<{ users: User[] }>("/admin/users") });
   const [showCreate, setShowCreate] = useState(false);
   const [permUser, setPermUser] = useState<User | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<User | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [resetPwUser, setResetPwUser] = useState<User | null>(null);
   const [resetPwValue, setResetPwValue] = useState("");
   const [resetPwConfirm, setResetPwConfirm] = useState("");
@@ -112,10 +116,12 @@ function UsersTab() {
     catch (e: any) { pushToast("error", e.message); }
   };
 
-  const removeUser = async (u: User) => {
-    if (!confirm(`Delete user "${u.username}"? This cannot be undone.`)) return;
-    try { await del(`/admin/users/${u.id}`); pushToast("success", "User deleted"); qc.invalidateQueries({ queryKey: ["admin-users"] }); }
+  const removeUser = async () => {
+    if (!pendingDelete) return;
+    setDeleting(true);
+    try { await del(`/admin/users/${pendingDelete.id}`); pushToast("success", "User deleted"); qc.invalidateQueries({ queryKey: ["admin-users"] }); setPendingDelete(null); }
     catch (e: any) { pushToast("error", e.message); }
+    finally { setDeleting(false); }
   };
 
   const resetPassword = async () => {
@@ -164,7 +170,9 @@ function UsersTab() {
       
       {/* Data Table */}
       <div className="glass-strong rounded-2xl border border-border/50 overflow-hidden shadow-sm">
-        {isLoading ? (
+        {isError ? (
+          <div className="p-6"><QueryError message="Could not load users." onRetry={() => refetch()} /></div>
+        ) : isLoading ? (
           <div className="p-6"><SkeletonList /></div>
         ) : users.length === 0 ? (
           <div className="p-10"><EmptyState title="No users found" description="Create a user to get started." /></div>
@@ -233,6 +241,7 @@ function UsersTab() {
                           onClick={() => { setResetPwUser(u); setResetPwValue(""); setResetPwConfirm(""); setResetPwError(null); }}
                           className="p-2 rounded-lg glass-hover text-accent hover:bg-accent/10 hover:shadow-sm transition-all"
                           title="Reset Password"
+                          aria-label={`Reset password for ${u.username}`}
                         >
                           <KeyRound className="h-4 w-4" />
                         </button>
@@ -240,13 +249,15 @@ function UsersTab() {
                           onClick={() => setPermUser(u)} 
                           className="p-2 rounded-lg glass-hover text-accent hover:bg-accent/10 hover:shadow-sm transition-all" 
                           title="Manage Root Access"
+                          aria-label={`Manage root access for ${u.username}`}
                         >
                           <Shield className="h-4 w-4" />
                         </button>
                         <button 
-                          onClick={() => removeUser(u)} 
+                          onClick={() => setPendingDelete(u)} 
                           className="p-2 rounded-lg glass-hover text-danger hover:bg-danger/10 hover:shadow-sm transition-all" 
                           title="Delete User"
+                          aria-label={`Delete user ${u.username}`}
                         >
                           <Trash2 className="h-4 w-4" />
                         </button>
@@ -283,6 +294,16 @@ function UsersTab() {
           </div>
         </Modal>
       )}
+      <ConfirmDialog
+        open={!!pendingDelete}
+        title="Delete user?"
+        description={pendingDelete ? `"${pendingDelete.username}" will be permanently removed. This cannot be undone.` : ""}
+        confirmLabel="Delete user"
+        danger
+        loading={deleting}
+        onConfirm={removeUser}
+        onCancel={() => setPendingDelete(null)}
+      />
     </div>
   );
 }
@@ -351,7 +372,7 @@ function CreateUserModal({ onClose, onDone }: { onClose: () => void; onDone: () 
 function PermModal({ user, onClose }: { user: User; onClose: () => void }) {
   const qc = useQueryClient();
   const pushToast = useUI((s) => s.pushToast);
-  const { data, isLoading } = useQuery({ queryKey: ["user-roots", user.id], queryFn: () => get<{ roots: any[] }>(`/admin/users/${user.id}/roots`) });
+  const { data, isLoading, isError, refetch } = useQuery({ queryKey: ["user-roots", user.id], queryFn: () => get<{ roots: any[] }>(`/admin/users/${user.id}/roots`) });
   
   const set = async (rootId: string, permission: string | null) => {
     try {
@@ -369,7 +390,9 @@ function PermModal({ user, onClose }: { user: User; onClose: () => void }) {
       onClose={onClose}
     >
       <div className="space-y-4 py-2">
-        {isLoading ? (
+        {isError ? (
+          <QueryError message="Could not load permissions." onRetry={() => refetch()} />
+        ) : isLoading ? (
           <div className="py-4"><SkeletonList /></div>
         ) : (data?.roots || []).length === 0 ? (
           <EmptyState title="No roots configured" description="Create storage roots first." />
@@ -412,7 +435,7 @@ function PermModal({ user, onClose }: { user: User; onClose: () => void }) {
 }
 
 function AuditTab() {
-  const { data, isLoading } = useQuery({ queryKey: ["audit"], queryFn: () => get<{ items: AuditItem[] }>("/admin/audit", { limit: 200 }) });
+  const { data, isLoading, isError, refetch } = useQuery({ queryKey: ["audit"], queryFn: () => get<{ items: AuditItem[] }>("/admin/audit", { limit: 200 }) });
   const items = data?.items || [];
   
   return (
@@ -428,7 +451,9 @@ function AuditTab() {
       </div>
       
       <div className="glass-strong rounded-2xl border border-border/50 overflow-hidden shadow-sm">
-        {isLoading ? (
+        {isError ? (
+          <div className="p-6"><QueryError message="Could not load audit log." onRetry={() => refetch()} /></div>
+        ) : isLoading ? (
           <div className="p-6"><SkeletonList /></div>
         ) : items.length === 0 ? (
           <div className="p-10"><EmptyState title="No audit entries" description="System events will appear here." /></div>
@@ -484,14 +509,18 @@ function SettingsTab() {
     setAccentLocal(t);
   };
   const { data: ver } = useQuery({ queryKey: ["version"], queryFn: () => get<{ version: string; go: string; product: string; tagline: string }>("/version") });
-  const { data: roots, isLoading: rootsLoading } = useQuery({ queryKey: ["roots-admin"], queryFn: () => get<{ roots: Root[] }>("/roots") });
+  const { data: roots, isLoading: rootsLoading, isError: rootsError, refetch: rootsRefetch } = useQuery({ queryKey: ["roots-admin"], queryFn: () => get<{ roots: Root[] }>("/roots") });
   const [editRoot, setEditRoot] = useState<Root | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [pendingRootDelete, setPendingRootDelete] = useState<Root | null>(null);
+  const [rootDeleting, setRootDeleting] = useState(false);
 
-  const removeRoot = async (r: Root) => {
-    if (!confirm(`Delete storage root "${r.name}"? This cannot be undone.`)) return;
-    try { await del(`/admin/roots/${r.id}`); pushToast("success", "Storage root deleted"); qc.invalidateQueries({ queryKey: ["roots-admin"] }); qc.invalidateQueries({ queryKey: ["roots"] }); }
+  const removeRoot = async () => {
+    if (!pendingRootDelete) return;
+    setRootDeleting(true);
+    try { await del(`/admin/roots/${pendingRootDelete.id}`); pushToast("success", "Storage root deleted"); qc.invalidateQueries({ queryKey: ["roots-admin"] }); qc.invalidateQueries({ queryKey: ["roots"] }); setPendingRootDelete(null); }
     catch (e: any) { pushToast("error", e.message); }
+    finally { setRootDeleting(false); }
   };
 
   return (
@@ -594,7 +623,9 @@ function SettingsTab() {
           </div>
           
           <div className="flex-1 p-6">
-            {rootsLoading ? (
+            {rootsError ? (
+              <QueryError message="Could not load storage roots." onRetry={() => rootsRefetch()} />
+            ) : rootsLoading ? (
               <SkeletonList />
             ) : (!roots?.roots || roots.roots.length === 0) ? (
               <EmptyState title="No storage roots" description="Add a directory from your server to start serving files." />
@@ -629,7 +660,7 @@ function SettingsTab() {
                         <Button variant="secondary" size="sm" className="flex-1" onClick={() => setEditRoot(r)} icon={<Pencil className="h-3.5 w-3.5" />}>
                           Edit
                         </Button>
-                        <Button variant="danger" size="sm" onClick={() => removeRoot(r)} className="px-3">
+                        <Button variant="danger" size="sm" onClick={() => setPendingRootDelete(r)} className="px-3" aria-label={`Delete storage root ${r.name}`}>
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>
                       </div>
@@ -644,6 +675,16 @@ function SettingsTab() {
 
       {showCreate && <RootModal onClose={() => setShowCreate(false)} onDone={() => { setShowCreate(false); qc.invalidateQueries({ queryKey: ["roots-admin"] }); qc.invalidateQueries({ queryKey: ["roots"] }); }} />}
       {editRoot && <RootModal root={editRoot} onClose={() => setEditRoot(null)} onDone={() => { setEditRoot(null); qc.invalidateQueries({ queryKey: ["roots-admin"] }); qc.invalidateQueries({ queryKey: ["roots"] }); }} />}
+      <ConfirmDialog
+        open={!!pendingRootDelete}
+        title="Delete storage root?"
+        description={pendingRootDelete ? `"${pendingRootDelete.name}" will be permanently removed. Files on disk are not deleted, but users will lose access.` : ""}
+        confirmLabel="Delete root"
+        danger
+        loading={rootDeleting}
+        onConfirm={removeRoot}
+        onCancel={() => setPendingRootDelete(null)}
+      />
     </div>
   );
 }

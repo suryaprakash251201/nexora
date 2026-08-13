@@ -150,6 +150,7 @@ export interface HomeData {
   music: RecentItem[];
   video: RecentItem[];
   playlists: Playlist[];
+  share_count?: number;
 }
 
 export interface PlaylistItem {

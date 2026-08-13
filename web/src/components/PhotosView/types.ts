@@ -38,8 +38,8 @@ export type ViewMode = "gallery" | "map";
 
 /** Target row height (px) used to pack photo rows for each density. */
 export const DENSITY_ROW_HEIGHT: Record<Density, number> = {
-  cozy: 248,
-  compact: 168,
+  cozy: 180,
+  compact: 120,
 };
 
 /** Gap between tiles inside a photo row, in px. */

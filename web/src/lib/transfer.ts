@@ -12,6 +12,24 @@ export function speedLabel(bps: number): string {
   return fmtSpeed(bps);
 }
 
+// Cancellable-transfer registries. Uploads use XHR (abortable); browser
+// downloads use fetch + AbortController; Tauri downloads are not cancellable
+// through this API, so they are never registered.
+const activeXhr = new Map<string, XMLHttpRequest>();
+const activeControllers = new Map<string, AbortController>();
+
+export function cancelTransfer(id: string) {
+  activeXhr.get(id)?.abort();
+  activeControllers.get(id)?.abort();
+  activeXhr.delete(id);
+  activeControllers.delete(id);
+  useTransfers.getState().remove(id);
+}
+
+export function isCancellable(id: string): boolean {
+  return activeXhr.has(id) || activeControllers.has(id);
+}
+
 // startUpload uploads each file individually via XHR so progress is reported
 // per file, and records each transfer in the global transfers store.
 export function startUpload(
@@ -55,6 +73,8 @@ export function startUpload(
     const uploadUrl = baseUrl + `/api/v1/files/upload?root=${encodeURIComponent(rootId)}&path=${encodeURIComponent(targetPath)}`;
     const xhr = new XMLHttpRequest();
     xhr.open("POST", uploadUrl);
+    activeXhr.set(id, xhr);
+    const cleanup = () => activeXhr.delete(id);
     xhr.withCredentials = !isTauri;
     const csrf = getCsrfToken();
     if (csrf) xhr.setRequestHeader("X-CSRF-Token", csrf);
@@ -82,6 +102,7 @@ export function startUpload(
     };
 
     xhr.onload = () => {
+      cleanup();
       if (xhr.status >= 200 && xhr.status < 300) {
         useTransfers.getState().update(id, { loaded: file.size, total: file.size, speed: 0, status: "done" });
         onDone?.();
@@ -94,7 +115,8 @@ export function startUpload(
         useTransfers.getState().update(id, { status: "error", error: msg });
       }
     };
-    xhr.onerror = () => useTransfers.getState().update(id, { status: "error", error: `Network error — could not reach server at ${uploadUrl.replace(/\?.*/, '')}` });
+    xhr.onabort = () => cleanup();
+    xhr.onerror = () => { cleanup(); useTransfers.getState().update(id, { status: "error", error: `Network error — could not reach server at ${uploadUrl.replace(/\?.*/, '')}` }); };
     xhr.send(form);
   });
 }
@@ -176,8 +198,10 @@ export async function startDownload(rootId: string, path: string, name: string) 
   }
 
   // Browser download
+  const controller = new AbortController();
+  activeControllers.set(id, controller);
   try {
-    const res = await fetch(fullUrl, { credentials: "include" });
+    const res = await fetch(fullUrl, { credentials: "include", signal: controller.signal });
     if (!res.ok || !res.body) throw new Error(`Download failed (${res.status})`);
     const total = Number(res.headers.get("Content-Length")) || 0;
     const reader = res.body.getReader();
@@ -216,6 +240,10 @@ export async function startDownload(rootId: string, path: string, name: string) 
     setTimeout(() => URL.revokeObjectURL(objUrl), 1000);
     useTransfers.getState().update(id, { loaded: total || loaded, total: total || loaded, speed: 0, status: "done" });
   } catch (e: any) {
-    useTransfers.getState().update(id, { status: "error", error: e?.message || "Download failed" });
+    if (e?.name !== "AbortError") {
+      useTransfers.getState().update(id, { status: "error", error: e?.message || "Download failed" });
+    }
+  } finally {
+    activeControllers.delete(id);
   }
 }

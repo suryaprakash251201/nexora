@@ -271,6 +271,9 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 	pls, _ := s.Playlists.ListPublic()
 	s.hydratePlaylistItems(pls)
 
+	var shareCount int
+	_ = s.DB.QueryRow(`SELECT COUNT(*) FROM shares WHERE user_id = ?`, user.ID).Scan(&shareCount)
+
 	writeJSON(w, http.StatusOK, map[string]any{
 		"recent":      s.recentItems(user.ID, "access", 12),
 		"added":       s.recentItems(user.ID, "add", 12),
@@ -278,5 +281,6 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 		"music":       s.homeSection(user.ID, homeKindMusic, 12),
 		"video":       s.homeSection(user.ID, homeKindVideo, 12),
 		"playlists":   pls,
+		"share_count": shareCount,
 	})
 }

@@ -39,7 +39,7 @@ export function packRows(photos: PhotoResult[], containerWidth: number, targetHe
 
   const finish = (items: RowItem[]): PhotoRow => {
     const sumRatio = items.reduce((s, it) => s + it.aspect, 0);
-    const height = Math.max(96, Math.min(460, (containerWidth - ROW_GAP * (items.length - 1)) / sumRatio));
+    const height = Math.max(80, Math.min(320, (containerWidth - ROW_GAP * (items.length - 1)) / sumRatio));
     return { items, height };
   };
 
@@ -130,7 +130,7 @@ function MemoriesStrip({ memories, onOpenAt }: { memories: Memory[]; onOpenAt: (
           <button
             key={m.key}
             onClick={() => onOpenAt(m.photo)}
-            className="group relative h-40 w-56 shrink-0 overflow-hidden rounded-xl bg-surface-2 ring-1 ring-white/[0.05] text-left"
+            className="group relative h-32 w-44 shrink-0 overflow-hidden rounded-xl bg-surface-2 ring-1 ring-white/[0.05] text-left"
           >
             <img
               src={photoThumb(m.photo.root_id, m.photo.path, 480)}

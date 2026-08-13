@@ -72,11 +72,13 @@ function AppInner() {
     setInputUrl(url);
   };
 
-  // ── Boot splash: hold the app logo in front for a minimum of ~2s on
-  // every full page load (web refresh, desktop first start, fresh URL). ──
-  const [splashDone, setSplashDone] = useState(false);
+  // ── Boot splash: show the branded logo briefly, but only once per
+  // browser session so refreshes don't add perceived latency. ──
+  const [splashDone, setSplashDone] = useState(() => {
+    try { return sessionStorage.getItem("nexora-splash-seen") === "1"; } catch { return false; }
+  });
   if (!splashDone) {
-    return <SplashScreen onDone={() => setSplashDone(true)} />;
+    return <SplashScreen onDone={() => { try { sessionStorage.setItem("nexora-splash-seen", "1"); } catch { /* ignore */ } setSplashDone(true); }} />;
   }
 
   if (isTauriEnv && !apiUrl) {

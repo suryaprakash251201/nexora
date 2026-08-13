@@ -36,6 +36,7 @@ import RootModal from "./RootModal";
 import FolderPickerModal from "./FolderPickerModal";
 import ProfileMenu from "./ProfileMenu";
 import CommandPalette from "./CommandPalette";
+import SelectionBar from "./SelectionBar";
 import KeyboardShortcutsModal from "./KeyboardShortcutsModal";
 import { formatRelative } from "../lib/format";
 import { SkeletonGrid, SkeletonList } from "./ui/Skeleton";
@@ -45,7 +46,7 @@ import { isEditable, isAudio } from "../lib/preview";
 import {
   Download, Trash2, Pencil, Copy, Eye, FolderOpen, RotateCcw,
   Star, Share2, Archive, FolderInput, FileEdit, ListMusic, HardDrive, Upload,
-  Move, Info, Tag as TagIcon, CheckSquare, X
+  Move, Info, Tag as TagIcon, CheckSquare
 } from "lucide-react";
 
 // Hooks
@@ -297,7 +298,7 @@ export default function Workspace({ user }: { user: User }) {
   };
 
   // Selection actions for CommandBar
-  const handleSelectionAction = useCallback((action: "move" | "copy" | "delete" | "download" | "share" | "archive" | "favorite" | "tag") => {
+  const handleSelectionAction = useCallback((action: "move" | "copy" | "delete" | "download" | "share" | "archive" | "favorite" | "tag" | "rename") => {
     if (!selection.size) return;
     const paths = Array.from(selection);
     
@@ -327,11 +328,16 @@ export default function Workspace({ user }: { user: User }) {
       case "favorite":
         paths.forEach(p => { const it = items.find(i => i.path === p); if (it) toggleFavorite(it); });
         break;
+      case "rename": {
+        const it = items.find(i => i.path === paths[0]);
+        if (it && canWrite) setMenu({ kind: "rename", item: it });
+        break;
+      }
       case "tag":
         if (rootId) setTagPicker({ rootId, paths });
         break;
     }
-  }, [selection, items, openPickerFor, bulkDelete, downloadItem, setShareItem, archivePaths, toggleFavorite, rootId, setTagPicker]);
+  }, [selection, items, openPickerFor, bulkDelete, downloadItem, setShareItem, archivePaths, toggleFavorite, rootId, setTagPicker, canWrite, setMenu]);
 
   const buildMenu = (item: FileItem, x: number, y: number): MenuItem[] => {
     const menuItems: MenuItem[] = [
@@ -494,70 +500,14 @@ export default function Workspace({ user }: { user: User }) {
         <input ref={folderInput} type="file" {...{ webkitdirectory: "", directory: "" }} multiple className="hidden" onChange={(e) => { uploadFiles(e.target.files); e.target.value = ""; }} />
 
         {(selectMode || selection.size > 0) && (
-          <div className="flex items-center gap-2 sm:gap-3 px-4 sm:px-6 py-2 border-b border-glass-border-soft bg-glass-bg-subtle backdrop-blur-sm">
-            <label className="flex items-center gap-2 text-xs sm:text-sm font-medium cursor-pointer select-none shrink-0 hover:text-foreground">
-              <input
-                type="checkbox"
-                checked={allSelected}
-                onChange={toggleSelectAll}
-                className="rounded border-2 border-glass-border bg-glass-bg text-accent focus:ring-accent cursor-pointer transition-all w-4 h-4 sm:w-4.5 sm:h-4.5"
-              />
-              <span className="font-medium text-text-secondary hover:text-content">{allSelected ? "Deselect all" : "Select all"}</span>
-            </label>
-
-            <span className="text-xs text-text-tertiary whitespace-nowrap shrink-0">
-              {selection.size} of {filtered.length} selected
-            </span>
-
-            <div className="w-px h-5 bg-border/40 shrink-0 mx-0.5 sm:mx-1" />
-
-            <div className="flex items-center gap-1.5 overflow-x-auto hide-scrollbar">
-              <button
-                disabled={selection.size === 0}
-                onClick={() => handleSelectionAction("download")}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-xl glass-hover border border-border/30 transition-all hover:bg-surface/80 text-content-muted hover:text-content disabled:opacity-40 disabled:pointer-events-none whitespace-nowrap"
-              >
-                <Download className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Download</span>
-              </button>
-              <button
-                disabled={selection.size === 0}
-                onClick={() => handleSelectionAction("move")}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-xl glass-hover border border-border/30 transition-all hover:bg-surface/80 text-content-muted hover:text-content disabled:opacity-40 disabled:pointer-events-none whitespace-nowrap"
-              >
-                <Move className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Move</span>
-              </button>
-              <button
-                disabled={selection.size === 0}
-                onClick={() => handleSelectionAction("copy")}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-xl glass-hover border border-border/30 transition-all hover:bg-surface/80 text-content-muted hover:text-content disabled:opacity-40 disabled:pointer-events-none whitespace-nowrap"
-              >
-                <Copy className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Copy</span>
-              </button>
-              <button
-                disabled={selection.size === 0}
-                onClick={() => handleSelectionAction("share")}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-xl glass-hover border border-border/30 transition-all hover:bg-surface/80 text-content-muted hover:text-content disabled:opacity-40 disabled:pointer-events-none whitespace-nowrap"
-              >
-                <Share2 className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Share</span>
-              </button>
-              <button
-                disabled={selection.size === 0}
-                onClick={() => handleSelectionAction("delete")}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-xl glass-hover border border-red-500/20 transition-all hover:bg-red-500/10 text-red-400 hover:text-red-300 disabled:opacity-40 disabled:pointer-events-none whitespace-nowrap"
-              >
-                <Trash2 className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Delete</span>
-              </button>
-            </div>
-
-            <div className="ml-auto flex items-center gap-1.5 shrink-0">
-              <button
-                onClick={() => { clearSelection(); useUI.getState().setSelectMode(false); }}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-xl glass-hover border border-border/30 transition-all hover:bg-surface/80 text-content-muted hover:text-content whitespace-nowrap"
-              >
-                <X className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Clear</span>
-              </button>
-            </div>
-          </div>
+          <SelectionBar
+            allSelected={allSelected}
+            selectedCount={selection.size}
+            totalCount={filtered.length}
+            onToggleSelectAll={toggleSelectAll}
+            onAction={handleSelectionAction}
+            onClear={() => { clearSelection(); useUI.getState().setSelectMode(false); }}
+          />
         )}
 
         <motion.main
@@ -839,6 +789,15 @@ export default function Workspace({ user }: { user: User }) {
         setSort={setSort}
         order={order}
         setOrder={setOrder}
+        onOpenPath={(rid, p, isDir) => navigateTo(rid, p, isDir, "")}
+        onDownload={() => handleSelectionAction("download")}
+        onShare={() => handleSelectionAction("share")}
+        onFavorite={() => handleSelectionAction("favorite")}
+        onRename={() => handleSelectionAction("rename")}
+        onMove={() => handleSelectionAction("move")}
+        onCopy={() => handleSelectionAction("copy")}
+        onArchive={() => handleSelectionAction("archive")}
+        onDelete={() => bulkDelete()}
       />
       <KeyboardShortcutsModal
         isOpen={shortcutsModalOpen}

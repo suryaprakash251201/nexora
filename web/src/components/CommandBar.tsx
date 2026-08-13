@@ -256,7 +256,7 @@ export default function CommandBar({
           <button
             ref={sortBtnRef}
             onClick={toggleSort}
-            className="p-2 rounded-xl glass-hover text-text-secondary hover:text-accent-purple transition-colors hidden sm:block min-w-[36px] min-h-[36px]"
+            className="p-2 rounded-xl glass-hover text-text-secondary hover:text-accent transition-colors hidden sm:block min-w-[36px] min-h-[36px]"
             title="Sort"
             aria-label="Sort"
             aria-expanded={sortOpen}
@@ -371,7 +371,7 @@ export default function CommandBar({
             className={cn(
               "shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 border",
               sort === opt.value
-                ? "bg-accent-purple/20 border-accent-purple/30 text-accent-purple"
+                ? "bg-accent/20 border-accent/30 text-accent"
                 : "glass-chip border-glass-border-soft text-text-tertiary"
             )}
           >
@@ -438,7 +438,7 @@ export default function CommandBar({
               className="w-full flex items-center gap-3 px-3 py-2 text-sm rounded-lg hover:bg-accent/10 hover:text-accent font-medium transition-colors"
               role="menuitem"
             >
-              <FolderUp className="h-4 w-4 text-purple-400" /> Upload folder
+              <FolderUp className="h-4 w-4 text-accent" /> Upload folder
             </button>
           )}
         </motion.div>,
@@ -491,12 +491,12 @@ export default function CommandBar({
               onClick={() => { setSort(opt.value); closeAllMenus(); }}
               className={cn(
                 "w-full flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition-colors",
-                sort === opt.value ? "text-accent-purple font-medium bg-accent-purple/10" : "hover:bg-glass-bg-subtle"
+                sort === opt.value ? "text-accent font-medium bg-accent/10" : "hover:bg-glass-bg-subtle"
               )}
               role="menuitem"
             >
               {opt.label}
-              {sort === opt.value && <ChevronDown className="h-4 w-4 ml-auto text-accent-purple" />}
+              {sort === opt.value && <ChevronDown className="h-4 w-4 ml-auto text-accent" />}
             </button>
           ))}
         </motion.div>,

@@ -20,7 +20,7 @@ function initials(name: string): string {
 }
 
 const roleColors: Record<string, string> = {
-  admin: "bg-purple-500/10 text-purple-400 border-purple-500/20",
+  admin: "bg-accent-purple/10 text-accent-purple border-accent-purple/20",
   user: "bg-blue-500/10 text-blue-400 border-blue-500/20",
   viewer: "bg-teal-500/10 text-teal-400 border-teal-500/20",
 };
@@ -71,7 +71,7 @@ export default function ProfileMenu({
                   </AvatarFallback>
                 </Avatar>
                 {user.status === "active" && (
-                  <div className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full bg-emerald-500 border-2 border-background flex items-center justify-center shadow-lg">
+                  <div className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full bg-success border-2 border-background flex items-center justify-center shadow-lg">
                     <CheckCircle2 className="h-2.5 w-2.5 text-white" />
                   </div>
                 )}

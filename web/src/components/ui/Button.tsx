@@ -18,8 +18,6 @@ const buttonVariants = cva(
           "bg-danger/10 text-danger border border-danger/20 hover:bg-danger/20 active:translate-y-px",
         outline:
           "border border-glass-border bg-transparent text-foreground hover:bg-glass-bg active:translate-y-px",
-        default:
-          "bg-primary text-primary-foreground shadow-[0_4px_16px_var(--color-accent-glow)] hover:opacity-90 active:translate-y-px",
         link:
           "text-accent underline-offset-4 hover:underline",
       },
