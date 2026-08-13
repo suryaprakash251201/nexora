@@ -18,7 +18,7 @@ import {
 import type { FileItem } from "../api/types";
 import { usePlayer, engine } from "../store/player";
 import { useShallow } from "zustand/react/shallow";
-import { thumbUrl, rawUrl, audioTranscodeUrl, generateSessionId, serverSupportsTranscode, isLosslessExtension, isTauriRuntime, needsAudioTranscode } from "../lib/preview";
+import { thumbUrl, rawUrl, audioTranscodeUrl, generateSessionId, serverSupportsTranscode, isLosslessExtension, isTauriRuntime, needsAudioTranscode, cleanTrackTitle } from "../lib/preview";
 import type { AudioTranscodeFormat } from "../lib/preview";
 import { AudioInfoPanel, EqualizerBars } from "./LosslessPlayer";
 import MediaPlayer from "./MediaPlayer";
@@ -251,7 +251,7 @@ export default function PlayerBar() {
               </div>
 
               <div className="min-w-0 flex-1 cursor-pointer" onClick={openExpanded}>
-                <p className="truncate text-[13px] sm:text-sm font-bold text-content leading-tight hover:text-accent transition-colors">{current.name.replace(/\.[^.]+$/, '')}</p>
+                <p className="truncate text-[13px] sm:text-sm font-bold text-content leading-tight hover:text-accent transition-colors">{cleanTrackTitle(current.name)}</p>
                 <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
                   <AudioInfoPanel item={current} compact />
                   {lossless && isPlaying && (

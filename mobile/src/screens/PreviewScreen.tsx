@@ -28,6 +28,7 @@ import { copyShareLink } from "../lib/shareLink";
 import { EqBars } from "../components/EqBars";
 import { LosslessWave } from "../components/LosslessBadge";
 import { detectAudioQuality } from "../lib/audioQuality";
+import { cleanTrackTitle } from "../lib/fileMeta";
 import { BottomSheet } from "../components/BottomSheet";
 import type { RootStackParamList } from "../navigation/types";
 
@@ -678,7 +679,7 @@ function AudioPlayer({ name, size, ext, mime, rootId, path, onShare }: { name: s
             </>
           ) : (
             <>
-              <Text style={[styles.trackName, { fontSize: font.xl }]} numberOfLines={2}>{name}</Text>
+              <Text style={[styles.trackName, { fontSize: font.xl }]} numberOfLines={2}>{cleanTrackTitle(name)}</Text>
               <View style={styles.trackMetaRow}>
                 {isLossless ? (
                   <LosslessWave size="md" />

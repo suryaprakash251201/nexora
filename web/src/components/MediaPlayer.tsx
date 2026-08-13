@@ -27,7 +27,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import type { FileItem } from "../api/types";
-import { thumbUrl, needsTranscode, transcodeUrl, audioTranscodeUrl, serverSupportsTranscode, rawUrl, generateSessionId, isLosslessExtension, needsAudioTranscode, getAudioQuality } from "../lib/preview";
+import { thumbUrl, needsTranscode, transcodeUrl, audioTranscodeUrl, serverSupportsTranscode, rawUrl, generateSessionId, isLosslessExtension, needsAudioTranscode, getAudioQuality, cleanTrackTitle } from "../lib/preview";
 import type { AudioTranscodeFormat } from "../lib/preview";
 import { AudioInfoPanel, EqualizerBars, OutputDevicePicker, useAudioContext } from "./LosslessPlayer";
 import { startDownload } from "../lib/transfer";
@@ -604,7 +604,7 @@ function AudioPlayer({
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className={`text-sm truncate ${isCur ? "text-white font-medium" : "text-white/75"}`}>
-                          {qi.name.replace(/\.[^.]+$/, "")}
+                          {cleanTrackTitle(qi.name)}
                         </p>
                         <p className="text-[11px] text-white/35 truncate mt-0.5">{qi.extension.toUpperCase()} · {qi.path}</p>
                       </div>
@@ -763,7 +763,7 @@ function AudioPlayer({
 
         {/* Track Info */}
         <div className="w-full flex flex-col items-center text-center mb-4 sm:mb-7">
-          <h2 className="text-white font-bold text-lg sm:text-2xl md:text-3xl truncate drop-shadow-md">{cur?.name?.replace(/\.[^.]+$/, '')}</h2>
+          <h2 className="text-white font-bold text-lg sm:text-2xl md:text-3xl truncate drop-shadow-md">{cur ? cleanTrackTitle(cur.name) : ""}</h2>
           {cur && (
             <div className="mt-2 flex items-center justify-center gap-2">
               <AudioInfoPanel item={cur} compact />

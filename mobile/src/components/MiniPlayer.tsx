@@ -31,6 +31,7 @@ import { AudioQualityPill } from "./AudioQualityBadge";
 import { AudioQualityDetail } from "./AudioQualityDetail";
 import { LosslessWave } from "./LosslessBadge";
 import { detectAudioQuality } from "../lib/audioQuality";
+import { cleanTrackTitle } from "../lib/fileMeta";
 import { copyShareLink } from "../lib/shareLink";
 
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
@@ -215,16 +216,20 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
     if (favorited) {
       api
         .removeFavorite(currentTrack.root_id, currentTrack.path)
-        .then(() => setFavorited(false))
-        .catch(() => {});
+        .then(() => {
+          setFavorited(false);
+          Alert.alert("Removed", "Removed from Liked Songs.");
+        })
+        .catch(() => Alert.alert("Could not remove", "Try again in a moment."));
     } else {
       api
         .addFavorite(currentTrack.root_id, currentTrack.path)
         .then(() => {
           setFavorited(true);
           haptic("medium");
+          Alert.alert("Liked", "Added to Liked Songs.");
         })
-        .catch(() => {});
+        .catch(() => Alert.alert("Could not like", "Try again in a moment."));
     }
   };
 
@@ -318,7 +323,7 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
               style={[styles.miniTitle, { color: colors.content, fontSize: font.sm }]}
               numberOfLines={1}
             >
-              {currentTrack.name}
+              {cleanTrackTitle(currentTrack.name)}
             </Text>
             <View style={styles.miniSubRow}>
               {isLossless ? (
@@ -501,7 +506,7 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
                     ]}
                     numberOfLines={1}
                   >
-                    {currentTrack.name}
+                    {cleanTrackTitle(currentTrack.name)}
                   </Text>
                   <Text
                     style={[
@@ -513,26 +518,6 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
                     {ext.toUpperCase() || "AUDIO"} · Nexora
                   </Text>
                 </View>
-                <TouchableOpacity
-                  style={[
-                    styles.trackMoreBtn,
-                    {
-                      backgroundColor: isDark
-                        ? "rgba(255,255,255,0.1)"
-                        : "rgba(0,0,0,0.06)",
-                    },
-                  ]}
-                  onPress={() => {
-                    haptic();
-                    setMoreSheet(true);
-                  }}
-                >
-                  <MaterialCommunityIcons
-                    name="dots-horizontal"
-                    size={20}
-                    color={colors.content}
-                  />
-                </TouchableOpacity>
               </View>
 
               {/* ── Lossless wave — centered below title; tap to toggle the
@@ -813,7 +798,7 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
                               ]}
                               numberOfLines={1}
                             >
-                              {item.name.replace(/\.[^.]+$/, "")}
+                              {cleanTrackTitle(item.name)}
                             </Text>
                             <Text style={[styles.queueSub, { color: colors.muted, fontSize: font.xs }]} numberOfLines={1}>
                               {(item.extension || "").toUpperCase()} · {item.path}
@@ -1028,14 +1013,6 @@ const styles = StyleSheet.create({
   trackArtist: {
     fontWeight: "500",
   },
-  trackMoreBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
   /* Lossless wave under the title */
   titleWaveWrap: {
     alignItems: "center",

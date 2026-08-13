@@ -1,6 +1,28 @@
 import { previewKind } from "../api/client";
 import type { FileItem } from "../api/types";
 
+/**
+ * cleanTrackTitle — removes noise from song titles for display:
+ * - leading track numbers ("01. ", "01 - ", "1) ", "01.innum konja neram")
+ * - trailing parenthetical/bracket tags ("(from maryaan)", "[Remastered]")
+ * - file extensions (defensive)
+ *
+ * "01.innum konja neram(from maryaan)" → "innum konja neram"
+ */
+export function cleanTrackTitle(name: string): string {
+  if (!name) return name;
+  let t = name.replace(/\.[^.]+$/, "");
+  // Leading track number followed by a separator (., -, –, —, ), _, space).
+  t = t.replace(/^\s*\d{1,3}\s*[.\-–—)_]\s*/, "");
+  // Trailing parenthetical / bracket groups (repeat to drop several).
+  let prev: string;
+  do {
+    prev = t;
+    t = t.replace(/\s*[\(（\[].*?[\)）\]]\s*$/, "");
+  } while (t !== prev);
+  return t.trim();
+}
+
 const KIND_ICON: Record<string, [string, string]> = {
   image: ["image-outline", "#5B8CFF"],
   video: ["play-circle-outline", "#A78BFA"],

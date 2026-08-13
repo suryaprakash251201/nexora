@@ -59,6 +59,22 @@ export function rawUrl(rootId: string, path: string, download = false): string {
   return getMediaUrl("/files/raw", { root: rootId, path, download: download ? 1 : undefined });
 }
 
+// cleanTrackTitle removes playback noise from a song title for display:
+// leading track numbers ("01. ", "01 - ", "1) ") and trailing
+// parenthetical/bracket tags ("(from maryaan)", "[Remastered]").
+// "01.innum konja neram(from maryaan)" → "innum konja neram"
+export function cleanTrackTitle(name: string): string {
+  if (!name) return name;
+  let t = name.replace(/\.[^.]+$/, "");
+  t = t.replace(/^\s*\d{1,3}\s*[.\-–—)_]\s*/, "");
+  let prev: string;
+  do {
+    prev = t;
+    t = t.replace(/\s*[\(（\[].*?[\)）\]]\s*$/, "");
+  } while (t !== prev);
+  return t.trim();
+}
+
 export function thumbUrl(item: FileItem, size = 256): string {
   return getMediaUrl("/files/thumbnail", { root: item.root_id, path: item.path, size });
 }
