@@ -53,15 +53,20 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       })
       .then((url) => {
         if (cancelled) return;
+        // Set intent here (not at effect start) so a stale playingChange
+        // from the just-ended track can't clear it mid-transition.
+        wantPlayRef.current = true;
         // replaceAsync: `replace` loads synchronously on the iOS main thread,
         // which can stutter the UI mid-transition and interleave with React
         // commits. The async variant is the supported path.
         const p = (player as any).replaceAsync?.(url);
         if (p && typeof p.then === "function") {
-          p.then(() => player.play()).catch(() => {});
+          p.then(() => {
+            if (wantPlayRef.current) player.play();
+          }).catch(() => {});
         } else {
           player.replace(url);
-          player.play();
+          if (wantPlayRef.current) player.play();
         }
       });
     return () => {
@@ -115,11 +120,31 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     return () => sub.remove();
   }, [player, step]);
 
-  // If a track fails to load/play (e.g. unsupported codec and no server
-  // transcode), auto-advance to the next track instead of dying silently.
+  // Whether we intend the player to be playing. Set true right before a new
+  // source is loaded (initial play, queue auto-advance, manual next/prev) and
+  // cleared when the player actually reports stopped (user pause or end). The
+  // statusChange handler below re-issues play() once the source is ready —
+  // this is what makes queue auto-advance reliable: play() called in a
+  // promise callback can silently no-op when the new source is still
+  // buffering, and without a retry the queue stalls after the first track.
+  const wantPlayRef = useRef(false);
+
+  // Track the previous track so we can detect auto-advance and reset intent.
+  useEffect(() => {
+    const sub = player.addListener("playingChange", ({ isPlaying }) => {
+      if (!isPlaying) wantPlayRef.current = false;
+    });
+    return () => sub.remove();
+  }, [player]);
+
   useEffect(() => {
     const sub = player.addListener("statusChange", ({ status }) => {
+      if (status === "readyToPlay" && wantPlayRef.current && !player.playing) {
+        player.play();
+      }
       if (status !== "error") return;
+      // Failed track → auto-advance to the next track instead of dying
+      // silently (e.g. unsupported codec and no server transcode).
       const { currentTrack: ct, playlist: pl } = stateRef.current;
       if (!ct || pl.length <= 1) return;
       const next = step(pl, ct, 1);

@@ -20,6 +20,7 @@ import { useAudio } from "../store/AudioContext";
 import { FileRow, EmptyState, ROW_HEIGHT } from "../components/FileRow";
 import { BottomSheet } from "../components/BottomSheet";
 import { AudioCover } from "../components/AudioCover";
+import { EqBars } from "../components/EqBars";
 import { isAudioFile } from "../lib/fileMeta";
 import type { FileItem, Playlist, PlaylistItem } from "../api/types";
 import type { RootStackParamList } from "../navigation/types";
@@ -48,12 +49,22 @@ export default function PlaylistScreen({ route, navigation }: Props) {
   const initial = route.params.playlist;
   const { api } = useSession();
   const { colors, font, gradients, radius, spacing, shadow, shadowSm, isDark } = useTheme();
-  const { playTrack } = useAudio();
+  const { playTrack, currentTrack, player } = useAudio();
   const insets = useSafeAreaInsets();
 
   const [playlist, setPlaylist] = useState<Playlist>(initial);
   const [actionItem, setActionItem] = useState<PlaylistItem | null>(null);
   const [favoritedPaths, setFavoritedPaths] = useState<Set<string>>(new Set());
+  const [playing, setPlaying] = useState(false);
+
+  // Live playing state for the row equalizer.
+  useEffect(() => {
+    if (!player) return;
+    const sub = player.addListener("playingChange", ({ isPlaying }: { isPlaying: boolean }) =>
+      setPlaying(isPlaying)
+    );
+    return () => sub.remove();
+  }, [player]);
 
   const files = useMemo(() => playlist.items.map(toFileItem), [playlist.items]);
 
@@ -100,6 +111,13 @@ export default function PlaylistScreen({ route, navigation }: Props) {
     },
     [files, playTrack]
   );
+
+  const shuffleAll = useCallback(() => {
+    if (files.length === 0) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    const shuffled = [...files].sort(() => Math.random() - 0.5);
+    playTrack(shuffled[0], shuffled);
+  }, [files, playTrack]);
 
   const openItem = useCallback(
     (item: PlaylistItem) => {
@@ -158,23 +176,35 @@ export default function PlaylistScreen({ route, navigation }: Props) {
       : undefined;
 
   const renderRow = useCallback(
-    ({ item, index }: { item: PlaylistItem; index: number }) => (
-      <View style={{ borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.borderSoft }}>
-        <FileRow
-          item={toFileItem(item)}
-          onPress={() => openItem(item)}
-          onLongPress={() => setActionItem(item)}
-          trailing={
-            <View style={styles.rowIndex}>
-              <Text style={[styles.rowIndexText, { color: colors.muted }]}>
-                {String(index + 1).padStart(2, "0")}
-              </Text>
-            </View>
-          }
-        />
-      </View>
-    ),
-    [colors.borderSoft, openItem]
+    ({ item, index }: { item: PlaylistItem; index: number }) => {
+      const isCur =
+        !!currentTrack && currentTrack.root_id === item.root_id && currentTrack.path === item.path;
+      return (
+        <View style={{ borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.borderSoft }}>
+          <FileRow
+            item={toFileItem(item)}
+            onPress={() => openItem(item)}
+            onLongPress={() => setActionItem(item)}
+            trailing={
+              isCur && playing ? (
+                <EqBars playing barCount={3} tint={colors.accent} />
+              ) : isCur ? (
+                <MaterialCommunityIcons name="volume-high" size={18} color={colors.accent} />
+              ) : (
+                <TouchableOpacity
+                  style={[styles.rowPlay, { backgroundColor: colors.accentSoft }]}
+                  onPress={() => openItem(item)}
+                  hitSlop={8}
+                >
+                  <MaterialCommunityIcons name="play" size={14} color={colors.accent} style={{ marginLeft: 1 }} />
+                </TouchableOpacity>
+              )
+            }
+          />
+        </View>
+      );
+    },
+    [colors.borderSoft, colors.accentSoft, colors.accent, openItem, currentTrack, playing]
   );
 
   return (
@@ -210,16 +240,28 @@ export default function PlaylistScreen({ route, navigation }: Props) {
                 {playlist.is_public ? " · Public" : ""} · Synced with web
               </Text>
 
-              <TouchableOpacity
-                style={[styles.playBtn, { borderRadius: radius.pill }]}
-                activeOpacity={0.85}
-                onPress={() => playAll(0)}
-                disabled={playlist.items.length === 0}
-              >
-                <LinearGradient colors={[...gradients.brand]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={StyleSheet.absoluteFill} />
-                <MaterialCommunityIcons name="play" size={20} color="#fff" />
-                <Text style={[styles.playBtnText, { fontSize: font.sm }]}>Play all</Text>
-              </TouchableOpacity>
+              <View style={styles.heroButtons}>
+                <TouchableOpacity
+                  style={[styles.playBtn, { borderRadius: radius.pill }]}
+                  activeOpacity={0.85}
+                  onPress={() => playAll(0)}
+                  disabled={playlist.items.length === 0}
+                >
+                  <LinearGradient colors={[...gradients.brand]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={StyleSheet.absoluteFill} />
+                  <MaterialCommunityIcons name="play" size={20} color="#fff" />
+                  <Text style={[styles.playBtnText, { fontSize: font.sm }]}>Play all</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.shuffleBtn, { borderRadius: radius.pill, borderColor: colors.border }]}
+                  activeOpacity={0.85}
+                  onPress={shuffleAll}
+                  disabled={playlist.items.length === 0}
+                >
+                  <MaterialCommunityIcons name="shuffle-variant" size={18} color={colors.content} />
+                  <Text style={[styles.shuffleBtnText, { color: colors.content, fontSize: font.sm }]}>Shuffle</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         }
@@ -278,8 +320,13 @@ const styles = StyleSheet.create({
   coverPlaceholder: { flex: 1, alignItems: "center", justifyContent: "center" },
   name: { fontWeight: "800", textAlign: "center", paddingHorizontal: 12 },
   meta: { marginTop: 6, fontWeight: "500", textAlign: "center" },
-  playBtn: {
+  heroButtons: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
     marginTop: 18,
+  },
+  playBtn: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
@@ -288,6 +335,22 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   playBtnText: { color: "#fff", fontWeight: "700" },
+  shuffleBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 22,
+    paddingVertical: 12,
+    borderWidth: 1,
+  },
+  shuffleBtnText: { fontWeight: "700" },
+  rowPlay: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   rowIndex: {
     width: 32,
     alignItems: "flex-end",

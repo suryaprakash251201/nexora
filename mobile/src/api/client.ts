@@ -265,6 +265,16 @@ export class Api {
     return this.get("/search", { q, root });
   }
 
+  /**
+   * Advanced library query — lists files of a kind across ALL accessible
+   * roots (empty query = everything), newest first, with pagination. Used by
+   * the Home category sections (Photos / Documents / Audio / Videos) to show
+   * the user's whole library grouped by month/year.
+   */
+  library(kind: string, limit = 200, offset = 0): Promise<SearchResponse> {
+    return this.get("/search", { q: "", kind, sort: "newest", limit, offset });
+  }
+
   stat(root: string, path: string): Promise<FileItem> {
     return this.get("/files/stat", { root, path });
   }

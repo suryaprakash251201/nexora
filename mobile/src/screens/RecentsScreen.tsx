@@ -155,13 +155,24 @@ export default function RecentsScreen({ variant = "recents" }: { variant?: "rece
 
   const openFile = useCallback(
     (item: FileItem) => {
-      if (previewKind(item) === "audio") {
-        playTrack(item, displayItems.filter(x => previewKind(x) === "audio"));
+      if (item.is_dir) {
+        // Folders open inside the file explorer, not the preview card.
+        navigation.navigate("Browser", { rootId: item.root_id, rootName: item.name, path: item.path });
+      } else if (previewKind(item) === "audio") {
+        playTrack(item, displayItems.filter((x) => !x.is_dir && previewKind(x) === "audio"));
       } else {
         navigation.navigate("Preview", { item, rootId: item.root_id });
       }
     },
     [navigation, playTrack, displayItems]
+  );
+
+  // Directly play an audio row from the trailing button.
+  const playAudioNow = useCallback(
+    (item: FileItem) => {
+      playTrack(item, displayItems.filter((x) => !x.is_dir && previewKind(x) === "audio"));
+    },
+    [playTrack, displayItems]
   );
 
   const renderRow = useCallback(
@@ -172,10 +183,21 @@ export default function RecentsScreen({ variant = "recents" }: { variant?: "rece
           onPress={openFile}
           subtitle={item.is_dir ? "Folder" : query.trim() ? item.path.replace(/\/[^/]+$/, "") || "/" : undefined}
           showDate={!query.trim()}
+          trailing={
+            !item.is_dir && previewKind(item) === "audio" ? (
+              <TouchableOpacity
+                onPress={() => playAudioNow(item)}
+                hitSlop={10}
+                style={[styles.playBtn, { backgroundColor: colors.accentSoft }]}
+              >
+                <MaterialCommunityIcons name="play" size={16} color={colors.accent} style={{ marginLeft: 1 }} />
+              </TouchableOpacity>
+            ) : undefined
+          }
         />
       </View>
     ),
-    [colors.borderSoft, openFile, query]
+    [colors.borderSoft, colors.accentSoft, colors.accent, openFile, playAudioNow, query]
   );
 
   const emptyState =
@@ -336,6 +358,13 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     paddingLeft: 4,
     marginTop: 2,
+  },
+  playBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
   },
   glassHighlight: {
     position: "absolute",
