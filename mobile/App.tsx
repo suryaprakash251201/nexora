@@ -26,6 +26,7 @@ import SettingsScreen from "./src/screens/SettingsScreen";
 import BrowserScreen from "./src/screens/BrowserScreen";
 import PreviewScreen from "./src/screens/PreviewScreen";
 import PlaylistScreen from "./src/screens/PlaylistScreen";
+import PlaylistsScreen from "./src/screens/PlaylistsScreen";
 import CategoryScreen from "./src/screens/CategoryScreen";
 import LikedScreen from "./src/screens/LikedScreen";
 import AdminScreen from "./src/screens/AdminScreen";
@@ -183,6 +184,7 @@ function RootNavigation() {
         <Stack.Screen name="Browser" component={BrowserScreen} options={({ route }) => ({ title: route.params.rootName })} />
         <Stack.Screen name="Preview" component={PreviewScreen} options={({ route }) => ({ title: route.params.item.name })} />
         <Stack.Screen name="Playlist" component={PlaylistScreen} options={{ title: "Playlist" }} />
+        <Stack.Screen name="Playlists" component={PlaylistsScreen} options={{ title: "Playlists" }} />
         <Stack.Screen name="Category" component={CategoryScreen} options={{ title: "Category" }} />
         <Stack.Screen name="Liked" component={LikedScreen} options={{ title: "Liked Songs" }} />
         <Stack.Screen name="Admin" component={AdminScreen} options={{ title: "Administration" }} />

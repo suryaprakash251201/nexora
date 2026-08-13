@@ -75,12 +75,27 @@ export default function AdminScreen({ navigation }: Props) {
   const [showCreateRoot, setShowCreateRoot] = useState(false);
   const [actionRoot, setActionRoot] = useState<AdminRoot | null>(null);
   const [showUserRoots, setShowUserRoots] = useState<AdminUser | null>(null);
-  const [userRoots, setUserRoots] = useState<{ id: string; name: string; read_only: boolean; granted: boolean; permission: string }[]>([]);
+  const [userRoots, setUserRoots] = useState<{ id: string; name: string; path: string; read_only: boolean; granted: boolean; permission: string }[]>([]);
 
   // New user form
   const [nu, setNu] = useState({ username: "", display_name: "", email: "", password: "", role: "user" });
   // New root form
-  const [nr, setNr] = useState({ name: "", path: "", type: "local", read_only: false, indexed: false });
+  const [nr, setNr] = useState({
+    name: "",
+    path: "",
+    type: "local",
+    read_only: false,
+    indexed: false,
+    // S3-compatible configuration (used when type === "s3")
+    s3: {
+      endpoint: "",
+      bucket: "",
+      region: "",
+      access_key: "",
+      secret_key: "",
+      prefix: "",
+    },
+  });
   // Reset password field (in user action sheet)
   const [newPass, setNewPass] = useState("");
   // Busy flags
@@ -216,17 +231,34 @@ export default function AdminScreen({ navigation }: Props) {
   // ── Root actions ────────────────────────────────────────────────────
   const createRoot = async () => {
     if (!api || !nr.name.trim() || !nr.path.trim()) return;
+    if (nr.type === "s3" && !nr.s3.endpoint.trim()) {
+      Alert.alert("S3 endpoint required", "Enter the S3-compatible endpoint (e.g. https://s3.amazonaws.com).");
+      return;
+    }
     setBusy(true);
     try {
+      // Build the JSON config the backend expects for S3-compatible roots.
+      let config: string | undefined;
+      if (nr.type === "s3") {
+        const cfg: Record<string, string> = {};
+        if (nr.s3.endpoint.trim()) cfg.endpoint = nr.s3.endpoint.trim();
+        if (nr.s3.bucket.trim()) cfg.bucket = nr.s3.bucket.trim();
+        if (nr.s3.region.trim()) cfg.region = nr.s3.region.trim();
+        if (nr.s3.access_key.trim()) cfg.accessKeyId = nr.s3.access_key.trim();
+        if (nr.s3.secret_key.trim()) cfg.secretAccessKey = nr.s3.secret_key.trim();
+        if (nr.s3.prefix.trim()) cfg.prefix = nr.s3.prefix.trim();
+        config = JSON.stringify(cfg);
+      }
       await api.createAdminRoot({
         name: nr.name.trim(),
         path: nr.path.trim(),
         type: nr.type,
         read_only: nr.read_only,
         indexed: nr.indexed,
+        config,
       });
       setShowCreateRoot(false);
-      setNr({ name: "", path: "", type: "local", read_only: false, indexed: false });
+      setNr({ name: "", path: "", type: "local", read_only: false, indexed: false, s3: { endpoint: "", bucket: "", region: "", access_key: "", secret_key: "", prefix: "" } });
       loadAll();
       Alert.alert("Root created", `${nr.name.trim()} is now available.`);
     } catch (e: any) {
@@ -279,7 +311,13 @@ export default function AdminScreen({ navigation }: Props) {
     if (!api) return;
     try {
       const res = await api.listUserRoots(u.id);
-      setUserRoots(res.roots);
+      // Enrich with the storage path so admins see which location they are
+      // granting/revoking (cross-referenced with the roots list).
+      const withPaths = res.roots.map((r) => ({
+        ...r,
+        path: roots.find((x) => x.id === r.id)?.path || "",
+      }));
+      setUserRoots(withPaths);
       setShowUserRoots(u);
     } catch (e: any) {
       Alert.alert("Could not load access", e?.message || "Something went wrong.");
@@ -652,14 +690,21 @@ export default function AdminScreen({ navigation }: Props) {
           <View key={r.id} style={styles.rootGrantRow}>
             <View style={{ flex: 1 }}>
               <Text style={{ color: colors.content, fontSize: font.md, fontWeight: "600" }}>{r.name}</Text>
-              <Text style={{ color: colors.muted, fontSize: font.xs, textTransform: "capitalize" }}>{r.granted ? `${r.permission} access` : "no access"}</Text>
+              <Text style={{ color: colors.muted, fontSize: font.xs }} numberOfLines={1}>
+                {r.path || "—"} · {r.granted ? `${r.permission} access` : "no access"}
+              </Text>
             </View>
-            <Switch
-              value={r.granted}
-              onValueChange={() => toggleUserRoot(r.id, r.granted)}
-              trackColor={{ true: colors.accent, false: colors.border }}
-              thumbColor="#fff"
-            />
+            <View style={styles.grantSwitchWrap}>
+              <Text style={{ color: r.granted ? colors.success : colors.muted, fontSize: font.xs, fontWeight: "700" }}>
+                {r.granted ? "Allow" : "Not allowed"}
+              </Text>
+              <Switch
+                value={r.granted}
+                onValueChange={() => toggleUserRoot(r.id, r.granted)}
+                trackColor={{ true: colors.accent, false: colors.border }}
+                thumbColor="#fff"
+              />
+            </View>
           </View>
         ))}
       </BottomSheet>
@@ -671,17 +716,34 @@ export default function AdminScreen({ navigation }: Props) {
         <View style={styles.sheetRow}>
           <Text style={[styles.sheetLabel, { color: colors.muted, fontSize: font.xs }]}>TYPE</Text>
           <View style={styles.chipRow}>
-            {["local", "smb", "nfs", "sftp", "s3"].map((t) => (
+            {["local", "s3"].map((t) => (
               <TouchableOpacity
                 key={t}
                 style={[styles.chip, { backgroundColor: nr.type === t ? colors.accent : colors.card, borderColor: nr.type === t ? colors.accent : colors.borderSoft }]}
                 onPress={() => setNr({ ...nr, type: t })}
               >
+                <MaterialCommunityIcons name={(ROOT_TYPE_ICONS[t] || ROOT_TYPE_ICONS.default) as any} size={13} color={nr.type === t ? "#fff" : colors.muted} />
                 <Text style={{ color: nr.type === t ? "#fff" : colors.content, fontSize: font.xs, fontWeight: "700", textTransform: "uppercase" }}>{t}</Text>
               </TouchableOpacity>
             ))}
           </View>
         </View>
+
+        {/* S3-compatible configuration (endpoint, bucket, credentials) */}
+        {nr.type === "s3" && (
+          <>
+            <Text style={[styles.sheetLabel, { color: colors.muted, fontSize: font.xs, marginTop: 6 }]}>S3 CONFIGURATION</Text>
+            <TextInput style={inputStyle(colors.border)} value={nr.s3.endpoint} onChangeText={(v) => setNr({ ...nr, s3: { ...nr.s3, endpoint: v } })} placeholder="Endpoint * (e.g. https://s3.amazonaws.com)" placeholderTextColor={colors.muted} autoCapitalize="none" autoCorrect={false} selectionColor={colors.accent} />
+            <TextInput style={inputStyle(colors.border)} value={nr.s3.bucket} onChangeText={(v) => setNr({ ...nr, s3: { ...nr.s3, bucket: v } })} placeholder="Bucket (e.g. my-bucket)" placeholderTextColor={colors.muted} autoCapitalize="none" autoCorrect={false} selectionColor={colors.accent} />
+            <TextInput style={inputStyle(colors.border)} value={nr.s3.region} onChangeText={(v) => setNr({ ...nr, s3: { ...nr.s3, region: v } })} placeholder="Region (optional, auto-detected)" placeholderTextColor={colors.muted} autoCapitalize="none" autoCorrect={false} selectionColor={colors.accent} />
+            <TextInput style={inputStyle(colors.border)} value={nr.s3.access_key} onChangeText={(v) => setNr({ ...nr, s3: { ...nr.s3, access_key: v } })} placeholder="Access key ID" placeholderTextColor={colors.muted} autoCapitalize="none" autoCorrect={false} selectionColor={colors.accent} />
+            <TextInput style={inputStyle(colors.border)} value={nr.s3.secret_key} onChangeText={(v) => setNr({ ...nr, s3: { ...nr.s3, secret_key: v } })} placeholder="Secret access key" placeholderTextColor={colors.muted} secureTextEntry autoCapitalize="none" autoCorrect={false} selectionColor={colors.accent} />
+            <TextInput style={inputStyle(colors.border)} value={nr.s3.prefix} onChangeText={(v) => setNr({ ...nr, s3: { ...nr.s3, prefix: v } })} placeholder="Prefix / folder (optional)" placeholderTextColor={colors.muted} autoCapitalize="none" autoCorrect={false} selectionColor={colors.accent} />
+            <Text style={{ color: colors.muted, fontSize: font.xs, lineHeight: 16, marginBottom: 4 }}>
+              Works with AWS S3, Cloudflare R2, MinIO and any S3-compatible API.
+            </Text>
+          </>
+        )}
         <View style={styles.switchRow}>
           <Text style={{ color: colors.content, fontSize: font.md, fontWeight: "600", flex: 1 }}>Read-only</Text>
           <Switch value={nr.read_only} onValueChange={(v) => setNr({ ...nr, read_only: v })} trackColor={{ true: colors.accent, false: colors.border }} thumbColor="#fff" />
@@ -804,9 +866,14 @@ const styles = StyleSheet.create({
   rootGrantRow: {
     flexDirection: "row",
     alignItems: "center",
+    gap: 12,
     paddingVertical: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: "rgba(128,128,128,0.2)",
+  },
+  grantSwitchWrap: {
+    alignItems: "flex-end",
+    gap: 2,
   },
   centerBlock: { alignItems: "center", paddingTop: 60, gap: 12 },
   centerTitle: { textAlign: "center", fontWeight: "600", paddingHorizontal: 20 },

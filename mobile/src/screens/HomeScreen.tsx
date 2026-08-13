@@ -205,7 +205,7 @@ export default function HomeScreen() {
               end={{ x: 1, y: 1 }}
               style={styles.glassHighlight}
             />
-            <View style={styles.rootCardTop}>
+              <View style={styles.rootCardTop}>
               <View style={styles.rootIconWrap}>
                 <LinearGradient
                   colors={[...gradients.brand]}
@@ -214,19 +214,6 @@ export default function HomeScreen() {
                   style={StyleSheet.absoluteFill}
                 />
                 <MaterialCommunityIcons name={iconName as any} size={24} color="#fff" />
-              </View>
-
-              <View
-                style={[
-                  styles.permBadge,
-                  { backgroundColor: item.permission === "write" ? "rgba(16,185,129,0.15)" : colors.card },
-                ]}
-              >
-                <MaterialCommunityIcons
-                  name={item.permission === "write" ? "pencil" : "eye"}
-                  size={14}
-                  color={item.permission === "write" ? colors.success : colors.muted}
-                />
               </View>
             </View>
 
@@ -375,36 +362,25 @@ export default function HomeScreen() {
                 <SectionLabel>Your Playlists</SectionLabel>
                 <Text style={[styles.playlistSync, { color: colors.muted, fontSize: font.xs }]}>synced with web</Text>
               </View>
-              {/* Full-width playlist rows, styled like the Liked Songs card —
-                  tap to push the playlist detail screen */}
-              <View style={{ paddingHorizontal: spacing.lg, gap: 10 }}>
-                {playlists.map((p) => (
-                  <TouchableOpacity
-                    key={p.id}
-                    style={[styles.playlistCard, { backgroundColor: colors.surface, borderColor: colors.borderSoft, borderRadius: radius.xl }, shadowSm]}
-                    activeOpacity={0.8}
-                    onPress={() => navigation.navigate("Playlist", { playlist: p })}
-                  >
-                    <LinearGradient colors={["rgba(255,255,255,0.06)", "transparent"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
-                    <View style={styles.playlistCover}>
-                      <MaterialCommunityIcons name="playlist-music" size={26} color={colors.accent} />
-                      <View style={[styles.playlistCount, { backgroundColor: colors.accentSoft }]}>
-                        <MaterialCommunityIcons name="music-note" size={10} color={colors.accent} />
-                        <Text style={[styles.playlistCountText, { color: colors.accent, fontSize: font.xs }]}>{p.items.length}</Text>
-                      </View>
-                    </View>
-                    <View style={styles.playlistBody}>
-                      <Text style={[styles.playlistTitle, { color: colors.content, fontSize: font.md }]} numberOfLines={1}>
-                        {p.name}
-                      </Text>
-                      <Text style={[styles.playlistSub, { color: colors.muted, fontSize: font.xs }]}>
-                        {p.items.length} track{p.items.length === 1 ? "" : "s"} · tap to open
-                      </Text>
-                    </View>
-                    <MaterialCommunityIcons name="chevron-right" size={22} color={colors.muted} style={{ opacity: 0.5 }} />
-                  </TouchableOpacity>
-                ))}
-              </View>
+              {/* One playlist card — tap to open the full list of playlists */}
+              <TouchableOpacity
+                style={[styles.playlistCard, { backgroundColor: colors.surface, borderColor: colors.borderSoft, borderRadius: radius.xl, marginHorizontal: spacing.lg }, shadowSm]}
+                activeOpacity={0.8}
+                onPress={() => navigation.navigate("Playlists")}
+              >
+                <LinearGradient colors={["rgba(255,255,255,0.06)", "transparent"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+                <View style={styles.playlistCover}>
+                  <LinearGradient colors={[...gradients.brand]} style={StyleSheet.absoluteFill} />
+                  <MaterialCommunityIcons name="playlist-music" size={26} color="#fff" />
+                </View>
+                <View style={styles.playlistBody}>
+                  <Text style={[styles.playlistTitle, { color: colors.content, fontSize: font.md }]}>Playlists</Text>
+                  <Text style={[styles.playlistSub, { color: colors.muted, fontSize: font.xs }]}>
+                    {playlists.length} playlist{playlists.length === 1 ? "" : "s"} · tap to open
+                  </Text>
+                </View>
+                <MaterialCommunityIcons name="chevron-right" size={22} color={colors.muted} style={{ opacity: 0.5 }} />
+              </TouchableOpacity>
             </View>
           )}
 
@@ -582,13 +558,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     overflow: "hidden",
   },
-  permBadge: {
-    width: 28,
-    height: 28,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-  },
   rootName: { fontWeight: "700" },
   rootType: { marginTop: 4, fontWeight: "600" },
   rootCardFooter: {
@@ -650,20 +619,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     position: "relative",
+    overflow: "hidden",
   },
   playlistBody: { flex: 1 },
-  playlistCount: {
-    position: "absolute",
-    bottom: -4,
-    right: -6,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 2,
-    borderRadius: 10,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-  },
-  playlistCountText: { fontWeight: "700" },
   playlistTitle: { fontWeight: "700", marginBottom: 2 },
   playlistSub: { fontWeight: "600" },
 

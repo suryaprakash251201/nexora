@@ -5,6 +5,7 @@ export type RootStackParamList = {
   Browser: { rootId: string; rootName: string; path?: string; initialItem?: FileItem };
   Preview: { item: FileItem; rootId: string };
   Playlist: { playlist: Playlist };
+  Playlists: undefined;
   Category: { kind: string; title: string };
   Liked: undefined;
   Admin: undefined;
