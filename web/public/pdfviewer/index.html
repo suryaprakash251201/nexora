@@ -74,6 +74,15 @@
   if (!src) { showError(); return; }
   pdfjsLib.GlobalWorkerOptions.workerSrc = "pdf.worker.min.js";
   loading.style.display = "flex";
+  // Tell the native WebView wrapper that the REAL viewer loaded (an old
+  // server without /pdfviewer/ falls back to the Nexora web SPA — the app
+  // uses this message to show a helpful error instead of a broken page).
+  function postReady() {
+    try {
+      if (window.ReactNativeWebView) window.ReactNativeWebView.postMessage("PDF_READY");
+    } catch (e) {}
+  }
+  postReady();
   pdfjsLib.getDocument(src).promise.then(function(doc){
     pdfDoc = doc;
     loading.style.display = "none";

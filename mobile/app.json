@@ -20,6 +20,12 @@
           "resizeMode": "cover",
           "backgroundColor": "#8B5CF6"
         }
+      ],
+      [
+        "expo-video",
+        {
+          "supportsBackgroundPlayback": true
+        }
       ]
     ],
     "ios": {

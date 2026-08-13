@@ -76,8 +76,13 @@ export default function PreviewScreen({ route }: Props) {
   // One transcode session per preview: the server uses it to kill the previous
   // ffmpeg process when the client re-requests the stream (seek/retry).
   const transcodeSession = useMemo(() => generateSessionId(), []);
-  const hlsUri = api
-    ? api.hlsPlaylistUrl(item.root_id || rootId, item.path, transcodeSession)
+  // Universal playback fallback: /files/transcode pipes a streamable
+  // fragmented MP4 (H.264/AAC) from ANY container/codec — used when the raw
+  // file can't be decoded natively (HEVC on older Android, MKV/AVI/…) or
+  // when native playback errors. (HLS was dropped as the fallback because it
+  // requires a local filesystem and fails on remote roots.)
+  const transcodeUri = api
+    ? api.transcodeUrl(item.root_id || rootId, item.path, { session: transcodeSession })
     : "";
 
   // ── Text / code preview ─────────────────────────────────────────────
@@ -130,6 +135,32 @@ export default function PreviewScreen({ route }: Props) {
     }
   };
 
+  // Pure download — used by the image toolbar's download button.
+  const downloadOnly = async () => {
+    if (!api) return;
+    try {
+      const target = new File(Paths.cache, "nexora-" + item.name.replace(/[^\w.\-]+/g, "_"));
+      await File.downloadFileAsync(api.rawFileUrl(item.root_id || rootId, item.path), target);
+      Alert.alert("Downloaded", `"${item.name}" saved to the app cache.`);
+    } catch (e: any) {
+      Alert.alert("Download failed", e?.message || "Something went wrong.");
+    }
+  };
+
+  // Pure share (re-uses the downloaded cache copy).
+  const shareOnly = async () => {
+    if (!api) return;
+    try {
+      const target = new File(Paths.cache, "nexora-" + item.name.replace(/[^\w.\-]+/g, "_"));
+      await File.downloadFileAsync(api.rawFileUrl(item.root_id || rootId, item.path), target);
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(target.uri, { mimeType: item.mime || undefined });
+      }
+    } catch (e: any) {
+      Alert.alert("Share failed", e?.message || "Something went wrong.");
+    }
+  };
+
   return (
     <View style={[styles.root, { backgroundColor: colors.bg }]}>
       {kind === "image" && (
@@ -156,10 +187,10 @@ export default function PreviewScreen({ route }: Props) {
               <Text style={styles.imageInfoText}>{formatBytes(item.size)} · {(item.mime || item.extension || "").toUpperCase()}</Text>
             </View>
             <View style={{ flex: 1 }} />
-            <TouchableOpacity style={styles.imageToolBtn} onPress={downloadAndOpen}>
+            <TouchableOpacity style={styles.imageToolBtn} onPress={downloadOnly}>
               <MaterialCommunityIcons name="download" size={24} color="#fff" />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.imageToolBtn} onPress={downloadAndOpen}>
+            <TouchableOpacity style={styles.imageToolBtn} onPress={shareOnly}>
               <MaterialCommunityIcons name="share-variant" size={24} color="#fff" />
             </TouchableOpacity>
           </View>
@@ -168,7 +199,7 @@ export default function PreviewScreen({ route }: Props) {
 
       {kind === "video" && (
         <View style={styles.center}>
-          <VideoPlayer uri={rawUrl} hlsUri={hlsUri} ext={item.extension} onFallback={downloadAndOpen} />
+          <VideoPlayer uri={rawUrl} transcodeUri={transcodeUri} ext={item.extension} onFallback={downloadAndOpen} />
         </View>
       )}
 
@@ -355,14 +386,15 @@ export default function PreviewScreen({ route }: Props) {
 
 // ── Video ─────────────────────────────────────────────────────────────
 // Plays the raw file natively where possible; for containers the native
-// players can't handle (MKV, AVI, WMV, …) — or when native playback errors —
-// it swaps to the server's transcode endpoint, which pipes a streamable
-// fragmented MP4 (ffmpeg) that both platforms can play.
-function VideoPlayer({ uri, hlsUri, ext, onFallback }: { uri: string; hlsUri: string; ext?: string; onFallback?: () => void }) {
+// players can't handle (MKV, AVI, WMV, …), for codecs the device lacks
+// (HEVC on older Android), or when native playback errors — it swaps to the
+// server's transcode endpoint, which pipes a streamable fragmented MP4
+// (H.264/AAC via ffmpeg) that both platforms can play.
+function VideoPlayer({ uri, transcodeUri, ext, onFallback }: { uri: string; transcodeUri: string; ext?: string; onFallback?: () => void }) {
   const { colors, font, radius } = useTheme();
   const extNorm = (ext || "").toLowerCase().replace(/^\./, "");
   const needsTranscode = TRANSCODE_EXT.has(extNorm);
-  const initialUri = needsTranscode && hlsUri ? hlsUri : uri;
+  const initialUri = needsTranscode && transcodeUri ? transcodeUri : uri;
 
   const player = useVideoPlayer(initialUri, (p) => {
     p.loop = true;
@@ -371,7 +403,7 @@ function VideoPlayer({ uri, hlsUri, ext, onFallback }: { uri: string; hlsUri: st
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState(false);
   const [switching, setSwitching] = useState(false);
-  const switched = useRef(needsTranscode && !!hlsUri);
+  const switched = useRef(needsTranscode && !!transcodeUri);
   const [sheetOpen, setSheetOpen] = useState(false);
 
   useEffect(() => {
@@ -384,12 +416,12 @@ function VideoPlayer({ uri, hlsUri, ext, onFallback }: { uri: string; hlsUri: st
         // setup callback fired before the player was ready.
         player.play();
       }
-      // Native playback failed → fall back to the HLS stream.
-      if (status === "error" && !switched.current && hlsUri) {
+      // Native playback failed → fall back to the server transcode stream.
+      if (status === "error" && !switched.current && transcodeUri) {
         switched.current = true;
         setSwitching(true);
         setFailed(false);
-        player.replace(hlsUri);
+        player.replace(transcodeUri);
         player.play();
       }
     });
@@ -399,7 +431,7 @@ function VideoPlayer({ uri, hlsUri, ext, onFallback }: { uri: string; hlsUri: st
         player.pause();
       } catch (e) {}
     };
-  }, [player, hlsUri]);
+  }, [player, transcodeUri]);
 
   if (failed) {
     return (
@@ -491,6 +523,9 @@ function AudioPlayer({ name, size, ext, mime, rootId, path, onShare }: { name: s
   // Load the resolved stream once ready. replaceAsync avoids the synchronous
   // iOS main-thread load (expo-video deprecates the sync `replace`).
   const player = useVideoPlayer(null);
+  useEffect(() => {
+    (player as any).staysActiveInBackground = true;
+  }, [player]);
   useEffect(() => {
     if (!resolvedUri) return;
     const p = (player as any).replaceAsync?.(resolvedUri);

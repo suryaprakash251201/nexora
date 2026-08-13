@@ -38,6 +38,12 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   // Start with no source — expo-video treats null as “no media loaded”.
   // (An empty string is an invalid URI on both iOS and Android and logs errors.)
   const player = useVideoPlayer(null);
+  // Keep playing when the screen locks / app goes to background (requires
+  // the expo-video background-playback plugin in app.json — iOS audio
+  // background mode + Android media foreground service).
+  useEffect(() => {
+    (player as any).staysActiveInBackground = true;
+  }, [player]);
   const sessionRef = useRef(newSession());
   const { prefs } = useSettings();
   const qualityRef = useRef(prefs.playbackQuality);

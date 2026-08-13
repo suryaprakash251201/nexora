@@ -291,6 +291,12 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
   };
 
   const openModal = () => {
+    // Clear any leftover swipe transform (an interrupted swipe-down close
+    // can leave the artwork translated — reopening would show it shifted
+    // over the timeline/controls).
+    panX.setValue(0);
+    panY.setValue(0);
+    swipeLock.current = null;
     setModalVisible(true);
     Animated.spring(slideAnim, {
       toValue: 0,

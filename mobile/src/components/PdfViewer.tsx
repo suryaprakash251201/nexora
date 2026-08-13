@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { ActivityIndicator, StyleSheet, TouchableOpacity, View, Text } from "react-native";
 import { WebView } from "react-native-webview";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -26,10 +26,20 @@ interface Props {
 export default function PdfViewer({ baseUrl, pdfUrl, fileName, onOpenExternal }: Props) {
   const { colors } = useTheme();
   const [failed, setFailed] = useState(false);
+  const [missingViewer, setMissingViewer] = useState(false);
+  const readyRef = useRef(false);
+  const [viewKey, setViewKey] = useState(0);
 
   const viewerUrl = `${baseUrl.replace(/\/+$/, "")}/pdfviewer/index.html?file=${encodeURIComponent(
     pdfUrl
   )}&name=${encodeURIComponent(fileName)}`;
+
+  const retry = () => {
+    readyRef.current = false;
+    setMissingViewer(false);
+    setFailed(false);
+    setViewKey((k) => k + 1);
+  };
 
   if (failed) {
     return (
@@ -37,13 +47,13 @@ export default function PdfViewer({ baseUrl, pdfUrl, fileName, onOpenExternal }:
         <MaterialCommunityIcons name="file-pdf-box" size={44} color={colors.danger} />
         <Text style={[styles.failedTitle, { color: colors.content }]}>Could not open the PDF viewer</Text>
         <Text style={[styles.failedSub, { color: colors.muted }]}>
-          The viewer page wasn't found on the server, or the connection failed.
+          {missingViewer
+            ? "Your Nexora server doesn't have the PDF viewer page installed yet — update the server to the latest build (web/public/pdfviewer is auto-copied on rebuild), or open the PDF in another app."
+            : "The viewer page wasn't found on the server, or the connection failed."}
         </Text>
         <TouchableOpacity
           style={[styles.retryBtn, { backgroundColor: colors.accent }]}
-          onPress={() => {
-            setFailed(false);
-          }}
+          onPress={retry}
           activeOpacity={0.8}
         >
           <MaterialCommunityIcons name="refresh" size={16} color="#fff" />
@@ -60,6 +70,7 @@ export default function PdfViewer({ baseUrl, pdfUrl, fileName, onOpenExternal }:
   return (
     <View style={styles.root}>
       <WebView
+        key={viewKey}
         source={{ uri: viewerUrl }}
         style={styles.web}
         originWhitelist={["*"]}
@@ -72,6 +83,22 @@ export default function PdfViewer({ baseUrl, pdfUrl, fileName, onOpenExternal }:
             <ActivityIndicator size="large" color={colors.accent} />
           </View>
         )}
+        // Detect an old server: the real viewer page reports PDF_READY via
+        // postMessage (it defines window.pdfjsLib). If nothing reports
+        // within ~6s, the server likely served the Nexora web SPA fallback
+        // instead — surface the missing-viewer state.
+        injectedJavaScript={`(function(){try{if(window.pdfjsLib){window.ReactNativeWebView.postMessage("PDF_READY");}}catch(e){}})();`}
+        onMessage={(e) => {
+          if (e.nativeEvent.data === "PDF_READY") readyRef.current = true;
+        }}
+        onLoadEnd={() => {
+          setTimeout(() => {
+            if (!readyRef.current) {
+              setMissingViewer(true);
+              setFailed(true);
+            }
+          }, 6000);
+        }}
         onHttpError={(s) => {
           if (s.nativeEvent.statusCode >= 400) setFailed(true);
         }}

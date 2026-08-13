@@ -93,8 +93,12 @@ export default function CategoryScreen({ route, navigation }: Props) {
   const [hasMore, setHasMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"list" | "grid">(prefs.viewMode);
-  // Fullscreen photo pager — index into `items` (image gallery only).
-  const [pagerIndex, setPagerIndex] = useState<number | null>(null);
+  // Fullscreen photo pager (image gallery only). The open/closed state and
+  // the current page are kept SEPARATE so a late onMomentumScrollEnd (fired
+  // after the user hits ✕ while the pager is still decelerating) can never
+  // re-open the modal by writing back a page index.
+  const [pagerOpen, setPagerOpen] = useState(false);
+  const [pagerIdx, setPagerIdx] = useState(0);
   const { width: winW } = useWindowDimensions();
   const offsetRef = useRef(0);
   const seqRef = useRef(0);
@@ -180,7 +184,7 @@ export default function CategoryScreen({ route, navigation }: Props) {
     !!currentTrack && currentTrack.root_id === r.root_id && currentTrack.path === r.path;
 
   // ── Gallery helpers (kind === "image") ──────────────────────────────
-  const pagerItem = pagerIndex !== null ? items[pagerIndex] : null;
+  const pagerItem = pagerOpen ? items[pagerIdx] : undefined;
   const downloadOrSharePhoto = async (share: boolean) => {
     if (!api || !pagerItem) return;
     try {
@@ -209,7 +213,10 @@ export default function CategoryScreen({ route, navigation }: Props) {
       <TouchableOpacity
         style={styles.galCell}
         activeOpacity={0.85}
-        onPress={() => setPagerIndex(index)}
+        onPress={() => {
+          setPagerIdx(index);
+          setPagerOpen(true);
+        }}
         onLongPress={() => openItem(item)}
         delayLongPress={350}
       >
@@ -360,12 +367,12 @@ export default function CategoryScreen({ route, navigation }: Props) {
             }
           />
 
-          {/* Fullscreen photo pager — swipe between photos, zoom-free gallery */}
+          {/* Fullscreen photo pager — swipe between photos, tap image to close */}
           <Modal
-            visible={pagerIndex !== null}
+            visible={pagerOpen}
             transparent={false}
             animationType="fade"
-            onRequestClose={() => setPagerIndex(null)}
+            onRequestClose={() => setPagerOpen(false)}
             statusBarTranslucent
           >
             <View style={styles.pagerRoot}>
@@ -373,14 +380,18 @@ export default function CategoryScreen({ route, navigation }: Props) {
                 data={galleryList}
                 horizontal
                 pagingEnabled
-                initialScrollIndex={pagerIndex ?? 0}
+                initialScrollIndex={pagerIdx}
                 getItemLayout={(_, i) => ({ length: winW, offset: winW * i, index: i })}
                 onMomentumScrollEnd={(e) =>
-                  setPagerIndex(Math.round(e.nativeEvent.contentOffset.x / winW))
+                  setPagerIdx(Math.round(e.nativeEvent.contentOffset.x / winW))
                 }
                 keyExtractor={(it) => it.root_id + it.path}
                 renderItem={({ item }) => (
-                  <View style={[styles.pagerPage, { width: winW }]}>
+                  <TouchableOpacity
+                    activeOpacity={1}
+                    style={[styles.pagerPage, { width: winW }]}
+                    onPress={() => setPagerOpen(false)}
+                  >
                     <Image
                       source={{ uri: api?.thumbnailUrl(item.root_id, item.path, 1600) }}
                       style={styles.pagerImg}
@@ -388,17 +399,17 @@ export default function CategoryScreen({ route, navigation }: Props) {
                       transition={150}
                       cachePolicy="memory-disk"
                     />
-                  </View>
+                  </TouchableOpacity>
                 )}
               />
 
               {/* Top bar: close + counter */}
               <View style={[styles.pagerTop, { paddingTop: insets.top + 10 }]}>
-                <TouchableOpacity style={styles.pagerClose} onPress={() => setPagerIndex(null)} activeOpacity={0.8}>
+                <TouchableOpacity style={styles.pagerClose} onPress={() => setPagerOpen(false)} activeOpacity={0.8} hitSlop={8}>
                   <MaterialCommunityIcons name="close" size={24} color="#fff" />
                 </TouchableOpacity>
                 <Text style={styles.pagerCount}>
-                  {(pagerIndex ?? 0) + 1} / {galleryList.length}
+                  {pagerIdx + 1} / {galleryList.length}
                 </Text>
                 <View style={{ width: 44 }} />
               </View>
@@ -416,9 +427,10 @@ export default function CategoryScreen({ route, navigation }: Props) {
                 <TouchableOpacity
                   style={styles.pagerBtn}
                   onPress={() => {
-                    if (pagerItem) {
-                      setPagerIndex(null);
-                      navigation.navigate("Preview", { item: toFileItem(pagerItem), rootId: pagerItem.root_id });
+                    const cur = pagerItem;
+                    setPagerOpen(false);
+                    if (cur) {
+                      navigation.navigate("Preview", { item: toFileItem(cur), rootId: cur.root_id });
                     }
                   }}
                   activeOpacity={0.85}
