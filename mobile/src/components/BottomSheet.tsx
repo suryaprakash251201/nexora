@@ -57,8 +57,16 @@ export function BottomSheet({ visible, onClose, title, actions, children }: Prop
                 i < actions.length - 1 && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.borderSoft },
               ]}
               onPress={() => {
-                a.onPress();
-                onClose();
+                // Wrap in try/catch so a synchronous throw in an action can
+                // never skip onClose() — otherwise the sheet's full-screen
+                // backdrop stays mounted and blocks the whole app.
+                try {
+                  a.onPress();
+                } catch (e) {
+                  console.warn("BottomSheet action error", e);
+                } finally {
+                  onClose();
+                }
               }}
               activeOpacity={0.6}
             >

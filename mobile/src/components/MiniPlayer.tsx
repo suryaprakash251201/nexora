@@ -11,6 +11,7 @@ import {
   Dimensions,
   ActivityIndicator,
   Alert,
+  TextInput,
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -20,7 +21,7 @@ import * as Haptics from "expo-haptics";
 import { File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import type { FileItem } from "../api/types";
+import type { FileItem, Playlist } from "../api/types";
 import { useAudio } from "../store/AudioContext";
 import { useTheme } from "../store/ThemeContext";
 import { useSession } from "../store/SessionContext";
@@ -52,6 +53,12 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
   const [scrubberWidth, setScrubberWidth] = useState(1);
   const [moreSheet, setMoreSheet] = useState(false);
   const [queueOpen, setQueueOpen] = useState(false);
+  // Playlist picker from the "..." menu: add current track to a playlist
+  // or create a new one.
+  const [playlistPicker, setPlaylistPicker] = useState(false);
+  const [playlists, setPlaylists] = useState<Playlist[]>([]);
+  const [newPlaylistName, setNewPlaylistName] = useState("");
+  const [playlistBusy, setPlaylistBusy] = useState(false);
   // Tap the lossless wave in the fullscreen player to reveal/hide the
   // track's audio details (codec · bit depth · sample rate).
   const [showQuality, setShowQuality] = useState(false);
@@ -178,12 +185,18 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
     }).start();
   };
 
+  // Close the fullscreen player. modalVisible is set to false IMMEDIATELY (not
+  // in the animation callback) so the Modal can never linger mounted with an
+  // off-screen view — an invisible-but-touch-capturing overlay that made the
+  // whole app unresponsive until the mini player was closed. Also force-close
+  // the action sheet / queue so no full-screen Modal can get stuck.
   const closeModal = () => {
-    Animated.timing(slideAnim, {
-      toValue: SCREEN_HEIGHT,
-      duration: 300,
-      useNativeDriver: true,
-    }).start(() => setModalVisible(false));
+    setModalVisible(false);
+    setMoreSheet(false);
+    setQueueOpen(false);
+    // Fire-and-forget slide-down so the view doesn't snap abruptly when the
+    // player is reopened during the same frame.
+    slideAnim.setValue(SCREEN_HEIGHT);
   };
 
   const coverUrl = api ? api.thumbnailUrl(currentTrack.root_id, currentTrack.path, 512) : null;
@@ -264,6 +277,58 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
     haptic();
     const url = await copyShareLink(api, currentTrack.root_id, currentTrack.path);
     if (url) Alert.alert("Link copied", url);
+  };
+
+  // ── Add-to-playlist / create-playlist (from the "..." menu) ──────
+  const openPlaylistPicker = async () => {
+    setMoreSheet(false);
+    haptic();
+    if (!api) return;
+    setPlaylistPicker(true);
+    setNewPlaylistName("");
+    try {
+      const res = await api.listPlaylists();
+      setPlaylists(res.items || []);
+    } catch {
+      setPlaylists([]);
+    }
+  };
+
+  const addToPlaylist = async (playlistId: string) => {
+    if (!currentTrack || !api || playlistBusy) return;
+    setPlaylistBusy(true);
+    try {
+      await api.addPlaylistItems(playlistId, [
+        { root_id: currentTrack.root_id, path: currentTrack.path },
+      ]);
+      haptic("medium");
+      setPlaylistPicker(false);
+      Alert.alert("Added", `"${cleanTrackTitle(currentTrack.name)}" added to playlist.`);
+    } catch (e: any) {
+      Alert.alert("Could not add", e?.message || "Try again in a moment.");
+    } finally {
+      setPlaylistBusy(false);
+    }
+  };
+
+  const createPlaylistWithTrack = async () => {
+    if (!currentTrack || !api || playlistBusy) return;
+    const name = newPlaylistName.trim();
+    if (!name) return;
+    setPlaylistBusy(true);
+    try {
+      await api.createPlaylist(name, [
+        { root_id: currentTrack.root_id, path: currentTrack.path },
+      ]);
+      haptic("medium");
+      setPlaylistPicker(false);
+      setNewPlaylistName("");
+      Alert.alert("Created", `Playlist "${name}" created with this song.`);
+    } catch (e: any) {
+      Alert.alert("Could not create", e?.message || "Try again in a moment.");
+    } finally {
+      setPlaylistBusy(false);
+    }
   };
 
   const jumpTo = (item: FileItem) => {
@@ -889,6 +954,11 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
             onPress: toggleFavorite,
           },
           {
+            label: "Add to playlist",
+            icon: "playlist-plus",
+            onPress: openPlaylistPicker,
+          },
+          {
             label: "Download",
             icon: "download",
             onPress: () => downloadAndShare(false),
@@ -905,6 +975,69 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
           },
         ]}
       />
+
+      {/* ── Add to playlist / create playlist picker ── */}
+      <BottomSheet
+        visible={playlistPicker}
+        onClose={() => {
+          setPlaylistPicker(false);
+          setNewPlaylistName("");
+        }}
+        title="Add to playlist"
+      >
+        <View style={styles.pickerCreateRow}>
+          <TextInput
+            style={[styles.pickerInput, { backgroundColor: colors.surfaceMuted, borderColor: colors.border, color: colors.content, borderRadius: radius.md }]}
+            value={newPlaylistName}
+            onChangeText={setNewPlaylistName}
+            placeholder="New playlist name…"
+            placeholderTextColor={colors.muted}
+            autoCapitalize="sentences"
+            selectionColor={colors.accent}
+            onSubmitEditing={createPlaylistWithTrack}
+          />
+          <TouchableOpacity
+            style={[styles.pickerCreateBtn, { backgroundColor: colors.accent, borderRadius: radius.md }, (!newPlaylistName.trim() || playlistBusy) && { opacity: 0.5 }]}
+            disabled={!newPlaylistName.trim() || playlistBusy}
+            onPress={createPlaylistWithTrack}
+          >
+            {playlistBusy ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <MaterialCommunityIcons name="plus" size={20} color="#fff" />
+            )}
+          </TouchableOpacity>
+        </View>
+
+        <Text style={[styles.pickerSection, { color: colors.muted, fontSize: font.xs }]}>YOUR PLAYLISTS</Text>
+        {playlists.length === 0 ? (
+          <Text style={[styles.pickerEmpty, { color: colors.muted, fontSize: font.sm }]}>
+            No playlists yet — create one above.
+          </Text>
+        ) : (
+          playlists.map((pl) => (
+            <TouchableOpacity
+              key={pl.id}
+              style={[styles.pickerRow, { borderBottomColor: colors.borderSoft }]}
+              onPress={() => addToPlaylist(pl.id)}
+              activeOpacity={0.6}
+            >
+              <View style={[styles.pickerRowIcon, { backgroundColor: colors.accentSoft }]}>
+                <MaterialCommunityIcons name="playlist-music" size={18} color={colors.accent} />
+              </View>
+              <View style={styles.pickerRowBody}>
+                <Text style={[styles.pickerRowTitle, { color: colors.content, fontSize: font.md }]} numberOfLines={1}>
+                  {pl.name}
+                </Text>
+                <Text style={[styles.pickerRowSub, { color: colors.muted, fontSize: font.xs }]}>
+                  {pl.items.length} track{pl.items.length === 1 ? "" : "s"}
+                </Text>
+              </View>
+              <MaterialCommunityIcons name="plus-circle-outline" size={20} color={colors.accent} />
+            </TouchableOpacity>
+          ))
+        )}
+      </BottomSheet>
     </>
   );
 }
@@ -1255,6 +1388,56 @@ const styles = StyleSheet.create({
   queueClose: { padding: 4 },
   queueList: { flexGrow: 0 },
   queueEmpty: { textAlign: "center", paddingVertical: 24 },
+
+  /* Playlist picker (from "..." menu) */
+  pickerCreateRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 6,
+  },
+  pickerInput: {
+    flex: 1,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+  },
+  pickerCreateBtn: {
+    width: 42,
+    height: 42,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  pickerSection: {
+    fontWeight: "700",
+    letterSpacing: 1,
+    marginTop: 10,
+    marginBottom: 4,
+    paddingHorizontal: 4,
+  },
+  pickerEmpty: {
+    textAlign: "center",
+    paddingVertical: 16,
+  },
+  pickerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 4,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  pickerRowIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  pickerRowBody: { flex: 1 },
+  pickerRowTitle: { fontWeight: "600" },
+  pickerRowSub: { marginTop: 2, fontWeight: "500" },
   queueRow: {
     flexDirection: "row",
     alignItems: "center",

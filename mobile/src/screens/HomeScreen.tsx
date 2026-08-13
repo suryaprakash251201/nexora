@@ -375,7 +375,9 @@ export default function HomeScreen() {
                 <SectionLabel>Your Playlists</SectionLabel>
                 <Text style={[styles.playlistSync, { color: colors.muted, fontSize: font.xs }]}>synced with web</Text>
               </View>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: spacing.lg, gap: 12 }}>
+              {/* Full-width playlist rows, styled like the Liked Songs card —
+                  tap to push the playlist detail screen */}
+              <View style={{ paddingHorizontal: spacing.lg, gap: 10 }}>
                 {playlists.map((p) => (
                   <TouchableOpacity
                     key={p.id}
@@ -385,21 +387,24 @@ export default function HomeScreen() {
                   >
                     <LinearGradient colors={["rgba(255,255,255,0.06)", "transparent"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
                     <View style={styles.playlistCover}>
-                      <MaterialCommunityIcons name="playlist-music" size={30} color={colors.accent} />
+                      <MaterialCommunityIcons name="playlist-music" size={26} color={colors.accent} />
                       <View style={[styles.playlistCount, { backgroundColor: colors.accentSoft }]}>
-                        <MaterialCommunityIcons name="music-note" size={11} color={colors.accent} />
+                        <MaterialCommunityIcons name="music-note" size={10} color={colors.accent} />
                         <Text style={[styles.playlistCountText, { color: colors.accent, fontSize: font.xs }]}>{p.items.length}</Text>
                       </View>
                     </View>
-                    <Text style={[styles.playlistTitle, { color: colors.content, fontSize: font.sm }]} numberOfLines={1}>
-                      {p.name}
-                    </Text>
-                    <Text style={[styles.playlistSub, { color: colors.muted, fontSize: font.xs }]}>
-                      {p.items.length} track{p.items.length === 1 ? "" : "s"}
-                    </Text>
+                    <View style={styles.playlistBody}>
+                      <Text style={[styles.playlistTitle, { color: colors.content, fontSize: font.md }]} numberOfLines={1}>
+                        {p.name}
+                      </Text>
+                      <Text style={[styles.playlistSub, { color: colors.muted, fontSize: font.xs }]}>
+                        {p.items.length} track{p.items.length === 1 ? "" : "s"} · tap to open
+                      </Text>
+                    </View>
+                    <MaterialCommunityIcons name="chevron-right" size={22} color={colors.muted} style={{ opacity: 0.5 }} />
                   </TouchableOpacity>
                 ))}
-              </ScrollView>
+              </View>
             </View>
           )}
 
@@ -630,22 +635,23 @@ const styles = StyleSheet.create({
   likedTitle: { fontWeight: "700" },
   likedSub: { marginTop: 3, fontWeight: "500" },
   playlistCard: {
-    width: 150,
-    padding: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 12,
     borderWidth: 1,
     overflow: "hidden",
-    alignItems: "flex-start",
   },
   playlistCover: {
-    width: 56,
-    height: 56,
-    borderRadius: 18,
+    width: 52,
+    height: 52,
+    borderRadius: 16,
     backgroundColor: "rgba(255,255,255,0.05)",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 12,
     position: "relative",
   },
+  playlistBody: { flex: 1 },
   playlistCount: {
     position: "absolute",
     bottom: -4,
@@ -658,7 +664,7 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   playlistCountText: { fontWeight: "700" },
-  playlistTitle: { fontWeight: "700", marginBottom: 2, maxWidth: 116 },
+  playlistTitle: { fontWeight: "700", marginBottom: 2 },
   playlistSub: { fontWeight: "600" },
 
   seeAll: { flexDirection: "row", alignItems: "center", gap: 2, padding: 4, marginTop: 18 },
