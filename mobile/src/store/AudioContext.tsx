@@ -1,11 +1,12 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from "react";
-import { useVideoPlayer, VideoPlayer } from "expo-video";
 import type { FileItem } from "../api/types";
+import { trackPlayerController, TrackPlayerController } from "../lib/trackPlayerController";
+import { cleanTrackTitle } from "../lib/fileMeta";
 import { useSession } from "./SessionContext";
 import { useSettings } from "./SettingsContext";
 
 type AudioContextType = {
-  player: VideoPlayer | null;
+  player: TrackPlayerController;
   currentTrack: FileItem | null;
   playlist: FileItem[];
   queueIndex: number;
@@ -35,16 +36,19 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   const [showPlayer, setShowPlayer] = useState(false);
   const [shuffle, setShuffle] = useState(false);
 
-  // Start with no source — expo-video treats null as “no media loaded”.
-  // (An empty string is an invalid URI on both iOS and Android and logs errors.)
-  const player = useVideoPlayer(null);
-  // Keep playing when the screen locks / app goes to background (requires
-  // the expo-video background-playback plugin in app.json — iOS audio
-  // background mode + Android media foreground service).
+  // Audio runs on react-native-track-player (shared singleton controller):
+  // background playback + a native media notification card (notification
+  // center / lock screen / control center) with play, pause, next, previous,
+  // seek and ±15s jump controls on both iOS and Android.
+  const player = trackPlayerController;
+  // Initialize the native player once (idempotent — also called by load()).
   useEffect(() => {
-    (player as any).staysActiveInBackground = true;
+    player.ensureInit();
   }, [player]);
   const sessionRef = useRef(newSession());
+  // Timestamp of the most recent load — guards the "ended" auto-advance
+  // against a queue-ended event that can race right after a load/reset.
+  const lastLoadRef = useRef(0);
   const { prefs } = useSettings();
   const qualityRef = useRef(prefs.playbackQuality);
   useEffect(() => {
@@ -61,11 +65,12 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     // APIs). Stat the file so codec classification (lossless vs AAC) and the
     // transcode-vs-raw routing use REAL metadata — otherwise a hi-res FLAC
     // from a playlist would be mislabeled and an ALAC .m4a misrouted.
+    let item: FileItem = currentTrack;
     const needStat = !currentTrack.is_dir && !currentTrack.size && !currentTrack.mime;
     (needStat ? api.stat(currentTrack.root_id, currentTrack.path).catch(() => null) : Promise.resolve(null))
       .then((real) => {
         if (cancelled) return;
-        const item = real || currentTrack;
+        item = real || currentTrack;
         return api.audioStreamUrl(item.root_id, item.path, {
           extension: item.extension,
           mime: item.mime,
@@ -76,32 +81,32 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       })
       .then((url) => {
         if (cancelled || !url) return;
-        // Set intent here (not at effect start) so a stale playingChange
-        // from the just-ended track can't clear it mid-transition.
-        wantPlayRef.current = true;
-        // replaceAsync: `replace` loads synchronously on the iOS main thread,
-        // which can stutter the UI mid-transition and interleave with React
-        // commits. The async variant is the supported path.
-        const p = (player as any).replaceAsync?.(url);
-        if (p && typeof p.then === "function") {
-          p.then(() => {
-            if (wantPlayRef.current) player.play();
-          }).catch(() => {});
-        } else {
-          player.replace(url);
-          if (wantPlayRef.current) player.play();
-        }
+        // Play intent: load() resets the single-track transport, adds the
+        // resolved stream and calls play() — TrackPlayer starts once the
+        // source is ready, so no manual play-on-ready retry is needed.
+        lastLoadRef.current = Date.now();
+        return player.load(
+          {
+            id: `${item.root_id}:${item.path}`,
+            url,
+            title: cleanTrackTitle(item.name),
+            artist: `${(item.extension || "AUDIO").toUpperCase()} · Nexora`,
+            // Embedded album art (MP3/FLAC/M4A) → the notification card artwork.
+            artwork: api.thumbnailUrl(item.root_id, item.path, 512),
+          },
+          true
+        );
       });
     return () => {
       cancelled = true;
     };
-  }, [currentTrack, api]);
+  }, [currentTrack, api, player]);
 
   // If the session ends (logout / token expiry), stop playback so audio
   // doesn't keep playing behind the login screen.
   useEffect(() => {
     if (!api) {
-      player.pause();
+      player.reset();
       setCurrentTrack(null);
       setPlaylist([]);
       setShowPlayer(false);
@@ -133,38 +138,25 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     return _dir > 0 ? pl[0] : pl[pl.length - 1];
   }, []);
 
+  // When a track ends naturally (repeat off) advance to the next queue item.
   useEffect(() => {
-    const sub = player.addListener("playToEnd", () => {
+    const sub = player.addListener("ended", () => {
       const { currentTrack: ct, playlist: pl } = stateRef.current;
       if (!ct || pl.length <= 1) return;
+      // Belt & braces: ignore a queue-ended that can race right after a load.
+      if (Date.now() - lastLoadRef.current < 1500) return;
+      // Repeat-one is handled natively (RepeatMode.Track) — never advance.
+      if (player.loop) return;
       const next = step(pl, ct, 1);
       if (next) setCurrentTrack(next);
     });
-    return () => sub.remove();
+    return () => {
+      sub.remove();
+    };
   }, [player, step]);
-
-  // Whether we intend the player to be playing. Set true right before a new
-  // source is loaded (initial play, queue auto-advance, manual next/prev) and
-  // cleared when the player actually reports stopped (user pause or end). The
-  // statusChange handler below re-issues play() once the source is ready —
-  // this is what makes queue auto-advance reliable: play() called in a
-  // promise callback can silently no-op when the new source is still
-  // buffering, and without a retry the queue stalls after the first track.
-  const wantPlayRef = useRef(false);
-
-  // Track the previous track so we can detect auto-advance and reset intent.
-  useEffect(() => {
-    const sub = player.addListener("playingChange", ({ isPlaying }) => {
-      if (!isPlaying) wantPlayRef.current = false;
-    });
-    return () => sub.remove();
-  }, [player]);
 
   useEffect(() => {
     const sub = player.addListener("statusChange", ({ status }) => {
-      if (status === "readyToPlay" && wantPlayRef.current && !player.playing) {
-        player.play();
-      }
       if (status !== "error") return;
       // Failed track → auto-advance to the next track instead of dying
       // silently (e.g. unsupported codec and no server transcode).
@@ -174,27 +166,27 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
         // wedged in a permanent error state — codec init failures on old
         // Android (e.g. FLAC below API 30) can otherwise crash MediaCodec or
         // leave every retry dead.
-        try {
-          (player as any).replace?.(null);
-        } catch {
-          /* ignore */
-        }
+        player.reset();
         return;
       }
       const next = step(pl, ct, 1);
       if (next && next.path !== ct.path) setCurrentTrack(next);
     });
-    return () => sub.remove();
+    return () => {
+      sub.remove();
+    };
   }, [player, step]);
 
-  const playTrack = (item: FileItem, list?: FileItem[]) => {
+  // Stable: reads no changing state (setters only), so it can be re-used as a
+  // stable effect dep by consumers (e.g. the preview screen's auto-play).
+  const playTrack = useCallback((item: FileItem, list?: FileItem[]) => {
     setCurrentTrack(item);
     if (list) {
       setPlaylist(list);
     } else {
       setPlaylist([item]);
     }
-  };
+  }, []);
 
   const nextTrack = () => {
     if (!currentTrack || playlist.length <= 1) return;
@@ -208,8 +200,18 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     if (prev) setCurrentTrack(prev);
   };
 
+  // Notification-center next/previous buttons (and headset media buttons)
+  // route through the app's queue + shuffle logic.
+  useEffect(() => {
+    player.remoteHandlers = { next: nextTrack, previous: prevTrack };
+    return () => {
+      player.remoteHandlers = {};
+    };
+  }, [player, nextTrack, prevTrack]);
+
   const closePlayer = () => {
-    player.pause();
+    // Reset clears the queue AND dismisses the notification card.
+    player.reset();
     setCurrentTrack(null);
     setShowPlayer(false);
   };

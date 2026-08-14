@@ -64,7 +64,9 @@ export default function PlaylistScreen({ route, navigation }: Props) {
     const sub = player.addListener("playingChange", ({ isPlaying }: { isPlaying: boolean }) =>
       setPlaying(isPlaying)
     );
-    return () => sub.remove();
+    return () => {
+      sub.remove();
+    };
   }, [player]);
 
   const files = useMemo(() => playlist.items.map(toFileItem), [playlist.items]);

@@ -26,6 +26,14 @@
         {
           "supportsBackgroundPlayback": true
         }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
       ]
     ],
     "ios": {

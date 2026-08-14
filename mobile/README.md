@@ -12,6 +12,7 @@ self-hosted file workspace. Runs on **Android and iOS**.
 - **Upload** — multi-file upload via the system document picker, with progress bar
 - **File operations** — create folders, rename, delete (moves to trash), long-press for quick actions
 - **Preview** — images (`expo-image`), video (`expo-video`), audio player, text/code/markdown inline; PDFs and other formats open in your system viewer after a quick download
+- **Notification-center audio player** — songs show a native media card in the iOS/Android notification center, lock screen and control center with play · pause · next/previous · seek · ±15s jump, artwork from embedded album art, and background playback (continues when the app is backgrounded or the screen is locked)
 - **Download & share** — any file downloads to the app cache and opens in the system share sheet
 - **Recents & search** — recent files plus full-text search across your library
 
@@ -32,13 +33,15 @@ Then:
 
 | Target | How |
 |---|---|
-| **Quick test** | Scan the QR code with **Expo Go** (App Store / Play Store) — works for both Android and iOS |
-| **Android emulator** | `npx expo start --android` (needs Android Studio) |
-| **iOS simulator** | `npx expo start --ios` (needs Xcode, macOS only) |
-| **Device via USB** | `npx expo start --tunnel` and scan from Expo Go |
+| **Quick test (UI only)** | Scan the QR code with **Expo Go** (App Store / Play Store) — works for both Android and iOS, **except audio playback** (see below) |
+| **Android emulator** | `npx expo run:android` (needs Android Studio) |
+| **iOS simulator** | `npx expo run:ios` (needs Xcode, macOS only) |
+| **Device via USB** | `npx expo run:android` / `npx expo run:ios` from a connected device, or `npx expo start --tunnel` with a development build |
 
-> Expo Go includes the native modules used here (expo-image, expo-video, expo-sharing,
-> expo-document-picker, expo-file-system), so no development build is required for testing.
+> Audio playback runs on **react-native-track-player**, which ships native code — so it only works
+> inside a **development or production build** (`npx expo run:*`, EAS, or a prebuild). **Expo Go no
+> longer plays audio** (the app degrades gracefully and shows a warning). Everything else
+> (browsing, images, video, text previews, downloads) still works in Expo Go.
 
 ## Production builds
 
@@ -53,6 +56,32 @@ npx eas build --platform ios --profile production
 
 See [docs.expo.dev/build](https://docs.expo.dev/build) for EAS setup. The app id is
 `dev.suryaprakash.nexora` on both platforms.
+
+## Notification-center audio player
+
+Audio playback uses [react-native-track-player](https://rntp.dev) (Apache-2.0) so that every
+song you play shows up as a native media card:
+
+- **iOS** — the lock screen / notification center / Control Center now-playing card
+  (`MPNowPlayingInfoCenter`), artwork from the file's embedded album art, and the background
+  audio mode (`UIBackgroundModes: audio`, already configured via the `expo-video` plugin).
+- **Android** — a media notification with the song title, artwork, a draggable seek bar, and
+  play/pause/next/previous buttons. Playback runs in a foreground media service and keeps
+  playing even if the app is swiped away (`ContinuePlayback`).
+- **Controls** — play · pause · next/previous track (following the in-app queue and shuffle) ·
+  drag-to-seek · ±15s forward/backward jumps, plus wired/Bluetooth headset media buttons.
+  Repeat-one uses the native track repeat.
+- **Where it works** — the mini player, the full-screen player, and the vinyl audio preview all
+  share one global player, so any song you play shows the notification card and keeps playing
+  in the background. Leaving a preview no longer stops the music.
+
+### Why a development build is required
+
+`react-native-track-player` is a native module, so audio + notification-center controls only work
+in builds that include it (`npx expo run:*`, EAS builds, or a prebuild). Expo Go does not include
+it — in Expo Go the app logs a warning and audio playback is disabled; all other features still
+work. For development, `npx expo run:android` / `npx expo run:ios` is the replacement for the
+old `expo start` flow.
 
 ## Connecting to your server
 

@@ -22,6 +22,8 @@ import * as Sharing from "expo-sharing";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useSession } from "../store/SessionContext";
 import { useTheme } from "../store/ThemeContext";
+import { useAudio } from "../store/AudioContext";
+import type { FileItem } from "../api/types";
 import { GlyphTile } from "../components/AppIcon";
 import { previewKind, formatBytes, formatDate } from "../api/client";
 import { copyShareLink } from "../lib/shareLink";
@@ -495,46 +497,37 @@ function VideoPlayer({ uri, transcodeUri, ext, onFallback }: { uri: string; tran
 function AudioPlayer({ name, size, ext, mime, rootId, path, onShare }: { name: string; size: number; ext: string; mime?: string; rootId: string; path: string; onShare: () => void }) {
   const { colors, font, gradients } = useTheme();
   const { api } = useSession();
+  // Route this preview through the GLOBAL player (the same engine the mini
+  // player uses) — so songs played here show up in the notification center /
+  // lock screen / control center with play · pause · next · previous · seek
+  // controls, and keep playing when the app is backgrounded or locked.
+  const { player, playTrack } = useAudio();
   const [favorited, setFavorited] = useState(false);
 
-  // Resolve the stream URL first: codecs the native players can't decode
-  // (ALAC .m4a, WMA, Ogg/Opus…) are routed through the server transcode
-  // pipeline so they actually play on both iOS and Android.
-  const [resolvedUri, setResolvedUri] = useState<string | null>(null);
-  useEffect(() => {
-    if (!api) return;
-    let cancelled = false;
-    setResolvedUri(null);
-    api
-      .audioStreamUrl(rootId, path, {
-        extension: ext,
-        mime,
-        size,
-        session: generateSessionId(),
-      })
-      .then((url) => {
-        if (!cancelled) setResolvedUri(url);
-      });
-    return () => {
-      cancelled = true;
+  // Stable FileItem for this preview; playing it replaces whatever was
+  // playing globally (same behavior as the old local player, but unified).
+  const previewItem = useRef<FileItem | null>(null);
+  if (!previewItem.current) {
+    previewItem.current = {
+      name,
+      path,
+      size,
+      is_dir: false,
+      modified: "",
+      mime: mime || "",
+      root_id: rootId,
+      extension: ext,
     };
-  }, [api, rootId, path, ext, mime]);
-
-  // Load the resolved stream once ready. replaceAsync avoids the synchronous
-  // iOS main-thread load (expo-video deprecates the sync `replace`).
-  const player = useVideoPlayer(null);
+  }
+  // Auto-play this preview once through the global player (the effect dep
+  // playTrack is stable, so this effectively runs once per mount).
+  const previewAutoPlayed = useRef(false);
   useEffect(() => {
-    (player as any).staysActiveInBackground = true;
-  }, [player]);
-  useEffect(() => {
-    if (!resolvedUri) return;
-    const p = (player as any).replaceAsync?.(resolvedUri);
-    if (p && typeof p.then === "function") {
-      p.catch(() => {});
-    } else {
-      player.replace(resolvedUri);
-    }
-  }, [resolvedUri]);
+    if (previewAutoPlayed.current) return;
+    previewAutoPlayed.current = true;
+    const item = previewItem.current!;
+    playTrack(item, [item]);
+  }, [playTrack]);
 
   // Sync the favorite state with the server.
   useEffect(() => {
@@ -586,8 +579,17 @@ function AudioPlayer({ name, size, ext, mime, rootId, path, onShare }: { name: s
     player.loop = loop;
   }, [loop, player]);
 
+  // Mirror global player state into the vinyl UI (the controller keeps
+  // synchronous mirrors updated by native events + a 500ms progress poll).
   useEffect(() => {
-    player.timeUpdateEventInterval = 0.5;
+    setPlaying(player.playing);
+    setReady(player.status === "readyToPlay");
+    setError(player.status === "error");
+    setCurrent(player.currentTime);
+    setDuration(player.duration);
+  }, [player]);
+
+  useEffect(() => {
     const subs = [
       player.addListener("playingChange", ({ isPlaying }) => {
         setPlaying(isPlaying);
@@ -595,16 +597,14 @@ function AudioPlayer({ name, size, ext, mime, rootId, path, onShare }: { name: s
       }),
       player.addListener("timeUpdate", ({ currentTime }) => {
         if (scrubPosRef.current === null) setCurrent(currentTime);
+        setDuration(player.duration);
       }),
       player.addListener("statusChange", ({ status }) => {
         setReady(status === "readyToPlay");
         setError(status === "error");
-        if (status === "readyToPlay") {
-          if (player.duration) setDuration(player.duration);
-          player.play();
-        }
+        if (status === "readyToPlay" && player.duration) setDuration(player.duration);
       }),
-      player.addListener("playToEnd", () => {
+      player.addListener("ended", () => {
         if (!loopRef.current) {
           setIsEnded(true);
           setPlaying(false);
@@ -613,9 +613,9 @@ function AudioPlayer({ name, size, ext, mime, rootId, path, onShare }: { name: s
     ];
     return () => {
       subs.forEach((s) => s.remove());
-      try {
-        player.pause();
-      } catch (e) {}
+      // Note: intentionally NOT pausing on unmount — playback is global now
+      // and should keep running (with its notification card) when leaving the
+      // preview, like any music app.
     };
   }, [player]);
 
@@ -836,8 +836,6 @@ function AudioPlayer({ name, size, ext, mime, rootId, path, onShare }: { name: s
           </TouchableOpacity>
         </View>
       </ScrollView>
-      {/* Hidden view keeps the native player alive */}
-      <VideoView player={player} style={styles.hiddenVideo} />
     </View>
   );
 }

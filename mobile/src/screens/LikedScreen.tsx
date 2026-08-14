@@ -55,7 +55,9 @@ export default function LikedScreen() {
     const sub = player.addListener("playingChange", ({ isPlaying }: { isPlaying: boolean }) =>
       setPlaying(isPlaying)
     );
-    return () => sub.remove();
+    return () => {
+      sub.remove();
+    };
   }, [player]);
 
   const load = useCallback(
