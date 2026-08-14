@@ -12,7 +12,7 @@ self-hosted file workspace. Runs on **Android and iOS**.
 - **Upload** — multi-file upload via the system document picker, with progress bar
 - **File operations** — create folders, rename, delete (moves to trash), long-press for quick actions
 - **Preview** — images (`expo-image`), video (`expo-video`), audio player, text/code/markdown inline; PDFs and other formats open in your system viewer after a quick download
-- **Notification-center audio player** — songs show a native media card in the iOS/Android notification center, lock screen and control center with play · pause · next/previous · seek · ±15s jump, artwork from embedded album art, and background playback (continues when the app is backgrounded or the screen is locked)
+- **Notification-center audio player** — songs show a native media card in the iOS/Android notification center, lock screen and control center with play · pause · next/previous · seek, artwork from embedded album art, and background playback (continues when the app is backgrounded or the screen is locked)
 - **Download & share** — any file downloads to the app cache and opens in the system share sheet
 - **Recents & search** — recent files plus full-text search across your library
 
@@ -68,8 +68,10 @@ song you play shows up as a native media card:
 - **Android** — a media notification with the song title, artwork, a draggable seek bar, and
   play/pause/next/previous buttons. Playback runs in a foreground media service and keeps
   playing even if the app is swiped away (`ContinuePlayback`).
-- **Controls** — play · pause · next/previous track (following the in-app queue and shuffle) ·
-  drag-to-seek · ±15s forward/backward jumps, plus wired/Bluetooth headset media buttons.
+- **Controls** — play · pause · **next/previous track buttons** in the notification (following
+  the in-app queue and shuffle) · drag-to-seek, plus wired/Bluetooth headset media buttons.
+  The whole playlist is loaded into the native media queue, so the next/previous buttons
+  appear on both iOS (lock screen / control center) and Android (media notification).
   Repeat-one uses the native track repeat.
 - **Where it works** — the mini player, the full-screen player, and the vinyl audio preview all
   share one global player, so any song you play shows the notification card and keeps playing

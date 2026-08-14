@@ -16,8 +16,10 @@ import TrackPlayer, {
  * `addListener(...)`. This class provides exactly that surface, but the actual
  * audio runs on react-native-track-player — which registers a native
  * **MediaSession (Android) / Now Playing (iOS)** so every song shows up in the
- * notification center / lock screen / control center with play, pause, next,
- * previous, seek, and ±15s jump controls, and keeps playing in the background.
+ * notification center / lock screen / control center with play, pause,
+ * next/previous (forward/backward) and seek controls, and keeps playing in
+ * the background. The whole playlist is loaded into the native queue so the
+ * media session exposes the next/previous buttons on both platforms.
  *
  * The class keeps synchronous mirrors of the native state (updated by events +
  * a 500ms progress poll) so the UI can keep reading plain properties without
@@ -28,7 +30,13 @@ export type ControllerEvent =
   | "playingChange"
   | "statusChange"
   | "timeUpdate"
-  | "ended";
+  | "ended"
+  | "activeTrackChanged";
+
+type ActiveTrackPayload = {
+  track: { id: string } | null;
+  index: number;
+};
 
 type Handler = (payload?: any) => void;
 
@@ -45,6 +53,8 @@ export class TrackPlayerController {
   private _currentTime: number = 0;
   duration: number = 0;
   buffered: number = 0;
+  /** Index of the currently active track in the native queue (-1 = none). */
+  currentIndex: number = -1;
 
   /** Repeat-one (loop). UI writes `player.loop = true/false`. */
   private _loop = false;
@@ -117,17 +127,17 @@ export class TrackPlayerController {
 
     await TrackPlayer.setupPlayer({ autoHandleInterruptions: true });
     await TrackPlayer.updateOptions({
-      // The notification / lock-screen control set. SkipToNext/Previous map to
-      // the app's queue logic via remote handlers; seek + ±15s jumps also show
-      // the draggable progress bar in the Android notification.
+      // The notification / lock-screen control set. Next/previous are the
+      // forward/backward buttons; seek shows the draggable progress bar in the
+      // Android notification and the iOS control-center scrubber. The ±15s
+      // jump capabilities are intentionally NOT enabled — they would replace
+      // the next/previous buttons in the iOS lock screen.
       capabilities: [
         Capability.Play,
         Capability.Pause,
         Capability.SkipToNext,
         Capability.SkipToPrevious,
         Capability.SeekTo,
-        Capability.JumpForward,
-        Capability.JumpBackward,
       ],
       // Collapsed notification (iOS lock screen / Android collapsed card).
       compactCapabilities: [
@@ -136,8 +146,6 @@ export class TrackPlayerController {
         Capability.SkipToNext,
         Capability.SkipToPrevious,
       ],
-      forwardJumpInterval: 15,
-      backwardJumpInterval: 15,
       android: {
         // Keep the notification + playback alive even if the user swipes the
         // app away — a proper music-player notification card.
@@ -164,14 +172,19 @@ export class TrackPlayerController {
       Event.PlaybackActiveTrackChanged,
       ({
         track,
-        position,
+        index,
       }: {
         track?: { id?: string; duration?: number } | null;
-        position?: number;
+        index?: number;
       }) => {
         if (track && track.id) this.trackId = track.id;
-        this._currentTime = position ?? 0;
+        this.currentIndex = typeof index === "number" ? index : -1;
+        this._currentTime = 0;
         this.duration = typeof track?.duration === "number" ? track.duration : 0;
+        this.emit("activeTrackChanged", {
+          track: track && track.id ? { id: track.id } : null,
+          index: this.currentIndex,
+        } as ActiveTrackPayload);
         this.emit("timeUpdate", { currentTime: this._currentTime });
       }
     );
@@ -281,6 +294,8 @@ export class TrackPlayerController {
     TrackPlayer.reset().catch(() => {});
     this._currentTime = 0;
     this.duration = 0;
+    this.currentIndex = -1;
+    this.trackId = null;
     if (this.playing) {
       this.playing = false;
       this.emit("playingChange", { isPlaying: false });
@@ -293,44 +308,59 @@ export class TrackPlayerController {
   }
 
   /**
-   * Loads one track (the app owns queue/next/prev; TrackPlayer is a
-   * single-track transport that also renders the notification card).
+   * Replaces the whole native queue with `tracks` (in order). The app keeps
+   * its own queue/shuffle logic, but the native session needs the full queue
+   * so the notification shows the next/previous buttons (Android derives them
+   * from the queue, iOS from the enabled capabilities).
    */
-  async load(
-    track: {
+  async replaceQueue(
+    tracks: Array<{
       id: string;
       url: string;
       title: string;
       artist?: string;
       artwork?: string;
-    },
-    autoplay = true
+    }>
   ) {
     if (!this.nativeAvailable) {
       this.warnMissingNative();
       return;
     }
     await this.ensureInit();
-    this.trackId = track.id;
-    this._currentTime = 0;
-    this.duration = 0;
-    this.status = EXPOV_LOADING;
-    this.emit("statusChange", { status: EXPOV_LOADING });
-    this.emit("timeUpdate", { currentTime: 0 });
     try {
       await TrackPlayer.reset();
-      await TrackPlayer.add({
-        id: track.id,
-        url: track.url,
-        title: track.title,
-        artist: track.artist,
-        artwork: track.artwork,
-      });
-      if (autoplay) await TrackPlayer.play();
+      await TrackPlayer.add(tracks);
+      this.currentIndex = -1;
+      this.trackId = null;
+      this._currentTime = 0;
+      this.duration = 0;
+      this.status = EXPOV_LOADING;
+      this.emit("statusChange", { status: EXPOV_LOADING });
+      this.emit("timeUpdate", { currentTime: 0 });
     } catch (e) {
-      console.error("[trackPlayerController] load failed", e);
+      console.error("[trackPlayerController] replaceQueue failed", e);
       this.status = EXPOV_ERROR;
       this.emit("statusChange", { status: EXPOV_ERROR });
+    }
+  }
+
+  /**
+   * Jumps the native queue to `index` and optionally starts playback. Also
+   * resets the timeline mirrors so the UI immediately reflects the new track.
+   */
+  async skipToIndex(index: number, autoplay: boolean) {
+    if (!this.nativeAvailable) return;
+    try {
+      await TrackPlayer.skip(index);
+      this.currentIndex = index;
+      this._currentTime = 0;
+      this.duration = 0;
+      this.status = EXPOV_LOADING;
+      this.emit("statusChange", { status: EXPOV_LOADING });
+      this.emit("timeUpdate", { currentTime: 0 });
+      if (autoplay) await TrackPlayer.play();
+    } catch (e) {
+      console.error("[trackPlayerController] skipToIndex failed", e);
     }
   }
 

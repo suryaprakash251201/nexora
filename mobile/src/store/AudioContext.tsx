@@ -38,16 +38,17 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
 
   // Audio runs on react-native-track-player (shared singleton controller):
   // background playback + a native media notification card (notification
-  // center / lock screen / control center) with play, pause, next, previous,
-  // seek and ±15s jump controls on both iOS and Android.
+  // center / lock screen / control center) with play, pause, next/previous
+  // (forward/backward) and seek controls on both iOS and Android. The whole
+  // playlist is loaded into the native queue so the media session exposes the
+  // next/previous buttons (Android derives them from the queue size).
   const player = trackPlayerController;
-  // Initialize the native player once (idempotent — also called by load()).
+  // Initialize the native player once (idempotent — also called lazily).
   useEffect(() => {
     player.ensureInit();
   }, [player]);
-  const sessionRef = useRef(newSession());
-  // Timestamp of the most recent load — guards the "ended" auto-advance
-  // against a queue-ended event that can race right after a load/reset.
+  // Timestamp of the most recent track selection — guards the "ended"
+  // auto-advance against a queue-ended event racing right after a skip.
   const lastLoadRef = useRef(0);
   const { prefs } = useSettings();
   const qualityRef = useRef(prefs.playbackQuality);
@@ -55,52 +56,106 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     qualityRef.current = prefs.playbackQuality;
   }, [prefs.playbackQuality]);
 
-  // Stream through the server transcode pipeline when the codec is not
-  // natively decodable (ALAC .m4a, WMA, Ogg/Opus, …) — mirrors the web app.
-  useEffect(() => {
-    if (!currentTrack || !api) return;
-    let cancelled = false;
-    sessionRef.current = newSession();
-    // Playlist/favorite/trash items may carry size:0 (no metadata in those
-    // APIs). Stat the file so codec classification (lossless vs AAC) and the
-    // transcode-vs-raw routing use REAL metadata — otherwise a hi-res FLAC
-    // from a playlist would be mislabeled and an ALAC .m4a misrouted.
-    let item: FileItem = currentTrack;
-    const needStat = !currentTrack.is_dir && !currentTrack.size && !currentTrack.mime;
-    (needStat ? api.stat(currentTrack.root_id, currentTrack.path).catch(() => null) : Promise.resolve(null))
-      .then((real) => {
-        if (cancelled) return;
-        item = real || currentTrack;
-        return api.audioStreamUrl(item.root_id, item.path, {
+  // Maps between the app playlist and the native queue. The native queue only
+  // contains tracks whose stream URL resolved successfully, so playlist index
+  // and native index can differ — this map bridges the two.
+  const queueMetaRef = useRef<{
+    nativeIndexByKey: Map<string, number>;
+  } | null>(null);
+  const queueBusyRef = useRef(false);
+
+  // Resolves a track's stream URL (stat fallback for metadata-less items so
+  // codec classification and transcode routing use REAL metadata — mirrors
+  // the web app). One session id per track so the server can kill stale
+  // ffmpeg per-stream on seek.
+  const resolveTrackUrl = useCallback(
+    async (it: FileItem): Promise<{ item: FileItem; url: string } | null> => {
+      if (!api) return null;
+      try {
+        const real =
+          !it.is_dir && !it.size && !it.mime
+            ? await api.stat(it.root_id, it.path).catch(() => null)
+            : null;
+        const item = real || it;
+        const url = await api.audioStreamUrl(item.root_id, item.path, {
           extension: item.extension,
           mime: item.mime,
           size: item.size,
-          session: sessionRef.current,
+          session: newSession(),
           quality: qualityRef.current,
         });
-      })
-      .then((url) => {
-        if (cancelled || !url) return;
-        // Play intent: load() resets the single-track transport, adds the
-        // resolved stream and calls play() — TrackPlayer starts once the
-        // source is ready, so no manual play-on-ready retry is needed.
-        lastLoadRef.current = Date.now();
-        return player.load(
-          {
-            id: `${item.root_id}:${item.path}`,
-            url,
-            title: cleanTrackTitle(item.name),
-            artist: `${(item.extension || "AUDIO").toUpperCase()} · Nexora`,
-            // Embedded album art (MP3/FLAC/M4A) → the notification card artwork.
-            artwork: api.thumbnailUrl(item.root_id, item.path, 512),
-          },
-          true
-        );
+        return url ? { item, url } : null;
+      } catch {
+        return null;
+      }
+    },
+    [api]
+  );
+
+  // ── Native queue build ────────────────────────────────────────────────
+  // Whenever the playlist changes, resolve every track's stream URL (in
+  // small concurrent batches) and load the whole list into TrackPlayer so
+  // the notification shows next/previous buttons and playback auto-advances.
+  useEffect(() => {
+    if (!api || !playlist.length) return;
+    let cancelled = false;
+    queueBusyRef.current = true;
+    (async () => {
+      const resolved: Array<{ item: FileItem; url: string }> = [];
+      const BATCH = 6;
+      for (let i = 0; i < playlist.length; i += BATCH) {
+        const results = await Promise.all(playlist.slice(i, i + BATCH).map(resolveTrackUrl));
+        for (const r of results) if (r) resolved.push(r);
+        if (cancelled) return;
+      }
+      if (cancelled) return;
+      queueBusyRef.current = false;
+      if (!resolved.length) {
+        player.reset();
+        return;
+      }
+      const nativeIndexByKey = new Map<string, number>();
+      resolved.forEach((r, idx) => {
+        nativeIndexByKey.set(`${r.item.root_id}:${r.item.path}`, idx);
       });
+      queueMetaRef.current = { nativeIndexByKey };
+      await player.replaceQueue(
+        resolved.map((r) => ({
+          id: `${r.item.root_id}:${r.item.path}`,
+          url: r.url,
+          title: cleanTrackTitle(r.item.name),
+          artist: `${(r.item.extension || "AUDIO").toUpperCase()} · Nexora`,
+          // Embedded album art (MP3/FLAC/M4A) → the notification card artwork.
+          artwork: api.thumbnailUrl(r.item.root_id, r.item.path, 512),
+        }))
+      );
+      // The queue now exists — jump to the currently selected track.
+      const ct = stateRef.current.currentTrack;
+      if (ct && !cancelled) {
+        const idx = nativeIndexByKey.get(`${ct.root_id}:${ct.path}`);
+        if (typeof idx === "number" && idx >= 0) {
+          lastLoadRef.current = Date.now();
+          await player.skipToIndex(idx, true);
+        }
+      }
+    })();
     return () => {
       cancelled = true;
     };
-  }, [currentTrack, api, player]);
+  }, [playlist, api, player, resolveTrackUrl]);
+
+  // ── Track selection (tap / next / prev / notification) ───────────────
+  // Jump the native queue to the selected track instead of rebuilding it.
+  useEffect(() => {
+    if (!currentTrack || !api || !playlist.length) return;
+    if (queueBusyRef.current) return; // queue build completion selects it
+    const meta = queueMetaRef.current;
+    const nativeIdx = meta?.nativeIndexByKey.get(`${currentTrack.root_id}:${currentTrack.path}`) ?? -1;
+    if (nativeIdx < 0) return; // stream unresolved / not in the native queue
+    if (nativeIdx === player.currentIndex) return; // already active
+    lastLoadRef.current = Date.now();
+    player.skipToIndex(nativeIdx, true);
+  }, [currentTrack, playlist, api, player]);
 
   // If the session ends (logout / token expiry), stop playback so audio
   // doesn't keep playing behind the login screen.
@@ -138,14 +193,34 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     return _dir > 0 ? pl[0] : pl[pl.length - 1];
   }, []);
 
-  // When a track ends naturally (repeat off) advance to the next queue item.
+  // ── Native auto-advance sync ─────────────────────────────────────────
+  // With the full playlist in the native queue, mid-queue track changes happen
+  // natively (track ends → next track). Keep the app's currentTrack in sync
+  // with what the media session is actually playing (also keeps the mini
+  // player, full-screen player and notification title in agreement).
+  useEffect(() => {
+    const sub = player.addListener("activeTrackChanged", ({ track }) => {
+      if (!track?.id) return;
+      const { currentTrack: ct, playlist: pl } = stateRef.current;
+      if (ct && `${ct.root_id}:${ct.path}` === track.id) return;
+      const item = pl.find((x) => `${x.root_id}:${x.path}` === track.id);
+      if (item) setCurrentTrack(item);
+    });
+    return () => {
+      sub.remove();
+    };
+  }, [player]);
+
+  // ── Queue end (repeat off) ────────────────────────────────────────────
+  // TrackPlayer stops when the last queue item ends (RepeatMode.Off). The app
+  // preserves its wrap-around behavior: jump back to the start of the queue.
   useEffect(() => {
     const sub = player.addListener("ended", () => {
       const { currentTrack: ct, playlist: pl } = stateRef.current;
       if (!ct || pl.length <= 1) return;
-      // Belt & braces: ignore a queue-ended that can race right after a load.
+      // Belt & braces: ignore a queue-ended that can race right after a skip.
       if (Date.now() - lastLoadRef.current < 1500) return;
-      // Repeat-one is handled natively (RepeatMode.Track) — never advance.
+      // Repeat-one is handled natively (RepeatMode.Track) — never wrap.
       if (player.loop) return;
       const next = step(pl, ct, 1);
       if (next) setCurrentTrack(next);
