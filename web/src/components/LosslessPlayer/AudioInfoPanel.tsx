@@ -6,6 +6,9 @@ interface Props {
   item: FileItem;
   /** Compact inline badge (used in the mini player); false = full panel. */
   compact?: boolean;
+  /** Always use the white glyph — for surfaces that are always dark (the
+   *  fullscreen player overlay) regardless of the active theme. */
+  onDark?: boolean;
 }
 
 /**
@@ -13,7 +16,7 @@ interface Props {
  * rate, channel layout, bitrate and (when present) ID3 tags. The badge is
  * color-coded by quality tier (HI-RES gold, LOSSLESS green, etc.).
  */
-export default function AudioInfoPanel({ item, compact = false }: Props) {
+export default function AudioInfoPanel({ item, compact = false, onDark = false }: Props) {
   const { info, loading } = useAudioInfo(item.root_id, item.path);
   const q = getAudioQuality(item, info);
 
@@ -27,7 +30,7 @@ export default function AudioInfoPanel({ item, compact = false }: Props) {
         className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wide bg-white/10 ${q.color}`}
       >
         {q.isLossless ? (
-          <LosslessWave className="h-3.5 w-auto" />
+          <LosslessWave onDark={onDark} className="h-3.5 w-auto" />
         ) : (
           <>
             {q.badge}
@@ -62,7 +65,7 @@ export default function AudioInfoPanel({ item, compact = false }: Props) {
     <div className="w-full max-w-sm rounded-2xl glass-strong border border-white/10 p-3 sm:p-4 text-left space-y-3 animate-scale-in">
       <div className="flex items-center justify-between gap-2">
         <span className={`inline-flex items-center gap-1.5 text-[11px] font-black tracking-[0.14em] ${q.color}`}>
-          {q.isLossless ? <LosslessWave className="h-3.5 w-auto" /> : q.badge}
+          {q.isLossless ? <LosslessWave onDark={onDark} className="h-3.5 w-auto" /> : q.badge}
         </span>
         <span className="text-[10px] font-medium text-white/45 uppercase tracking-wider">
           {loading ? "reading metadata…" : q.label}
@@ -105,12 +108,20 @@ export default function AudioInfoPanel({ item, compact = false }: Props) {
 /**
  * LosslessWave — the lossless sound-wave glyph. Ships dark + light variants
  * so it reads correctly in both the dark and light web themes.
+ *
+ * Naming: lossless-wave.png is the DARK glyph (for light backgrounds),
+ * lossless-wave-light.png is the WHITE glyph (for dark backgrounds).
+ * Dark theme → white glyph; light theme → dark glyph.
  */
-function LosslessWave({ className = "h-2.5 w-auto" }: { className?: string }) {
+function LosslessWave({ className = "h-2.5 w-auto", onDark = false }: { className?: string; onDark?: boolean }) {
+  if (onDark) {
+    // Always-dark surface (fullscreen overlay): white glyph regardless of theme.
+    return <img src="/lossless-wave-light.png" alt="" className={className} />;
+  }
   return (
     <>
-      <img src="/lossless-wave-light.png" alt="" className={`${className} dark:hidden`} />
-      <img src="/lossless-wave.png" alt="" className={`${className} hidden dark:block`} />
+      <img src="/lossless-wave.png" alt="" className={`${className} dark:hidden`} />
+      <img src="/lossless-wave-light.png" alt="" className={`${className} hidden dark:block`} />
     </>
   );
 }

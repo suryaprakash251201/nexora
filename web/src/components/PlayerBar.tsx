@@ -208,7 +208,13 @@ export default function PlayerBar() {
     a.addEventListener("progress", onProgress);
     return () => a.removeEventListener("progress", onProgress);
   }, []);
-  const bufferedPct = duration > 0 ? Math.min(100, (bufferedEnd / duration) * 100) : 0;
+  // Buffered data is shown as a capped lookahead from the playhead instead of
+  // the whole buffered range: on a fast local server the browser buffers far
+  // ahead (often the entire stream), which used to paint the seek bar as
+  // "100% buffered". Cap the indicator at 60s ahead of the playhead.
+  const elTime = audioRef.current ? audioRef.current.currentTime : 0;
+  const bufferedAhead = Math.max(0, bufferedEnd - elTime);
+  const bufferedPct = duration > 0 ? Math.min(100, (Math.min(bufferedAhead, 60) / duration) * 100) : 0;
 
   const handleError = (e: React.SyntheticEvent<HTMLAudioElement, Event>) => {
     const target = e.target as HTMLAudioElement;
@@ -369,7 +375,7 @@ export default function PlayerBar() {
             <div className="mt-2">
               <div className="relative h-1.5 rounded-full bg-white/20 overflow-hidden cursor-pointer group">
                 {bufferedPct > 0 && (
-                  <div className="absolute inset-y-0 left-0 bg-white/15 transition-all duration-300" style={{ width: `${bufferedPct}%` }} />
+                  <div className="absolute inset-y-0 bg-white/15 transition-all duration-300" style={{ left: `${pct}%`, width: `${bufferedPct}%` }} />
                 )}
                 <div className="absolute inset-y-0 left-0 progress-fill" style={{ width: `${pct}%` }} />
                 <input

@@ -361,7 +361,16 @@ function AudioPlayer({
   const muted = controlled ? mutedV : lMuted;
   const rate = controlled ? rateV : lRate;
   const pct = duration > 0 ? ((dragTime ?? curTime) / duration) * 100 : 0;
-  const bufferedPct = duration > 0 ? Math.min(100, (bufferedEnd / duration) * 100) : 0;
+  // Buffered data is shown as a capped lookahead from the playhead instead of
+  // the whole buffered range: on a fast local server the browser buffers far
+  // ahead (often the entire stream), which used to paint the seek bar as
+  // "100% buffered" and wash out the progress fill. Cap the indicator at 60s
+  // ahead so it reads like a real player. Element currentTime is used (not the
+  // offset-adjusted displayed time) because buffered ranges are stream-relative.
+  const el = controlled ? engine.audio : ref.current;
+  const elTime = el ? el.currentTime : 0;
+  const bufferedAhead = Math.max(0, bufferedEnd - elTime);
+  const bufferedPct = duration > 0 ? Math.min(100, (Math.min(bufferedAhead, 60) / duration) * 100) : 0;
 
   // Track how much of the stream is buffered (for the seek-bar indicator).
   useEffect(() => {
@@ -766,7 +775,7 @@ function AudioPlayer({
           <h2 className="text-white font-bold text-lg sm:text-2xl md:text-3xl truncate drop-shadow-md">{cur ? cleanTrackTitle(cur.name) : ""}</h2>
           {cur && (
             <div className="mt-2 flex items-center justify-center gap-2">
-              <AudioInfoPanel item={cur} compact />
+              <AudioInfoPanel item={cur} compact onDark />
               <button
                 onClick={(e) => { e.stopPropagation(); setShowInfo((v) => !v); }}
                 className={`p-1.5 rounded-full glass-hover transition-colors ${showInfo ? "text-accent bg-accent/20" : "text-white/70 hover:text-white"}`}
@@ -802,7 +811,7 @@ function AudioPlayer({
             }}
           >
               {bufferedPct > 0 && (
-                <div className="absolute inset-y-0 left-0 bg-white/15 transition-all duration-300" style={{ width: `${bufferedPct}%` }} />
+                <div className="absolute inset-y-0 bg-white/15 transition-all duration-300" style={{ left: `${pct}%`, width: `${bufferedPct}%` }} />
               )}
               <div className="absolute inset-y-0 left-0 progress-fill" style={{ width: `${pct}%` }} />
               {/* No moving thumb: position is shown by the progress fill and the
@@ -997,7 +1006,7 @@ function AudioPlayer({
           <h3 className="font-bold text-xl truncate">{cur?.name?.replace(/\.[^.]+$/, '')}</h3>
           {cur && (
             <div className="mt-2 flex justify-center">
-              <AudioInfoPanel item={cur} compact />
+              <AudioInfoPanel item={cur} compact onDark />
             </div>
           )}
           <p className="text-content-muted text-sm mt-1">{multi ? `Track ${qIndex + 1} of ${queue.length}` : "Audio playback"}</p>
@@ -1617,12 +1626,12 @@ function VideoPlayer({ url, item, autoPlay }: { url?: string; item?: FileItem; a
   );
 }
 
-/** LosslessWaveGlyph — the lossless sound-wave icon (dark + light variants). */
+/**
+ * LosslessWaveGlyph — the lossless sound-wave icon. The fullscreen player
+ * overlay is ALWAYS dark (bg-black/95) regardless of the active theme, so
+ * this renders the WHITE glyph unconditionally — the dark glyph would be
+ * invisible on the dark overlay.
+ */
 function LosslessWaveGlyph({ className = "h-2.5 w-auto" }: { className?: string }) {
-  return (
-    <>
-      <img src="/lossless-wave-light.png" alt="" className={`${className} dark:hidden`} />
-      <img src="/lossless-wave.png" alt="" className={`${className} hidden dark:block`} />
-    </>
-  );
+  return <img src="/lossless-wave-light.png" alt="" className={className} />;
 }

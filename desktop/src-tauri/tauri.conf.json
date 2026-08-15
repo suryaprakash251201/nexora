@@ -27,7 +27,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; img-src 'self' http: https: data: blob:; media-src 'self' http: https: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; font-src 'self' data:; connect-src 'self' http: https: tauri:; frame-src 'self' http: https: blob:;"
+      "csp": "default-src 'self'; img-src 'self' http: https: data: blob:; media-src 'self' http: https: blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; script-src 'self'; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' http: https: tauri:; frame-src 'self' http: https: blob:;"
     }
   },
   "plugins": {
