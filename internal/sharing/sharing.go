@@ -15,11 +15,11 @@ import (
 
 // Errors returned by the sharing store.
 var (
-	ErrNotFound     = errors.New("sharing: not found")
-	ErrExpired      = errors.New("sharing: link expired")
-	ErrExhausted    = errors.New("sharing: download limit reached")
-	ErrPassword     = errors.New("sharing: password required or incorrect")
-	ErrRevoked      = errors.New("sharing: link revoked")
+	ErrNotFound  = errors.New("sharing: not found")
+	ErrExpired   = errors.New("sharing: link expired")
+	ErrExhausted = errors.New("sharing: download limit reached")
+	ErrPassword  = errors.New("sharing: password required or incorrect")
+	ErrRevoked   = errors.New("sharing: link revoked")
 )
 
 // Scope controls what a share allows.
@@ -32,17 +32,17 @@ const (
 
 // Share is a stored share link.
 type Share struct {
-	ID            string    `json:"id"`
-	Token         string    `json:"token"`
-	UserID        string    `json:"user_id"`
-	RootID        string    `json:"root_id"`
-	Path          string    `json:"path"`
-	Scope         Scope     `json:"scope"`
-	HasPassword   bool      `json:"has_password"`
-	ExpiresAt     *string   `json:"expires_at"`
-	MaxDownloads  int       `json:"max_downloads"`
-	DownloadCount int       `json:"download_count"`
-	CreatedAt     string    `json:"created_at"`
+	ID            string  `json:"id"`
+	Token         string  `json:"token"`
+	UserID        string  `json:"user_id"`
+	RootID        string  `json:"root_id"`
+	Path          string  `json:"path"`
+	Scope         Scope   `json:"scope"`
+	HasPassword   bool    `json:"has_password"`
+	ExpiresAt     *string `json:"expires_at"`
+	MaxDownloads  int     `json:"max_downloads"`
+	DownloadCount int     `json:"download_count"`
+	CreatedAt     string  `json:"created_at"`
 
 	passwordHash string
 }
@@ -127,6 +127,16 @@ const selectCols = `id,token,user_id,root_id,path,scope,password_hash,expires_at
 // GetByToken fetches a share by its public token.
 func (s *Store) GetByToken(token string) (Share, error) {
 	row := s.db.QueryRow(`SELECT `+selectCols+` FROM shares WHERE token=?`, token)
+	sh, err := s.scan(row)
+	if err == sql.ErrNoRows {
+		return Share{}, ErrNotFound
+	}
+	return sh, err
+}
+
+// GetByID fetches a share by its internal ID (for event/audit metadata).
+func (s *Store) GetByID(id string) (Share, error) {
+	row := s.db.QueryRow(`SELECT `+selectCols+` FROM shares WHERE id=?`, id)
 	sh, err := s.scan(row)
 	if err == sql.ErrNoRows {
 		return Share{}, ErrNotFound
