@@ -600,7 +600,7 @@ curl -X POST http://localhost/api/v1/webhooks \
 | `NEXORA_SESSION_SECRET` | auto-generated | Session signing secret |
 | `NEXORA_SESSION_LIFETIME` | `168h` | Session duration (Go duration) |
 | `NEXORA_SECURE_COOKIES` | `false` | Require HTTPS for cookies |
-| `NEXORA_MAX_UPLOAD_SIZE` | `2GB` | Maximum upload size |
+| `NEXORA_MAX_UPLOAD_SIZE` | `512GB` | Maximum upload size (effectively unlimited by default) |
 | `NEXORA_ALLOWED_MIME` | (all) | Comma-separated MIME allowlist |
 | `NEXORA_RATE_LIMIT_PER_MIN` | `60` | Login rate limit |
 | `NEXORA_LOCKOUT_ATTEMPTS` | `5` | Failed attempts before lockout |

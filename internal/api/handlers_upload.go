@@ -2,6 +2,7 @@ package api
 
 import (
 	"fmt"
+	"github.com/nexora/nexora/internal/events"
 	"github.com/nexora/nexora/internal/middleware"
 	"github.com/nexora/nexora/internal/storage"
 	"io"
@@ -26,8 +27,11 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := r.ParseMultipartForm(s.Cfg.MaxUploadSize); err != nil {
-		writeError(w, http.StatusBadRequest, "upload_too_large", "request body exceeds max upload size", middleware.GetRequestID(r.Context()))
+	// maxMemory is only the in-memory buffer for multipart parsing; larger
+	// files stream to temp files, so there is no single-file size limit.
+	const maxMemory = 32 << 20
+	if err := r.ParseMultipartForm(maxMemory); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_multipart", "could not parse upload request", middleware.GetRequestID(r.Context()))
 		return
 	}
 	files := r.MultipartForm.File["files"]
@@ -80,6 +84,7 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 		}
 		s.audit(r, "upload", dest, "")
 		s.recordRecent(r, rootID, dest, "add")
+		s.emit(events.EventFileCreated, r, rootID, dest, fh.Size)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "uploaded": uploaded})
 }

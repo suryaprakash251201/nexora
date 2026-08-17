@@ -366,7 +366,7 @@ NEXORA_SECURE_COOKIES=true
                   <tr><td><code>NEXORA_SESSION_SECRET</code></td><td>Session-signing secret (generate with <code>openssl rand -hex 32</code>).</td></tr>
                   <tr><td><code>NEXORA_SESSION_LIFETIME</code></td><td>Session lifetime, e.g. <code>168h</code>.</td></tr>
                   <tr><td><code>NEXORA_SECURE_COOKIES</code></td><td>Set to <code>true</code> for HTTPS.</td></tr>
-                  <tr><td><code>NEXORA_MAX_UPLOAD_SIZE</code></td><td>Maximum upload size, e.g. <code>2GB</code>.</td></tr>
+                  <tr><td><code>NEXORA_MAX_UPLOAD_SIZE</code></td><td>Maximum upload size, e.g. <code>512GB</code> (default: effectively unlimited).</td></tr>
                   <tr><td><code>NEXORA_ALLOWED_MIME</code></td><td>Optional comma-separated upload allowlist.</td></tr>
                   <tr><td><code>NEXORA_DEFAULT_ROOTS</code></td><td>Roots created on first setup: <code>Name:/path:readOnly[:indexed]</code>.</td></tr>
                   <tr><td><code>NEXORA_RATE_LIMIT_PER_MIN</code></td><td>Login rate limit (default <code>60</code>).</td></tr>

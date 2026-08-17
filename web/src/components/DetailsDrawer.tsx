@@ -67,7 +67,7 @@ export default function DetailsDrawer({
 
   return (
     <Sheet open={!!path} onOpenChange={(open) => { if (!open) onClose(); }}>
-      <SheetContent className="w-full sm:w-[380px] p-0 flex flex-col overflow-hidden">
+      <SheetContent showCloseButton={false} className="w-full sm:w-[380px] p-0 flex flex-col overflow-hidden">
         <SheetHeader className="h-14 flex-row items-center justify-between px-4 sm:px-6 border-b border-border/50 shrink-0 space-y-0">
           <SheetTitle className="font-semibold text-base">Details</SheetTitle>
           <SheetClose className="p-2 rounded-xl glass-hover text-content-muted hover:text-content transition-colors">

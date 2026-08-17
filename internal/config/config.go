@@ -69,7 +69,7 @@ func Load() (*Config, error) {
 		LogFormat:          env("NEXORA_LOG_FORMAT", "json"),
 		CORSOrigins:        envList("NEXORA_CORS_ORIGINS", []string{}),
 		TrustedProxies:     envList("NEXORA_TRUSTED_PROXIES", []string{}),
-		MaxUploadSize:      envBytes("NEXORA_MAX_UPLOAD_SIZE", 2<<30),
+		MaxUploadSize:      envBytes("NEXORA_MAX_UPLOAD_SIZE", 512<<30), // 512GB — effectively unlimited single-file uploads
 		AllowedMimeTypes:   envList("NEXORA_ALLOWED_MIME", []string{}),
 		RateLimitPerMin:    envInt("NEXORA_RATE_LIMIT_PER_MIN", 60),
 		LockoutAttempts:    envInt("NEXORA_LOCKOUT_ATTEMPTS", 5),

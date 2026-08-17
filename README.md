@@ -216,7 +216,7 @@ Copy `.env.example` to `.env` for the documented defaults. Key settings:
 | `NEXORA_DATABASE_PATH` | SQLite database path. |
 | `NEXORA_SESSION_SECRET` | Session-signing secret. |
 | `NEXORA_SECURE_COOKIES` | Set to `true` for HTTPS. |
-| `NEXORA_MAX_UPLOAD_SIZE` | Maximum upload size, for example `2GB`. |
+| `NEXORA_MAX_UPLOAD_SIZE` | Maximum upload size, for example `512GB` (default: effectively unlimited). |
 | `NEXORA_ALLOWED_MIME` | Optional comma-separated upload allowlist. |
 | `NEXORA_DEFAULT_ROOTS` | Roots created on first setup: `Name:/path:readOnly[:indexed]`. |
 | `NEXORA_TRUSTED_PROXIES` | Proxy CIDRs allowed to send client-IP headers. |

@@ -440,6 +440,46 @@ body {
 .stagger-children > *:nth-child(10) { animation-delay: 0.36s; }
 
 /* ============================================================
+   Transfer center — rounded glow effects
+   ============================================================ */
+
+/* Pulsing rounded glow border/shadow around the transfers panel & pill */
+@keyframes n-transfer-glow {
+  0%, 100% {
+    box-shadow:
+      0 4px 8px rgba(0, 0, 0, 0.16),
+      0 12px 32px rgba(0, 0, 0, 0.18),
+      0 24px 64px rgba(0, 0, 0, 0.12),
+      0 0 16px rgba(91, 140, 255, 0.16),
+      0 0 40px rgba(91, 140, 255, 0.08);
+  }
+  50% {
+    box-shadow:
+      0 4px 8px rgba(0, 0, 0, 0.16),
+      0 12px 32px rgba(0, 0, 0, 0.18),
+      0 24px 64px rgba(0, 0, 0, 0.12),
+      0 0 26px rgba(91, 140, 255, 0.30),
+      0 0 64px rgba(91, 140, 255, 0.16);
+  }
+}
+
+.transfers-glow {
+  animation: n-transfer-glow 2.6s ease-in-out infinite;
+}
+
+/* Ambient radial glow inside the panel background */
+.transfers-panel::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(70% 55% at 85% -5%, rgba(91, 140, 255, 0.14), transparent 60%),
+    radial-gradient(50% 45% at 5% 110%, rgba(122, 92, 255, 0.10), transparent 60%);
+}
+
+/* ============================================================
    Audio Player Specific Animations
    ============================================================ */
 
