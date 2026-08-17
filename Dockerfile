@@ -19,7 +19,15 @@ FROM golang:1.26-alpine AS gobuild
 # linux/arm64 on amd64 runners (the publish workflow pins QEMU 7.0.0 to fix
 # an npm SIGILL; QEMU 10.0.6+ fixes this Go bug natively).
 ENV GODEBUG=madvdontneed=0
-RUN apk add --no-cache git
+# apk can hit transient DNS/network errors fetching the Alpine index; retry a
+# few times before giving up so a flaky mirror doesn't kill the whole build.
+RUN set -eux; \
+    for i in $(seq 1 5); do \
+      apk add --no-cache git && break; \
+      echo "apk add git failed (attempt $i/5), retrying in 5s..."; \
+      sleep 5; \
+    done; \
+    test -x /usr/bin/git || { echo "apk add git failed permanently"; exit 1; }
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
@@ -34,7 +42,14 @@ RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w -X github.com/ne
 ############################
 FROM alpine:3.20 AS runtime
 
-RUN apk add --no-cache ca-certificates tzdata wget ffmpeg && \
+# Same retry wrapper: transient DNS errors on the Alpine mirror must not fail the build.
+RUN set -eux; \
+    for i in $(seq 1 5); do \
+      apk add --no-cache ca-certificates tzdata wget ffmpeg && break; \
+      echo "apk add runtime deps failed (attempt $i/5), retrying in 5s..."; \
+      sleep 5; \
+    done; \
+    test -x /usr/bin/wget || { echo "apk add runtime deps failed permanently"; exit 1; }; \
     addgroup -S nexora && adduser -S nexora -G nexora && \
     mkdir -p /app/data/cache/thumbnails /app/web && \
     chown -R nexora:nexora /app

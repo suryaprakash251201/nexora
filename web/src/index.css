@@ -810,6 +810,27 @@ body {
 }
 
 /* ============================================================
+   Thin visible scrollbar for the transfer panel list
+   ============================================================ */
+.transfer-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.35) transparent;
+}
+.transfer-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.transfer-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.transfer-scroll::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.35);
+  border-radius: 999px;
+}
+.transfer-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.55);
+}
+
+/* ============================================================
    Scrollbar
    ============================================================ */
 

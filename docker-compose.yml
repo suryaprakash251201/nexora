@@ -20,6 +20,11 @@ services:
       dockerfile: Dockerfile
       args:
         VERSION: "${NEXORA_VERSION:-1.7.2}"
+      # Build with host networking: on hosts where the container DNS is broken
+      # (e.g. Tailscale MagicDNS 100.100.100.100 doesn't answer container
+      # queries), pulling packages inside the image fails with "no such
+      # package". Host networking lets RUN steps use the host resolver.
+      network: host
     image: nexora:latest
     container_name: nexora
     restart: unless-stopped

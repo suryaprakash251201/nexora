@@ -1,5 +1,6 @@
 import { getCsrfToken, getBaseUrl } from "../api/client";
 import { useTransfers, uid, type Transfer } from "../store/transfers";
+import { formatBytes } from "./format";
 
 function fmtSpeed(bps: number): string {
   if (bps >= 1 << 30) return (bps / (1 << 30)).toFixed(1) + " GB/s";
@@ -181,7 +182,9 @@ function runUpload(
   xhr.onabort = () => done();
   xhr.onerror = () => {
     done();
-    useTransfers.getState().update(id, { status: "error", error: `Network error — could not reach server at ${uploadUrl.replace(/\?.*/, '')}` });
+    const t = useTransfers.getState().transfers.find((x) => x.id === id);
+    const at = t && t.loaded > 0 ? ` at ${formatBytes(t.loaded)}` : "";
+    useTransfers.getState().update(id, { status: "error", error: `Network error${at} — connection closed by server` });
   };
   xhr.send(form);
 }
