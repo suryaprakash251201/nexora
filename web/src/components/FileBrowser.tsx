@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, memo, useCallback } from "react";
-import { motion, AnimatePresence } from "motion/react";
+import { motion } from "motion/react";
 import { useUI } from "../store";
 import { Play, MoreVertical, AlertTriangle, RefreshCw } from "lucide-react";
 import { FileItem } from "../api/types";
@@ -9,7 +9,6 @@ import { iconForFile, colorClasses, iconGlowClasses } from "./FileIcon";
 import { EmptyState } from "./ui/EmptyState";
 import { SkeletonGrid, SkeletonList } from "./ui/Skeleton";
 import { cn } from "@/lib/utils";
-import { staggerContainer, staggerItem } from "@/lib/animations";
 import { TagChip } from "./TagManager";
 import type { DensityMode } from "../store";
 
@@ -33,6 +32,8 @@ interface FileBrowserProps {
   error?: Error | null;
   onRetry?: () => void;
   density?: DensityMode;
+  /** Current folder path — resets the scroll container to top when it changes. */
+  folderPath?: string;
 }
 
 const FileIconForItem = memo(function FileIconForItem({ item, large, fill, className }: { item: FileItem; large?: boolean; fill?: boolean; className?: string }) {
@@ -80,11 +81,22 @@ export default function FileBrowser({
   error,
   onRetry,
   density = "comfortable",
+  folderPath,
 }: FileBrowserProps) {
   const visibleColumns = useUI((s) => s.visibleColumns);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const dropZoneRef = useRef<HTMLDivElement>(null);
+
+  // When the visible folder changes, jump back to the top instead of
+  // preserving the old scroll offset mid-list.
+  const prevFolder = useRef(folderPath);
+  useEffect(() => {
+    if (prevFolder.current !== folderPath) {
+      prevFolder.current = folderPath;
+      dropZoneRef.current?.scrollTo({ top: 0 });
+    }
+  }, [folderPath]);
 
   const canDrop = canWrite && selectMode && onDropItem;
   const allSelected = items.length > 0 && items.every((i) => selection.has(i.path));
@@ -310,26 +322,19 @@ export default function FileBrowser({
     <div ref={dropZoneRef} className="flex-1 overflow-auto hide-scrollbar">
       {viewMode === "grid" ? (
         <>
-          <motion.div
-            variants={staggerContainer}
-            initial="initial"
-            animate="animate"
+          <div
             className={cn(dc.grid[d], "grid")} style={{ gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))" }}
             role="grid"
             aria-label="File grid"
           >
-            <AnimatePresence mode="popLayout">
               {items.map((item, index) => {
                 const selected = selection.has(item.path);
                 return (
                   <motion.div
                     key={item.path}
-                    layout
-                    variants={staggerItem}
-                    initial={{ opacity: 0, y: 16, scale: 0.98 }}
+                    initial={{ opacity: 0, y: 6, scale: 0.99 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.95, y: -8 }}
-                    transition={{ duration: 0.3, ease: [0.25, 0.1, 0.25, 1], delay: Math.min(index * 0.02, 0.25) }}
+                    transition={{ duration: 0.16, ease: "easeOut", delay: Math.min(index * 0.006, 0.24) }}
                     tabIndex={0}
                     onClick={(e) => handleItemClick(item, e)}
                     onContextMenu={(e) => onContextMenu(e, item)}
@@ -432,8 +437,7 @@ export default function FileBrowser({
                   </motion.div>
                 );
               })}
-            </AnimatePresence>
-          </motion.div>
+          </div>
           {hasMore && onLoadMore && (
             <div className="flex justify-center py-6 pb-40">
               <button
@@ -469,24 +473,15 @@ export default function FileBrowser({
             )}
           </div>
 
-          <motion.div
-            variants={staggerContainer}
-            initial="initial"
-            animate="animate"
-            className="mt-1"
-          >
-            <AnimatePresence mode="popLayout">
+          <div className="mt-1">
               {items.map((item, index) => {
                 const selected = selection.has(item.path);
                 return (
                   <motion.div
                     key={item.path}
-                    layout
-                    variants={staggerItem}
-                    initial={{ opacity: 0, y: 8 }}
+                    initial={{ opacity: 0, y: 4 }}
                     animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, x: -8 }}
-                    transition={{ duration: 0.2, delay: Math.min(index * 0.01, 0.15) }}
+                    transition={{ duration: 0.14, ease: "easeOut", delay: Math.min(index * 0.004, 0.12) }}
                     tabIndex={0}
                     onClick={(e) => handleItemClick(item, e)}
                     onContextMenu={(e) => onContextMenu(e, item)}
@@ -585,8 +580,7 @@ export default function FileBrowser({
                   </motion.div>
                 );
               })}
-            </AnimatePresence>
-          </motion.div>
+          </div>
           {hasMore && onLoadMore && (
             <div className="flex justify-center py-6 pb-40">
               <button

@@ -59,6 +59,15 @@ import { useModals } from "./hooks/useModals";
 import DesktopDragDrop from "./DesktopDragDrop";
 import { isTauri, isLocalServer, revealInFileManager } from "../lib/desktop";
 
+// Mirrors the /home/usage payload (also typed in HomePanel).
+interface HomeUsage {
+  total: number;
+  available: number;
+  used: number;
+  file_count: number;
+  breakdown: Record<string, { count: number; size: number }>;
+}
+
 export default function Workspace({ user }: { user: User }) {
   const qc = useQueryClient();
   const selection = useUI((s) => s.selection);
@@ -159,9 +168,12 @@ export default function Workspace({ user }: { user: User }) {
 
   useEffect(() => {
     setFileOffset(0);
-    setAccumulatedItems([]);
     setHasMoreFiles(false);
-    files.refetch();
+    // Note: no explicit refetch here — the query key already includes
+    // (rootId, path, sort, order), so the browser automatically fetches the
+    // new folder. keepPreviousData keeps the previous listing visible until
+    // the new one lands (no skeleton flash), and a 30s staleTime makes
+    // back-navigation serve from cache instantly.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rootId, path, sort, order]);
   const modals = useModals();
@@ -198,7 +210,7 @@ export default function Workspace({ user }: { user: User }) {
   const trash = useQuery({ queryKey: ["trash"], queryFn: () => get<{ items: TrashItem[] }>("/trash"), enabled: view === "trash" });
   const favorites = useQuery({ queryKey: ["favorites"], queryFn: () => get<{ items: FavoriteItem[] }>("/favorites"), enabled: view === "favorites" });
   const recents = useQuery({ queryKey: ["recents"], queryFn: () => get<{ items: RecentItem[] }>("/recents"), enabled: view === "recents" });
-  const home = useQuery({ queryKey: ["home"], queryFn: () => get<HomeData>("/home"), enabled: view === "home" });
+  const home = useQuery({ queryKey: ["home"], queryFn: () => get<HomeData>("/home"), enabled: view === "home", staleTime: 30_000 });
   const favSet = useQuery({ queryKey: ["fav-set"], queryFn: () => get<{ items: FavoriteItem[] }>("/favorites") });
   
   const filtered = useMemo(() => {
@@ -228,6 +240,23 @@ export default function Workspace({ user }: { user: User }) {
     qc.invalidateQueries({ queryKey: ["favorites"] });
     qc.invalidateQueries({ queryKey: ["fav-set"] });
   }, [qc, rootId, path, sort, order, fileOffset]);
+
+  // Warm the target view's data while the pointer hovers a nav item, so a
+  // click swaps views with data already in the cache (no spinner / skeleton).
+  const prefetchView = useCallback((v: SidebarView) => {
+    if (v === "home") {
+      qc.prefetchQuery({ queryKey: ["home"], queryFn: () => get<HomeData>("/home"), staleTime: 30_000 });
+      qc.prefetchQuery({ queryKey: ["home-usage"], queryFn: () => get<HomeUsage>("/home/usage"), staleTime: 60_000 });
+    } else if (v === "trash") {
+      qc.prefetchQuery({ queryKey: ["trash"], queryFn: () => get<{ items: TrashItem[] }>("/trash") });
+    } else if (v === "favorites") {
+      qc.prefetchQuery({ queryKey: ["favorites"], queryFn: () => get<{ items: FavoriteItem[] }>("/favorites") });
+    } else if (v === "recents") {
+      qc.prefetchQuery({ queryKey: ["recents"], queryFn: () => get<{ items: RecentItem[] }>("/recents") });
+    } else if (v === "playlists") {
+      qc.prefetchQuery({ queryKey: ["playlists"], queryFn: () => get<{ items: unknown[] }>("/playlists"), staleTime: 30_000 });
+    }
+  }, [qc]);
 
   // Use custom hooks
   const { uploadFiles, downloadItem } = useTransfers(rootId, path, refresh);
@@ -466,6 +495,7 @@ export default function Workspace({ user }: { user: User }) {
         onToggleCollapse={() => setSidebarCollapsed((c) => !c)}
         onSelectRoot={(id) => { setRootId(id); clearSelection(); }}
         onSelectView={(v) => { setView(v); clearSelection(); }}
+        onHoverView={prefetchView}
         onNewRoot={() => isAdmin && setRootModal(true)}
         onLogout={logout}
       />
@@ -518,10 +548,10 @@ export default function Workspace({ user }: { user: User }) {
         )}
 
         <motion.main
-          key={view === "files" ? `files:${rootId ?? ""}:${path}` : view}
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.15, ease: [0.25, 0.1, 0.25, 1] }}
+          key={view}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.12, ease: "easeOut" }}
           className="flex-1 overflow-auto flex flex-col hide-scrollbar"
         >
             <Suspense fallback={<div className="flex-1 grid place-items-center text-content-muted">Loading...</div>}>
@@ -544,8 +574,9 @@ export default function Workspace({ user }: { user: User }) {
                 onLoadMore={() => setFileOffset(prev => prev + (files.data?.limit || 500))}
                 isLoadingMore={files.isFetching && fileOffset > 0}
                 error={files.error as Error | null}
-                onRetry={() => { setFileOffset(0); setAccumulatedItems([]); files.refetch(); }}
+                onRetry={() => { setFileOffset(0); files.refetch(); }}
                 density={density}
+                folderPath={path}
               />
             )}
             {view === "trash" && <TrashView items={trash.data?.items || []} loading={trash.isLoading} onRestore={async (id) => { await post("/trash/restore", { id }); refresh(); }} onDelete={async (id) => { await del("/trash", { id }); refresh(); }} selection={selection} selectMode={selectMode} onSelect={(id) => toggleSelect(id)} />}

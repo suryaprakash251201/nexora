@@ -1,6 +1,7 @@
 import { Trash2, Plus, Share2, Clock, Star, Search, Shield, ListMusic, Home, PanelLeftClose, PanelLeftOpen, LogOut } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import type { Root } from "../api/types";
+import { memo } from "react";
 import { rootIcon } from "../lib/rootIcons";
 import { get } from "../api/client";
 import { useQuery } from "@tanstack/react-query";
@@ -24,11 +25,11 @@ const viewColors: Record<string, string> = {
   photos: "#F43F5E"
 };
 
-const NavItem = ({ v, icon, label, isActive, badge, collapsed, onSelectView }: { v: SidebarView; icon: React.ReactNode; label: string; isActive: boolean; badge?: number; collapsed: boolean; onSelectView: (v: SidebarView) => void; }) => {
+const NavItem = ({ v, icon, label, isActive, badge, collapsed, onSelectView, onHoverView }: { v: SidebarView; icon: React.ReactNode; label: string; isActive: boolean; badge?: number; collapsed: boolean; onSelectView: (v: SidebarView) => void; onHoverView?: (v: SidebarView) => void; }) => {
   const accent = viewColors[v] || "#5B8CFF";
   return (
-    <button onClick={() => onSelectView(v)} title={collapsed ? label : undefined}
-      className={cn("relative w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-sm font-medium transition-all duration-200 min-h-[44px] group overflow-hidden", 
+    <button onClick={() => onSelectView(v)} onMouseEnter={() => onHoverView?.(v)} title={collapsed ? label : undefined}
+      className={cn("relative w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-sm font-medium transition-all duration-200 min-h-[44px] group overflow-hidden active:scale-[0.98]", 
         collapsed ? "justify-center px-0" : "",
         isActive ? "bg-glass-bg-subtle shadow-sm" : "hover:bg-glass-bg-subtle/50"
       )}
@@ -69,8 +70,8 @@ const NavItem = ({ v, icon, label, isActive, badge, collapsed, onSelectView }: {
   );
 };
 
-export default function Sidebar({
-  roots, activeRoot, view, isAdmin, collapsed, onToggleCollapse, onSelectRoot, onSelectView, onNewRoot, onLogout,
+export default memo(function Sidebar({
+  roots, activeRoot, view, isAdmin, collapsed, onToggleCollapse, onSelectRoot, onSelectView, onNewRoot, onLogout, onHoverView,
 }: {
   roots: Root[];
   activeRoot: string | null;
@@ -82,6 +83,7 @@ export default function Sidebar({
   onSelectView: (v: SidebarView) => void;
   onNewRoot: () => void;
   onLogout: () => void;
+  onHoverView?: (v: SidebarView) => void;
 }) {
   const version = useQuery({ queryKey: ["version"], queryFn: () => get<{ version: string }>("/version") });
   const usage = useQuery({ queryKey: ["storage-usage"], queryFn: () => get<{ total: number; used: number; available: number }>("/admin/usage"), enabled: isAdmin, });
@@ -139,18 +141,18 @@ export default function Sidebar({
         {collapsed && <button onClick={onToggleCollapse} title="Expand sidebar" aria-label="Expand sidebar" className="mb-4 p-2.5 rounded-xl hover:bg-glass-bg transition-colors min-h-[44px] min-w-[44px]"><PanelLeftOpen className="h-4 w-4 text-text-tertiary mx-auto" /></button>}
 
         <nav aria-label="Main navigation" className={cn("flex-1 overflow-y-auto space-y-0.5 hide-scrollbar", collapsed ? "px-2 w-full" : "px-2 w-full")}>
-          <NavItem v="home" icon={<Home className="w-[18px] h-[18px]" />} label="Home" isActive={view === "home"} collapsed={collapsed} onSelectView={onSelectView} />
-          <NavItem v="search" icon={<Search className="w-[18px] h-[18px]" />} label="Search" isActive={view === "search"} collapsed={collapsed} onSelectView={onSelectView} />
-          <NavItem v="analytics" icon={<svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18" /></svg>} label="Analytics" isActive={view === "analytics"} collapsed={collapsed} onSelectView={onSelectView} />
-          <NavItem v="photos" icon={<svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2" strokeWidth={2}/><circle cx="8.5" cy="8.5" r="1.5" strokeWidth={2}/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 15l-5-5L5 21" /></svg>} label="Photos" isActive={view === "photos"} collapsed={collapsed} onSelectView={onSelectView} />
+          <NavItem v="home" icon={<Home className="w-[18px] h-[18px]" />} label="Home" isActive={view === "home"} collapsed={collapsed} onSelectView={onSelectView} onHoverView={onHoverView} />
+          <NavItem v="search" icon={<Search className="w-[18px] h-[18px]" />} label="Search" isActive={view === "search"} collapsed={collapsed} onSelectView={onSelectView} onHoverView={onHoverView} />
+          <NavItem v="analytics" icon={<svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18" /></svg>} label="Analytics" isActive={view === "analytics"} collapsed={collapsed} onSelectView={onSelectView} onHoverView={onHoverView} />
+          <NavItem v="photos" icon={<svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2" strokeWidth={2}/><circle cx="8.5" cy="8.5" r="1.5" strokeWidth={2}/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 15l-5-5L5 21" /></svg>} label="Photos" isActive={view === "photos"} collapsed={collapsed} onSelectView={onSelectView} onHoverView={onHoverView} />
           <div className="my-1.5 mx-3 h-px bg-glass-border-soft" />
-          <NavItem v="recents" icon={<Clock className="w-[18px] h-[18px]" />} label="Recent" isActive={view === "recents"} collapsed={collapsed} onSelectView={onSelectView} />
-          <NavItem v="favorites" icon={<Star className="w-[18px] h-[18px]" />} label="Favorites" isActive={view === "favorites"} badge={badgeCounts.favorites} collapsed={collapsed} onSelectView={onSelectView} />
-          <NavItem v="shares" icon={<Share2 className="w-[18px] h-[18px]" />} label="Shared" isActive={view === "shares"} badge={badgeCounts.shares} collapsed={collapsed} onSelectView={onSelectView} />
-          <NavItem v="playlists" icon={<ListMusic className="w-[18px] h-[18px]" />} label="Playlists" isActive={view === "playlists"} collapsed={collapsed} onSelectView={onSelectView} />
+          <NavItem v="recents" icon={<Clock className="w-[18px] h-[18px]" />} label="Recent" isActive={view === "recents"} collapsed={collapsed} onSelectView={onSelectView} onHoverView={onHoverView} />
+          <NavItem v="favorites" icon={<Star className="w-[18px] h-[18px]" />} label="Favorites" isActive={view === "favorites"} badge={badgeCounts.favorites} collapsed={collapsed} onSelectView={onSelectView} onHoverView={onHoverView} />
+          <NavItem v="shares" icon={<Share2 className="w-[18px] h-[18px]" />} label="Shared" isActive={view === "shares"} badge={badgeCounts.shares} collapsed={collapsed} onSelectView={onSelectView} onHoverView={onHoverView} />
+          <NavItem v="playlists" icon={<ListMusic className="w-[18px] h-[18px]" />} label="Playlists" isActive={view === "playlists"} collapsed={collapsed} onSelectView={onSelectView} onHoverView={onHoverView} />
         
           <div className="my-1.5 mx-3 h-px bg-glass-border-soft" />
-          <NavItem v="trash" icon={<Trash2 className="w-[18px] h-[18px]" />} label="Trash" isActive={view === "trash"} badge={badgeCounts.trash} collapsed={collapsed} onSelectView={onSelectView} />
+          <NavItem v="trash" icon={<Trash2 className="w-[18px] h-[18px]" />} label="Trash" isActive={view === "trash"} badge={badgeCounts.trash} collapsed={collapsed} onSelectView={onSelectView} onHoverView={onHoverView} />
 
           {roots.map((r) => {
             const Icon = rootIcon(r.icon);
@@ -252,4 +254,4 @@ export default function Sidebar({
       </motion.aside>
     </>
   );
-}
+});

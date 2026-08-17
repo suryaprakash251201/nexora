@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import {
   Play,
   Pause,
@@ -43,7 +43,7 @@ function Cover({ item }: { item: FileItem | null }) {
   return <img src={thumbUrl(item)} alt="" className="h-full w-full object-cover transition-transform duration-500 hover:scale-110" onError={() => setFailed(true)} />;
 }
 
-export default function PlayerBar() {
+export default memo(function PlayerBar() {
   const audioRef = useRef<HTMLAudioElement>(null);
   const bound = useRef(false);
   const { current, isPlaying, buffering, volume, muted, primaryOpen, currentTime, duration, queueLength, index, shuffle, repeat, audioError } = usePlayer(
@@ -416,4 +416,4 @@ export default function PlayerBar() {
       )}
     </>
   );
-}
+});

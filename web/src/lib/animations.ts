@@ -28,8 +28,8 @@ export const staggerContainer: Variants = {
   initial: {},
   animate: {
     transition: {
-      staggerChildren: 0.05,
-      delayChildren: 0.1,
+      staggerChildren: 0.015,
+      delayChildren: 0.04,
     },
   },
 };

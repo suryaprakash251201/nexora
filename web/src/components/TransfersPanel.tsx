@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { memo, useState, useEffect } from "react";
 import { Upload, Download, X, CheckCircle2, AlertCircle, Clock, ChevronsLeftRight, Grip } from "lucide-react";
 import { useTransfers, type Transfer } from "../store/transfers";
 import { cancelTransfer, isCancellable, speedLabel } from "../lib/transfer";
@@ -101,7 +101,7 @@ function Chip({ t }: { t: Transfer }) {
   );
 }
 
-export default function TransfersPanel() {
+export default memo(function TransfersPanel() {
   const transfers = useTransfers((s) => s.transfers);
   const [open, setOpen] = useState(true);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -232,4 +232,4 @@ export default function TransfersPanel() {
       </div>
     </div>
   );
-}
+});

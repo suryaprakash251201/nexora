@@ -80,7 +80,7 @@ function StatsBar() {
           key={s.label}
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: i * 0.08, duration: 0.4 }}
+          transition={{ delay: i * 0.04, duration: 0.35 }}
           className="glass-subtle border border-glass-border rounded-2xl p-4 relative overflow-hidden group hover:border-accent/40 transition-all duration-300"
         >
           <div className="absolute inset-0 bg-gradient-to-br from-white/[0.02] via-transparent to-transparent pointer-events-none" />
