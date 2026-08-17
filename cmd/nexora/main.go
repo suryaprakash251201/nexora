@@ -116,9 +116,13 @@ func main() {
 		Addr:              cfg.ListenAddr,
 		Handler:           srv.Routes(),
 		ReadHeaderTimeout: 15 * time.Second,
-		ReadTimeout:       60 * time.Second,
-		WriteTimeout:      0, // streaming (Range) needs no write timeout
-		IdleTimeout:       120 * time.Second,
+		// No read timeout: uploads stream the whole request body (files up to GBs)
+		// and a fixed ReadTimeout would cut the connection mid-transfer — which
+		// looks like an upload that stalls and dies. ReadHeaderTimeout above still
+		// guards against slowloris on the header phase.
+		ReadTimeout: 0,
+		WriteTimeout: 0, // streaming (Range) needs no write timeout
+		IdleTimeout:  120 * time.Second,
 	}
 
 	go func() {
