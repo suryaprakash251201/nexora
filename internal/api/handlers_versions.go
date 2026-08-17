@@ -14,6 +14,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/nexora/nexora/internal/auth"
+	"github.com/nexora/nexora/internal/events"
 	"github.com/nexora/nexora/internal/middleware"
 	"github.com/nexora/nexora/internal/storage"
 )
@@ -190,6 +191,7 @@ func (s *Server) handleCreateVersion(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.audit(r, "version_create", rel, fmt.Sprintf("version=%d", nextVersion))
+	s.emit(events.EventVersionCreated, r, req.Root, rel, size)
 	writeJSON(w, http.StatusCreated, map[string]any{"version": version})
 }
 
@@ -238,6 +240,7 @@ func (s *Server) handleRestoreVersion(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.audit(r, "version_restore", path, "restored_from="+versionID)
+	s.emit(events.EventVersionRestored, r, rootID, rel, int64(len(src)))
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 

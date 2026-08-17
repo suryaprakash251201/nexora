@@ -17,12 +17,13 @@ import (
 	"github.com/nexora/nexora/internal/auth"
 	"github.com/nexora/nexora/internal/config"
 	"github.com/nexora/nexora/internal/database"
+	"github.com/nexora/nexora/internal/events"
 	"github.com/nexora/nexora/internal/jobs"
 	"github.com/nexora/nexora/internal/logger"
 	"github.com/nexora/nexora/internal/metrics"
 	"github.com/nexora/nexora/internal/middleware"
-	"github.com/nexora/nexora/internal/preview"
 	"github.com/nexora/nexora/internal/playlists"
+	"github.com/nexora/nexora/internal/preview"
 	"github.com/nexora/nexora/internal/search"
 	"github.com/nexora/nexora/internal/sharing"
 	"github.com/nexora/nexora/internal/storage"
@@ -77,13 +78,31 @@ func main() {
 		})
 	}
 
-	srv := api.NewServer(cfg, log, db, users, sessions, auditStore, guard, limiter, roots, plStore)
-	srv.Search = searchSvc
-	srv.Shares = shareStore
-	srv.Preview = previewSvc
-	srv.Jobs = jobMgr
-	srv.Metrics = reg
-	srv.WebRoot = webRoot()
+	eventBus := events.NewBus(db)
+	defer eventBus.Stop()
+	if err := eventBus.LoadWebhooks(); err != nil {
+		log.Warn("failed to load webhooks from database", "error", err)
+	}
+
+	srv := api.NewServer(api.Deps{
+		Cfg:       cfg,
+		Log:       log,
+		DB:        db,
+		Users:     users,
+		Sessions:  sessions,
+		Audit:     auditStore,
+		Guard:     guard,
+		Limiter:   limiter,
+		Roots:     roots,
+		Playlists: plStore,
+		Search:    searchSvc,
+		Shares:    shareStore,
+		Preview:   previewSvc,
+		Jobs:      jobMgr,
+		Metrics:   reg,
+		Events:    eventBus,
+		WebRoot:   webRoot(),
+	})
 
 	// Background: initial low-priority index scan (never blocks startup) and
 	// periodic maintenance.

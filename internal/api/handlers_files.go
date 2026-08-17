@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"github.com/nexora/nexora/internal/auth"
+	"github.com/nexora/nexora/internal/events"
 	"github.com/nexora/nexora/internal/middleware"
 	"github.com/nexora/nexora/internal/storage"
 	"net/http"
@@ -271,6 +272,7 @@ func (s *Server) handleCreateDir(w http.ResponseWriter, r *http.Request) {
 	s.indexUpsert(req.Root, acc.provider, rel)
 	s.audit(r, "create_directory", rel, "")
 	s.recordRecent(r, req.Root, rel, "add")
+	s.emit(events.EventDirCreated, r, req.Root, rel, 0)
 	writeJSON(w, http.StatusCreated, map[string]any{"ok": true, "path": rel})
 }
 
@@ -314,6 +316,22 @@ func (s *Server) audit(r *http.Request, action, target, detail string) {
 	if user, ok := auth.UserFromContext(r.Context()); ok {
 		_ = s.Audit.Record(user.ID, action, target, detail, clientIP(r))
 	}
+}
+
+// emit publishes a file event to the in-process event bus (webhooks). It is a
+// no-op when the bus is not wired (nil).
+func (s *Server) emit(typ events.EventType, r *http.Request, rootID, path string, size int64) {
+	if s.Events == nil {
+		return
+	}
+	user, _ := auth.UserFromContext(r.Context())
+	s.Events.Emit(events.Event{
+		Type:   typ,
+		UserID: user.ID,
+		RootID: rootID,
+		Path:   path,
+		Size:   size,
+	})
 }
 
 func fileToMap(f storage.FileInfo, rootID string) map[string]any {

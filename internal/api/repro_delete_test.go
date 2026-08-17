@@ -54,7 +54,18 @@ func TestDeleteMovesToTrashAndRecordsEntry(t *testing.T) {
 		t.Fatalf("create root: %v", err)
 	}
 
-	s := NewServer(cfg, log, db, users, sessions, audit.NewStore(db), guard, limiter, roots, pl)
+	s := NewServer(Deps{
+		Cfg:       cfg,
+		Log:       log,
+		DB:        db,
+		Users:     users,
+		Sessions:  sessions,
+		Audit:     audit.NewStore(db),
+		Guard:     guard,
+		Limiter:   limiter,
+		Roots:     roots,
+		Playlists: pl,
+	})
 	h := s.Routes()
 
 	sess, err := sessions.Create(u.ID, "127.0.0.1", "test")

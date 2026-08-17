@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/nexora/nexora/internal/auth"
+	"github.com/nexora/nexora/internal/events"
 	"github.com/nexora/nexora/internal/middleware"
 	"github.com/nexora/nexora/internal/sharing"
 	"github.com/nexora/nexora/internal/storage"
@@ -83,6 +84,7 @@ func (s *Server) handleCreateShare(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.audit(r, "share_create", rel, "token="+sh.Token[:8]+"…")
+	s.emit(events.EventShareCreated, r, req.Root, rel, 0)
 	writeJSON(w, http.StatusCreated, map[string]any{"share": shareToMap(sh, s.shareURL(r, sh.Token))})
 }
 
@@ -93,6 +95,11 @@ func (s *Server) handleRevokeShare(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "unauthenticated", "Authentication required", middleware.GetRequestID(r.Context()))
 		return
 	}
+	// Fetch metadata before revocation so the event can carry root/path.
+	var evRoot, evPath string
+	if sh, err := s.Shares.GetByID(id); err == nil {
+		evRoot, evPath = sh.RootID, sh.Path
+	}
 	if err := s.Shares.Revoke(id, user.ID, user.Role == "admin"); err != nil {
 		if err == sharing.ErrNotFound {
 			writeError(w, http.StatusNotFound, "not_found", "share not found", middleware.GetRequestID(r.Context()))
@@ -102,6 +109,7 @@ func (s *Server) handleRevokeShare(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.audit(r, "share_revoke", id, "")
+	s.emit(events.EventShareRevoked, r, evRoot, evPath, 0)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 

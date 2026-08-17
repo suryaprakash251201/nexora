@@ -15,11 +15,11 @@ import (
 	"github.com/nexora/nexora/internal/logger"
 	"github.com/nexora/nexora/internal/metrics"
 	"github.com/nexora/nexora/internal/middleware"
+	"github.com/nexora/nexora/internal/playlists"
 	"github.com/nexora/nexora/internal/preview"
 	"github.com/nexora/nexora/internal/search"
 	"github.com/nexora/nexora/internal/sharing"
 	"github.com/nexora/nexora/internal/storage"
-	"github.com/nexora/nexora/internal/playlists"
 )
 
 // Server bundles dependencies for the HTTP API and static file server.
@@ -43,19 +43,52 @@ type Server struct {
 	WebRoot      string
 }
 
+// Deps carries every dependency the API server needs. Passing a single struct
+// (rather than positional arguments plus post-construction field assignment)
+// forces the compiler to catch missing dependencies and prevents the kind of
+// silent nil field that previously left the event bus unwired.
+type Deps struct {
+	Cfg       *config.Config
+	Log       *logger.Logger
+	DB        *sql.DB
+	Users     *auth.UserStore
+	Sessions  *auth.SessionStore
+	Audit     *audit.Store
+	Guard     *auth.LoginGuard
+	Limiter   *middleware.RateLimiter
+	Roots     *storage.RootService
+	Playlists *playlists.Store
+
+	// Optional services; nil disables the feature.
+	Search  *search.Service
+	Shares  *sharing.Store
+	Preview *preview.Service
+	Jobs    *jobs.Manager
+	Metrics *metrics.Registry
+	Events  *events.Bus
+	WebRoot string
+}
+
 // NewServer constructs the API server with its dependencies.
-func NewServer(cfg *config.Config, log *logger.Logger, db *sql.DB, users *auth.UserStore, sessions *auth.SessionStore, audit *audit.Store, guard *auth.LoginGuard, limiter *middleware.RateLimiter, roots *storage.RootService, plStore *playlists.Store) *Server {
+func NewServer(d Deps) *Server {
 	return &Server{
-		Cfg:          cfg,
-		Log:          log,
-		DB:           db,
-		Users:        users,
-		Sessions:     sessions,
-		Audit:        audit,
-		Guard:        guard,
-		Limiter:      limiter,
-		StorageRoots: roots,
-		Playlists:    plStore,
+		Cfg:          d.Cfg,
+		Log:          d.Log,
+		DB:           d.DB,
+		Users:        d.Users,
+		Sessions:     d.Sessions,
+		Audit:        d.Audit,
+		Guard:        d.Guard,
+		Limiter:      d.Limiter,
+		StorageRoots: d.Roots,
+		Playlists:    d.Playlists,
+		Search:       d.Search,
+		Shares:       d.Shares,
+		Preview:      d.Preview,
+		Jobs:         d.Jobs,
+		Metrics:      d.Metrics,
+		Events:       d.Events,
+		WebRoot:      d.WebRoot,
 	}
 }
 

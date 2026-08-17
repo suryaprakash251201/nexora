@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"github.com/nexora/nexora/internal/auth"
+	"github.com/nexora/nexora/internal/events"
 	"github.com/nexora/nexora/internal/middleware"
 	"github.com/nexora/nexora/internal/storage"
 	"github.com/nexora/nexora/internal/util"
@@ -56,6 +57,7 @@ func (s *Server) handleRename(w http.ResponseWriter, r *http.Request) {
 	s.indexRemove(req.Root, rel)
 	s.indexUpsert(req.Root, acc.provider, dest)
 	s.audit(r, "rename", rel+" -> "+dest, "")
+	s.emit(events.EventFileRenamed, r, req.Root, dest, 0)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "path": dest})
 }
 
@@ -91,6 +93,7 @@ func (s *Server) handleMove(w http.ResponseWriter, r *http.Request) {
 	s.indexRemove(req.Root, src)
 	s.indexUpsert(req.Root, acc.provider, dst)
 	s.audit(r, "move", src+" -> "+dst, "")
+	s.emit(events.EventFileMoved, r, req.Root, dst, 0)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
@@ -125,6 +128,7 @@ func (s *Server) handleCopy(w http.ResponseWriter, r *http.Request) {
 	}
 	s.indexUpsert(req.Root, acc.provider, dst)
 	s.audit(r, "copy", src+" -> "+dst, "")
+	s.emit(events.EventFileCopied, r, req.Root, dst, 0)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
@@ -150,6 +154,7 @@ func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 		}
 		s.indexRemove(rootID, rel)
 		s.audit(r, "delete_permanent", rel, "")
+		s.emit(events.EventFileDeleted, r, rootID, rel, 0)
 		writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 		return
 	}
@@ -178,6 +183,7 @@ func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	s.audit(r, "delete", rel, "moved to trash")
 	s.indexRemove(rootID, rel)
+	s.emit(events.EventFileDeleted, r, rootID, rel, info.Size)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "trashed": true})
 }
 
@@ -217,6 +223,7 @@ func (s *Server) handleCreateFile(w http.ResponseWriter, r *http.Request) {
 	s.indexUpsert(req.Root, acc.provider, rel)
 	s.audit(r, "create_file", rel, "")
 	s.recordRecent(r, req.Root, rel, "add")
+	s.emit(events.EventFileCreated, r, req.Root, rel, int64(len(req.Content)))
 	writeJSON(w, http.StatusCreated, map[string]any{"ok": true, "path": rel})
 }
 

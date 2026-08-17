@@ -5,21 +5,22 @@ import (
 	"strconv"
 
 	"github.com/nexora/nexora/internal/auth"
+	"github.com/nexora/nexora/internal/events"
 	"github.com/nexora/nexora/internal/middleware"
 	"github.com/nexora/nexora/internal/storage"
 )
 
 type trashRow struct {
-	ID            string
-	UserID        string
-	RootID        string
-	OriginalPath  string
-	TrashPath     string
-	Name          string
-	Size          int64
-	IsDir         bool
-	DeletedAt     string
-	RootName      string
+	ID           string
+	UserID       string
+	RootID       string
+	OriginalPath string
+	TrashPath    string
+	Name         string
+	Size         int64
+	IsDir        bool
+	DeletedAt    string
+	RootName     string
 }
 
 func (s *Server) listTrash(r *http.Request, user auth.User) ([]trashRow, error) {
@@ -130,6 +131,7 @@ func (s *Server) handleRestoreTrash(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.audit(r, "restore", t.OriginalPath, "from trash")
+	s.emit(events.EventFileRestored, r, t.RootID, t.OriginalPath, t.Size)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 

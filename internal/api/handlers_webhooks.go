@@ -17,10 +17,11 @@ func (s *Server) handleListWebhooks(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "unauthenticated", "Authentication required", middleware.GetRequestID(r.Context()))
 		return
 	}
-
-	// Webhooks managed in-process (not persisted yet)
-	// For now return empty list
-	writeJSON(w, http.StatusOK, map[string]any{"webhooks": []events.WebhookTarget{}})
+	if s.Events == nil {
+		writeJSON(w, http.StatusOK, map[string]any{"webhooks": []events.WebhookTarget{}})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"webhooks": s.Events.ListWebhooks()})
 }
 
 // handleCreateWebhook registers a new webhook target.

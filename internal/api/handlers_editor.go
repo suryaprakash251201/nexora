@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nexora/nexora/internal/events"
 	"github.com/nexora/nexora/internal/middleware"
 	"github.com/nexora/nexora/internal/preview"
 	"github.com/nexora/nexora/internal/storage"
@@ -123,6 +124,7 @@ func (s *Server) handleSaveContent(w http.ResponseWriter, r *http.Request) {
 		s.Search.Upsert(req.Root, newInfo)
 	}
 	s.audit(r, "edit", rel, "saved via editor")
+	s.emit(events.EventFileUpdated, r, req.Root, rel, int64(len(req.Content)))
 	newVersion := time.Now().UTC().Format(time.RFC3339Nano)
 	if newInfo, serr := acc.provider.Stat(rel); serr == nil {
 		newVersion = newInfo.Modified.UTC().Format(time.RFC3339Nano)
