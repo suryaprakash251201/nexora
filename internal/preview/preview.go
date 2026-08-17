@@ -28,17 +28,27 @@ import (
 // ErrUnsupported is returned when a file cannot be thumbnailed/probed.
 var ErrUnsupported = errors.New("preview: unsupported media type")
 
+// thumbConcurrency bounds how many thumbnail/cover generations may run at
+// once. Image decoding + JPEG encoding is CPU-heavy and runs synchronously in
+// the request handler; a folder full of images can otherwise saturate the CPU
+// when the browser opens it for the first time. Requests wait on the gate
+// instead of competing for cores.
+const thumbConcurrency = 4
+
 // Service generates and caches previews.
 type Service struct {
 	cacheDir string
 	maxSize  int64
 	ttl      time.Duration
+
+	// gate serializes thumbnail/cover generation work.
+	gate chan struct{}
 }
 
 // NewService creates a preview service.
 func NewService(cacheDir string, maxSize int64, ttl time.Duration) *Service {
 	_ = os.MkdirAll(cacheDir, 0o755)
-	return &Service{cacheDir: cacheDir, maxSize: maxSize, ttl: ttl}
+	return &Service{cacheDir: cacheDir, maxSize: maxSize, ttl: ttl, gate: make(chan struct{}, thumbConcurrency)}
 }
 
 // Checksum computes the SHA-256 of a file via its provider reader. Only called
@@ -105,6 +115,11 @@ func (s *Service) Thumbnail(provider storage.StorageProvider, rootID, rel string
 	if data, err := os.ReadFile(cachePath); err == nil {
 		return data, nil
 	}
+
+	// Cap concurrent decode+encode work so a first folder visit with dozens of
+	// images doesn't saturate the CPU (each request handler blocks on this gate).
+	s.gate <- struct{}{}
+	defer func() { <-s.gate }()
 
 	rc, err := provider.Read(rel)
 	if err != nil {

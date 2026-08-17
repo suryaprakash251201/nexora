@@ -41,6 +41,10 @@ func (s *Service) Cover(provider storage.StorageProvider, rootID, rel string, ma
 		return data, nil
 	}
 
+	// Cap concurrent decode+encode work (same gate as Thumbnail).
+	s.gate <- struct{}{}
+	defer func() { <-s.gate }()
+
 	rc, err := provider.Read(rel)
 	if err != nil {
 		return nil, err

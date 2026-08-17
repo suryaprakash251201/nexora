@@ -98,7 +98,11 @@ export default function Workspace({ user }: { user: User }) {
   else if (pathname === "/photos") view = "photos";
   else if (pathname.startsWith("/admin")) view = "admin";
   
-  const roots = useQuery({ queryKey: ["roots"], queryFn: () => get<{ roots: Root[] }>("/roots") });
+  const roots = useQuery({
+    queryKey: ["roots"],
+    queryFn: () => get<{ roots: Root[] }>("/roots"),
+    staleTime: 30_000,
+  });
   const pendingFilesView = useRef(false);
 
   useEffect(() => {
@@ -173,6 +177,9 @@ export default function Workspace({ user }: { user: User }) {
     queryFn: () => get<FileListResponse>("/files", { root: rootId!, path, sort, order, offset: String(fileOffset) }),
     enabled: view === "files" && !!rootId,
     placeholderData: keepPreviousData,
+    // Keep visited folders in cache so back-navigation is instant; refresh()
+    // and mutations invalidate explicitly when the listing actually changes.
+    staleTime: 30_000,
   });
 
   useEffect(() => {

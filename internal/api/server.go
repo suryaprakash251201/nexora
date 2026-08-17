@@ -295,5 +295,5 @@ func (s *Server) Routes() http.Handler {
 
 	// Static UI + SPA fallback.
 	r.NotFound(s.handleStatic)
-	return r
+	return middleware.Compress(r)
 }

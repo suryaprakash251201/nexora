@@ -329,7 +329,7 @@ export default function FileBrowser({
                     initial={{ opacity: 0, y: 16, scale: 0.98 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.95, y: -8 }}
-                    transition={{ duration: 0.3, ease: [0.25, 0.1, 0.25, 1], delay: Math.min(index * 0.03, 0.6) }}
+                    transition={{ duration: 0.3, ease: [0.25, 0.1, 0.25, 1], delay: Math.min(index * 0.02, 0.25) }}
                     tabIndex={0}
                     onClick={(e) => handleItemClick(item, e)}
                     onContextMenu={(e) => onContextMenu(e, item)}
@@ -486,7 +486,7 @@ export default function FileBrowser({
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, x: -8 }}
-                    transition={{ duration: 0.2, delay: Math.min(index * 0.02, 0.4) }}
+                    transition={{ duration: 0.2, delay: Math.min(index * 0.01, 0.15) }}
                     tabIndex={0}
                     onClick={(e) => handleItemClick(item, e)}
                     onContextMenu={(e) => onContextMenu(e, item)}

@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useState } from "react";
 import NexoraLogo from "./icons/NexoraLogo";
 
 interface SplashScreenProps {
-  /** How long to hold the logo before fading out (ms). Default 2000. */
+  /** How long to hold the logo before fading out (ms). Default 800. */
   minMs?: number;
   /**
    * Persistent mode — used for the in-app "connecting" state.
@@ -22,7 +22,7 @@ const FADE_MS = 450;
  * and a loading bar. Takes over from the static #boot-splash injected in
  * index.html (removed on mount so there is no visual double-flash).
  */
-export default function SplashScreen({ minMs = 2000, persistent = false, caption, onDone }: SplashScreenProps) {
+export default function SplashScreen({ minMs = 800, persistent = false, caption, onDone }: SplashScreenProps) {
   const [phase, setPhase] = useState<"visible" | "fading">("visible");
 
   // Hand off from the static HTML splash as soon as we're in the DOM.
