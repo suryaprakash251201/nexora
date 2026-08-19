@@ -29,9 +29,9 @@ const NavItem = ({ v, icon, label, isActive, badge, collapsed, onSelectView, onH
   const accent = viewColors[v] || "#5B8CFF";
   return (
     <button onClick={() => onSelectView(v)} onMouseEnter={() => onHoverView?.(v)} title={collapsed ? label : undefined}
-      className={cn("relative w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-sm font-medium transition-all duration-200 min-h-[44px] group overflow-hidden active:scale-[0.98]",
-        collapsed ? "justify-center px-0" : "",
-        isActive ? "bg-glass-bg-subtle shadow-sm" : "hover:bg-glass-bg-subtle/50"
+      className={cn("relative w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl text-left text-[15px] font-medium transition-all duration-200 min-h-[48px] group overflow-hidden active:scale-[0.98]",
+        collapsed ? "justify-center px-0" : "px-4",
+        isActive ? "bg-glass-bg-subtle shadow-sm" : "hover:bg-glass-bg-subtle/50 hover:shadow-inner"
       )}
     >
       {isActive && (
@@ -41,7 +41,7 @@ const NavItem = ({ v, icon, label, isActive, badge, collapsed, onSelectView, onH
           transition={{ type: "spring", stiffness: 400, damping: 30 }}
         />
       )}
-      <div className={cn("flex items-center gap-3 w-full rounded-lg transition-all duration-200", collapsed ? "justify-center" : "pl-2")}
+      <div className={cn("flex items-center gap-3.5 w-full rounded-lg transition-all duration-200", collapsed ? "justify-center" : "pl-1")}
         style={isActive ? { color: accent } : undefined}
       >
         <span className={cn("shrink-0 transition-transform duration-200 relative", isActive ? "scale-110" : "group-hover:scale-110")}
@@ -70,7 +70,8 @@ const NavItem = ({ v, icon, label, isActive, badge, collapsed, onSelectView, onH
 
 // Section label shown between nav groups.
 const SectionLabel = ({ children }: { children: React.ReactNode }) => (
-  <div className="px-4 pt-4 pb-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-text-tertiary/70">
+  <div className="px-5 pt-5 pb-2 text-[10px] font-bold uppercase tracking-[0.14em] text-text-tertiary/70 flex items-center gap-2">
+    <span className="w-1 h-1 rounded-full bg-text-tertiary/40 shrink-0" />
     {children}
   </div>
 );
@@ -109,7 +110,7 @@ export default memo(function Sidebar({
       {/* Floating rounded navigation panel. Wrapper keeps the collapse/hide
           width animation smooth; the inner card is the rounded glass surface. */}
       <motion.aside
-        animate={{ width: collapsed ? 76 : 264 }}
+        animate={{ width: collapsed ? 80 : 304 }}
         transition={{ duration: 0.28, ease: [0.25, 0.1, 0.25, 1] }}
         className="relative shrink-0 h-full py-3 pl-3 z-40 overflow-visible"
       >
@@ -119,8 +120,8 @@ export default memo(function Sidebar({
           <div className="absolute inset-0 bg-gradient-to-b from-white/[0.03] via-transparent to-transparent pointer-events-none rounded-[28px]" />
 
           {/* Header */}
-          <div className={cn("flex items-center gap-3 pt-4 pb-2 shrink-0", collapsed ? "justify-center px-0" : "px-4 w-full")}>
-            <svg viewBox="0 0 36 36" width="40" height="40" xmlns="http://www.w3.org/2000/svg" className="shrink-0 drop-shadow-[0_2px_8px_rgba(139,92,246,0.5)]">
+          <div className={cn("flex items-center gap-3 pt-5 pb-3 shrink-0", collapsed ? "justify-center px-0" : "px-5 w-full")}>
+            <svg viewBox="0 0 36 36" width="44" height="44" xmlns="http://www.w3.org/2000/svg" className="shrink-0 drop-shadow-[0_2px_8px_rgba(139,92,246,0.5)]">
               <defs>
                 <linearGradient id="sg" x1="0%" y1="0%" x2="100%" y2="100%">
                   <stop offset="0%" stopColor="#3B82F6"/>
@@ -180,19 +181,19 @@ export default memo(function Sidebar({
           {/* Scrollable navigation — hidden scrollbar for clean look */}
           <nav aria-label="Main navigation" className={cn("flex-1 overflow-y-auto pb-2 sidebar-scroll", collapsed ? "px-2 w-full" : "px-2 w-full")}>
             {!collapsed && <SectionLabel>Main</SectionLabel>}
-            <NavItem v="home" icon={<Home className="w-[18px] h-[18px]" />} label="Home" isActive={view === "home"} collapsed={collapsed} onSelectView={onSelectView} onHoverView={onHoverView} />
-            <NavItem v="search" icon={<Search className="w-[18px] h-[18px]" />} label="Search" isActive={view === "search"} collapsed={collapsed} onSelectView={onSelectView} onHoverView={onHoverView} />
-            <NavItem v="analytics" icon={<svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18" /></svg>} label="Analytics" isActive={view === "analytics"} collapsed={collapsed} onSelectView={onSelectView} onHoverView={onHoverView} />
-            <NavItem v="photos" icon={<svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2" strokeWidth={2}/><circle cx="8.5" cy="8.5" r="1.5" strokeWidth={2}/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 15l-5-5L5 21" /></svg>} label="Photos" isActive={view === "photos"} collapsed={collapsed} onSelectView={onSelectView} onHoverView={onHoverView} />
+            <NavItem v="home" icon={<Home className="w-5 h-5" />} label="Home" isActive={view === "home"} collapsed={collapsed} onSelectView={onSelectView} onHoverView={onHoverView} />
+            <NavItem v="search" icon={<Search className="w-5 h-5" />} label="Search" isActive={view === "search"} collapsed={collapsed} onSelectView={onSelectView} onHoverView={onHoverView} />
+            <NavItem v="analytics" icon={<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18" /></svg>} label="Analytics" isActive={view === "analytics"} collapsed={collapsed} onSelectView={onSelectView} onHoverView={onHoverView} />
+            <NavItem v="photos" icon={<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2" strokeWidth={2}/><circle cx="8.5" cy="8.5" r="1.5" strokeWidth={2}/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 15l-5-5L5 21" /></svg>} label="Photos" isActive={view === "photos"} collapsed={collapsed} onSelectView={onSelectView} onHoverView={onHoverView} />
 
             {!collapsed && <SectionLabel>Library</SectionLabel>}
-            <NavItem v="recents" icon={<Clock className="w-[18px] h-[18px]" />} label="Recent" isActive={view === "recents"} collapsed={collapsed} onSelectView={onSelectView} onHoverView={onHoverView} />
-            <NavItem v="favorites" icon={<Star className="w-[18px] h-[18px]" />} label="Favorites" isActive={view === "favorites"} badge={badgeCounts.favorites} collapsed={collapsed} onSelectView={onSelectView} onHoverView={onHoverView} />
-            <NavItem v="shares" icon={<Share2 className="w-[18px] h-[18px]" />} label="Shared" isActive={view === "shares"} badge={badgeCounts.shares} collapsed={collapsed} onSelectView={onSelectView} onHoverView={onHoverView} />
-            <NavItem v="playlists" icon={<ListMusic className="w-[18px] h-[18px]" />} label="Playlists" isActive={view === "playlists"} collapsed={collapsed} onSelectView={onSelectView} onHoverView={onHoverView} />
+            <NavItem v="recents" icon={<Clock className="w-5 h-5" />} label="Recent" isActive={view === "recents"} collapsed={collapsed} onSelectView={onSelectView} onHoverView={onHoverView} />
+            <NavItem v="favorites" icon={<Star className="w-5 h-5" />} label="Favorites" isActive={view === "favorites"} badge={badgeCounts.favorites} collapsed={collapsed} onSelectView={onSelectView} onHoverView={onHoverView} />
+            <NavItem v="shares" icon={<Share2 className="w-5 h-5" />} label="Shared" isActive={view === "shares"} badge={badgeCounts.shares} collapsed={collapsed} onSelectView={onSelectView} onHoverView={onHoverView} />
+            <NavItem v="playlists" icon={<ListMusic className="w-5 h-5" />} label="Playlists" isActive={view === "playlists"} collapsed={collapsed} onSelectView={onSelectView} onHoverView={onHoverView} />
 
             {!collapsed && <SectionLabel>Storage</SectionLabel>}
-            <NavItem v="trash" icon={<Trash2 className="w-[18px] h-[18px]" />} label="Trash" isActive={view === "trash"} badge={badgeCounts.trash} collapsed={collapsed} onSelectView={onSelectView} onHoverView={onHoverView} />
+            <NavItem v="trash" icon={<Trash2 className="w-5 h-5" />} label="Trash" isActive={view === "trash"} badge={badgeCounts.trash} collapsed={collapsed} onSelectView={onSelectView} onHoverView={onHoverView} />
 
             {roots.map((r) => {
               const Icon = rootIcon(r.icon);
@@ -200,7 +201,7 @@ export default memo(function Sidebar({
               const accent = viewColors.files;
               return (
                 <button key={r.id} onClick={() => onSelectRoot(r.id)} title={collapsed ? r.name : undefined}
-                  className={cn("relative w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-sm font-medium transition-all duration-200 min-h-[44px] group", collapsed ? "justify-center px-0" : "")}>
+                  className={cn("relative w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl text-left text-[15px] font-medium transition-all duration-200 min-h-[48px] group", collapsed ? "justify-center px-0" : "px-4", isActive ? "bg-glass-bg-subtle shadow-sm" : "hover:bg-glass-bg-subtle/50")}>
                   {isActive && (
                     <motion.div layoutId="sidebar-active-root"
                       className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-full"
@@ -220,7 +221,7 @@ export default memo(function Sidebar({
 
             {!collapsed && isAdmin && (
               <button onClick={onNewRoot}
-                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-sm font-medium text-text-tertiary hover:text-foreground hover:bg-glass-bg transition-all duration-200 border border-dashed border-glass-border mt-1 min-h-[44px] pl-5">
+                className="w-full flex items-center gap-3.5 px-4 py-2.5 rounded-xl text-left text-[15px] font-medium text-text-tertiary hover:text-foreground hover:bg-glass-bg transition-all duration-200 border border-dashed border-glass-border mt-1 min-h-[48px] pl-5">
                 <Plus className="h-4 w-4 shrink-0" />
                 <span>New storage</span>
               </button>
@@ -228,9 +229,9 @@ export default memo(function Sidebar({
           </nav>
 
           {/* Footer */}
-          <div className={cn("mt-auto flex flex-col gap-2 w-full shrink-0 border-t border-glass-border-soft/60", collapsed ? "p-2" : "p-2.5")}>
+          <div className={cn("mt-auto flex flex-col gap-2 w-full shrink-0 border-t border-glass-border-soft/60", collapsed ? "p-2.5" : "p-3")}>
             {!collapsed && (
-              <div className="px-3 py-2.5 rounded-xl glass-subtle border border-glass-border-soft mb-0.5">
+              <div className="px-3.5 py-3 rounded-xl glass-subtle border border-glass-border-soft mb-0.5">
                 <div className="flex justify-between text-[11px] mb-1.5 font-medium">
                   <span className="text-text-tertiary">Storage</span>
                   <span className="text-text-secondary">
@@ -252,7 +253,7 @@ export default memo(function Sidebar({
 
             {isAdmin && (
               <button onClick={() => onSelectView("admin")} title={collapsed ? "Admin" : undefined}
-                className={cn("relative w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-sm font-medium transition-all duration-200 min-h-[44px] group", collapsed ? "justify-center px-0" : "pl-3")}
+                className={cn("relative w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl text-left text-[15px] font-medium transition-all duration-200 min-h-[48px] group", collapsed ? "justify-center px-0" : "px-4")}
                 style={view === "admin" ? { color: viewColors.admin } : undefined}>
                 {view === "admin" && (
                   <motion.div layoutId="sidebar-active-admin"
@@ -267,7 +268,7 @@ export default memo(function Sidebar({
             )}
 
             <button onClick={onLogout} title={collapsed ? "Log out" : undefined}
-              className={cn("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-sm font-medium transition-all duration-200 min-h-[44px] group", collapsed ? "justify-center px-0" : "pl-3", "text-danger/70 hover:bg-danger/10 hover:text-danger")}>
+              className={cn("w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl text-left text-[15px] font-medium transition-all duration-200 min-h-[48px] group", collapsed ? "justify-center px-0" : "px-4", "text-danger/70 hover:bg-danger/10 hover:text-danger")}>
               <LogOut className="h-5 w-5 shrink-0" />
               {!collapsed && <span>Log out</span>}
             </button>
