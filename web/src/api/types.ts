@@ -77,9 +77,22 @@ export interface SharePublicInfo {
   status: "ok" | "expired" | "exhausted";
   extension: string;
   mime: string;
+  size?: number;
   max_downloads: number;
   downloads: number;
   expires_at: string | null;
+  is_dir?: boolean;
+  entries?: SharePublicEntry[];
+  total_entries?: number;
+}
+
+export interface SharePublicEntry {
+  name: string;
+  path: string;
+  size: number;
+  is_dir: boolean;
+  extension: string;
+  mime: string;
 }
 
 export interface AuditItem {
@@ -173,6 +186,10 @@ export interface Playlist {
   created_at: string;
   updated_at: string;
   items: PlaylistItem[];
+  owner_username?: string;
+  is_owner?: boolean;
+  can_edit?: boolean;
+  collaborators?: PlaylistCollaborator[];
 }
 
 export interface PlaylistCollaborator {

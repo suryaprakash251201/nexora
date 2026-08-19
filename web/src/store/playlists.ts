@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { FileItem, Playlist as ApiPlaylist, PlaylistItem } from "../api/types";
+import type { FileItem, Playlist as ApiPlaylist, PlaylistItem, PlaylistCollaborator } from "../api/types";
 import { get, post, del, put, patch } from "../api/client";
 import { usePlayer } from "./player";
 import { useUI } from "../store";
@@ -26,6 +26,9 @@ interface PlaylistsState {
   removeItem: (id: string, path: string) => Promise<void>;
   setCover: (id: string, coverRootId: string, coverPath: string) => Promise<void>;
   setPublic: (id: string, isPublic: boolean) => Promise<void>;
+  listCollaborators: (id: string) => Promise<PlaylistCollaborator[]>;
+  addCollaborator: (id: string, userId: string, role: string) => Promise<void>;
+  removeCollaborator: (id: string, userId: string) => Promise<void>;
   play: (id: string) => void;
   playFrom: (id: string, index: number) => void;
 }
@@ -156,6 +159,37 @@ export const usePlaylists = create<PlaylistsState>((set, getStore) => ({
       set({ playlists: prev });
       throw e;
     }
+  },
+
+  listCollaborators: async (id) => {
+    const res = await get<{ collaborators: PlaylistCollaborator[] }>(`/playlists/${id}/collaborators`);
+    return res.collaborators || [];
+  },
+
+  addCollaborator: async (id, userId, role) => {
+    const res = await post<{ collaborators: PlaylistCollaborator[] }>(`/playlists/${id}/collaborators`, {
+      action: "add",
+      user_id: userId,
+      role,
+    });
+    // Refresh local collaborator state from the server response.
+    set({
+      playlists: getStore().playlists.map((p) =>
+        p.id === id ? { ...p, collaborators: res.collaborators || [] } : p
+      ),
+    });
+  },
+
+  removeCollaborator: async (id, userId) => {
+    const res = await post<{ collaborators: PlaylistCollaborator[] }>(`/playlists/${id}/collaborators`, {
+      action: "remove",
+      user_id: userId,
+    });
+    set({
+      playlists: getStore().playlists.map((p) =>
+        p.id === id ? { ...p, collaborators: res.collaborators || [] } : p
+      ),
+    });
   },
 
   play: (id) => {
