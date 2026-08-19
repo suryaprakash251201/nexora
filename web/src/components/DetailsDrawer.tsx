@@ -300,7 +300,7 @@ function SharesList({ rootId, path }: { rootId: string; path: string }) {
   const createShare = async () => {
     setCreating(true);
     try {
-      await post("/shares", { root: rootId, path, expires_at: null, max_downloads: null });
+      await post("/shares", { root: rootId, path, scope: "preview", expires_in_hours: 0, max_downloads: 0 });
       pushToast("success", "Share link created");
       qc.invalidateQueries({ queryKey: shareKey });
     } catch (e: any) { pushToast("error", e.message); }
