@@ -1,12 +1,16 @@
-import { useState } from "react";
-import { ListMusic, Play, Pencil, Trash2, Plus, X, Music, Eye, EyeOff, ArrowLeft } from "lucide-react";
-import { usePlaylists } from "../store/playlists";
+import { useState, useEffect, useMemo, useRef } from "react";
+import { ListMusic, Play, Pencil, Trash2, Plus, X, Music, ArrowLeft, Download, Share2, Users, UserPlus, Search, LoaderCircle, MoreVertical, Image as ImageIcon, Globe, Lock } from "lucide-react";
+import { usePlaylists, type Playlist as StorePlaylist } from "../store/playlists";
 import { usePlayer } from "../store/player";
 import { useUI } from "../store";
 import { thumbUrl } from "../lib/preview";
+import { startDownload } from "../lib/transfer";
 import { Modal } from "./Modal";
 import CoverPickerModal from "./CoverPickerModal";
-import type { User } from "../api/types";
+import ShareDialog from "./ShareDialog";
+import type { PlaylistCollaborator, User } from "../api/types";
+import { get } from "../api/client";
+import { useQuery } from "@tanstack/react-query";
 
 function PlaylistCover({ playlist, className = "" }: { playlist: any; className?: string }) {
   const [failed, setFailed] = useState(false);
@@ -31,8 +35,235 @@ function PlaylistCover({ playlist, className = "" }: { playlist: any; className?
   );
 }
 
+// ── Playlist dot menu (⋯) ────────────────────────────────────────────────
+function PlaylistDotMenu({
+  playlist,
+  onSetCover,
+  onTogglePublic,
+  onRename,
+  onDelete,
+}: {
+  playlist: { id: string; name: string; is_public: boolean };
+  onSetCover: () => void;
+  onTogglePublic: () => void;
+  onRename: () => void;
+  onDelete: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen(!open)}
+        className="p-2 rounded-xl glass-hover text-content-muted hover:text-content"
+        title="More options"
+      >
+        <MoreVertical className="h-4 w-4" />
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full mt-1 z-50 w-48 rounded-xl bg-surface border border-border/50 shadow-xl py-1 animate-scale-in">
+          <button
+            onClick={() => { onSetCover(); setOpen(false); }}
+            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-content hover:bg-accent/10 transition-colors"
+          >
+            <ImageIcon className="h-4 w-4 text-content-muted" /> Set Cover Photo
+          </button>
+          <button
+            onClick={() => { onTogglePublic(); setOpen(false); }}
+            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-content hover:bg-accent/10 transition-colors"
+          >
+            {playlist.is_public ? (
+              <><Lock className="h-4 w-4 text-warning" /> Make Private</>
+            ) : (
+              <><Globe className="h-4 w-4 text-accent" /> Make Public</>
+            )}
+          </button>
+          <div className="my-1 border-t border-border/50" />
+          <button
+            onClick={() => { onRename(); setOpen(false); }}
+            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-content hover:bg-accent/10 transition-colors"
+          >
+            <Pencil className="h-4 w-4 text-content-muted" /> Rename
+          </button>
+          <button
+            onClick={() => { onDelete(); setOpen(false); }}
+            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-danger hover:bg-danger/10 transition-colors"
+          >
+            <Trash2 className="h-4 w-4" /> Delete
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Collaborator management modal ──────────────────────────────────────────
+function CollaboratorModal({ playlist, onClose }: { playlist: { id: string; name: string }; onClose: () => void }) {
+  const pushToast = useUI((s) => s.pushToast);
+  const listCollaborators = usePlaylists((s) => s.listCollaborators);
+  const addCollaborator = usePlaylists((s) => s.addCollaborator);
+  const removeCollaborator = usePlaylists((s) => s.removeCollaborator);
+  const [collabs, setCollabs] = useState<PlaylistCollaborator[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<{ id: string; username: string }[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [role, setRole] = useState<"editor" | "viewer">("editor");
+
+  useEffect(() => {
+    listCollaborators(playlist.id).then(setCollabs).finally(() => setLoading(false));
+  }, [playlist.id, listCollaborators]);
+
+  const search = async (q: string) => {
+    setQuery(q);
+    if (q.trim().length < 2) {
+      setResults([]);
+      return;
+    }
+    setSearching(true);
+    try {
+      const res = await get<{ users: { id: string; username: string }[] }>(`/users/search?q=${encodeURIComponent(q.trim())}`);
+      setResults(res.users || []);
+    } catch {
+      setResults([]);
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const add = async (userId: string, username: string) => {
+    try {
+      await addCollaborator(playlist.id, userId, role);
+      const updated = await listCollaborators(playlist.id);
+      setCollabs(updated);
+      setResults([]);
+      setQuery("");
+      pushToast("success", `Added ${username} as ${role}`);
+    } catch (e: any) {
+      pushToast("error", e.message || "Could not add collaborator");
+    }
+  };
+
+  const remove = async (userId: string, username: string) => {
+    try {
+      await removeCollaborator(playlist.id, userId);
+      const updated = await listCollaborators(playlist.id);
+      setCollabs(updated);
+      pushToast("info", `Removed ${username}`);
+    } catch (e: any) {
+      pushToast("error", e.message || "Could not remove collaborator");
+    }
+  };
+
+  return (
+    <Modal title="Collaborators" description={`Who can access "${playlist.name}"`} onClose={onClose} icon={<Users className="h-5 w-5 text-accent" />}>
+      <div className="py-2 space-y-4">
+        {/* Add collaborator */}
+        <div className="space-y-2">
+          <label className="text-xs font-bold text-content-muted uppercase tracking-wider">Add by username</label>
+          <div className="relative">
+            <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-content-muted" />
+            <input
+              value={query}
+              onChange={(e) => search(e.target.value)}
+              placeholder="Search users…"
+              className="w-full rounded-lg glass-input pl-9 pr-3 py-2 outline-none text-sm"
+            />
+            {searching && <LoaderCircle className="h-4 w-4 absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-content-muted" />}
+          </div>
+          <div className="flex items-center gap-2">
+            <select
+              value={role}
+              onChange={(e) => setRole(e.target.value as "editor" | "viewer")}
+              className="rounded-lg glass-input px-2 py-1.5 outline-none text-xs font-medium"
+              title="Collaborator role"
+            >
+              <option value="editor">Editor</option>
+              <option value="viewer">Viewer</option>
+            </select>
+            <span className="text-[11px] text-content-muted">Editors can add tracks & rename; viewers can only listen.</span>
+          </div>
+          {results.length > 0 && (
+            <div className="rounded-xl border border-border/50 bg-surface/60 overflow-hidden divide-y divide-border/40">
+              {results.map((u) => {
+                const already = collabs.some((c) => c.user_id === u.id);
+                return (
+                  <button
+                    key={u.id}
+                    disabled={already}
+                    onClick={() => add(u.id, u.username)}
+                    className={`w-full flex items-center justify-between px-3 py-2.5 text-sm hover:bg-surface/70 transition-colors ${already ? "opacity-50 cursor-not-allowed" : ""}`}
+                  >
+                    <span className="flex items-center gap-2">
+                      <span className="h-6 w-6 rounded-full bg-accent/15 text-accent grid place-items-center text-[10px] font-bold uppercase">{u.username.slice(0, 2)}</span>
+                      <span className="font-medium">{u.username}</span>
+                    </span>
+                    {already ? (
+                      <span className="text-[10px] uppercase font-bold text-content-muted">Added</span>
+                    ) : (
+                      <span className="flex items-center gap-1 text-xs text-accent"><UserPlus className="h-3.5 w-3.5" /> Add</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Current collaborators */}
+        <div>
+          <label className="text-xs font-bold text-content-muted uppercase tracking-wider mb-2 block">Current collaborators</label>
+          {loading ? (
+            <div className="space-y-2">
+              <div className="skeleton h-10 rounded-lg" />
+              <div className="skeleton h-10 rounded-lg" />
+            </div>
+          ) : collabs.length === 0 ? (
+            <p className="text-sm text-content-muted py-4 text-center border border-dashed border-border/50 rounded-xl">
+              No collaborators yet — this playlist is private to you.
+            </p>
+          ) : (
+            <div className="rounded-xl border border-border/50 bg-surface/60 overflow-hidden divide-y divide-border/40">
+              {collabs.map((c) => (
+                <div key={c.user_id} className="flex items-center justify-between px-3 py-2.5">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="h-6 w-6 rounded-full bg-accent/15 text-accent grid place-items-center text-[10px] font-bold uppercase shrink-0">
+                      {(c.username || "?").slice(0, 2)}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate">{c.username || "Unknown user"}</p>
+                      <p className="text-[10px] uppercase tracking-wider font-bold text-content-muted">{c.role}</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => remove(c.user_id, c.username || c.user_id)}
+                    className="p-1.5 rounded-lg glass-hover text-content-muted hover:text-red-500 transition-colors"
+                    title="Remove collaborator"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 export default function PlaylistsPanel({ user }: { user?: User }) {
-  const isAdmin = user?.role === "admin";
   const playlists = usePlaylists((s) => s.playlists);
   const remove = usePlaylists((s) => s.remove);
   const rename = usePlaylists((s) => s.rename);
@@ -51,8 +282,36 @@ export default function PlaylistsPanel({ user }: { user?: User }) {
   const [renameTarget, setRenameTarget] = useState<{ id: string; name: string } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
   const [coverModal, setCoverModal] = useState<{ id: string } | null>(null);
+  const [collabModal, setCollabModal] = useState(false);
+  const [shareTarget, setShareTarget] = useState<{ item: any; rootId: string } | null>(null);
 
   const selected = selectedId ? playlists.find((p) => p.id === selectedId) : null;
+  const canEditSelected = !!selected && (selected.is_owner || selected.can_edit);
+  const isOwnerSelected = !!selected && !!selected.is_owner;
+
+  // Fetch public playlists from all users
+  const { data: publicData } = useQuery({
+    queryKey: ["publicPlaylists"],
+    queryFn: () => get<{ items: StorePlaylist[] }>('/playlists/public'),
+    staleTime: 60_000,
+  });
+  const publicPlaylists = useMemo(() => {
+    const list = publicData?.items || [];
+    // Exclude playlists the user already sees in mine/shared
+    const ownedIds = new Set(playlists.map(p => p.id));
+    return list.filter(p => !ownedIds.has(p.id));
+  }, [publicData, playlists]);
+
+  // Group into "My Playlists" and "Shared with me".
+  const { mine, shared } = useMemo(() => {
+    const mine: StorePlaylist[] = [];
+    const shared: StorePlaylist[] = [];
+    for (const p of playlists) {
+      if (p.is_owner) mine.push(p);
+      else shared.push(p);
+    }
+    return { mine, shared };
+  }, [playlists]);
 
   const addCurrent = async (id: string) => {
     if (!current) {
@@ -72,7 +331,7 @@ export default function PlaylistsPanel({ user }: { user?: User }) {
     }
   };
 
-  const newPlaylist = async () => {
+  const newPlaylist = () => {
     setNewName(`Playlist ${playlists.length + 1}`);
     setNewModal(true);
   };
@@ -136,8 +395,18 @@ export default function PlaylistsPanel({ user }: { user?: User }) {
 
           <div className="flex-1 min-w-0 flex flex-col justify-end">
             <h1 className="text-2xl md:text-3xl font-extrabold truncate">{selected.name}</h1>
-            <div className="flex items-center gap-2 mt-1.5 text-sm text-content-muted">
+            <div className="flex items-center gap-2 mt-1.5 text-sm text-content-muted flex-wrap">
               <span>{selected.items.length} track{selected.items.length === 1 ? "" : "s"}</span>
+              <span className="text-content-muted/60">·</span>
+              <span className="flex items-center gap-1">
+                <Users className="h-3.5 w-3.5" />
+                {selected.is_owner ? "Owned by you" : `Shared by ${selected.owner_username || "someone"}`}
+              </span>
+              {!selected.is_owner && (
+                <span className="px-1.5 py-0.5 rounded-md bg-surface border border-border/50 text-[10px] font-bold uppercase text-content-muted">
+                  {selected.can_edit ? "Editor" : "Viewer"}
+                </span>
+              )}
               {selected.is_public && (
                 <span className="px-1.5 py-0.5 rounded-md bg-accent/10 text-accent text-[10px] font-bold uppercase">Public</span>
               )}
@@ -153,34 +422,28 @@ export default function PlaylistsPanel({ user }: { user?: User }) {
               </button>
               <button
                 onClick={() => addCurrent(selected.id)}
-                disabled={!current}
+                disabled={!current || !canEditSelected}
                 className="flex items-center gap-1.5 px-4 py-2 rounded-xl glass-hover border border-border/50 text-sm font-medium disabled:opacity-40"
+                title={!canEditSelected ? "Only owners and editors can add tracks" : undefined}
               >
                 <Plus className="h-4 w-4" /> Add Current
               </button>
-              {isAdmin && (
-                <>
-                  <button
-                    onClick={() => doSetCover(selected.id)}
-                    className="p-2 rounded-xl glass-hover text-content-muted hover:text-content"
-                    title="Set cover"
-                  >
-                    <Eye className="h-4 w-4" />
-                  </button>
-                  <button
-                    onClick={() => doTogglePublic(selected.id, selected.is_public)}
-                    className={`p-2 rounded-xl glass-hover ${selected.is_public ? "text-accent" : "text-content-muted"}`}
-                    title={selected.is_public ? "Make private" : "Make public"}
-                  >
-                    {selected.is_public ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                  <button onClick={() => doRename(selected.id, selected.name)} className="p-2 rounded-xl glass-hover text-content-muted hover:text-content" title="Rename">
-                    <Pencil className="h-4 w-4" />
-                  </button>
-                  <button onClick={() => doRemove(selected.id, selected.name)} className="p-2 rounded-xl glass-hover text-red-500 hover:bg-red-500/10" title="Delete">
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </>
+              {isOwnerSelected && (
+                <button
+                  onClick={() => setCollabModal(true)}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl glass-hover border border-border/50 text-sm font-medium"
+                >
+                  <Users className="h-4 w-4" /> Collaborate
+                </button>
+              )}
+              {isOwnerSelected && (
+                <PlaylistDotMenu
+                  playlist={selected}
+                  onSetCover={() => doSetCover(selected.id)}
+                  onTogglePublic={() => doTogglePublic(selected.id, selected.is_public)}
+                  onRename={() => doRename(selected.id, selected.name)}
+                  onDelete={() => doRemove(selected.id, selected.name)}
+                />
               )}
             </div>
           </div>
@@ -214,17 +477,40 @@ export default function PlaylistsPanel({ user }: { user?: User }) {
                     <p className={`text-sm truncate ${nowPlaying ? "font-bold text-accent" : "font-medium"}`}>{it.name}</p>
                     <p className="text-[11px] text-content-muted/70 truncate">{it.path}</p>
                   </div>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); doRemoveItem(selected.id, it.path); }}
-                    className="p-1.5 rounded-lg glass-hover text-content-muted hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-                    title="Remove from playlist"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
+                  <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); startDownload(it.root_id, it.path, it.name); }}
+                      className="p-1.5 rounded-lg glass-hover text-content-muted hover:text-accent"
+                      title="Download track"
+                    >
+                      <Download className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setShareTarget({ item: { ...it, is_dir: false }, rootId: it.root_id }); }}
+                      className="p-1.5 rounded-lg glass-hover text-content-muted hover:text-accent"
+                      title="Share track"
+                    >
+                      <Share2 className="h-4 w-4" />
+                    </button>
+                    {canEditSelected && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); doRemoveItem(selected.id, it.path); }}
+                        className="p-1.5 rounded-lg glass-hover text-content-muted hover:text-red-500"
+                        title="Remove from playlist"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
                 </div>
               );
             })}
           </div>
+        )}
+
+        {collabModal && <CollaboratorModal playlist={selected} onClose={() => setCollabModal(false)} />}
+        {shareTarget && (
+          <ShareDialog item={shareTarget.item} rootId={shareTarget.rootId} onClose={() => setShareTarget(null)} />
         )}
 
         {renameTarget && (
@@ -263,11 +549,48 @@ export default function PlaylistsPanel({ user }: { user?: User }) {
     );
   }
 
+  const renderGrid = (list: StorePlaylist[]) => (
+    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+      {list.map((pl) => (
+        <button
+          key={pl.id}
+          onClick={() => setSelectedId(pl.id)}
+          className="group text-left outline-none"
+        >
+          <div className="aspect-square rounded-2xl overflow-hidden mb-2.5 shadow-md ring-1 ring-white/10 group-hover:ring-accent/40 transition-all duration-300 relative bg-surface-muted/30">
+            <PlaylistCover playlist={pl} className="group-hover:scale-105 transition-transform duration-500" />
+            <div className="absolute inset-0 bg-black/[0.05] dark:bg-black/10 group-hover:bg-black/[0.12] dark:group-hover:bg-black/30 transition-colors duration-300" />
+            <div className="absolute inset-0 grid place-items-center opacity-0 group-hover:opacity-100 transition-all duration-300 scale-90 group-hover:scale-100">
+              <div className="h-12 w-12 rounded-full bg-accent/90 text-white grid place-items-center shadow-lg backdrop-blur-md">
+                <Play className="h-6 w-6 ml-1" />
+              </div>
+            </div>
+            {!pl.is_owner && (
+              <div className="absolute top-2 right-2 px-1.5 py-0.5 rounded-md bg-black/50 backdrop-blur-md text-[9px] font-bold uppercase text-white/90 flex items-center gap-1">
+                <Users className="h-2.5 w-2.5" /> Shared
+              </div>
+            )}
+          </div>
+          <p className="font-semibold text-sm truncate group-hover:text-accent transition-colors">{pl.name}</p>
+          <div className="flex items-center gap-1.5 mt-0.5">
+            <span className="text-xs text-content-muted">{pl.items.length} track{pl.items.length === 1 ? "" : "s"}</span>
+            {!pl.is_owner && pl.owner_username && (
+              <span className="text-[10px] text-content-muted/60 truncate">· {pl.owner_username}</span>
+            )}
+            {pl.is_public && (
+              <span className="px-1 py-0.5 rounded bg-accent/10 text-accent text-[9px] font-bold uppercase">Public</span>
+            )}
+          </div>
+        </button>
+      ))}
+    </div>
+  );
+
   return (
     <div className="flex-1 overflow-auto p-4 pb-24 md:pb-20">
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-lg font-semibold flex items-center gap-2"><ListMusic className="h-5 w-5 text-accent" /> Playlists</h2>
-        {isAdmin && <button onClick={newPlaylist} className="flex items-center gap-1.5 px-4 py-2 rounded-xl accent-glass text-sm font-medium"><Plus className="h-4 w-4" /> New</button>}
+        <button onClick={newPlaylist} className="flex items-center gap-1.5 px-4 py-2 rounded-xl accent-glass text-sm font-medium"><Plus className="h-4 w-4" /> New</button>
       </div>
 
       {playlists.length === 0 ? (
@@ -276,34 +599,34 @@ export default function PlaylistsPanel({ user }: { user?: User }) {
             <ListMusic className="h-8 w-8 text-accent" />
           </div>
           <p className="mb-1 font-medium">No playlists yet.</p>
-          <p className="text-sm">Select audio files in the Files view and choose "Add to playlist".</p>
+          <p className="text-sm">Create your own playlist or select audio files in the Files view and choose "Add to playlist".</p>
         </div>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-          {playlists.map((pl) => (
-            <button
-              key={pl.id}
-              onClick={() => setSelectedId(pl.id)}
-              className="group text-left outline-none"
-            >
-              <div className="aspect-square rounded-2xl overflow-hidden mb-2.5 shadow-md ring-1 ring-white/10 group-hover:ring-accent/40 transition-all duration-300 relative bg-surface-muted/30">
-                <PlaylistCover playlist={pl} className="group-hover:scale-105 transition-transform duration-500" />
-                <div className="absolute inset-0 bg-black/[0.05] dark:bg-black/10 group-hover:bg-black/[0.12] dark:group-hover:bg-black/30 transition-colors duration-300" />
-                <div className="absolute inset-0 grid place-items-center opacity-0 group-hover:opacity-100 transition-all duration-300 scale-90 group-hover:scale-100">
-                  <div className="h-12 w-12 rounded-full bg-accent/90 text-white grid place-items-center shadow-lg backdrop-blur-md">
-                    <Play className="h-6 w-6 ml-1" />
-                  </div>
-                </div>
-              </div>
-              <p className="font-semibold text-sm truncate group-hover:text-accent transition-colors">{pl.name}</p>
-              <div className="flex items-center gap-1.5 mt-0.5">
-                <span className="text-xs text-content-muted">{pl.items.length} track{pl.items.length === 1 ? "" : "s"}</span>
-                {pl.is_public && (
-                  <span className="px-1 py-0.5 rounded bg-accent/10 text-accent text-[9px] font-bold uppercase">Public</span>
-                )}
-              </div>
-            </button>
-          ))}
+        <div className="space-y-8">
+          {mine.length > 0 && (
+            <section>
+              <h3 className="text-xs font-bold uppercase tracking-wider text-content-muted mb-3 flex items-center gap-1.5">
+                <ListMusic className="h-3.5 w-3.5" /> My Playlists ({mine.length})
+              </h3>
+              {renderGrid(mine)}
+            </section>
+          )}
+          {shared.length > 0 && (
+            <section>
+              <h3 className="text-xs font-bold uppercase tracking-wider text-content-muted mb-3 flex items-center gap-1.5">
+                <Users className="h-3.5 w-3.5" /> Shared with me ({shared.length})
+              </h3>
+              {renderGrid(shared)}
+            </section>
+          )}
+          {publicPlaylists.length > 0 && (
+            <section>
+              <h3 className="text-xs font-bold uppercase tracking-wider text-content-muted mb-3 flex items-center gap-1.5">
+                <Globe className="h-3.5 w-3.5" /> Public Playlists ({publicPlaylists.length})
+              </h3>
+              {renderGrid(publicPlaylists)}
+            </section>
+          )}
         </div>
       )}
 
