@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/nexora/nexora/internal/storage"
 )
@@ -62,6 +63,98 @@ func (s *Service) Cover(provider storage.StorageProvider, rootID, rel string, ma
 	thumb := downscale(img, maxDim)
 
 	if tmp, err := os.CreateTemp(s.cacheDir, "cover-*.jpg"); err == nil {
+		_ = jpeg.Encode(tmp, thumb, &jpeg.Options{Quality: 82})
+		tmp.Close()
+		_ = os.Rename(tmp.Name(), cachePath)
+	}
+	buf := &byteBuffer{}
+	if err := jpeg.Encode(buf, thumb, &jpeg.Options{Quality: 82}); err != nil {
+		return nil, err
+	}
+	return buf.data, nil
+}
+
+// folderCoverScore maps the common album-art base names (lowercase, without
+// extension) found inside music folders to a priority — the higher the score,
+// the earlier the candidate is tried.
+var folderCoverScore = map[string]int{
+	"cover": 10, "front": 9, "folder": 8, "album": 7,
+	"albumart": 6, "albumartsmall": 5, "albumartlarge": 5,
+}
+
+// coverExtScore ranks image formats: JPEG/PNG decode everywhere, others last.
+var coverExtScore = map[string]int{
+	".jpg": 3, ".jpeg": 3, ".png": 2,
+}
+
+// FolderCover returns a cached thumbnail of the album-cover image stored
+// alongside audio files in the same directory ("cover.jpg", "folder.jpg",
+// "front.jpg", "album.jpg", …). Formats without embedded tags — notably WAV —
+// get a proper album-cover preview this way. Returns ErrUnsupported when the
+// directory holds no recognizable cover image.
+func (s *Service) FolderCover(provider storage.StorageProvider, rootID, rel string, maxDim int) ([]byte, error) {
+	if maxDim <= 0 || maxDim > 1024 {
+		maxDim = 256
+	}
+	dir := filepath.Dir(rel)
+	if dir == "." || dir == "/" {
+		dir = ""
+	}
+	entries, err := provider.List(dir)
+	if err != nil {
+		return nil, ErrUnsupported
+	}
+
+	best := ""
+	bestScore := -1
+	for _, e := range entries {
+		if e.IsDir {
+			continue
+		}
+		lower := strings.ToLower(filepath.Base(e.Path))
+		ext := filepath.Ext(lower)
+		score, ok := folderCoverScore[strings.TrimSpace(strings.TrimSuffix(lower, ext))]
+		if !ok {
+			continue
+		}
+		score = score*10 + coverExtScore[ext]
+		if score > bestScore {
+			bestScore = score
+			best = e.Path
+		}
+	}
+	if best == "" {
+		return nil, ErrUnsupported
+	}
+
+	info, err := provider.Stat(best)
+	if err != nil || info.IsDir || info.Size <= 0 || info.Size > s.maxSize {
+		return nil, ErrUnsupported
+	}
+
+	// Cache key includes the audio path so a cover swap re-generates the thumb.
+	key := "fcover-" + cacheKey(rootID, rel, info.Size, info.Modified, maxDim)
+	cachePath := filepath.Join(s.cacheDir, key+".jpg")
+	if data, err := os.ReadFile(cachePath); err == nil {
+		return data, nil
+	}
+
+	// Cap concurrent decode+encode work (same gate as Thumbnail/Cover).
+	s.gate <- struct{}{}
+	defer func() { <-s.gate }()
+
+	rc, err := provider.Read(best)
+	if err != nil {
+		return nil, ErrUnsupported
+	}
+	defer rc.Close()
+	img, _, err := image.Decode(rc)
+	if err != nil {
+		return nil, ErrUnsupported
+	}
+	thumb := downscale(img, maxDim)
+
+	if tmp, err := os.CreateTemp(s.cacheDir, "fcover-*.jpg"); err == nil {
 		_ = jpeg.Encode(tmp, thumb, &jpeg.Options{Quality: 82})
 		tmp.Close()
 		_ = os.Rename(tmp.Name(), cachePath)

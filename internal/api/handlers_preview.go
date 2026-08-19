@@ -25,9 +25,17 @@ func (s *Server) handleThumbnail(w http.ResponseWriter, r *http.Request) {
 	size, _ := strconv.Atoi(queryParam(r, "size", "256"))
 	data, err := s.Preview.Thumbnail(acc.provider, rootID, rel, size)
 	if err != nil {
-		// Fall back to embedded album art for audio files (MP3/FLAC).
+		// Fall back to embedded album art for audio files (MP3/FLAC/M4A).
 		if cover, cerr := s.Preview.Cover(acc.provider, rootID, rel, size); cerr == nil {
 			data = cover
+			err = nil
+		}
+	}
+	if err != nil {
+		// Last resort: a cover image stored next to the audio file (WAV and
+		// other formats without embedded tags get an album-cover preview).
+		if fcover, ferr := s.Preview.FolderCover(acc.provider, rootID, rel, size); ferr == nil {
+			data = fcover
 			err = nil
 		}
 	}

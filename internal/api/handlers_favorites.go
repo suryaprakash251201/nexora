@@ -268,7 +268,7 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pls, _ := s.Playlists.ListPublic()
+	pls, _ := s.Playlists.ListForUser(user.ID)
 	s.hydratePlaylistItems(pls)
 
 	var shareCount int

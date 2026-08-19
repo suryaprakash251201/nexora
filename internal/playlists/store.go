@@ -26,6 +26,11 @@ type Playlist struct {
 	CreatedAt   string         `json:"created_at"`
 	UpdatedAt   string         `json:"updated_at"`
 	Items       []PlaylistItem `json:"items"`
+
+	// Augmented fields for the frontend (not stored in DB).
+	OwnerUsername string `json:"owner_username,omitempty"`
+	IsOwner       bool   `json:"is_owner,omitempty"`
+	CanEdit       bool   `json:"can_edit,omitempty"`
 }
 
 type PlaylistItem struct {
@@ -65,6 +70,41 @@ func (s *Store) ListAll() ([]Playlist, error) {
 	for rows.Next() {
 		var p Playlist
 		if err := rows.Scan(&p.ID, &p.UserID, &p.Name, &p.CoverRootID, &p.CoverPath, &p.IsPublic, &p.CreatedAt, &p.UpdatedAt); err != nil {
+			return nil, err
+		}
+		p.Items = make([]PlaylistItem, 0)
+		playlists = append(playlists, p)
+	}
+	rows.Close()
+
+	if len(playlists) == 0 {
+		return playlists, nil
+	}
+
+	playlists = s.hydrateItems(playlists)
+	return playlists, nil
+}
+
+// ListForUser returns the playlists a user can see: the ones they own plus the
+// ones shared with them as a collaborator. Each entry carries the owner's
+// username and the viewer's ownership/edit flags so the UI can group them and
+// gate actions per user.
+func (s *Store) ListForUser(userID string) ([]Playlist, error) {
+	rows, err := s.db.Query(`SELECT p.id, p.user_id, p.name, COALESCE(p.cover_root_id,''), COALESCE(p.cover_path,''), COALESCE(p.is_public,0), p.created_at, p.updated_at, COALESCE(u.username,''),
+		CASE WHEN p.user_id = ? THEN 1 ELSE 0 END,
+		CASE WHEN p.user_id = ? THEN 1 ELSE COALESCE((SELECT 1 FROM playlist_collaborators pc WHERE pc.playlist_id = p.id AND pc.user_id = ? AND pc.role = 'editor'), 0) END
+		FROM playlists p LEFT JOIN users u ON p.user_id = u.id
+		WHERE p.user_id = ? OR EXISTS (SELECT 1 FROM playlist_collaborators pc2 WHERE pc2.playlist_id = p.id AND pc2.user_id = ?)
+		ORDER BY p.created_at DESC`, userID, userID, userID, userID, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var playlists []Playlist
+	for rows.Next() {
+		var p Playlist
+		if err := rows.Scan(&p.ID, &p.UserID, &p.Name, &p.CoverRootID, &p.CoverPath, &p.IsPublic, &p.CreatedAt, &p.UpdatedAt, &p.OwnerUsername, &p.IsOwner, &p.CanEdit); err != nil {
 			return nil, err
 		}
 		p.Items = make([]PlaylistItem, 0)
@@ -161,6 +201,8 @@ func (s *Store) Create(userID, name string) (*Playlist, error) {
 		CreatedAt: now,
 		UpdatedAt: now,
 		Items:     make([]PlaylistItem, 0),
+		IsOwner:   true,
+		CanEdit:   true,
 	}, nil
 }
 
@@ -170,13 +212,19 @@ func (s *Store) Delete(userID, id string) error {
 }
 
 func (s *Store) Rename(userID, id, name string) error {
-	_, err := s.db.Exec(`UPDATE playlists SET name = ?, updated_at = ? WHERE id = ? AND user_id = ?`, name, util.NowUTC(), id, userID)
+	if !s.CanEdit(userID, id) {
+		return fmt.Errorf("playlist not found or unauthorized")
+	}
+	_, err := s.db.Exec(`UPDATE playlists SET name = ?, updated_at = ? WHERE id = ?`, name, util.NowUTC(), id)
 	return err
 }
 
 func (s *Store) SetCover(userID, playlistID, coverRootID, coverPath string) error {
-	_, err := s.db.Exec(`UPDATE playlists SET cover_root_id = ?, cover_path = ?, updated_at = ? WHERE id = ? AND user_id = ?`,
-		coverRootID, coverPath, util.NowUTC(), playlistID, userID)
+	if !s.CanEdit(userID, playlistID) {
+		return fmt.Errorf("playlist not found or unauthorized")
+	}
+	_, err := s.db.Exec(`UPDATE playlists SET cover_root_id = ?, cover_path = ?, updated_at = ? WHERE id = ?`,
+		coverRootID, coverPath, util.NowUTC(), playlistID)
 	return err
 }
 

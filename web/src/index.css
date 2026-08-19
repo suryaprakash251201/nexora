@@ -810,6 +810,17 @@ body {
 }
 
 /* ============================================================
+   Sidebar scroll — hidden scrollbar for clean sidebar look
+   ============================================================ */
+.sidebar-scroll {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.sidebar-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+/* ============================================================
    Thin visible scrollbar for the transfer panel list
    ============================================================ */
 .transfer-scroll {

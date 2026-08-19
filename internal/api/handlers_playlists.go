@@ -88,13 +88,13 @@ func (s *Server) hydratePlaylistItems(pls []playlists.Playlist) {
 }
 
 func (s *Server) handleListPlaylists(w http.ResponseWriter, r *http.Request) {
-	_, ok := auth.UserFromContext(r.Context())
+	user, ok := auth.UserFromContext(r.Context())
 	if !ok {
 		writeError(w, http.StatusUnauthorized, "unauthenticated", "Authentication required", middleware.GetRequestID(r.Context()))
 		return
 	}
 
-	pls, err := s.Playlists.ListAll()
+	pls, err := s.Playlists.ListForUser(user.ID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error", "Failed to list playlists", middleware.GetRequestID(r.Context()))
 		return
@@ -122,11 +122,7 @@ func (s *Server) handleCreatePlaylist(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if user.Role != auth.RoleAdmin {
-		writeError(w, http.StatusForbidden, "forbidden", "Only admins can create playlists", middleware.GetRequestID(r.Context()))
-		return
-	}
-
+	// Any authenticated user may create their own playlists.
 	var req struct {
 		Name  string                   `json:"name"`
 		Items []playlists.PlaylistItem `json:"items"`
@@ -152,7 +148,7 @@ func (s *Server) handleCreatePlaylist(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		// Refresh items
-		pls, _ := s.Playlists.ListAll()
+		pls, _ := s.Playlists.ListForUser(user.ID)
 		for _, p := range pls {
 			if p.ID == pl.ID {
 				pl = &p
@@ -207,14 +203,10 @@ func (s *Server) handleRenamePlaylist(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Only owner or admin can rename
-	if user.Role != auth.RoleAdmin {
-		var ownerID string
-		err := s.DB.QueryRow(`SELECT user_id FROM playlists WHERE id = ?`, id).Scan(&ownerID)
-		if err != nil || ownerID != user.ID {
-			writeError(w, http.StatusForbidden, "forbidden", "Only the playlist owner or admin can rename", middleware.GetRequestID(r.Context()))
-			return
-		}
+	// Owners and editor collaborators may rename.
+	if user.Role != auth.RoleAdmin && !s.Playlists.CanEdit(user.ID, id) {
+		writeError(w, http.StatusForbidden, "forbidden", "Only the playlist owner or editors can rename", middleware.GetRequestID(r.Context()))
+		return
 	}
 
 	if err := s.Playlists.Rename(user.ID, id, req.Name); err != nil {
@@ -254,7 +246,12 @@ func (s *Server) handleUpdatePlaylist(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Cover changes are allowed for owner/editors; visibility stays owner/admin.
 	if req.CoverRootID != nil && req.CoverPath != nil {
+		if user.Role != auth.RoleAdmin && !s.Playlists.CanEdit(user.ID, id) {
+			writeError(w, http.StatusForbidden, "forbidden", "You don't have permission to update this playlist", middleware.GetRequestID(r.Context()))
+			return
+		}
 		if err := s.Playlists.SetCover(user.ID, id, *req.CoverRootID, *req.CoverPath); err != nil {
 			writeError(w, http.StatusInternalServerError, "internal_error", "Failed to update cover", middleware.GetRequestID(r.Context()))
 			return
@@ -262,6 +259,14 @@ func (s *Server) handleUpdatePlaylist(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if req.IsPublic != nil {
+		if user.Role != auth.RoleAdmin {
+			var ownerID string
+			err := s.DB.QueryRow(`SELECT user_id FROM playlists WHERE id = ?`, id).Scan(&ownerID)
+			if err != nil || ownerID != user.ID {
+				writeError(w, http.StatusForbidden, "forbidden", "Only the playlist owner or admin can change visibility", middleware.GetRequestID(r.Context()))
+				return
+			}
+		}
 		if err := s.Playlists.SetPublic(user.ID, id, *req.IsPublic); err != nil {
 			writeError(w, http.StatusInternalServerError, "internal_error", "Failed to update visibility", middleware.GetRequestID(r.Context()))
 			return
@@ -390,13 +395,18 @@ func (s *Server) handleCoverConfig(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleListCollaborators(w http.ResponseWriter, r *http.Request) {
-	_, ok := auth.UserFromContext(r.Context())
+	user, ok := auth.UserFromContext(r.Context())
 	if !ok {
 		writeError(w, http.StatusUnauthorized, "unauthenticated", "Authentication required", middleware.GetRequestID(r.Context()))
 		return
 	}
 
 	id := chi.URLParam(r, "id")
+	// Owner, admins and editor collaborators may view the collaborator list.
+	if user.Role != auth.RoleAdmin && !s.Playlists.CanEdit(user.ID, id) {
+		writeError(w, http.StatusForbidden, "forbidden", "You don't have permission to view collaborators", middleware.GetRequestID(r.Context()))
+		return
+	}
 	collabs, err := s.Playlists.ListCollaborators(id)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error", "Failed to list collaborators", middleware.GetRequestID(r.Context()))
@@ -404,4 +414,35 @@ func (s *Server) handleListCollaborators(w http.ResponseWriter, r *http.Request)
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"collaborators": collabs})
+}
+
+// handleUserSearch finds users by username prefix for the playlist collaborator
+// picker. Only id + username are returned — no emails or roles.
+func (s *Server) handleUserSearch(w http.ResponseWriter, r *http.Request) {
+	user, ok := auth.UserFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthenticated", "Authentication required", middleware.GetRequestID(r.Context()))
+		return
+	}
+	q := strings.TrimSpace(queryParam(r, "q", ""))
+	if q == "" {
+		writeJSON(w, http.StatusOK, map[string]any{"users": []map[string]string{}})
+		return
+	}
+	like := "%" + q + "%"
+	rows, err := s.DB.Query(`SELECT id, username FROM users WHERE username LIKE ? AND id != ? ORDER BY username LIMIT 10`, like, user.ID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "Failed to search users", middleware.GetRequestID(r.Context()))
+		return
+	}
+	defer rows.Close()
+	users := make([]map[string]string, 0, 10)
+	for rows.Next() {
+		var id, username string
+		if err := rows.Scan(&id, &username); err != nil {
+			continue
+		}
+		users = append(users, map[string]string{"id": id, "username": username})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"users": users})
 }

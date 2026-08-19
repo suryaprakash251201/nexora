@@ -527,9 +527,15 @@ export default function Workspace({ user }: { user: User }) {
           />
         )}
         {view !== "files" && view !== "home" && !videoItem && (
-          <div className="h-14 glass-bar flex items-center justify-between px-4">
-            <span className="font-semibold capitalize">{view}</span>
-            <ProfileMenu user={user} isAdmin={isAdmin} onLogout={logout} onAdmin={() => setView("admin")} />
+          <div className="relative mx-4 mt-4 mb-2">
+            <div className="h-14 flex items-center justify-between px-5 rounded-t-[24px] rounded-b-[20px] bg-gradient-to-b from-glass-bg-strong/80 to-glass-bg/60 border border-glass-border-soft/80 shadow-[0_4px_20px_rgba(0,0,0,0.15)] backdrop-blur-xl">
+              <div className="flex items-center gap-3">
+                <div className="w-1.5 h-8 rounded-full bg-gradient-to-b from-accent to-accent-secondary" />
+                <span className="font-semibold text-lg capitalize tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-foreground to-foreground/80">{view}</span>
+              </div>
+              <ProfileMenu user={user} isAdmin={isAdmin} onLogout={logout} onAdmin={() => setView("admin")} />
+            </div>
+            <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-accent/30 to-transparent" />
           </div>
         )}
 
@@ -610,9 +616,15 @@ export default function Workspace({ user }: { user: User }) {
             />}
             {view === "home" && (
               <>
-                <div className="h-14 glass-bar flex items-center justify-between px-4">
-                  <span className="font-semibold">Home</span>
-                  <ProfileMenu user={user} isAdmin={isAdmin} onLogout={logout} onAdmin={() => setView("admin")} />
+                <div className="relative mx-4 mt-4 mb-2">
+                  <div className="h-14 flex items-center justify-between px-5 rounded-t-[24px] rounded-b-[20px] bg-gradient-to-b from-glass-bg-strong/80 to-glass-bg/60 border border-glass-border-soft/80 shadow-[0_4px_20px_rgba(0,0,0,0.15)] backdrop-blur-xl">
+                    <div className="flex items-center gap-3">
+                      <div className="w-1.5 h-8 rounded-full bg-gradient-to-b from-accent to-accent-secondary" />
+                      <span className="font-semibold text-lg tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-foreground to-foreground/80">Home</span>
+                    </div>
+                    <ProfileMenu user={user} isAdmin={isAdmin} onLogout={logout} onAdmin={() => setView("admin")} />
+                  </div>
+                  <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-accent/30 to-transparent" />
                 </div>
                 <HomePanel
                   user={user}

@@ -3,6 +3,7 @@ package api
 import (
 	"database/sql"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
@@ -115,18 +116,28 @@ func (s *Server) Routes() http.Handler {
 	r.Use(middleware.CSRF(csrfExempt, s.Cfg.SecureCookies))
 	r.Use(auth.SessionAuth(s.Sessions, s.Users))
 
-	// CORS — enabled by default with wildcard for desktop/Tailscale clients.
-	// Token-based auth (Authorization header) is used for cross-origin requests,
-	// so AllowCredentials is false unless specific origins are configured.
-	// When using wildcard origins, the Authorization header is NOT exposed to
-	// prevent cross-origin token theft from arbitrary websites.
-	allowedHeaders := []string{"Accept", "Content-Type", "X-CSRF-Token", "X-Request-ID", "Authorization"}
+	// CORS — origins come from NEXORA_CORS_ORIGINS (comma-separated) when set;
+	// with an empty list the server falls back to allow-any-origin so desktop
+	// (Tauri custom scheme) and Tailscale clients keep working out of the box.
+	// Token-based auth (Authorization header) is used for cross-origin requests.
+	// When configured, we echo the exact Origin header back (never "*") so
+	// AllowCredentials works correctly on restrictive WebKit environments.
+	allowedHeaders := []string{"Accept", "Content-Type", "X-CSRF-Token", "X-Request-ID", "Authorization", "X-Share-Password"}
 
-	// Use AllowOriginFunc to echo the exact Origin header.
-	// This avoids issues with wildcard origins (*) and credentials,
-	// especially on restrictive environments like WebKit (Tauri macOS).
+	allowOrigins := s.Cfg.CORSOrigins
+	allowAll := len(allowOrigins) == 0
+	allowedSet := make(map[string]struct{}, len(allowOrigins))
+	for _, o := range allowOrigins {
+		allowedSet[strings.TrimSpace(o)] = struct{}{}
+	}
 	r.Use(cors.Handler(cors.Options{
-		AllowOriginFunc:  func(_ *http.Request, _ string) bool { return true },
+		AllowOriginFunc: func(_ *http.Request, origin string) bool {
+			if allowAll {
+				return true
+			}
+			_, ok := allowedSet[origin]
+			return ok
+		},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowedHeaders:   allowedHeaders,
 		AllowCredentials: true,
@@ -229,6 +240,9 @@ func (s *Server) Routes() http.Handler {
 	authed.Get("/playlists/public", s.handleListPublicPlaylists)
 	authed.Post("/playlists/{id}/collaborators", s.handleManageCollaborators)
 	authed.Get("/playlists/{id}/collaborators", s.handleListCollaborators)
+
+	// User directory (collaborator picker).
+	authed.Get("/users/search", s.handleUserSearch)
 
 	// Archive / extract jobs.
 	authed.Post("/archive", s.handleCreateArchive)
