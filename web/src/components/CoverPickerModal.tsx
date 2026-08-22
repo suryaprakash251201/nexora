@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { Image, Upload, Folder, ArrowUp, Check, Loader2 } from "lucide-react";
+import { Button } from "./ui/Button";
 import { rootsApi, playlistsApi, filesApi } from "../api/endpoints";
 import { useQuery } from "@tanstack/react-query";
 import { Modal } from "./Modal";
@@ -102,13 +103,9 @@ export default function CoverPickerModal({ onClose, onConfirm }: CoverPickerModa
       title="Set cover image"
       onClose={onClose}
       footer={
-        <button
-          onClick={doConfirm}
-          disabled={!canConfirm}
-          className="px-3 py-1.5 rounded-lg accent-glass text-sm font-medium disabled:opacity-50"
-        >
+        <Button variant="primary" size="sm" onClick={doConfirm} disabled={!canConfirm}>
           Set cover
-        </button>
+        </Button>
       }
     >
       <div className="flex gap-1 mb-4 rounded-lg bg-surface-muted/50 p-1">
@@ -247,20 +244,21 @@ export default function CoverPickerModal({ onClose, onConfirm }: CoverPickerModa
                   >
                     Cancel
                   </button>
-                  <button
+                  <Button
+                    variant="primary"
+                    size="sm"
                     onClick={handleUpload}
-                    disabled={uploading || !uploadRoot}
-                    className="px-3 py-1.5 rounded-lg accent-glass text-sm font-medium disabled:opacity-50 flex items-center gap-1.5"
+                    loading={uploading}
+                    disabled={!uploadRoot}
                   >
-                    {uploading && <Loader2 className="h-4 w-4 animate-spin" />}
                     {uploading ? "Uploading…" : "Upload"}
-                  </button>
+                  </Button>
                 </div>
               </div>
             )}
             {uploadedResult && (
               <div className="space-y-3">
-                <div className="flex items-center gap-2 text-emerald-400 text-sm font-medium">
+                <div className="flex items-center gap-2 text-accent-emerald text-sm font-medium">
                   <Check className="h-4 w-4" /> Uploaded successfully
                 </div>
                 <p className="text-xs text-content-muted font-mono truncate">{uploadedResult.path}</p>

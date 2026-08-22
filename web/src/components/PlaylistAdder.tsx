@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { Plus, Music, X } from "lucide-react";
+import { Button } from "./ui/Button";
 import { usePlaylists, useCreatePlaylist, useAddPlaylistItems } from "../hooks/usePlaylists";
 import { useUI } from "../store";
 import type { FileItem } from "../api/types";
@@ -109,9 +110,9 @@ export function PlaylistPickerList({ items, onClose }: { items: FileItem[]; onCl
             className="flex-1 min-w-0 rounded-lg glass-input px-2.5 py-1.5 text-sm outline-none"
             aria-label="New playlist name"
           />
-          <button type="submit" disabled={!newName.trim()} className="px-2.5 py-1.5 rounded-lg accent-glass text-xs font-medium disabled:opacity-40">
+          <Button type="submit" variant="primary" size="sm" disabled={!newName.trim()}>
             Create
-          </button>
+          </Button>
           <button type="button" onClick={() => { setCreatingNew(false); setNewName(""); }} className="p-1.5 text-content-muted hover:text-content" aria-label="Cancel">
             <X className="h-3.5 w-3.5" />
           </button>

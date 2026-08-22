@@ -5,6 +5,7 @@ import { useUI } from "../store";
 import { thumbUrl } from "../lib/preview";
 import { startDownload } from "../lib/transfer";
 import { Modal } from "./Modal";
+import { Button } from "./ui/Button";
 import CoverPickerModal from "./CoverPickerModal";
 import ShareDialog from "./ShareDialog";
 import type { User } from "../api/types";
@@ -409,13 +410,13 @@ export default function PlaylistsPanel({ user }: { user?: User }) {
               )}
             </div>
             <div className="flex items-center gap-2 mt-4 flex-wrap">
-              <button
+              <Button
+                variant="primary"
                 onClick={() => play(selected.id)}
                 disabled={!selected.items.length}
-                className="flex items-center gap-1.5 px-5 py-2 rounded-xl accent-glass text-sm font-medium disabled:opacity-40"
               >
                 <Play className="h-4 w-4" /> Play All
-              </button>
+              </Button>
               <button
                 onClick={() => addCurrent(selected.id)}
                 disabled={!current || !canEditSelected}
@@ -508,7 +509,7 @@ export default function PlaylistsPanel({ user }: { user?: User }) {
         )}
         {renameTarget && (
           <Modal title="Rename playlist" onClose={() => setRenameTarget(null)}
-            footer={<button onClick={doRenameConfirm} className="px-3 py-1.5 rounded-lg accent-glass text-sm font-medium">Rename</button>}>
+            footer={<Button variant="primary" size="sm" onClick={doRenameConfirm}>Rename</Button>}>
             <input
               autoFocus
               value={renameTarget.name}
@@ -579,7 +580,7 @@ export default function PlaylistsPanel({ user }: { user?: User }) {
     <div className="flex-1 overflow-auto p-4 pb-24 md:pb-20">
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-lg font-semibold flex items-center gap-2"><ListMusic className="h-5 w-5 text-accent" /> Playlists</h2>
-        <button onClick={newPlaylist} className="flex items-center gap-1.5 px-4 py-2 rounded-xl accent-glass text-sm font-medium"><Plus className="h-4 w-4" /> New</button>
+        <Button variant="primary" onClick={newPlaylist}><Plus className="h-4 w-4" /> New</Button>
       </div>
       {playlists.length === 0 ? (
         <div className="text-center text-content-muted p-10 glass rounded-2xl">
@@ -619,7 +620,7 @@ export default function PlaylistsPanel({ user }: { user?: User }) {
       )}
       {newModal && (
         <Modal title="New playlist" onClose={() => setNewModal(false)}
-          footer={<button onClick={doCreate} className="px-3 py-1.5 rounded-lg accent-glass text-sm font-medium">Create</button>}>
+          footer={<Button variant="primary" size="sm" onClick={doCreate}>Create</Button>}>
           <input
             autoFocus
             value={newName}

@@ -41,6 +41,7 @@ import SelectionBar from "./SelectionBar";
 import KeyboardShortcutsModal from "./KeyboardShortcutsModal";
 import { formatRelative } from "../lib/format";
 import { SkeletonGrid, SkeletonList, SkeletonLine, SkeletonCard } from "./ui/Skeleton";
+import { Button } from "./ui/Button";
 import { FileThumb } from "./FileThumb";
 import { staggerContainer, staggerItem, cardHover } from "@/lib/animations";
 import { isEditable, isAudio } from "../lib/preview";
@@ -532,6 +533,10 @@ export default function Workspace({ user }: { user: User }) {
               if (!canWrite || selection.size === 0) return;
               void movePathsTo(Array.from(selection), p);
             }}
+            onUploadFiles={(files, p) => {
+              if (!canWrite) return;
+              void uploadFiles(files, rootId ?? undefined, p);
+            }}
           />
         )}
         {view !== "files" && view !== "home" && !videoItem && (
@@ -785,14 +790,14 @@ export default function Workspace({ user }: { user: User }) {
       )}
 
       {playlistModal && (
-        <Modal title="Save playlist" onClose={() => setPlaylistModal(false)} footer={<button onClick={savePlaylist} className="px-3 py-1.5 rounded-lg accent-glass text-sm font-medium">Create</button>}>
+        <Modal title="Save playlist" onClose={() => setPlaylistModal(false)} footer={<Button variant="primary" size="sm" onClick={savePlaylist}>Create</Button>}>
           <label className="block text-sm mb-1 opacity-80">Playlist name</label>
           <input
             value={playlistName}
             onChange={(e) => setPlaylistName(e.target.value)}
             autoFocus
             placeholder="My playlist"
-            className="w-full rounded-lg glass-input px-3 py-2 outline-none"
+            className="glass-input w-full rounded-xl px-3 py-2 outline-none"
           />
           <p className="mt-2 text-xs opacity-60">
             {(selectedItems.length ? selectedItems : items).filter((i) => i.mime.startsWith("audio/")).length} audio track(s) will be added.
@@ -955,13 +960,9 @@ function DropRootPicker({ roots, pending, onClose, onConfirm }: {
       title="Upload to…"
       onClose={onClose}
       footer={
-        <button
-          disabled={!effective}
-          onClick={() => onConfirm(effective, destPath.trim())}
-          className="px-3 py-1.5 rounded-lg accent-glass text-sm font-medium disabled:opacity-50"
-        >
+        <Button variant="primary" size="sm" disabled={!effective} onClick={() => onConfirm(effective, destPath.trim())}>
           Upload {fileCount > 0 ? `${fileCount} file${fileCount > 1 ? "s" : ""}` : ""}
-        </button>
+        </Button>
       }
     >
       <p className="text-sm text-content-muted mb-3">
@@ -1072,8 +1073,8 @@ function ActionModals({ menu, rootId, path, onClose, onDone, onArchiveExtract }:
 
   if (menu.kind === "newFolder") {
     return (
-      <Modal title="New folder" onClose={onClose} footer={<button onClick={() => run(() => filesApi.createDirectory(rootId, base(value || "New Folder")), "Folder created")} className="px-3 py-1.5 rounded-lg accent-glass text-sm">Create</button>}>
-        <input autoFocus value={value} onChange={(e) => setValue(e.target.value)} placeholder="Folder name" className="w-full rounded-lg bg-surface border px-3 py-2 outline-none focus:ring-2 focus:ring-accent/40" />
+      <Modal title="New folder" onClose={onClose} footer={<Button variant="primary" size="sm" onClick={() => run(() => filesApi.createDirectory(rootId, base(value || "New Folder")), "Folder created")}>Create</Button>}>
+        <input autoFocus value={value} onChange={(e) => setValue(e.target.value)} placeholder="Folder name" className="glass-input w-full rounded-xl px-3 py-2" />
       </Modal>
     );
   }
@@ -1086,8 +1087,8 @@ function ActionModals({ menu, rootId, path, onClose, onDone, onArchiveExtract }:
       return v.replace(/\.[^./\\]+$/, "") + "." + ext;
     };
     return (
-      <Modal title="New text file" onClose={onClose} footer={<button onClick={() => run(() => filesApi.createFile(rootId, base(value || "untitled.txt"), content), "File created")} className="px-3 py-1.5 rounded-lg accent-glass text-sm">Create</button>}>
-        <input autoFocus value={value} onChange={(e) => setValue(e.target.value)} placeholder="name.txt" className="w-full mb-2 rounded-lg bg-surface border px-3 py-2 outline-none focus:ring-2 focus:ring-accent/40" />
+      <Modal title="New text file" onClose={onClose} footer={<Button variant="primary" size="sm" onClick={() => run(() => filesApi.createFile(rootId, base(value || "untitled.txt"), content), "File created")}>Create</Button>}>
+        <input autoFocus value={value} onChange={(e) => setValue(e.target.value)} placeholder="name.txt" className="glass-input mb-2 w-full rounded-xl px-3 py-2" />
         <div className="mb-2 flex flex-wrap gap-1.5">
           <button
             type="button"
@@ -1105,23 +1106,23 @@ function ActionModals({ menu, rootId, path, onClose, onDone, onArchiveExtract }:
             LRC lyrics
           </button>
         </div>
-        <textarea value={content} onChange={(e) => setContent(e.target.value)} rows={6} placeholder="Contents…" className="w-full rounded-lg bg-surface border px-3 py-2 outline-none focus:ring-2 focus:ring-accent/40 font-mono text-sm" />
+        <textarea value={content} onChange={(e) => setContent(e.target.value)} rows={6} placeholder="Contents…" className="glass-input w-full rounded-xl px-3 py-2 font-mono text-sm" />
       </Modal>
     );
   }
   if (menu.kind === "rename" && menu.item) {
     return (
-      <Modal title="Rename" onClose={onClose} footer={<button onClick={() => run(() => filesApi.rename(rootId, menu.item!.path, value), "Renamed")} className="px-3 py-1.5 rounded-lg accent-glass text-sm">Rename</button>}>
-        <input autoFocus defaultValue={menu.item.name} onChange={(e) => setValue(e.target.value)} className="w-full rounded-lg bg-surface border px-3 py-2 outline-none focus:ring-2 focus:ring-accent/40" />
+      <Modal title="Rename" onClose={onClose} footer={<Button variant="primary" size="sm" onClick={() => run(() => filesApi.rename(rootId, menu.item!.path, value), "Renamed")}>Rename</Button>}>
+        <input autoFocus defaultValue={menu.item.name} onChange={(e) => setValue(e.target.value)} className="glass-input w-full rounded-xl px-3 py-2" />
       </Modal>
     );
   }
   if (menu.kind === "extract" && menu.item) {
     const defaultDest = path;
     return (
-      <Modal title={`Extract "${menu.item.name}"`} onClose={onClose} footer={<button onClick={() => onArchiveExtract(menu.item!.path, value || defaultDest)} className="px-3 py-1.5 rounded-lg accent-glass text-sm">Extract</button>}>
+      <Modal title={`Extract "${menu.item.name}"`} onClose={onClose} footer={<Button variant="primary" size="sm" onClick={() => onArchiveExtract(menu.item!.path, value || defaultDest)}>Extract</Button>}>
         <p className="text-sm text-content-muted mb-2">Destination folder (relative path, empty = current):</p>
-        <input autoFocus value={value} onChange={(e) => setValue(e.target.value)} placeholder={defaultDest || "root"} className="w-full rounded-lg bg-surface border px-3 py-2 outline-none focus:ring-2 focus:ring-accent/40" />
+        <input autoFocus value={value} onChange={(e) => setValue(e.target.value)} placeholder={defaultDest || "root"} className="glass-input w-full rounded-xl px-3 py-2" />
         <p className="mt-2 text-xs text-content-muted">Archives are extracted safely with zip-slip protection.</p>
       </Modal>
     );

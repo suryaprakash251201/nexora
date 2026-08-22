@@ -49,6 +49,8 @@ interface CommandBarProps {
   onCommandPalette?: () => void;
   /** Drop selected files onto a breadcrumb to move them into that folder. */
   onDropToFolder?: (path: string) => void;
+  /** Drop OS files onto a breadcrumb to upload them into that folder. */
+  onUploadFiles?: (files: FileList, path: string) => void;
 }
 
 export default function CommandBar({
@@ -76,6 +78,7 @@ export default function CommandBar({
   onAdmin,
   onCommandPalette,
   onDropToFolder,
+  onUploadFiles,
 }: CommandBarProps) {
   const viewMode = useUI((s) => s.viewMode);
   const setViewMode = useUI((s) => s.setViewMode);
@@ -185,7 +188,7 @@ export default function CommandBar({
       <div className="glass rounded-2xl flex items-center gap-1.5 sm:gap-3 px-2.5 sm:px-5 h-13 sm:h-16">
         {/* Left: Breadcrumbs + Search */}
         <div className="min-w-0 flex-1 flex items-center gap-2 sm:gap-3">
-          <Breadcrumbs rootName={rootName} path={path} onNavigate={onNavigate} onDropToFolder={onDropToFolder} />
+          <Breadcrumbs rootName={rootName} path={path} onNavigate={onNavigate} onDropToFolder={onDropToFolder} onUploadFiles={onUploadFiles} />
 
           {/* Search — icon-only when collapsed, expands on click */}
           <div className="relative">

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "motion/react";
-import { Users, ScrollText, RefreshCw, Plus, Shield, Settings, HardDrive, Sun, LayoutGrid, List, Pencil, Trash2, ShieldCheck, Clock, KeyRound, Loader2, AlertCircle } from "lucide-react";
+import { Users, ScrollText, RefreshCw, Plus, Shield, Settings, HardDrive, Sun, LayoutGrid, List, Pencil, Trash2, ShieldCheck, Clock, KeyRound, AlertCircle } from "lucide-react";
 import { accentThemes, setAccentTheme } from "../lib/useAccentTheme";
 import { adminApi, versionApi, rootsApi } from "../api/endpoints";
 import { Modal } from "./Modal";
@@ -276,9 +276,9 @@ function UsersTab() {
       {resetPwUser && (
         <Modal title={`Reset Password: ${resetPwUser.username}`} onClose={() => { setResetPwUser(null); setResetPwError(null); }}
           footer={
-            <button onClick={resetPassword} disabled={resetPwBusy || !resetPwValue || !resetPwConfirm} className="px-3 py-1.5 rounded-lg accent-glass text-sm font-medium disabled:opacity-50 flex items-center gap-1.5">
-              {resetPwBusy && <Loader2 className="h-4 w-4 animate-spin" />} Set Password
-            </button>
+            <Button variant="primary" size="sm" loading={resetPwBusy} disabled={!resetPwValue || !resetPwConfirm} onClick={resetPassword}>
+              Set Password
+            </Button>
           }>
           <div className="space-y-4">
             <p className="text-sm text-content-muted">Set a new password for <strong>{resetPwUser.username}</strong>. The user will be logged out of all sessions.</p>

@@ -8,20 +8,28 @@ export default function Breadcrumbs({
   onNavigate,
   /** When provided, dropping selected files onto a crumb moves them there. */
   onDropToFolder,
+  /** When provided, dropping OS files onto a crumb uploads them to that folder. */
+  onUploadFiles,
 }: {
   rootName: string;
   path: string;
   onNavigate: (path: string) => void;
   onDropToFolder?: (path: string) => void;
+  onUploadFiles?: (files: FileList, path: string) => void;
 }) {
   const segments = path.split("/").filter(Boolean);
   let acc = "";
 
   const [dragTarget, setDragTarget] = useState<string | null>(null);
 
+  // External file drags advertise a "Files" type; internal selection drags don't.
+  const isFileDrag = (e: React.DragEvent) => [...e.dataTransfer.types].includes("Files");
+  const canAccept = (e: React.DragEvent, targetPath: string) =>
+    isFileDrag(e) ? !!onUploadFiles : !!onDropToFolder;
+
   const handleDragOver = (e: React.DragEvent, targetPath: string) => {
-    if (!onDropToFolder) return; // no handler → don't advertise a drop target
-    if ([...e.dataTransfer.types].includes("text/plain")) return; // ignore selection text
+    if (!canAccept(e, targetPath)) return;
+    if (!isFileDrag(e) && [...e.dataTransfer.types].includes("text/plain")) return; // ignore selection text
     e.preventDefault();
     setDragTarget(targetPath);
   };
@@ -34,7 +42,9 @@ export default function Breadcrumbs({
   const handleDrop = (e: React.DragEvent, targetPath: string) => {
     e.preventDefault();
     setDragTarget(null);
-    if (onDropToFolder && !([...e.dataTransfer.types].includes("text/plain"))) {
+    if (isFileDrag(e)) {
+      if (onUploadFiles && e.dataTransfer.files.length > 0) onUploadFiles(e.dataTransfer.files, targetPath);
+    } else if (onDropToFolder && !([...e.dataTransfer.types].includes("text/plain"))) {
       onDropToFolder(targetPath);
     }
   };

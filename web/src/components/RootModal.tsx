@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { HardDrive, Cloud, Eye, EyeOff } from "lucide-react";
 import { Modal } from "./Modal";
+import { Button } from "./ui/Button";
 import { useUI } from "../store";
 import { adminApi } from "../api/endpoints";
 import { ROOT_ICONS } from "../lib/rootIcons";
@@ -112,9 +113,9 @@ export default function RootModal({
       title={isEdit ? "Edit storage root" : "New storage root"}
       onClose={onClose}
       footer={
-        <button onClick={run} className="px-3 py-1.5 rounded-lg accent-glass text-sm">
+        <Button variant="primary" size="sm" onClick={run}>
           {isEdit ? "Save" : "Create"}
-        </button>
+        </Button>
       }
     >
       {/* Icon & Name row */}
@@ -126,7 +127,7 @@ export default function RootModal({
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="w-full rounded-lg bg-surface border px-3 py-2 outline-none text-sm"
+            className="glass-input w-full rounded-xl px-3 py-2 text-sm"
             placeholder="Root name (e.g. Backups)"
           />
         </div>
@@ -191,7 +192,7 @@ export default function RootModal({
           <input
             value={localPath}
             onChange={(e) => setLocalPath(e.target.value)}
-            className="w-full mb-1 rounded-lg bg-surface border px-3 py-2 outline-none font-mono text-sm"
+            className="glass-input mb-1 w-full rounded-xl px-3 py-2 font-mono text-sm"
             placeholder="/mnt/backups"
           />
           <p className="text-[11px] text-content-muted/70 mb-2 flex items-center gap-1">
@@ -210,7 +211,7 @@ export default function RootModal({
             <input
               value={s3Path}
               onChange={(e) => setS3Path(e.target.value)}
-              className="w-full rounded-lg bg-surface border px-3 py-2 outline-none font-mono text-sm"
+              className="glass-input w-full rounded-xl px-3 py-2 font-mono text-sm"
               placeholder="/my-bucket-files"
             />
             <p className="text-[11px] text-content-muted/70 mt-0.5">
@@ -247,7 +248,7 @@ export default function RootModal({
             <input
               value={endpoint}
               onChange={(e) => setEndpoint(e.target.value)}
-              className="w-full rounded-lg bg-surface border px-3 py-2 outline-none font-mono text-sm"
+              className="glass-input w-full rounded-xl px-3 py-2 font-mono text-sm"
               placeholder="https://s3.amazonaws.com"
             />
             <p className="text-[11px] text-content-muted/70 mt-0.5">{providerHint}</p>
@@ -260,7 +261,7 @@ export default function RootModal({
               <input
                 value={region}
                 onChange={(e) => setRegion(e.target.value)}
-                className="w-full rounded-lg bg-surface border px-3 py-2 outline-none font-mono text-sm"
+                className="glass-input w-full rounded-xl px-3 py-2 font-mono text-sm"
                 placeholder="us-east-1"
               />
             </div>
@@ -269,7 +270,7 @@ export default function RootModal({
               <input
                 value={bucket}
                 onChange={(e) => setBucket(e.target.value)}
-                className="w-full rounded-lg bg-surface border px-3 py-2 outline-none font-mono text-sm"
+                className="glass-input w-full rounded-xl px-3 py-2 font-mono text-sm"
                 placeholder="my-nexora-files"
               />
             </div>
@@ -281,7 +282,7 @@ export default function RootModal({
             <input
               value={accessKeyId}
               onChange={(e) => setAccessKeyId(e.target.value)}
-              className="w-full rounded-lg bg-surface border px-3 py-2 outline-none font-mono text-sm"
+              className="glass-input w-full rounded-xl px-3 py-2 font-mono text-sm"
               placeholder="AKIAIOSFODNN7EXAMPLE"
             />
           </div>
@@ -292,7 +293,7 @@ export default function RootModal({
                 type={showSecret ? "text" : "password"}
                 value={secretAccessKey}
                 onChange={(e) => setSecretAccessKey(e.target.value)}
-                className="w-full rounded-lg bg-surface border px-3 py-2 outline-none font-mono text-sm pr-9"
+                className="glass-input w-full rounded-xl px-3 py-2 pr-9 font-mono text-sm"
                 placeholder="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
               />
               <button
@@ -313,7 +314,7 @@ export default function RootModal({
             <input
               value={prefix}
               onChange={(e) => setPrefix(e.target.value)}
-              className="w-full rounded-lg bg-surface border px-3 py-2 outline-none font-mono text-sm"
+              className="glass-input w-full rounded-xl px-3 py-2 font-mono text-sm"
               placeholder="nexora-files/"
             />
             <p className="text-[11px] text-content-muted/70 mt-0.5">

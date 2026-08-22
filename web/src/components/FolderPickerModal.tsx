@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { Folder, ArrowUp, FolderInput, Check } from "lucide-react";
+import { Button } from "./ui/Button";
 ;
 import { filesApi } from "../api/endpoints";
 import { useQuery } from "@tanstack/react-query";
@@ -37,12 +38,9 @@ export default function FolderPickerModal({
       title={`${mode === "move" ? "Move" : "Copy"} to folder`}
       onClose={onClose}
       footer={
-        <button
-          onClick={() => onConfirm(nav)}
-          className="px-3 py-1.5 rounded-lg accent-glass text-sm font-medium"
-        >
+        <Button variant="primary" size="sm" onClick={() => onConfirm(nav)}>
           {mode === "move" ? "Move here" : "Copy here"}
-        </button>
+        </Button>
       }
     >
       <p className="text-xs text-content-muted mb-2">Destination: <span className="font-mono">{nav || "root"}</span></p>

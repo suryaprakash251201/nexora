@@ -382,7 +382,8 @@ export default function FileBrowser({
             ref={itemsGridRef}
             onKeyDown={handleArrowNavigation}
             className={cn(DENSITY_CLASSES.grid[d], "grid")} style={{ gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))" }}
-            role="list"
+            role="listbox"
+            aria-multiselectable="true"
             aria-label="File grid"
           >
               {items.map((item, index) => {
@@ -397,8 +398,8 @@ export default function FileBrowser({
                     transition={{ duration: 0.16, ease: "easeOut", delay: Math.min(index * 0.006, 0.24) }}
                     tabIndex={0}
                     data-file-item
-                    role="listitem"
-                    aria-selected={selectMode || selection.size > 0 ? selected : undefined}
+                    role="option"
+                    aria-selected={selected}
                     onClick={(e) => handleItemClick(item, e)}
                     onContextMenu={(e) => onContextMenu(e, item)}
                     onKeyDown={(e) => handleKeyDown(e, item)}
@@ -519,11 +520,13 @@ export default function FileBrowser({
         </>
       ) : (
         <div className={cn(dc.listContainer[d], "pb-16 sm:pb-32 md:pb-36 max-w-7xl mx-auto")}>
-          <div className={cn(
-            "grid grid-cols-[auto_1fr_auto_auto] items-center border-b border-glass-border-soft sticky top-0 z-10",
+          {/* Grid owns both the sticky header row and data rows for valid ARIA ownership. */}
+          <div ref={itemsGridRef} role="grid" aria-multiselectable="true" aria-rowcount={items.length + 1} aria-label="File list" onKeyDown={handleArrowNavigation}>
+          <div role="row" className={cn(
+            "grid grid-cols-[auto_1fr_auto_auto] items-center border-b border-glass-border-soft sticky top-0 z-10 mb-1",
             dc.listHeader[d]
           )}>
-            <span className="flex justify-center items-center">
+            <span role="columnheader" className="flex justify-center items-center">
               <input
                 type="checkbox"
                 checked={allSelected}
@@ -532,16 +535,15 @@ export default function FileBrowser({
                 className={cn("rounded border-2 border-glass-border bg-glass-bg text-accent focus:ring-accent cursor-pointer transition-all", dc.headerCheckbox[d])}
               />
             </span>
-            <span className="truncate font-semibold text-text-secondary">Name</span>
+            <span role="columnheader" className="truncate font-semibold text-text-secondary">Name</span>
             {visibleColumns.size && (
-              <span className={cn("text-right truncate text-text-tertiary", dc.listSizeWidth[d])}>Size</span>
+              <span role="columnheader" className={cn("text-right truncate text-text-tertiary", dc.listSizeWidth[d])}>Size</span>
             )}
             {visibleColumns.modified && (
-              <span className={cn("text-right truncate text-text-tertiary", dc.listDateWidth[d])}>Modified</span>
+              <span role="columnheader" className={cn("text-right truncate text-text-tertiary", dc.listDateWidth[d])}>Modified</span>
             )}
           </div>
 
-          <div ref={itemsGridRef} role="list" aria-label="File list" onKeyDown={handleArrowNavigation} className="mt-1">
               {items.map((item, index) => {
                 const selected = selection.has(item.path);
                 const action = hoverActionFor(item);
@@ -554,8 +556,8 @@ export default function FileBrowser({
                     transition={{ duration: 0.14, ease: "easeOut", delay: Math.min(index * 0.004, 0.12) }}
                     tabIndex={0}
                     data-file-item
-                    role="listitem"
-                    aria-selected={selectMode || selection.size > 0 ? selected : undefined}
+                    role="row"
+                    aria-selected={selected}
                     onClick={(e) => handleItemClick(item, e)}
                     onContextMenu={(e) => onContextMenu(e, item)}
                     onKeyDown={(e) => handleKeyDown(e, item)}
@@ -579,9 +581,10 @@ export default function FileBrowser({
                     )}
                   >
                     {/* Checkbox */}
-                    <div className="flex justify-center items-center">
+                    <div role="gridcell" className="flex justify-center items-center">
                       <input
                         type="checkbox"
+                        aria-label={`Select ${item.name}`}
                         className={cn(
                           "rounded border-2 border-glass-border bg-glass-bg text-accent focus:ring-2 focus:ring-accent/50 cursor-pointer transition-all",
                           selected ? "opacity-100" : "opacity-0 group-hover:opacity-100 [@media(pointer:coarse)]:opacity-40 [@media(pointer:coarse)]:group-hover:opacity-100",
@@ -594,7 +597,7 @@ export default function FileBrowser({
                     </div>
 
                     {/* Icon + Name + Tags + Actions */}
-                    <div className="flex items-center gap-3 min-w-0">
+                    <div role="gridcell" className="flex items-center gap-3 min-w-0">
                       <div className={cn("shrink-0 flex items-center justify-center", dc.listIcon[d])}>
                         <FileIconForItem item={item} className={dc.listIconInner[d]} />
                       </div>
@@ -641,14 +644,14 @@ export default function FileBrowser({
 
                     {/* Size */}
                     {visibleColumns.size && (
-                      <span className={cn("text-right font-medium text-text-tertiary truncate", dc.listMeta[d], dc.listSizeWidth[d])}>
+                      <span role="gridcell" className={cn("text-right font-medium text-text-tertiary truncate", dc.listMeta[d], dc.listSizeWidth[d])}>
                         {item.is_dir ? "—" : formatBytes(item.size)}
                       </span>
                     )}
 
                     {/* Modified */}
                     {visibleColumns.modified && (
-                      <span className={cn("text-right font-medium text-text-tertiary truncate", dc.listMeta[d], dc.listDateWidth[d])}>
+                      <span role="gridcell" className={cn("text-right font-medium text-text-tertiary truncate", dc.listMeta[d], dc.listDateWidth[d])}>
                         {formatDate(item.modified)}
                       </span>
                     )}

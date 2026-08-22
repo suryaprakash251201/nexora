@@ -14,7 +14,7 @@ import { MapGallery } from "./MapGallery";
 import { PhotoViewer } from "./PhotoViewer";
 import { FilterMenu } from "./FilterMenu";
 import { SelectionBar } from "./SelectionBar";
-import { ConfirmDialog } from "./ConfirmDialog";
+import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { useDebouncedValue, useElementSize, useLocalStorage, usePhotos } from "./hooks";
 import type { Density, PhotoFilters, PhotoResult, ViewMode } from "./types";
 const MAX_BULK_SHARE = 20;
@@ -486,26 +486,29 @@ export default function PhotosView({ roots, onOpen, onPreview }: PhotosViewProps
         )}
       </AnimatePresence>
       {/* --------------------------- Confirm dialog --------------------------- */}
-      {confirm && (
-        <ConfirmDialog
-          title={confirm.kind === "selection" ? `Delete ${selectedIds.size} photo${selectedIds.size === 1 ? "" : "s"}?` : "Delete this photo?"}
-          description={
-            confirm.kind === "selection"
-              ? `${selectedIds.size} photo${selectedIds.size === 1 ? "" : "s"} selected`
-              : `${confirm.photo.name}`
+      <ConfirmDialog
+        open={confirm !== null}
+        danger
+        title={confirm?.kind === "selection" ? `Delete ${selectedIds.size} photo${selectedIds.size === 1 ? "" : "s"}?` : "Delete this photo?"}
+        description={
+          confirm === null
+            ? undefined
+            : confirm.kind === "selection"
+              ? `${selectedIds.size} photo${selectedIds.size === 1 ? "" : "s"} selected. This moves them to the trash — you can restore them from there.`
+              : `${confirm.photo.name}. This moves it to the trash — you can restore it from there.`
+        }
+        confirmLabel="Move to trash"
+        loading={busy}
+        onConfirm={() => {
+          if (!confirm) return;
+          if (confirm.kind === "selection") {
+            void deletePhotos(photos.filter((p) => selectedIds.has(p.id)));
+          } else {
+            void deletePhotos([confirm.photo]);
           }
-          confirmLabel="Move to trash"
-          busy={busy}
-          onConfirm={() => {
-            if (confirm.kind === "selection") {
-              void deletePhotos(photos.filter((p) => selectedIds.has(p.id)));
-            } else {
-              void deletePhotos([confirm.photo]);
-            }
-          }}
-          onClose={() => setConfirm(null)}
-        />
-      )}
+        }}
+        onCancel={() => setConfirm(null)}
+      />
     </div>
   );
 }
