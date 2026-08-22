@@ -70,8 +70,8 @@ Share `POST /shares` creates `token` 48-hex + optional password (Argon2id), expi
 | `GET` | `/api/v1/audio/info?root=&path=` | `ffprobe` codec/sampleRate/bitDepth/channels/tags + `losslessCodecs` map |
 | `GET` | `/api/v1/audio/formats` | Caps table (`libx264 veryfast crf23 yuv420p` vs `copy`, AAC 128/192/320k, `flac/flac24/wav`) |
 | `GET` | `/api/v1/audio/lyrics?root=&path=` | `{has_lyrics, raw, format:lrc|plain, source, synced, cues:[{time,text}]}` — auto `.lrc` sibling |
-| `POST` | `/api/v1/audio/lyrics` | `{root, path, lyrics}` |
-| `DELETE` | `/api/v1/audio/lyrics?root=&path=` | |
+| `POST` | `/api/v1/audio/lyrics?root=&path=` | Body `{raw, format:"lrc"\|"plain"}` — writes `<song>.lrc` next to the audio file (strict sidecar); requires write access; returns `{ok, path}` |
+| `DELETE` | `/api/v1/audio/lyrics?root=&path=` | Deletes the `<song>.lrc` sidecar file |
 
 ## Trash
 

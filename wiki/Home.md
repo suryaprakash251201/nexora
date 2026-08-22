@@ -2,8 +2,14 @@
 
 Welcome to the **Nexora** knowledge base. This wiki is the companion to the [README](../README.md) — deeper dives, how-tos, and reference material.
 
-> **Version:** `1.8.0` (root `VERSION` file) • **Go** 1.26 • **React** 19 • **Expo** 54 • **Tauri** 2  
+> **Version:** `1.9.0` (root `VERSION` file) • **Go** 1.26 • **React** 19 • **Expo** 54 • **Tauri** 2  
 > Website: https://nexora.suryaprakashinfo.in • Demo: https://pms2.tail58d7ea.ts.net (community)
+
+## What's New in v1.9.0
+
+- 🎤 **Synced lyrics end-to-end** — Apple Music-style fullscreen panel, click-to-seek karaoke lines, and strict `<song>.lrc` sidecar files saved next to your music (editable in the built-in editor).
+- ⚡ **Upload reliability** — background library scans no longer block uploads/API writes at the database (chunked index transactions + WAL connection pool).
+- 🔍 **Honest storage errors** — permission, read-only and disk-full failures now say exactly what's wrong instead of a generic message.
 
 ## Start Here
 

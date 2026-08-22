@@ -37,6 +37,18 @@ sudo chown -R 100:101 data/
 docker compose up -d
 ```
 
+**Symptom (pre-1.9.0):** uploads/deletes *inside subfolders* fail with a generic "Storage operation failed" while the root folder works — the subfolders were created by another user after init ran.
+
+Since **1.9.0** the server names the real cause:
+
+| Message | Meaning | Fix |
+|---|---|---|
+| `permission_denied` — "Filesystem permission denied (check storage directory ownership)" | `EACCES`/`EPERM` writing under that path | `chown -R 100:101 <mount>` or re-run `nexora-init` |
+| `read_only` — "Storage is mounted read-only" | filesystem mounted `ro`, or root flagged read-only in Nexora | remount rw / toggle root setting |
+| `storage_full` — "No space left on the storage device" | `ENOSPC` | free space / extend volume |
+
+Works at the root but fails one level deep → check ownership of just those subfolders: `ls -la /data/Movies` vs `ls -la /data/Movies/2024`.
+
 ## Database
 
 ### Reset SQLite (destructive)
@@ -56,7 +68,11 @@ docker compose logs postgres
 go test -tags postgres -run TestRunPostgres ./migrations -count=1 -v
 ```
 
-If migrations fail with `PRAGMA`, ensure you're on `1.8.0` — `migrations/rewrite.go` now strips it and handles dialect conversion. Earlier versions were broken on Postgres.
+If migrations fail with `PRAGMA`, ensure you're on `1.9.0` — `migrations/rewrite.go` strips it and handles dialect conversion. Earlier versions were broken on Postgres.
+
+### Uploads stuck at 100% in the transfer panel
+
+Fixed in **v1.9.0** (background scans could pin the single SQLite connection; now chunked + pooled). If you upgraded: restart the server — the pool change applies on boot. Still stuck? Check `docker compose logs nexora` for `search:` lines while reproducing.
 
 ### Search index stale after large move
 
