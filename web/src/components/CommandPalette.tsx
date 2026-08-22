@@ -258,7 +258,7 @@ export default function CommandPalette({
   return (
     <>
       {shortcutsOpen && createPortal(
-        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[var(--z-palette)] flex items-center justify-center p-4">
           <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShortcutsOpen(false)} aria-hidden="true" />
           <div className="relative w-full max-w-lg glass-strong rounded-2xl shadow-2xl border border-glass-border-soft overflow-hidden animate-scale-in max-h-[80vh] flex flex-col">
             <div className="flex items-center justify-between p-4 border-b border-glass-border-soft">
@@ -291,7 +291,7 @@ export default function CommandPalette({
         document.body,
       )}
       {isOpen && createPortal(
-    <div className="fixed inset-0 z-[100] flex items-start justify-center pt-20">
+    <div className="fixed inset-0 z-[var(--z-modal)] flex items-start justify-center pt-20">
       <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} aria-hidden="true" />
       <div className="relative w-full max-w-2xl glass-strong rounded-2xl shadow-2xl border border-glass-border-soft overflow-hidden animate-scale-in">
         <div className="p-4 border-b border-glass-border-soft">

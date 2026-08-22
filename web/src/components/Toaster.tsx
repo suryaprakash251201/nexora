@@ -7,7 +7,7 @@ export default function Toaster() {
 
   return (
     <div
-      className="fixed bottom-4 right-4 md:bottom-6 md:right-6 z-[100] flex flex-col gap-3 w-80 max-w-[calc(100vw-2rem)] pointer-events-none"
+      className="fixed bottom-4 right-4 md:bottom-6 md:right-6 z-[var(--z-toast)] flex flex-col gap-3 w-80 max-w-[calc(100vw-2rem)] pointer-events-none"
       role="region"
       aria-label="Notifications"
       aria-live={toasts.some((t) => t.kind === "error") ? "assertive" : "polite"}

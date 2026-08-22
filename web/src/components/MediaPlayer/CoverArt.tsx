@@ -7,7 +7,7 @@ export function CoverArt({ item, className }: { item: FileItem; className?: stri
   const [failed, setFailed] = useState(false);
   if (failed) {
     return (
-      <div className={`h-full w-full grid place-items-center bg-gradient-to-br from-accent/30 to-purple-500/20 ${className || ""}`}>
+      <div className={`h-full w-full grid place-items-center bg-gradient-to-br from-accent/30 to-accent-secondary/20 ${className || ""}`}>
         <Music className="h-1/3 w-1/3 text-white/80 drop-shadow-md" />
       </div>
     );

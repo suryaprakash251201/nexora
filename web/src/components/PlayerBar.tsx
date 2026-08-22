@@ -29,7 +29,7 @@ function Cover({ item }: { item: FileItem | null }) {
   const [failed, setFailed] = useState(false);
   if (failed || !item) {
     return (
-      <div className="h-full w-full grid place-items-center bg-gradient-to-br from-accent/60 to-purple-600/60 backdrop-blur-md">
+      <div className="h-full w-full grid place-items-center bg-gradient-to-br from-accent/60 to-accent-secondary/60 backdrop-blur-md">
         <Music className="h-5 w-5 text-white/90" />
       </div>
     );
@@ -239,7 +239,7 @@ export default memo(function PlayerBar() {
       <audio ref={audioRef} preload="auto" playsInline webkit-playsinline="true" onError={handleError} />
 
       {hasActivePlayer && showMini && !expanded && (
-        <div className="fixed bottom-32 md:bottom-6 left-1/2 -translate-x-1/2 z-[60] w-[calc(100%-2rem)] max-w-lg pointer-events-none">
+        <div className="fixed bottom-32 md:bottom-6 left-1/2 -translate-x-1/2 z-[var(--z-float)] w-[calc(100%-2rem)] max-w-lg pointer-events-none">
           <div className="pointer-events-auto glass-strong rounded-2xl px-3 py-2.5 shadow-2xl transition-all duration-500 ease-out">
             <div className="flex items-center gap-2">
               <div className={`group relative h-10 w-10 rounded-full overflow-hidden shrink-0 shadow-md transition-all duration-500 ${isPlaying ? 'audio-disc-mini' : ''}`}>
@@ -286,7 +286,7 @@ export default memo(function PlayerBar() {
                 <button
                   onClick={() => usePlayer.getState().toggle()}
                     className={`h-9 w-9 rounded-full grid place-items-center text-white shadow-lg transition-all duration-300 hover:scale-105 active:scale-95
-                    ${isPlaying ? 'bg-gradient-to-br from-accent to-purple-500 shadow-accent/40 player-glow' : 'bg-surface-muted border border-white/20 text-content'}`}
+                    ${isPlaying ? 'bg-gradient-to-br from-accent to-accent-secondary shadow-accent/40 player-glow' : 'bg-surface-muted border border-white/20 text-content'}`}
                   title={isPlaying ? "Pause" : "Play"}
                 >
                   {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4 translate-x-0.5" />}
@@ -395,7 +395,7 @@ export default memo(function PlayerBar() {
       )}
 
       {hasActivePlayer && expanded && (
-        <div className="pointer-events-auto relative z-[100]">
+        <div className="pointer-events-auto relative z-[var(--z-modal)]">
           <MediaPlayer
             kind="audio"
             controlled

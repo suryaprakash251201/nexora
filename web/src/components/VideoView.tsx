@@ -37,7 +37,7 @@ export default function VideoView({
     : "";
 
   return (
-    <div className="fixed inset-0 z-[80] flex h-[100dvh] min-h-0 flex-col bg-black text-white">
+    <div className="fixed inset-0 z-[var(--z-fullscreen)] flex h-[100dvh] min-h-0 flex-col bg-black text-white">
       <div className="z-10 flex shrink-0 items-center justify-between border-b border-white/10 bg-black/80 px-3 py-2 backdrop-blur-md sm:px-4 sm:py-3">
         <div className="flex items-center gap-3 min-w-0">
           <button

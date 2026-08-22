@@ -684,7 +684,8 @@ body {
   animation: n-pulse-glow 2s ease-in-out infinite;
 }
 
-/* Z-index layer system */
+/* Z-index layer system — single source of truth for stacking.
+   Use as `z-[var(--z-modal)]` etc.; do not introduce new arbitrary values. */
 :root {
   --z-base: 0;
   --z-content: 10;
@@ -694,7 +695,12 @@ body {
   --z-player-bar: 45;
   --z-selection-bar: 50;
   --z-dropdown: 55;
+  --z-float: 60;            /* floating mini player, drag-drop overlay */
+  --z-transfers: 65;        /* transfers pill/panel (above mini player) */
+  --z-veil: 70;             /* workspace loading veil */
+  --z-fullscreen: 80;       /* fullscreen video view, playlist popovers */
   --z-modal: 100;
+  --z-palette: 110;         /* command palette (above modals) */
   --z-toast: 130;
 }
 

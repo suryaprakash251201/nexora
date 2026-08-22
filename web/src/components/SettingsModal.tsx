@@ -123,7 +123,7 @@ export default function SettingsModal({ user, onClose }: { user: User; onClose: 
     if (e.target === e.currentTarget) onClose();
   };
   return createPortal(
-    <div className="fixed inset-0 z-[100] grid place-items-center p-4 scrim backdrop-blur-sm" onMouseDown={onBackdrop}>
+    <div className="fixed inset-0 z-[var(--z-modal)] grid place-items-center p-4 scrim backdrop-blur-sm" onMouseDown={onBackdrop}>
       <div
         ref={dialogRef}
         role="dialog"

@@ -775,7 +775,7 @@ export default function Workspace({ user }: { user: User }) {
       )}
 
       {dragActive && (
-          <div className="fixed inset-0 z-[70] grid place-items-center bg-black/70 dark:bg-black/70 backdrop-blur-sm pointer-events-none">
+          <div className="fixed inset-0 z-[var(--z-veil)] grid place-items-center bg-black/70 dark:bg-black/70 backdrop-blur-sm pointer-events-none">
             <div className="glass-strong rounded-2xl px-8 py-10 text-center">
               <Upload className="h-12 w-12 mx-auto mb-3 text-accent" />
               <p className="text-lg font-semibold">Drop to upload</p>

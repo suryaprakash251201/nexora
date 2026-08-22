@@ -5,7 +5,6 @@ import {
   HardDrive, Image, Video, Music, FileText, Archive, Code2, FolderSearch,
   ChevronDown, ChevronRight, Copy, ExternalLink
 } from "lucide-react";
-;
 import { statsApi } from "../api/endpoints";
 import { Root } from "../api/types";
 import { formatBytes } from "../lib/format";
@@ -14,13 +13,15 @@ interface StorageAnalyticsProps {
   onClose?: () => void;
   onNavigateToFile?: (rootId: string, path: string) => void;
 }
+// Categorical colors use the shared multi-accent palette tokens (index.css)
+// so charts stay consistent with the design system in both themes.
 const categoryConfig: Record<string, { label: string; icon: React.FC<any>; color: string; barColor: string }> = {
-  images: { label: "Images", icon: Image, color: "#F472B6", barColor: "from-pink-500 to-rose-500" },
-  videos: { label: "Videos", icon: Video, color: "#A78BFA", barColor: "from-purple-500 to-violet-500" },
-  audio: { label: "Audio", icon: Music, color: "#34D399", barColor: "from-emerald-500 to-teal-500" },
-  documents: { label: "Documents", icon: FileText, color: "#FBBF24", barColor: "from-yellow-500 to-amber-500" },
-  archives: { label: "Archives", icon: Archive, color: "#FB923C", barColor: "from-orange-500 to-amber-500" },
-  code: { label: "Code", icon: Code2, color: "#38BDF8", barColor: "from-cyan-500 to-sky-500" },
+  images: { label: "Images", icon: Image, color: "var(--color-accent-pink)", barColor: "from-accent-pink to-accent-rose" },
+  videos: { label: "Videos", icon: Video, color: "var(--color-accent-purple)", barColor: "from-accent-purple to-accent-secondary" },
+  audio: { label: "Audio", icon: Music, color: "var(--color-accent-emerald)", barColor: "from-accent-emerald to-accent-teal" },
+  documents: { label: "Documents", icon: FileText, color: "var(--color-accent-amber)", barColor: "from-accent-amber to-accent-orange" },
+  archives: { label: "Archives", icon: Archive, color: "var(--color-accent-orange)", barColor: "from-accent-orange to-accent-rose" },
+  code: { label: "Code", icon: Code2, color: "var(--color-accent-cyan)", barColor: "from-accent-cyan to-accent-blue" },
   other: { label: "Other", icon: HardDrive, color: "#9CA3AF", barColor: "from-gray-500 to-slate-500" },
 };
 export default function StorageAnalyticsPanel({ roots, onClose, onNavigateToFile }: StorageAnalyticsProps) {

@@ -456,7 +456,7 @@ export function AudioPlayer({
       role="dialog"
       aria-modal="true"
       aria-label="Audio player"
-      className="fixed inset-0 z-[100] flex flex-col animate-fade-in bg-black/95 select-none"
+      className="fixed inset-0 z-[var(--z-modal)] flex flex-col animate-fade-in bg-black/95 select-none"
     >
       {/* Blurred cover-art backdrop (Apple-style glass effect) */}
       {cur && !bgFailed && (
@@ -720,7 +720,7 @@ export function AudioPlayer({
             {cur ? (
               <CoverArt item={cur} className="rounded-full" />
             ) : (
-              <div className="h-full w-full grid place-items-center bg-gradient-to-br from-accent/30 to-purple-500/20">
+              <div className="h-full w-full grid place-items-center bg-gradient-to-br from-accent/30 to-accent-secondary/20">
                 <Music className="h-24 w-24 text-white/80" />
               </div>
             )}

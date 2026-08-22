@@ -183,7 +183,7 @@ export default function TransfersPanel() {
     return (
       <button
         onClick={() => setOpen(true)}
-        className="fixed bottom-4 right-4 z-[65] h-11 w-11 rounded-full glass-strong transfers-glow shadow-2xl border border-border/50 flex items-center justify-center animate-scale-in cursor-pointer"
+        className="fixed bottom-4 right-4 z-[var(--z-transfers)] h-11 w-11 rounded-full glass-strong transfers-glow shadow-2xl border border-border/50 flex items-center justify-center animate-scale-in cursor-pointer"
         title="Show transfers"
         aria-label="Show transfers"
       >
@@ -208,7 +208,7 @@ export default function TransfersPanel() {
     <div
       aria-live="polite"
       aria-label="File transfers"
-      className="fixed bottom-4 right-4 z-[65] w-72 sm:w-80 glass-strong transfers-glow transfers-panel rounded-2xl shadow-2xl border border-border/50 overflow-hidden flex flex-col transition-all duration-300 ease-in-out animate-scale-in"
+      className="fixed bottom-4 right-4 z-[var(--z-transfers)] w-72 sm:w-80 glass-strong transfers-glow transfers-panel rounded-2xl shadow-2xl border border-border/50 overflow-hidden flex flex-col transition-all duration-300 ease-in-out animate-scale-in"
     >
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-border/50 bg-surface/50 backdrop-blur-md shrink-0">

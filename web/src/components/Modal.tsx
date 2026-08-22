@@ -22,6 +22,15 @@ export function Modal({ title, description, icon, onClose, children, footer }: {
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
+  // Lock body scrolling while the modal is open (preserves any inline value).
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, []);
+
   return (
     <AnimatePresence>
       <motion.div
@@ -29,7 +38,7 @@ export function Modal({ title, description, icon, onClose, children, footer }: {
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         transition={{ duration: 0.12 }}
-        className="fixed inset-0 z-[100] grid place-items-center p-4 scrim"
+        className="fixed inset-0 z-[var(--z-modal)] grid place-items-center p-4 scrim"
         onMouseDown={onClose}
       >
         <motion.div
@@ -45,7 +54,7 @@ export function Modal({ title, description, icon, onClose, children, footer }: {
           className="w-full max-w-md glass-strong rounded-2xl outline-none shadow-2xl shadow-black/30 flex flex-col max-h-[85vh]"
           onMouseDown={(e) => e.stopPropagation()}
         >
-          <div className="flex items-start justify-between px-6 py-4 border-b border-border/50 bg-gradient-to-r from-white/[0.02] via-transparent to-transparent">
+          <div className="flex items-start justify-between px-6 py-4 border-b border-border/50 bg-gradient-to-r from-glass-bg-subtle via-transparent to-transparent">
             <div className="flex gap-4">
               {icon && (
                 <div className="h-12 w-12 rounded-2xl bg-accent/10 flex items-center justify-center shrink-0 border border-accent/20">
@@ -62,7 +71,7 @@ export function Modal({ title, description, icon, onClose, children, footer }: {
             </button>
           </div>
           <div className="p-6 overflow-y-auto">{children}</div>
-          {footer && <div className="px-6 py-4 border-t border-border/50 bg-white/[0.02] flex justify-end gap-3">{footer}</div>}
+          {footer && <div className="px-6 py-4 border-t border-border/50 bg-glass-bg-subtle flex justify-end gap-3">{footer}</div>}
         </motion.div>
       </motion.div>
     </AnimatePresence>

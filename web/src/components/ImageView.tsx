@@ -188,7 +188,7 @@ export default function ImageView({
         (wrapRef as any).current = el;
         (focusTrapRef as any).current = el;
       }}
-      className="fixed inset-0 z-[100] bg-black/85 backdrop-blur-sm select-none animate-fade-in overflow-hidden"
+      className="fixed inset-0 z-[var(--z-modal)] bg-black/85 backdrop-blur-sm select-none animate-fade-in overflow-hidden"
       onMouseMove={resetTimer}
       role="dialog"
       aria-modal="true"

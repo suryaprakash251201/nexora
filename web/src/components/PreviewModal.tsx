@@ -136,7 +136,7 @@ export default function PreviewModal({
   const focusTrapRef = useFocusTrap(true);
 
   return (
-    <div className={`fixed inset-0 z-[100] flex items-center justify-center ${kind === "video" ? "p-0" : "p-2 md:p-6"} bg-black/60 backdrop-blur-sm animate-fade-in`} onMouseDown={handleClose} role="dialog" aria-modal="true" aria-label="File preview">
+    <div className={`fixed inset-0 z-[var(--z-modal)] flex items-center justify-center ${kind === "video" ? "p-0" : "p-2 md:p-6"} bg-black/60 backdrop-blur-sm animate-fade-in`} onMouseDown={handleClose} role="dialog" aria-modal="true" aria-label="File preview">
       <div 
         ref={focusTrapRef}
         className={`w-full flex flex-col glass-strong bg-background/95 shadow-2xl transition-all duration-300 ease-out overflow-hidden

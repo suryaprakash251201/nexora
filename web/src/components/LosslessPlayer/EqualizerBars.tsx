@@ -69,7 +69,7 @@ export default function EqualizerBars({ analyser, isPlaying, bars = 24, classNam
         return (
           <div
             key={i}
-            className={`w-[3px] rounded-full bg-gradient-to-t from-accent to-purple-400 ${barClassName}`}
+            className={`w-[3px] rounded-full bg-gradient-to-t from-accent to-accent-secondary ${barClassName}`}
             style={{
               height: `${Math.round(h * 100)}%`,
               transformOrigin: "bottom",

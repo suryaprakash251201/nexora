@@ -315,7 +315,7 @@ export function VideoPlayer({ url, item, autoPlay }: { url?: string; item?: File
   const dlUrl = item ? rawUrl(item.root_id, item.path, true) : (url || "#");
 
   const wrapClasses = full
-    ? "fixed inset-0 z-[100] bg-black"
+    ? "fixed inset-0 z-[var(--z-modal)] bg-black"
     : theater
     ? "fixed inset-0 z-40 bg-black/95 backdrop-blur-sm p-4 md:p-8 flex items-center justify-center theater-enter"
     : "relative w-full max-w-5xl mx-auto overflow-hidden shadow-2xl ring-1 ring-border/50 bg-black rounded-2xl";

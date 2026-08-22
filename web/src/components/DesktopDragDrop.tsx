@@ -53,7 +53,7 @@ export default function DesktopDragDrop({ rootId, path, canWrite, onUpload }: De
   if (!over) return null;
 
   return (
-    <div className="fixed inset-0 z-[60] pointer-events-none grid place-items-center p-8">
+    <div className="fixed inset-0 z-[var(--z-float)] pointer-events-none grid place-items-center p-8">
       <div className="w-full max-w-md rounded-2xl border-2 border-dashed border-accent/70 bg-glass-bg-strong/80 backdrop-blur-md shadow-glass-strong p-8 text-center">
         <div className="mx-auto grid place-items-center h-14 w-14 rounded-full bg-accent/15 text-accent">
           <UploadCloud className="h-7 w-7" />

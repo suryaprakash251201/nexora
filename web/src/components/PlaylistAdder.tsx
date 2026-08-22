@@ -151,7 +151,7 @@ export function AddToPlaylistMenu({
         {children}
       </button>
       {open && (
-        <div className={`absolute z-[80] mt-1 min-w-[240px] glass-strong rounded-lg ring-1 ring-white/10 shadow-xl ${align === "right" ? "right-0" : "left-0"}`}>
+        <div className={`absolute z-[var(--z-fullscreen)] mt-1 min-w-[240px] glass-strong rounded-lg ring-1 ring-white/10 shadow-xl ${align === "right" ? "right-0" : "left-0"}`}>
           <PlaylistPickerList items={items} onClose={() => setOpen(false)} />
         </div>
       )}
@@ -180,7 +180,7 @@ export function PlaylistPickerPopover({
   if (y + h > window.innerHeight) ny = window.innerHeight - h - 8;
   return (
     <div
-      className="fixed z-[80] min-w-[240px] glass-strong rounded-lg ring-1 ring-white/10 shadow-xl"
+      className="fixed z-[var(--z-fullscreen)] min-w-[240px] glass-strong rounded-lg ring-1 ring-white/10 shadow-xl"
       style={{ left: nx, top: ny }}
       ref={ref}
     >
