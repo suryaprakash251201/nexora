@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { Plus, Music, X } from "lucide-react";
-import { usePlaylists } from "../store/playlists";
+import { usePlaylists, useCreatePlaylist, useAddPlaylistItems } from "../hooks/usePlaylists";
 import { useUI } from "../store";
 import type { FileItem } from "../api/types";
 import { thumbUrl } from "../lib/preview";
@@ -34,9 +34,10 @@ function MiniCover({ playlist }: { playlist: any }) {
 }
 
 export function PlaylistPickerList({ items, onClose }: { items: FileItem[]; onClose: () => void }) {
-  const playlists = usePlaylists((s) => s.playlists);
-  const create = usePlaylists((s) => s.create);
-  const addItems = usePlaylists((s) => s.addItems);
+  const { data: playlistsData } = usePlaylists();
+  const playlists = playlistsData?.items ?? [];
+  const createMutation = useCreatePlaylist();
+  const addItemsMutation = useAddPlaylistItems();
   const pushToast = useUI((s) => s.pushToast);
   const audio = audioOnly(items);
 
@@ -50,17 +51,25 @@ export function PlaylistPickerList({ items, onClose }: { items: FileItem[]; onCl
       return;
     }
     if (id) {
-      addItems(id, audio);
-      const pl = playlists.find((p) => p.id === id);
-      pushToast("success", `Added ${audio.length} to "${pl?.name ?? "playlist"}"`);
+      try {
+        await addItemsMutation.mutateAsync({ id, items: audio });
+        const pl = playlists.find((p) => p.id === id);
+        pushToast("success", `Added ${audio.length} to "${pl?.name ?? "playlist"}"`);
+      } catch (e: any) {
+        pushToast("error", e.message || "Failed to add tracks");
+      }
       onClose();
     }
   };
 
   const createNew = async () => {
     const name = newName.trim() || `Playlist ${playlists.length + 1}`;
-    const pl = await create(name, audio);
-    pushToast("success", `Created "${pl.name}" with ${audio.length} track${audio.length === 1 ? "" : "s"}`);
+    try {
+      const pl = await createMutation.mutateAsync({ name, items: audio });
+      pushToast("success", `Created "${pl.name}" with ${audio.length} track${audio.length === 1 ? "" : "s"}`);
+    } catch (e: any) {
+      pushToast("error", e.message || "Failed to create playlist");
+    }
     onClose();
   };
 

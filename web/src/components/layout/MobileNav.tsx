@@ -2,7 +2,8 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   Home, Search, Folder, Star, Clock, ListMusic,
-  Shield, LogOut, X, Ellipsis, Upload, FolderUp, FolderPlus, Trash2
+  Shield, LogOut, X, Ellipsis, Upload, FolderUp, FolderPlus, Trash2,
+  Share2, Images
 } from "lucide-react";
 import type { SidebarView } from "../Sidebar";
 import type { Root } from "../../api/types";
@@ -28,7 +29,7 @@ const primaryTabs: { id: SidebarView; label: string; icon: typeof Home }[] = [
   { id: "home", label: "Home", icon: Home },
   { id: "files", label: "Files", icon: Folder },
   { id: "search", label: "Search", icon: Search },
-  { id: "favorites", label: "Stars", icon: Star },
+  { id: "favorites", label: "Favorites", icon: Star },
 ];
 
 export function MobileNav({
@@ -215,8 +216,10 @@ export function MobileNav({
                 <p className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary px-2 mb-2">Navigate</p>
                 <div className="space-y-1">
                   {[
-                    { id: "recents" as SidebarView, label: "Recent", icon: Clock },
+                    { id: "recents" as SidebarView, label: "Recents", icon: Clock },
                     { id: "playlists" as SidebarView, label: "Playlists", icon: ListMusic },
+                    { id: "shares" as SidebarView, label: "Shared", icon: Share2 },
+                    { id: "photos" as SidebarView, label: "Photos", icon: Images },
                     { id: "trash" as SidebarView, label: "Trash", icon: Trash2 },
                   ].map((item) => {
                     const Icon = item.icon;

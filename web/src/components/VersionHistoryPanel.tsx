@@ -2,7 +2,8 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion } from "motion/react";
 import { History, RotateCcw, Trash2, Plus, Clock, FileDigit, X, Loader2 } from "lucide-react";
-import { versionsApi } from "../api/client";
+;
+import { versionsApi } from "../api/endpoints";
 import { FileVersion } from "../api/types";
 import { formatBytes, formatDate } from "../lib/format";
 import { Button } from "./ui/Button";
@@ -10,24 +11,20 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { ConfirmDialog } from "./ui/ConfirmDialog";
 import { QueryError } from "./ui/QueryError";
-
 interface VersionHistoryProps {
   rootId: string;
   path: string;
   fileName: string;
   onClose: () => void;
 }
-
 export function VersionHistoryPanel({ rootId, path, fileName, onClose }: VersionHistoryProps) {
   const qc = useQueryClient();
   const [note, setNote] = useState("");
   const [creating, setCreating] = useState(false);
-
   const { data, isLoading, error } = useQuery({
     queryKey: ["file-versions", rootId, path],
     queryFn: () => versionsApi.list(rootId, path),
   });
-
   const createMutation = useMutation({
     mutationFn: () => versionsApi.create(rootId, path, note || undefined),
     onSuccess: () => {
@@ -38,7 +35,6 @@ export function VersionHistoryPanel({ rootId, path, fileName, onClose }: Version
     },
     onError: (err: any) => toast.error(err.message || "Failed to create snapshot"),
   });
-
   const restoreMutation = useMutation({
     mutationFn: (id: string) => versionsApi.restore(id),
     onSuccess: () => {
@@ -47,7 +43,6 @@ export function VersionHistoryPanel({ rootId, path, fileName, onClose }: Version
     },
     onError: (err: any) => toast.error(err.message || "Failed to restore version"),
   });
-
   const deleteMutation = useMutation({
     mutationFn: (id: string) => versionsApi.delete(id),
     onSuccess: () => {
@@ -56,14 +51,11 @@ export function VersionHistoryPanel({ rootId, path, fileName, onClose }: Version
     },
     onError: (err: any) => toast.error(err.message || "Failed to delete version"),
   });
-
   const handleCreate = () => {
     createMutation.mutate();
   };
-
   const [pendingRestore, setPendingRestore] = useState<FileVersion | null>(null);
   const [pendingDelete, setPendingDelete] = useState<FileVersion | null>(null);
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={onClose}>
       <div
@@ -85,7 +77,6 @@ export function VersionHistoryPanel({ rootId, path, fileName, onClose }: Version
             <X className="h-4 w-4" />
           </button>
         </div>
-
         {/* Create snapshot */}
         {creating ? (
           <div className="p-4 border-b border-white/5 bg-surface/30">
@@ -113,7 +104,6 @@ export function VersionHistoryPanel({ rootId, path, fileName, onClose }: Version
             </Button>
           </div>
         )}
-
         {/* Versions list */}
         <div className="flex-1 overflow-y-auto">
           {isLoading ? (
@@ -168,7 +158,6 @@ export function VersionHistoryPanel({ rootId, path, fileName, onClose }: Version
                       <p className="text-xs text-content-muted mt-0.5 italic truncate">{version.note}</p>
                     )}
                   </div>
-
                   {version.id !== "current" && (
                     <div className="flex items-center gap-1">
                       <button

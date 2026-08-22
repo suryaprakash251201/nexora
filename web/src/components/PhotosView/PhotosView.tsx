@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { favoritesApi, filesApi, sharesApi } from "../../api/endpoints";
 import { AnimatePresence, motion } from "motion/react";
 import {
   Download, FolderOpen, LayoutGrid, Map as MapIcon, MapPin, Search,
   Share2, Star, Trash2, X, Check, Copy,
 } from "lucide-react";
-import { del, post } from "@/api/client";
+;
 import { rawUrl } from "@/lib/preview";
 import { useUI } from "@/store";
 import { cn } from "@/lib/utils";
@@ -16,22 +17,17 @@ import { SelectionBar } from "./SelectionBar";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { useDebouncedValue, useElementSize, useLocalStorage, usePhotos } from "./hooks";
 import type { Density, PhotoFilters, PhotoResult, ViewMode } from "./types";
-
 const MAX_BULK_SHARE = 20;
-
 interface RootInfo {
   id: string;
   name: string;
 }
-
 interface PhotosViewProps {
   roots: RootInfo[];
   onOpen: (rootId: string, path: string) => void;
   onPreview: (rootId: string, path: string) => void;
 }
-
 const EMPTY_FILTERS: PhotoFilters = { sort: "date_desc" };
-
 function isFiltered(f: PhotoFilters, search: string): boolean {
   return !!(
     search ||
@@ -45,7 +41,6 @@ function isFiltered(f: PhotoFilters, search: string): boolean {
     f.sort !== "date_desc"
   );
 }
-
 export default function PhotosView({ roots, onOpen, onPreview }: PhotosViewProps) {
   const pushToast = useUI((s) => s.pushToast);
   const [viewMode, setViewMode] = useLocalStorage<ViewMode>("nexora.photos.viewMode", "gallery");
@@ -61,16 +56,13 @@ export default function PhotosView({ roots, onOpen, onPreview }: PhotosViewProps
   const [busy, setBusy] = useState(false);
   const headerRef = useRef<HTMLDivElement>(null);
   const [headerH, setHeaderH] = useState(0);
-
   const { photos, hasMore, loading, loadingMore, error, totalCount, reload, loadMore, patch } = usePhotos(
     filters,
     debouncedSearch,
     true
   );
-
   const selecting = selectedIds.size > 0;
   const filtered = isFiltered(filters, debouncedSearch);
-
   // Measure header height so sticky day headers land right below it.
   useEffect(() => {
     const el = headerRef.current;
@@ -80,13 +72,11 @@ export default function PhotosView({ roots, onOpen, onPreview }: PhotosViewProps
     setHeaderH(el.offsetHeight);
     return () => ro.disconnect();
   }, [viewMode]);
-
   // Scroll back to top whenever the feed (filters/search) changes.
   useEffect(() => {
     const scroller = document.querySelector("main") as HTMLElement | null;
     scroller?.scrollTo?.({ top: 0 });
   }, [debouncedSearch, filters]);
-
   // Gallery keyboard shortcuts (viewer owns the keyboard while open).
   useEffect(() => {
     if (viewerIndex !== null) return;
@@ -110,9 +100,7 @@ export default function PhotosView({ roots, onOpen, onPreview }: PhotosViewProps
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [viewerIndex, selecting, photos, contextMenu]);
-
   /* ------------------------------ derived data ------------------------------ */
-
   const years = useMemo(() => {
     const s = new Set<number>();
     for (const p of photos) {
@@ -121,15 +109,12 @@ export default function PhotosView({ roots, onOpen, onPreview }: PhotosViewProps
     }
     return [...s].sort((a, b) => b - a);
   }, [photos]);
-
   const cameras = useMemo(() => {
     const s = new Set<string>();
     for (const p of photos) if (p.make) s.add(p.make);
     return [...s].sort();
   }, [photos]);
-
   const geoCount = useMemo(() => photos.filter((p) => typeof p.lat === "number" && typeof p.lng === "number").length, [photos]);
-
   const topCamera = useMemo(() => {
     const counts = new Map<string, number>();
     for (const p of photos) {
@@ -141,11 +126,8 @@ export default function PhotosView({ roots, onOpen, onPreview }: PhotosViewProps
     for (const [k, n] of counts) if (!best || n > best[1]) best = [k, n];
     return best;
   }, [photos]);
-
   const favoriteCount = useMemo(() => photos.filter((p) => p.is_favorite).length, [photos]);
-
   /* -------------------------------- selection ------------------------------- */
-
   const toggleSelect = useCallback((p: PhotoResult) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -154,18 +136,15 @@ export default function PhotosView({ roots, onOpen, onPreview }: PhotosViewProps
       return next;
     });
   }, []);
-
   const selectAllOnScreen = useCallback(() => {
     setSelectedIds((prev) => (prev.size === photos.length ? new Set() : new Set(photos.map((p) => p.id))));
   }, [photos]);
-
   /* ------------------------------ photo actions ----------------------------- */
-
   const toggleFavorite = useCallback(
     (p: PhotoResult) => {
       const target = !p.is_favorite;
       patch((prev) => prev.map((x) => (x.id === p.id ? { ...x, is_favorite: target } : x)));
-      const apiCall = target ? post("/favorites", { root: p.root_id, path: p.path }) : del("/favorites", { root: p.root_id, path: p.path });
+      const apiCall = target ? favoritesApi.add(p.root_id, p.path) : favoritesApi.remove(p.root_id, p.path);
       apiCall
         .then(() => pushToast("success", target ? "Added to favorites" : "Removed from favorites"))
         .catch(() => {
@@ -175,7 +154,6 @@ export default function PhotosView({ roots, onOpen, onPreview }: PhotosViewProps
     },
     [patch, pushToast]
   );
-
   const downloadPhotos = useCallback((list: PhotoResult[]) => {
     if (!list.length) return;
     // Sequential same-origin anchor clicks avoid popup blockers.
@@ -190,7 +168,6 @@ export default function PhotosView({ roots, onOpen, onPreview }: PhotosViewProps
       }, i * 150);
     });
   }, []);
-
   const sharePhotos = useCallback(
     async (list: PhotoResult[]) => {
       if (list.length > MAX_BULK_SHARE) {
@@ -202,7 +179,7 @@ export default function PhotosView({ roots, onOpen, onPreview }: PhotosViewProps
       const urls: string[] = [];
       for (const p of list) {
         try {
-          const res = await post<{ share?: { url?: string } }>("/shares", { root: p.root_id, path: p.path, scope: "preview" });
+          const res = await sharesApi.create({ root: p.root_id, path: p.path, scope: "preview" });
           if (res?.share?.url) urls.push(res.share.url);
         } catch {
           /* skip failed share */
@@ -222,7 +199,6 @@ export default function PhotosView({ roots, onOpen, onPreview }: PhotosViewProps
     },
     [pushToast]
   );
-
   const deletePhotos = useCallback(
     async (list: PhotoResult[]) => {
       setBusy(true);
@@ -230,7 +206,7 @@ export default function PhotosView({ roots, onOpen, onPreview }: PhotosViewProps
       let ok = 0;
       for (const p of list) {
         try {
-          await del("/files", { root: p.root_id, path: p.path });
+          await filesApi.delete(p.root_id, p.path);
           ok++;
         } catch {
           /* keep going */
@@ -259,22 +235,16 @@ export default function PhotosView({ roots, onOpen, onPreview }: PhotosViewProps
     },
     [patch, pushToast, photos]
   );
-
   /* ------------------------------ viewer wiring ----------------------------- */
-
   const openViewerAt = useCallback((index: number) => setViewerIndex(index), []);
-
   const viewerPhoto = viewerIndex !== null ? photos[viewerIndex] : undefined;
-
   const handleViewerDelete = useCallback(
     (p: PhotoResult) => {
       setConfirm({ kind: "one", photo: p });
     },
     []
   );
-
   /* ----------------------------- context menu ------------------------------ */
-
   useEffect(() => {
     if (!contextMenu) return;
     const close = () => setContextMenu(null);
@@ -288,14 +258,11 @@ export default function PhotosView({ roots, onOpen, onPreview }: PhotosViewProps
       window.removeEventListener("keydown", onKey);
     };
   }, [contextMenu]);
-
   const onTileContextMenu = useCallback((e: React.MouseEvent, p: PhotoResult) => {
     e.preventDefault();
     setContextMenu({ x: Math.min(e.clientX, window.innerWidth - 220), y: Math.min(e.clientY, window.innerHeight - 320), photo: p });
   }, []);
-
   /* --------------------------------- render -------------------------------- */
-
   const activeFilterCount =
     (filters.year ? 1 : 0) +
     (filters.month ? 1 : 0) +
@@ -304,7 +271,6 @@ export default function PhotosView({ roots, onOpen, onPreview }: PhotosViewProps
     (filters.favoritesOnly ? 1 : 0) +
     (filters.dateFrom ? 1 : 0) +
     (filters.dateTo ? 1 : 0);
-
   return (
     <div className="flex min-h-full flex-1 flex-col">
       {/* ------------------------------ Header ------------------------------ */}
@@ -319,7 +285,6 @@ export default function PhotosView({ roots, onOpen, onPreview }: PhotosViewProps
               {topCamera && photos.length > 20 && <> · mostly {topCamera[0]}</>}
             </p>
           </div>
-
           <div className="ml-auto flex items-center gap-1.5">
             {/* search */}
             <div className="relative">
@@ -336,9 +301,7 @@ export default function PhotosView({ roots, onOpen, onPreview }: PhotosViewProps
                 </button>
               )}
             </div>
-
             <FilterMenu filters={filters} onChange={setFilters} availableCameras={cameras} activeCount={activeFilterCount} />
-
             {/* density */}
             <div className="hidden items-center rounded-lg border border-border/40 p-0.5 sm:flex">
               <button
@@ -356,7 +319,6 @@ export default function PhotosView({ roots, onOpen, onPreview }: PhotosViewProps
                 Compact
               </button>
             </div>
-
             {/* view mode */}
             <div className="flex items-center rounded-lg border border-border/40 p-0.5">
               <button
@@ -376,7 +338,6 @@ export default function PhotosView({ roots, onOpen, onPreview }: PhotosViewProps
             </div>
           </div>
         </div>
-
         {/* year chips + active filter chips */}
         {(years.length > 1 || filtered) && (
           <div className="flex items-center gap-1.5 overflow-x-auto px-3 pb-2 hide-scrollbar sm:px-5">
@@ -416,7 +377,6 @@ export default function PhotosView({ roots, onOpen, onPreview }: PhotosViewProps
           </div>
         )}
       </div>
-
       {/* ------------------------------ Content ------------------------------ */}
       <GalleryContainer>
         {({ width }) =>
@@ -450,7 +410,6 @@ export default function PhotosView({ roots, onOpen, onPreview }: PhotosViewProps
           )
         }
       </GalleryContainer>
-
       {/* ---------------------------- Selection bar ---------------------------- */}
       {selecting && (
         <SelectionBar
@@ -470,7 +429,6 @@ export default function PhotosView({ roots, onOpen, onPreview }: PhotosViewProps
           sharing={sharing}
         />
       )}
-
       {/* ------------------------------ Context menu ------------------------------ */}
       <AnimatePresence>
         {contextMenu && (
@@ -512,7 +470,6 @@ export default function PhotosView({ roots, onOpen, onPreview }: PhotosViewProps
           </motion.div>
         )}
       </AnimatePresence>
-
       {/* -------------------------------- Viewer -------------------------------- */}
       <AnimatePresence>
         {viewerIndex !== null && viewerPhoto && (
@@ -528,7 +485,6 @@ export default function PhotosView({ roots, onOpen, onPreview }: PhotosViewProps
           />
         )}
       </AnimatePresence>
-
       {/* --------------------------- Confirm dialog --------------------------- */}
       {confirm && (
         <ConfirmDialog
@@ -553,7 +509,6 @@ export default function PhotosView({ roots, onOpen, onPreview }: PhotosViewProps
     </div>
   );
 }
-
 function MenuItem({ icon, label, onClick, danger }: { icon: React.ReactNode; label: string; onClick: () => void; danger?: boolean }) {
   return (
     <button
@@ -568,7 +523,6 @@ function MenuItem({ icon, label, onClick, danger }: { icon: React.ReactNode; lab
     </button>
   );
 }
-
 /**
  * Wraps the gallery in a full-width block and reports its content width to the
  * row-packing algorithm. The gallery needs to know the exact width to compute

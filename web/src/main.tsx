@@ -23,7 +23,7 @@ const queryClient = new QueryClient({
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
-      <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false} themes={["dark", "light"]}>
+      <ThemeProvider attribute="class" defaultTheme="system" enableSystem themes={["dark", "light"]}>
         <ErrorBoundary>
           <RouterProvider router={router} />
         </ErrorBoundary>

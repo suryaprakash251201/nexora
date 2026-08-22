@@ -21,7 +21,7 @@ func newTestBus(t *testing.T) *Bus {
 		t.Fatalf("open db: %v", err)
 	}
 	t.Cleanup(func() { db.Close() })
-	b := NewBus(db)
+	b := NewBus(db, nil)
 	t.Cleanup(b.Stop)
 	return b
 }
@@ -110,7 +110,7 @@ func TestWebhookPersistenceRoundtrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}
-	b := NewBus(db)
+	b := NewBus(db, nil)
 	defer b.Stop()
 
 	b.RegisterWebhook(WebhookTarget{
@@ -128,7 +128,7 @@ func TestWebhookPersistenceRoundtrip(t *testing.T) {
 		t.Fatalf("reopen db: %v", err)
 	}
 	defer db2.Close()
-	b2 := NewBus(db2)
+	b2 := NewBus(db2, nil)
 	defer b2.Stop()
 	if err := b2.LoadWebhooks(); err != nil {
 		t.Fatalf("load webhooks: %v", err)

@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { RotateCcw, ExternalLink, LoaderCircle, PlugZap, WifiOff } from "lucide-react";
-import { get, post, discoverServerUrl } from "./api/client";
+import { discoverServerUrl } from "./api/client";
+import { authApi } from "./api/endpoints";
 import Login from "./components/Login";
 import Setup from "./components/Setup";
 import Workspace from "./components/Workspace";
@@ -12,7 +13,6 @@ import TauriShell from "./components/TauriShell";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Toaster } from "./components/ui/sonner";
 import { openInBrowser, isTauri } from "./lib/desktop";
-import type { User } from "./api/types";
 
 export default function App() {
   return (
@@ -56,13 +56,13 @@ function AppInner() {
 
   const needsSetup = useQuery({
     queryKey: ["needs-setup"],
-    queryFn: () => get<{ configured: boolean }>("/auth/needs-setup"),
+    queryFn: () => authApi.needsSetup(),
     enabled: !isTauriEnv || !!apiUrl,
   });
 
   const session = useQuery({
     queryKey: ["session"],
-    queryFn: () => get<{ user: User }>("/auth/session"),
+    queryFn: () => authApi.session(),
     enabled: !isTauriEnv || !!apiUrl,
   });
 
@@ -233,7 +233,7 @@ function AppInner() {
 
 // Re-export for potential external use.
 export async function handleLogout() {
-  await post("/auth/logout");
+  await authApi.logout();
   localStorage.removeItem("nexora-token");
   window.location.reload();
 }

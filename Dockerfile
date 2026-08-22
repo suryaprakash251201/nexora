@@ -6,8 +6,9 @@
 FROM node:20-alpine AS web
 WORKDIR /web
 COPY web/package.json web/package-lock.json* ./
-RUN npm install && npm cache clean --force
+RUN npm ci && npm cache clean --force
 COPY web/ ./
+COPY packages/core /packages/core
 RUN npm run build
 
 ############################
@@ -50,7 +51,7 @@ RUN set -eux; \
       sleep 5; \
     done; \
     test -x /usr/bin/wget || { echo "apk add runtime deps failed permanently"; exit 1; }; \
-    addgroup -S nexora && adduser -S nexora -G nexora && \
+    addgroup -S -g 101 nexora && adduser -S -u 100 -G nexora nexora && \
     mkdir -p /app/data/cache/thumbnails /app/web && \
     chown -R nexora:nexora /app
 

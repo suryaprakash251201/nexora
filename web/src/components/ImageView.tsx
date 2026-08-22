@@ -3,6 +3,7 @@ import { X, ChevronLeft, ChevronRight, Download, Share2, ZoomIn, ZoomOut, Rotate
 import type { FileItem } from "../api/types";
 import { rawUrl, thumbUrl } from "../lib/preview";
 import { startDownload } from "../lib/transfer";
+import { useFocusTrap } from "../lib/useFocusTrap";
 
 export default function ImageView({
   item,
@@ -28,6 +29,7 @@ export default function ImageView({
   const [imgLoaded, setImgLoaded] = useState(false);
   const [imgNatural, setImgNatural] = useState({ w: 0, h: 0 });
   const controlsRef = useRef<number>(0);
+  const focusTrapRef = useFocusTrap(true);
   const wrapRef = useRef<HTMLDivElement>(null);
   const filmstripRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
@@ -182,9 +184,15 @@ export default function ImageView({
 
   return (
     <div
-      ref={wrapRef}
-      className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm select-none animate-fade-in overflow-hidden"
+      ref={(el) => {
+        (wrapRef as any).current = el;
+        (focusTrapRef as any).current = el;
+      }}
+      className="fixed inset-0 z-[100] bg-black/85 backdrop-blur-sm select-none animate-fade-in overflow-hidden"
       onMouseMove={resetTimer}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Image viewer"
     >
       {/* Top bar */}
       <div className={`absolute top-0 inset-x-0 z-30 flex items-center justify-between px-5 py-4 bg-gradient-to-b from-black/60 to-transparent transition-opacity duration-500 ${showControls ? "opacity-100" : "opacity-0 pointer-events-none"}`}>

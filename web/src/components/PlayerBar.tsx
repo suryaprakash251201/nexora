@@ -23,13 +23,7 @@ import type { AudioTranscodeFormat } from "../lib/preview";
 import { AudioInfoPanel, EqualizerBars } from "./LosslessPlayer";
 import MediaPlayer from "./MediaPlayer";
 import { useClickOutside } from "./hooks/useClickOutside";
-
-function fmt(t: number): string {
-  if (!isFinite(t) || t < 0) t = 0;
-  const m = Math.floor(t / 60);
-  const s = Math.floor(t % 60);
-  return `${m}:${s.toString().padStart(2, "0")}`;
-}
+import { fmtTime as fmt } from "../lib/format";
 
 function Cover({ item }: { item: FileItem | null }) {
   const [failed, setFailed] = useState(false);
@@ -286,7 +280,7 @@ export default memo(function PlayerBar() {
                 </button>
               )}
               <div className="flex items-center gap-0.5 shrink-0">
-                <button onClick={() => usePlayer.getState().prev()} className="p-1.5 rounded-full text-content-muted hover:text-content hover:bg-white/10 transition-colors" title="Previous">
+                <button onClick={() => usePlayer.getState().prev()} className="p-1.5 rounded-full text-content-muted hover:text-content hover:bg-glass-bg transition-colors" title="Previous">
                   <SkipBack className="h-4 w-4" />
                 </button>
                 <button
@@ -297,14 +291,14 @@ export default memo(function PlayerBar() {
                 >
                   {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4 translate-x-0.5" />}
                 </button>
-                <button onClick={() => usePlayer.getState().next(false)} className="p-1.5 rounded-full text-content-muted hover:text-content hover:bg-white/10 transition-colors" title="Next">
+                <button onClick={() => usePlayer.getState().next(false)} className="p-1.5 rounded-full text-content-muted hover:text-content hover:bg-glass-bg transition-colors" title="Next">
                   <SkipForward className="h-4 w-4" />
                 </button>
                 <button
                   onClick={() => usePlayer.getState().setShuffle(!shuffle)}
                   aria-pressed={shuffle}
                   title={shuffle ? "Shuffle: On" : "Shuffle: Off"}
-                  className={`p-1.5 rounded-full transition-all duration-200 ${shuffle ? "text-accent bg-accent/15 shadow-sm" : "text-content-muted hover:text-content hover:bg-white/10"}`}
+                  className={`p-1.5 rounded-full transition-all duration-200 ${shuffle ? "text-accent bg-accent/15 shadow-sm" : "text-content-muted hover:text-content hover:bg-glass-bg"}`}
                 >
                   <Shuffle className="h-3.5 w-3.5" />
                 </button>
@@ -312,7 +306,7 @@ export default memo(function PlayerBar() {
                   onClick={() => usePlayer.getState().cycleRepeat()}
                   aria-pressed={repeat !== "off"}
                   title={`Repeat: ${repeat === "one" ? "One" : repeat === "all" ? "All" : "Off"}`}
-                  className={`relative p-1.5 rounded-full transition-all duration-200 ${repeat !== "off" ? "text-accent bg-accent/15 shadow-sm" : "text-content-muted hover:text-content hover:bg-white/10"}`}
+                  className={`relative p-1.5 rounded-full transition-all duration-200 ${repeat !== "off" ? "text-accent bg-accent/15 shadow-sm" : "text-content-muted hover:text-content hover:bg-glass-bg"}`}
                 >
                   {repeat === "one" ? <Repeat1 className="h-3.5 w-3.5" /> : <Repeat className="h-3.5 w-3.5" />}
                   {repeat !== "off" && (
@@ -331,7 +325,9 @@ export default memo(function PlayerBar() {
                       e.preventDefault();
                       openVol();
                     }}
-                    className={`p-1.5 rounded-full transition-colors ${muted ? "text-danger bg-danger/10" : "text-content-muted hover:text-content hover:bg-white/10"}`}
+                    aria-label={muted ? "Unmute" : "Mute"}
+                    aria-expanded={volOpen}
+                    className={`p-1.5 rounded-full transition-colors ${muted ? "text-danger bg-danger/10" : "text-content-muted hover:text-content hover:bg-glass-bg"}`}
                     title={muted ? "Unmute" : "Mute"}
                   >
                     <VolIcon className="h-3.5 w-3.5" />
@@ -340,7 +336,7 @@ export default memo(function PlayerBar() {
                     onMouseEnter={openVol}
                     className={`absolute bottom-full right-0 mb-2 w-28 glass-strong rounded-lg p-2 transition-opacity duration-150 ${volOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"}`}
                   >
-                    <div className="relative h-1.5 w-full rounded-full bg-white/20">
+                    <div className="relative h-1.5 w-full rounded-full bg-glass-border">
                       <div className="absolute inset-y-0 left-0" style={{
                         width: `${(muted ? 0 : volume) * 100}%`,
                         background: muted || volume === 0 ? 'var(--color-text-quaternary)' : 'linear-gradient(90deg, var(--color-accent), var(--color-accent-secondary))',

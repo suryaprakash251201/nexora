@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Copy, Trash2, Link2, ExternalLink, Shield, Clock, Download, Globe } from "lucide-react";
-import { get, del } from "../api/client";
+import { sharesApi } from "../api/endpoints";
 import { useUI } from "../store";
 import { formatDate } from "../lib/format";
 import type { ShareItem } from "../api/types";
@@ -14,7 +14,7 @@ import { useState } from "react";
 export default function SharesPanel() {
   const qc = useQueryClient();
   const pushToast = useUI((s) => s.pushToast);
-  const { data, isLoading, isError, refetch } = useQuery({ queryKey: ["shares"], queryFn: () => get<{ items: ShareItem[] }>("/shares") });
+  const { data, isLoading, isError, refetch } = useQuery({ queryKey: ["shares"], queryFn: () => sharesApi.list() });
   const [pendingRevoke, setPendingRevoke] = useState<ShareItem | null>(null);
   const [revoking, setRevoking] = useState(false);
 
@@ -22,7 +22,7 @@ export default function SharesPanel() {
     if (!pendingRevoke) return;
     setRevoking(true);
     try {
-      await del(`/shares/${pendingRevoke.id}`);
+      await sharesApi.delete(pendingRevoke.id);
       pushToast("success", "Share link revoked");
       qc.invalidateQueries({ queryKey: ["shares"] });
       setPendingRevoke(null);

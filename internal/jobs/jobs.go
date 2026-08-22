@@ -8,6 +8,8 @@ import (
 	"archive/zip"
 	"context"
 	"database/sql"
+
+	"github.com/nexora/nexora/internal/database"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -17,6 +19,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/nexora/nexora/internal/logger"
@@ -69,7 +72,7 @@ type ExtractPayload struct {
 
 // Manager owns the worker pool and job persistence.
 type Manager struct {
-	db       *sql.DB
+	db       *database.DB
 	roots    *storage.RootService
 	log      *logger.Logger
 	cacheDir string
@@ -78,6 +81,7 @@ type Manager struct {
 	wg      sync.WaitGroup
 	ctx     context.Context
 	cancel  context.CancelFunc
+	stopped atomic.Bool
 
 	subMu sync.Mutex
 	subs  map[string][]chan Job
@@ -87,7 +91,7 @@ type Manager struct {
 }
 
 // NewManager creates the manager with a bounded worker pool.
-func NewManager(db *sql.DB, roots *storage.RootService, log *logger.Logger, cacheDir string, workers int) *Manager {
+func NewManager(db *database.DB, roots *storage.RootService, log *logger.Logger, cacheDir string, workers int) *Manager {
 	if workers <= 0 {
 		workers = 2
 	}
@@ -110,10 +114,12 @@ func NewManager(db *sql.DB, roots *storage.RootService, log *logger.Logger, cach
 	return m
 }
 
-// Stop drains the worker pool.
+// Stop drains the worker pool. Safe for concurrent and repeated calls.
 func (m *Manager) Stop() {
+	if m.stopped.Swap(true) {
+		return
+	}
 	m.cancel()
-	close(m.queue)
 	m.wg.Wait()
 }
 
@@ -138,6 +144,9 @@ func (m *Manager) EnqueueExtract(userID string, p ExtractPayload) (Job, error) {
 }
 
 func (m *Manager) enqueue(id, typ, userID, rootID string, payload any) (Job, error) {
+	if m.stopped.Load() {
+		return Job{}, errors.New("service is shutting down")
+	}
 	body, _ := json.Marshal(payload)
 	now := util.NowUTC()
 	_, err := m.db.Exec(
@@ -149,6 +158,10 @@ func (m *Manager) enqueue(id, typ, userID, rootID string, payload any) (Job, err
 	}
 	j := Job{ID: id, Type: typ, Status: StatusPending, UserID: userID, RootID: rootID, CreatedAt: now, UpdatedAt: now}
 	select {
+	case <-m.ctx.Done():
+		m.finish(id, StatusFailed, "service is shutting down", "")
+		j.Status = StatusFailed
+		j.Error = "service is shutting down"
 	case m.queue <- id:
 	default:
 		// Queue full: mark failed rather than block the request.
@@ -161,19 +174,26 @@ func (m *Manager) enqueue(id, typ, userID, rootID string, payload any) (Job, err
 
 // Get returns a job by ID.
 func (m *Manager) Get(id string) (Job, bool, error) {
+	j, _, ok, err := m.lookup(id)
+	return j, ok, err
+}
+
+// lookup returns a job together with its raw stored payload so callers don't
+// have to re-query the row just to decode it.
+func (m *Manager) lookup(id string) (Job, string, bool, error) {
 	var j Job
 	var payload string
 	err := m.db.QueryRow(
 		`SELECT id,type,status,user_id,root_id,payload,progress,error,created_at,updated_at FROM jobs WHERE id=?`, id).
 		Scan(&j.ID, &j.Type, &j.Status, &j.UserID, &j.RootID, &payload, &j.Progress, &j.Error, &j.CreatedAt, &j.UpdatedAt)
 	if err == sql.ErrNoRows {
-		return Job{}, false, nil
+		return Job{}, "", false, nil
 	}
 	if err != nil {
-		return Job{}, false, err
+		return Job{}, "", false, err
 	}
 	j.Result = extractResult(j.Type, payload)
-	return j, true, nil
+	return j, payload, true, nil
 }
 
 // ListForUser returns recent jobs for a user.
@@ -248,13 +268,13 @@ func (m *Manager) publish(jobID string) {
 
 func (m *Manager) worker() {
 	defer m.wg.Done()
-	for id := range m.queue {
+	for {
 		select {
 		case <-m.ctx.Done():
 			return
-		default:
+		case id := <-m.queue:
+			m.run(id)
 		}
-		m.run(id)
 	}
 }
 
@@ -268,20 +288,20 @@ func (m *Manager) run(id string) {
 		m.activeMu.Unlock()
 	}()
 
-	j, ok, err := m.Get(id)
+	j, payload, ok, err := m.lookup(id)
 	if err != nil || !ok {
 		return
 	}
 	m.setStatus(id, StatusRunning)
 	m.publish(id)
 
-	var payload string
-	_ = m.db.QueryRow(`SELECT payload FROM jobs WHERE id=?`, id).Scan(&payload)
-
 	switch j.Type {
 	case TypeArchive:
 		var p ArchivePayload
-		_ = json.Unmarshal([]byte(payload), &p)
+		if err := json.Unmarshal([]byte(payload), &p); err != nil {
+			m.finish(id, StatusFailed, "corrupt job payload", "")
+			return
+		}
 		if err := m.doArchive(id, p); err != nil {
 			m.finish(id, StatusFailed, err.Error(), "")
 		} else {
@@ -289,7 +309,10 @@ func (m *Manager) run(id string) {
 		}
 	case TypeExtract:
 		var p ExtractPayload
-		_ = json.Unmarshal([]byte(payload), &p)
+		if err := json.Unmarshal([]byte(payload), &p); err != nil {
+			m.finish(id, StatusFailed, "corrupt job payload", "")
+			return
+		}
 		if err := m.doExtract(id, p); err != nil {
 			m.finish(id, StatusFailed, err.Error(), "")
 		} else {
@@ -301,8 +324,10 @@ func (m *Manager) run(id string) {
 	m.publish(id)
 }
 
-// doArchive builds a ZIP of the requested paths into the cache dir.
-func (m *Manager) doArchive(id string, p ArchivePayload) error {
+// doArchive builds a ZIP of the requested paths into the cache dir. On any
+// failure the partial output is removed so clients can never download a
+// corrupt archive.
+func (m *Manager) doArchive(id string, p ArchivePayload) (retErr error) {
 	root, ok, err := m.roots.Get(p.RootID)
 	if err != nil || !ok {
 		return errors.New("root not found")
@@ -315,6 +340,12 @@ func (m *Manager) doArchive(id string, p ArchivePayload) error {
 		return err
 	}
 	defer f.Close()
+	defer func() {
+		if retErr != nil {
+			// Never leave a partial archive behind for download/cleanup races.
+			os.Remove(outPath)
+		}
+	}()
 	zw := zip.NewWriter(f)
 
 	// Gather the flat list of files first (for progress).
@@ -332,8 +363,7 @@ func (m *Manager) doArchive(id string, p ArchivePayload) error {
 	}
 	total := len(files)
 	if total == 0 {
-		zw.Close()
-		return errors.New("nothing to archive")
+		return errors.Join(errors.New("nothing to archive"), zw.Close())
 	}
 
 	// Determine a common base so archive entries are relative and tidy.
@@ -342,7 +372,6 @@ func (m *Manager) doArchive(id string, p ArchivePayload) error {
 	for i, rel := range files {
 		select {
 		case <-m.ctx.Done():
-			zw.Close()
 			return context.Canceled
 		default:
 		}
@@ -560,8 +589,10 @@ func (m *Manager) CleanupOldArchives(ttl time.Duration) {
 	rows, err := m.db.Query(`SELECT id FROM jobs WHERE type=? AND created_at < ?`,
 		TypeArchive, time.Now().Add(-ttl).UTC().Format(time.RFC3339))
 	if err != nil {
+		m.log.Error("jobs: cleanup query failed", "error", err)
 		return
 	}
+	defer rows.Close()
 	var ids []string
 	for rows.Next() {
 		var id string
@@ -569,10 +600,16 @@ func (m *Manager) CleanupOldArchives(ttl time.Duration) {
 			ids = append(ids, id)
 		}
 	}
-	rows.Close()
+	if err := rows.Err(); err != nil {
+		m.log.Error("jobs: cleanup scan failed", "error", err)
+		return
+	}
 	for _, id := range ids {
+		if _, err := m.db.Exec(`DELETE FROM jobs WHERE id=?`, id); err != nil {
+			m.log.Error("jobs: cleanup delete failed", "job", id, "error", err)
+			continue
+		}
 		_ = os.Remove(m.ArchivePath(id))
-		_, _ = m.db.Exec(`DELETE FROM jobs WHERE id=?`, id)
 	}
 }
 

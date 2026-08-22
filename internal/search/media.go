@@ -41,8 +41,8 @@ func (s *Service) ScanMediaMetadata(ctx context.Context) {
 		// Find up to 100 images that don't have media_metadata yet, or whose
 		// dimensions were never extracted (rows created before width/height
 		// scanning existed).
-		rows, err := s.db.Query(`
-			SELECT s.id, s.root_id, s.path 
+		rows, err := s.db.QueryContext(ctx, `
+			SELECT s.id, s.root_id, s.path
 			FROM search_index s
 			LEFT JOIN media_metadata m ON s.id = m.id
 			WHERE s.mime LIKE 'image/%' AND (m.id IS NULL OR m.width = 0 OR m.height = 0)
@@ -60,15 +60,28 @@ func (s *Service) ScanMediaMetadata(ctx context.Context) {
 				pending = append(pending, p)
 			}
 		}
-		rows.Close()
+		closeErr := rows.Close()
+		if closeErr == nil {
+			closeErr = rows.Err()
+		}
+		if closeErr != nil {
+			s.log.Error("media: failed to scan pending media", "error", closeErr)
+			return
+		}
 
 		if len(pending) == 0 {
-			time.Sleep(1 * time.Minute) // Sleep when idle
+			// Idle: wait, but wake up immediately on shutdown.
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(1 * time.Minute):
+			}
 			continue
 		}
 
 		roots, err := s.roots.List()
 		if err != nil {
+			s.log.Error("media: failed to list roots", "error", err)
 			return
 		}
 		rootMap := make(map[string]string)
@@ -78,6 +91,7 @@ func (s *Service) ScanMediaMetadata(ctx context.Context) {
 
 		tx, err := s.db.Begin()
 		if err != nil {
+			s.log.Error("media: begin tx failed", "error", err)
 			return
 		}
 		stmt, err := tx.Prepare(`
@@ -93,7 +107,8 @@ func (s *Service) ScanMediaMetadata(ctx context.Context) {
 				height = excluded.height
 		`)
 		if err != nil {
-			tx.Rollback()
+			s.log.Error("media: prepare upsert failed", "error", err)
+			_ = tx.Rollback()
 			return
 		}
 
@@ -107,12 +122,23 @@ func (s *Service) ScanMediaMetadata(ctx context.Context) {
 			width, height := imageDimensions(absPath)
 
 			// We insert even if blank, so we don't keep retrying.
-			_, _ = stmt.Exec(p.ID, dateTaken, lat, lng, makeStr, modelStr, width, height)
+			if _, err := stmt.Exec(p.ID, dateTaken, lat, lng, makeStr, modelStr, width, height); err != nil {
+				s.log.Debug("media: metadata upsert skipped", "path", p.Path, "error", err)
+			}
 		}
-		stmt.Close()
-		_ = tx.Commit()
+		if err := stmt.Close(); err != nil {
+			s.log.Error("media: closing upsert statement failed", "error", err)
+		}
+		if err := tx.Commit(); err != nil {
+			s.log.Error("media: commit failed", "error", err)
+		}
 
-		time.Sleep(100 * time.Millisecond) // Yield
+		// Yield between batches; wake up immediately on shutdown.
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(100 * time.Millisecond):
+		}
 	}
 }
 

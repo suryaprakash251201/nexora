@@ -10,6 +10,7 @@ import (
 
 	_ "modernc.org/sqlite"
 
+	"github.com/nexora/nexora/internal/database"
 	"github.com/nexora/nexora/internal/logger"
 	"github.com/nexora/nexora/migrations"
 )
@@ -30,7 +31,7 @@ func newTestService(t *testing.T) (*Service, *sql.DB) {
 	}
 
 	log := logger.New("error", "test")
-	return NewService(db, nil, log), db
+	return NewService(database.Wrap(db, "sqlite"), nil, log), db
 }
 
 func seedPhoto(t *testing.T, db *sql.DB, id, rootID, path, name, mime, modified string) {

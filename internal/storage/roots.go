@@ -2,6 +2,8 @@ package storage
 
 import (
 	"database/sql"
+
+	"github.com/nexora/nexora/internal/database"
 	"encoding/json"
 	"sync"
 
@@ -33,13 +35,13 @@ type Root struct {
 
 // RootService manages storage roots and resolves providers/user permissions.
 type RootService struct {
-	db      *sql.DB
+	db      *database.DB
 	mu      sync.RWMutex
 	cache   map[string]StorageProvider
 }
 
 // NewRootService creates the service.
-func NewRootService(db *sql.DB) *RootService {
+func NewRootService(db *database.DB) *RootService {
 	return &RootService{db: db, cache: make(map[string]StorageProvider)}
 }
 

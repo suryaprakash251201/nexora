@@ -6,6 +6,9 @@ package search
 
 import (
 	"context"
+	"errors"
+
+	"github.com/nexora/nexora/internal/database"
 	"database/sql"
 	"os"
 	"path/filepath"
@@ -49,7 +52,7 @@ type Query struct {
 
 // Service manages the metadata index and scanner.
 type Service struct {
-	db    *sql.DB
+	db    *database.DB
 	roots *storage.RootService
 	log   *logger.Logger
 
@@ -61,7 +64,7 @@ type Service struct {
 }
 
 // NewService constructs the search service.
-func NewService(db *sql.DB, roots *storage.RootService, log *logger.Logger) *Service {
+func NewService(db *database.DB, roots *storage.RootService, log *logger.Logger) *Service {
 	return &Service{db: db, roots: roots, log: log}
 }
 
@@ -74,7 +77,7 @@ func (s *Service) Status() (scanning bool, last time.Time, indexed int64) {
 
 // Search executes a metadata query. The RootIDs allow-list is enforced so a
 // user can never see results from roots they cannot access.
-func (s *Service) Search(q Query) ([]Result, error) {
+func (s *Service) Search(ctx context.Context, q Query) ([]Result, error) {
 	if len(q.RootIDs) == 0 {
 		return nil, nil
 	}
@@ -161,7 +164,7 @@ func (s *Service) Search(q Query) ([]Result, error) {
 	sb.WriteString("LIMIT ? OFFSET ?")
 	args = append(args, limit, q.Offset)
 
-	rows, err := s.db.Query(sb.String(), args...)
+	rows, err := s.db.QueryContext(ctx, sb.String(), args...)
 	if err != nil {
 		return nil, err
 	}
@@ -256,37 +259,53 @@ func (s *Service) ScanAll(ctx context.Context) {
 	s.mu.Unlock()
 }
 
-// scanRoot indexes one root. It uses a bounded set of DB writes in a single
-// transaction batch and refuses to follow symlinks that escape the root.
+// scanRoot indexes one root. Entries are written in short transactions
+// (chunks) instead of one giant one: background indexing releases the SQLite
+// write lock every chunk, so uploads and API writes interleave instead of
+// queueing behind a minutes-long mega-transaction (the cause of uploads
+// sticking at 100% while a scan ran). Symlink policy is unchanged: entries
+// that escape the root are never followed.
 func (s *Service) scanRoot(ctx context.Context, root storage.Root) int64 {
 	absRoot := filepath.Clean(root.Path)
-	tx, err := s.db.Begin()
+	var count int64
+	const chunkSize = 2000
+	const maxEntries = 500000 // safety cap for very large trees
+
+	beginChunk := func() (*database.Tx, *sql.Stmt, error) {
+		tx, err := s.db.Begin()
+		if err != nil {
+			return nil, nil, err
+		}
+		stmt, err := tx.Prepare(
+			`INSERT OR REPLACE INTO search_index(id,root_id,path,name,ext,size,is_dir,mime,modified)
+			 VALUES(?,?,?,?,?,?,?,?,?)`)
+		if err != nil {
+			_ = tx.Rollback()
+			return nil, nil, err
+		}
+		return tx, stmt, nil
+	}
+
+	tx, stmt, err := beginChunk()
 	if err != nil {
 		s.log.Error("search: begin tx failed", "root", root.Name, "error", err)
 		return 0
 	}
 	// Reset this root's entries then re-populate.
 	if _, err := tx.Exec(`DELETE FROM search_index WHERE root_id=?`, root.ID); err != nil {
-		tx.Rollback()
+		s.log.Error("search: reset root failed", "root", root.Name, "error", err)
+		_ = tx.Rollback()
 		return 0
 	}
-	stmt, err := tx.Prepare(
-		`INSERT OR REPLACE INTO search_index(id,root_id,path,name,ext,size,is_dir,mime,modified)
-		 VALUES(?,?,?,?,?,?,?,?,?)`)
-	if err != nil {
-		tx.Rollback()
-		return 0
-	}
-	defer stmt.Close()
 
-	var count int64
-	const maxEntries = 500000 // safety cap for very large trees
-	walkErr := filepath.WalkDir(absRoot, func(p string, d os.DirEntry, err error) error {
-		if err != nil {
+	canceled := false
+	walkErr := filepath.WalkDir(absRoot, func(p string, d os.DirEntry, entryErr error) error {
+		if entryErr != nil {
 			return nil // skip unreadable entries
 		}
 		select {
 		case <-ctx.Done():
+			canceled = true
 			return context.Canceled
 		default:
 		}
@@ -320,21 +339,51 @@ func (s *Service) scanRoot(ctx context.Context, root storage.Root) int64 {
 			return nil
 		}
 		name := d.Name()
-		_, err = stmt.Exec(
+		if _, xerr := stmt.Exec(
 			entryID(root.ID, rel), root.ID, rel, name, storage.Ext(name),
 			info.Size(), boolToInt(d.IsDir()), storage.MimeFor(name, d.IsDir()),
-			info.ModTime().UTC().Format(time.RFC3339))
-		if err == nil {
+			info.ModTime().UTC().Format(time.RFC3339)); xerr == nil {
 			count++
+		}
+		if count%chunkSize == 0 {
+			// Commit the chunk and open a fresh transaction so other writers
+			// can acquire the write lock between batches.
+			if cerr := stmt.Close(); cerr != nil {
+				s.log.Error("search: close stmt failed", "root", root.Name, "error", cerr)
+			}
+			if cerr := tx.Commit(); cerr != nil {
+				s.log.Error("search: chunk commit failed", "root", root.Name, "error", cerr)
+				return cerr // aborts the walk; earlier chunks remain committed
+			}
+			ntx, nstmt, nerr := beginChunk()
+			if nerr != nil {
+				s.log.Error("search: begin chunk failed", "root", root.Name, "error", nerr)
+				return nerr
+			}
+			tx, stmt = ntx, nstmt
 		}
 		return nil
 	})
-	if walkErr != nil && walkErr != context.Canceled {
-		s.log.Debug("search: walk warning", "root", root.Name, "error", walkErr)
+
+	if walkErr != nil {
+		// Aborted mid-chunk (canceled or DB error): discard only the open
+		// chunk; previously committed chunks stay and the next scan reconciles.
+		_ = stmt.Close()
+		_ = tx.Rollback()
+		if canceled || errors.Is(walkErr, context.Canceled) {
+			s.log.Debug("search: walk canceled", "root", root.Name, "entries", count)
+		} else {
+			s.log.Error("search: walk aborted", "root", root.Name, "error", walkErr)
+		}
+		return count
+	}
+
+	if serr := stmt.Close(); serr != nil {
+		s.log.Error("search: close stmt failed", "root", root.Name, "error", serr)
 	}
 	if err := tx.Commit(); err != nil {
 		s.log.Error("search: commit failed", "root", root.Name, "error", err)
-		return 0
+		return count
 	}
 	s.log.Debug("search: indexed root", "root", root.Name, "entries", count)
 	return count

@@ -3,7 +3,6 @@ package preview
 import (
 	"bytes"
 	"image"
-	"image/jpeg"
 	"io"
 	"os"
 	"path/filepath"
@@ -62,16 +61,8 @@ func (s *Service) Cover(provider storage.StorageProvider, rootID, rel string, ma
 	}
 	thumb := downscale(img, maxDim)
 
-	if tmp, err := os.CreateTemp(s.cacheDir, "cover-*.jpg"); err == nil {
-		_ = jpeg.Encode(tmp, thumb, &jpeg.Options{Quality: 82})
-		tmp.Close()
-		_ = os.Rename(tmp.Name(), cachePath)
-	}
-	buf := &byteBuffer{}
-	if err := jpeg.Encode(buf, thumb, &jpeg.Options{Quality: 82}); err != nil {
-		return nil, err
-	}
-	return buf.data, nil
+	// Encode once: serve these bytes and persist them to the cache.
+	return encodeAndCache(thumb, cachePath, 82)
 }
 
 // folderCoverScore maps the common album-art base names (lowercase, without
@@ -154,16 +145,8 @@ func (s *Service) FolderCover(provider storage.StorageProvider, rootID, rel stri
 	}
 	thumb := downscale(img, maxDim)
 
-	if tmp, err := os.CreateTemp(s.cacheDir, "fcover-*.jpg"); err == nil {
-		_ = jpeg.Encode(tmp, thumb, &jpeg.Options{Quality: 82})
-		tmp.Close()
-		_ = os.Rename(tmp.Name(), cachePath)
-	}
-	buf := &byteBuffer{}
-	if err := jpeg.Encode(buf, thumb, &jpeg.Options{Quality: 82}); err != nil {
-		return nil, err
-	}
-	return buf.data, nil
+	// Encode once: serve these bytes and persist them to the cache.
+	return encodeAndCache(thumb, cachePath, 82)
 }
 
 // HasCover reports whether we should attempt cover extraction for a file.

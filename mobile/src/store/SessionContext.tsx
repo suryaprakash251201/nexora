@@ -1,4 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as SecureStore from "expo-secure-store";
+import { Platform } from "react-native";
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { Api } from "../api/client";
 import type { User } from "../api/types";
@@ -6,6 +8,52 @@ import type { User } from "../api/types";
 const KEY_URL = "nexora.serverUrl";
 const KEY_TOKEN = "nexora.token";
 const KEY_USER = "nexora.user";
+
+// Token is sensitive — keep it in the platform keychain via expo-secure-store
+// on native, with AsyncStorage as a fallback for web / Expo Go where the
+// native module may be unavailable.  Other session data (server URL, cached
+// user) stays in AsyncStorage.
+const canUseSecureStore = Platform.OS !== "web";
+
+async function getToken(): Promise<string | null> {
+  if (canUseSecureStore) {
+    try {
+      const v = await SecureStore.getItemAsync(KEY_TOKEN);
+      if (v) return v;
+      // One-time migration: token may still be in AsyncStorage from older builds.
+      const legacy = await AsyncStorage.getItem(KEY_TOKEN);
+      if (legacy) {
+        await SecureStore.setItemAsync(KEY_TOKEN, legacy);
+        await AsyncStorage.removeItem(KEY_TOKEN);
+        return legacy;
+      }
+      return null;
+    } catch {
+      // Fall through to AsyncStorage (Expo Go / dev without native module).
+    }
+  }
+  return AsyncStorage.getItem(KEY_TOKEN);
+}
+
+async function setTokenSecure(tok: string): Promise<void> {
+  if (canUseSecureStore) {
+    try {
+      await SecureStore.setItemAsync(KEY_TOKEN, tok);
+      await AsyncStorage.removeItem(KEY_TOKEN);
+      return;
+    } catch {}
+  }
+  await AsyncStorage.setItem(KEY_TOKEN, tok);
+}
+
+async function removeTokenSecure(): Promise<void> {
+  if (canUseSecureStore) {
+    try {
+      await SecureStore.deleteItemAsync(KEY_TOKEN);
+    } catch {}
+  }
+  await AsyncStorage.removeItem(KEY_TOKEN);
+}
 
 interface SessionState {
   serverUrl: string | null;
@@ -32,7 +80,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       try {
         const [url, tok, usr] = await Promise.all([
           AsyncStorage.getItem(KEY_URL),
-          AsyncStorage.getItem(KEY_TOKEN),
+          getToken(),
           AsyncStorage.getItem(KEY_USER),
         ]);
         if (url) setServerUrl(url);
@@ -57,7 +105,8 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     const a = new Api(serverUrl, token);
     a.setUnauthorizedHandler(() => {
       // Token rejected by the server — sign out so the user can log back in.
-      AsyncStorage.multiRemove([KEY_TOKEN, KEY_USER]).catch(() => {});
+      removeTokenSecure().catch(() => {});
+      AsyncStorage.removeItem(KEY_USER).catch(() => {});
       setToken(null);
       setUser(null);
     });
@@ -74,16 +123,13 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const setSession = useCallback(async (tok: string, usr: User) => {
-    await AsyncStorage.multiSet([
-      [KEY_TOKEN, tok],
-      [KEY_USER, JSON.stringify(usr)],
-    ]);
+    await Promise.all([setTokenSecure(tok), AsyncStorage.setItem(KEY_USER, JSON.stringify(usr))]);
     setToken(tok);
     setUser(usr);
   }, []);
 
   const logout = useCallback(async () => {
-    await AsyncStorage.multiRemove([KEY_TOKEN, KEY_USER]);
+    await Promise.all([removeTokenSecure(), AsyncStorage.removeItem(KEY_USER)]);
     setToken(null);
     setUser(null);
   }, []);

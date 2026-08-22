@@ -12,6 +12,7 @@ import {
   FolderUp,
   X,
   Filter,
+  Check,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import Breadcrumbs from "./Breadcrumbs";
@@ -40,11 +41,14 @@ interface CommandBarProps {
   onUpload: () => void;
   onUploadFolder?: () => void;
   onRefresh: () => void;
+  isFetching?: boolean;
   user: User;
   isAdmin: boolean;
   onLogout: () => void;
   onAdmin: () => void;
   onCommandPalette?: () => void;
+  /** Drop selected files onto a breadcrumb to move them into that folder. */
+  onDropToFolder?: (path: string) => void;
 }
 
 export default function CommandBar({
@@ -65,11 +69,13 @@ export default function CommandBar({
   onUpload,
   onUploadFolder,
   onRefresh,
+  isFetching,
   user,
   isAdmin,
   onLogout,
   onAdmin,
   onCommandPalette,
+  onDropToFolder,
 }: CommandBarProps) {
   const viewMode = useUI((s) => s.viewMode);
   const setViewMode = useUI((s) => s.setViewMode);
@@ -179,7 +185,7 @@ export default function CommandBar({
       <div className="glass rounded-2xl flex items-center gap-1.5 sm:gap-3 px-2.5 sm:px-5 h-13 sm:h-16">
         {/* Left: Breadcrumbs + Search */}
         <div className="min-w-0 flex-1 flex items-center gap-2 sm:gap-3">
-          <Breadcrumbs rootName={rootName} path={path} onNavigate={onNavigate} />
+          <Breadcrumbs rootName={rootName} path={path} onNavigate={onNavigate} onDropToFolder={onDropToFolder} />
 
           {/* Search — icon-only when collapsed, expands on click */}
           <div className="relative">
@@ -270,8 +276,9 @@ export default function CommandBar({
             className="p-2 rounded-xl glass-hover text-text-secondary hover:text-foreground transition-colors min-w-[36px] min-h-[36px]"
             title="Refresh"
             aria-label="Refresh"
+            disabled={isFetching}
           >
-            <RefreshCw className="h-4 w-4" />
+            <RefreshCw className={`h-4 w-4 ${isFetching ? "animate-spin" : ""}`} />
           </button>
 
           {/* View Mode Toggle */}
@@ -279,7 +286,7 @@ export default function CommandBar({
             <button
               onClick={() => setViewMode("list")}
               className={cn(
-                "p-1.5 rounded-lg transition-all duration-200 min-w-[32px] min-h-[32px]",
+                "p-1.5 rounded-lg transition-all duration-200 min-w-[44px] min-h-[44px] flex items-center justify-center",
                 viewMode === "list"
                   ? "bg-glass-bg-strong text-foreground shadow-sm"
                   : "text-text-tertiary hover:text-foreground"
@@ -293,7 +300,7 @@ export default function CommandBar({
             <button
               onClick={() => setViewMode("grid")}
               className={cn(
-                "p-1.5 rounded-lg transition-all duration-200 min-w-[32px] min-h-[32px]",
+                "p-1.5 rounded-lg transition-all duration-200 min-w-[44px] min-h-[44px] flex items-center justify-center",
                 viewMode === "grid"
                   ? "bg-glass-bg-strong text-foreground shadow-sm"
                   : "text-text-tertiary hover:text-foreground"
@@ -467,7 +474,7 @@ export default function CommandBar({
               role="menuitem"
             >
               {opt.label}
-              {filter === opt.value && <ChevronDown className="h-4 w-4 ml-auto text-accent-tertiary" />}
+              {filter === opt.value && <Check className="h-4 w-4 ml-auto text-accent-tertiary" aria-hidden />}
             </button>
           ))}
         </motion.div>,
@@ -496,7 +503,7 @@ export default function CommandBar({
               role="menuitem"
             >
               {opt.label}
-              {sort === opt.value && <ChevronDown className="h-4 w-4 ml-auto text-accent" />}
+              {sort === opt.value && <Check className="h-4 w-4 ml-auto text-accent" aria-hidden />}
             </button>
           ))}
         </motion.div>,

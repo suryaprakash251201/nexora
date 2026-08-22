@@ -16,7 +16,9 @@
     "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true,
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@nexora/core": ["../packages/core/src"],
+      "@nexora/core/*": ["../packages/core/src/*"]
     }
   },
   "include": ["src"]

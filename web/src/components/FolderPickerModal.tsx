@@ -1,10 +1,10 @@
 import { useMemo, useState } from "react";
 import { Folder, ArrowUp, FolderInput, Check } from "lucide-react";
-import { get } from "../api/client";
+;
+import { filesApi } from "../api/endpoints";
 import { useQuery } from "@tanstack/react-query";
 import { Modal } from "./Modal";
 import type { FileItem } from "../api/types";
-
 // FolderPickerModal lets the user browse a storage root's folder tree and pick
 // a destination directory. Used for bulk Move/Copy operations.
 export default function FolderPickerModal({
@@ -24,17 +24,14 @@ export default function FolderPickerModal({
   const folders = useQuery({
     queryKey: ["folders", rootId, nav],
     queryFn: () =>
-      get<{ items: FileItem[] }>("/files", { root: rootId, path: nav, sort: "name", order: "asc" }),
+      filesApi.list({ root: rootId, path: nav, sort: "name", order: "asc" }) as any,
     enabled: !!rootId,
   });
-
   const subfolders = useMemo(
-    () => (folders.data?.items || []).filter((i) => i.is_dir),
+    () => (folders.data?.items || []).filter((i: FileItem) => i.is_dir),
     [folders.data],
   );
-
   const parent = nav.includes("/") ? nav.slice(0, nav.lastIndexOf("/")) : "";
-
   return (
     <Modal
       title={`${mode === "move" ? "Move" : "Copy"} to folder`}
@@ -63,7 +60,7 @@ export default function FolderPickerModal({
         {!folders.isLoading && subfolders.length === 0 && (
           <p className="p-3 text-sm text-content-muted">No subfolders. Items will go into “{nav || "root"}”.</p>
         )}
-        {subfolders.map((f) => (
+        {subfolders.map((f: FileItem) => (
           <button
             key={f.path}
             onClick={() => setNav(f.path)}

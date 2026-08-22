@@ -2,7 +2,8 @@ package auth
 
 import (
 	"crypto/sha256"
-	"database/sql"
+
+	"github.com/nexora/nexora/internal/database"
 	"encoding/hex"
 	"time"
 
@@ -19,12 +20,12 @@ type Session struct {
 
 // SessionStore manages sessions backed by the database.
 type SessionStore struct {
-	db            *sql.DB
+	db            *database.DB
 	lifetime      time.Duration
 }
 
 // NewSessionStore creates a session store with the given session lifetime.
-func NewSessionStore(db *sql.DB, lifetime time.Duration) *SessionStore {
+func NewSessionStore(db *database.DB, lifetime time.Duration) *SessionStore {
 	return &SessionStore{db: db, lifetime: lifetime}
 }
 

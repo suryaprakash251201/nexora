@@ -5,16 +5,15 @@ import {
   HardDrive, Image, Video, Music, FileText, Archive, Code2, FolderSearch,
   ChevronDown, ChevronRight, Copy, ExternalLink
 } from "lucide-react";
-import { statsApi } from "../api/client";
+;
+import { statsApi } from "../api/endpoints";
 import { Root } from "../api/types";
 import { formatBytes } from "../lib/format";
-
 interface StorageAnalyticsProps {
   roots: Root[];
   onClose?: () => void;
   onNavigateToFile?: (rootId: string, path: string) => void;
 }
-
 const categoryConfig: Record<string, { label: string; icon: React.FC<any>; color: string; barColor: string }> = {
   images: { label: "Images", icon: Image, color: "#F472B6", barColor: "from-pink-500 to-rose-500" },
   videos: { label: "Videos", icon: Video, color: "#A78BFA", barColor: "from-purple-500 to-violet-500" },
@@ -24,24 +23,20 @@ const categoryConfig: Record<string, { label: string; icon: React.FC<any>; color
   code: { label: "Code", icon: Code2, color: "#38BDF8", barColor: "from-cyan-500 to-sky-500" },
   other: { label: "Other", icon: HardDrive, color: "#9CA3AF", barColor: "from-gray-500 to-slate-500" },
 };
-
 export default function StorageAnalyticsPanel({ roots, onClose, onNavigateToFile }: StorageAnalyticsProps) {
   const [selectedRoot, setSelectedRoot] = useState<string>(roots[0]?.id || "");
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(["images", "videos", "documents"]));
   const [showDuplicates, setShowDuplicates] = useState(false);
-
   const { data: stats, isLoading: statsLoading } = useQuery({
     queryKey: ["storage-stats", selectedRoot],
     queryFn: () => statsApi.get(selectedRoot),
     enabled: !!selectedRoot,
   });
-
   const { data: duplicates, isLoading: dupesLoading } = useQuery({
     queryKey: ["duplicates", selectedRoot],
     queryFn: () => statsApi.duplicates(selectedRoot),
     enabled: !!selectedRoot && showDuplicates,
   });
-
   const toggleCategory = (cat: string) => {
     setExpandedCategories(prev => {
       const next = new Set(prev);
@@ -50,8 +45,6 @@ export default function StorageAnalyticsPanel({ roots, onClose, onNavigateToFile
       return next;
     });
   };
-
-
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
@@ -72,7 +65,6 @@ export default function StorageAnalyticsPanel({ roots, onClose, onNavigateToFile
           </select>
         </div>
       </div>
-
       {statsLoading ? (
         <div className="flex-1 grid place-items-center">
           <div className="text-center text-content-muted">
@@ -93,7 +85,6 @@ export default function StorageAnalyticsPanel({ roots, onClose, onNavigateToFile
               <p className="text-2xl font-bold">{formatBytes(stats.total_size)}</p>
             </div>
           </div>
-
           {/* Category Distribution */}
           <div>
             <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
@@ -109,7 +100,6 @@ export default function StorageAnalyticsPanel({ roots, onClose, onNavigateToFile
                   const pct = stats.total_size > 0 ? ((stat.size / stats.total_size) * 100).toFixed(1) : "0";
                   const Icon = config.icon;
                   const isExpanded = expandedCategories.has(category);
-
                   return (
                     <div key={category}>
                       <button
@@ -144,7 +134,6 @@ export default function StorageAnalyticsPanel({ roots, onClose, onNavigateToFile
                           {isExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
                         </div>
                       </button>
-
                       {isExpanded && (
                         <motion.div
                           initial={{ opacity: 0, height: 0 }}
@@ -166,7 +155,6 @@ export default function StorageAnalyticsPanel({ roots, onClose, onNavigateToFile
                 })}
             </div>
           </div>
-
           {/* Largest Files */}
           {stats.largest && stats.largest.length > 0 && (
             <div>
@@ -194,7 +182,6 @@ export default function StorageAnalyticsPanel({ roots, onClose, onNavigateToFile
               </div>
             </div>
           )}
-
           {/* Duplicates */}
           <div>
             <button
@@ -207,7 +194,6 @@ export default function StorageAnalyticsPanel({ roots, onClose, onNavigateToFile
               </div>
               {showDuplicates ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
             </button>
-
             {showDuplicates && (
               <div className="mt-2 space-y-2 pl-4">
                 {dupesLoading ? (

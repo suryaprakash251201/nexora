@@ -5,8 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-
-	"github.com/nexora/nexora/internal/util"
 )
 
 // SystemTrashDir is the per-root directory where deleted items are moved before
@@ -533,5 +531,3 @@ func detectMimeByExt(name string) string {
 		return ""
 	}
 }
-
-var _ = util.NowUTC

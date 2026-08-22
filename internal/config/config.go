@@ -100,13 +100,37 @@ func Load() (*Config, error) {
 	return c, nil
 }
 
-// Validate checks that required security settings are sane.
+// Validate checks that required security settings are sane. It fails fast on
+// misconfiguration that would otherwise surface as obscure runtime errors.
 func (c *Config) Validate() error {
 	if c.ListenAddr == "" {
 		return fmt.Errorf("listen address must not be empty")
 	}
 	if c.MaxUploadSize <= 0 {
 		return fmt.Errorf("max upload size must be positive")
+	}
+	switch c.DatabaseType {
+	case "sqlite", "postgres":
+	default:
+		return fmt.Errorf("NEXORA_DATABASE_TYPE must be 'sqlite' or 'postgres' (got %q)", c.DatabaseType)
+	}
+	if c.DatabaseType == "postgres" && strings.TrimSpace(c.DatabaseURL) == "" {
+		return fmt.Errorf("NEXORA_DATABASE_URL is required when NEXORA_DATABASE_TYPE=postgres")
+	}
+	if c.DatabaseType == "sqlite" && strings.TrimSpace(c.DatabasePath) == "" {
+		return fmt.Errorf("NEXORA_DATABASE_PATH must not be empty for sqlite")
+	}
+	if c.SessionSecret != "" && len(c.SessionSecret) < 16 {
+		return fmt.Errorf("NEXORA_SESSION_SECRET must be at least 16 characters when set (got %d)", len(c.SessionSecret))
+	}
+	for _, o := range c.CORSOrigins {
+		o = strings.TrimSpace(o)
+		if o == "" || o == "*" {
+			continue
+		}
+		if !strings.HasPrefix(o, "http://") && !strings.HasPrefix(o, "https://") && !strings.HasPrefix(o, "tauri://") {
+			return fmt.Errorf("NEXORA_CORS_ORIGINS entry %q must be an http(s):// or tauri:// origin", o)
+		}
 	}
 	return nil
 }

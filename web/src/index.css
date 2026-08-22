@@ -107,7 +107,8 @@ body {
   margin: 0;
 }
 
-* {
+/* Scoped from `*` to avoid faint halos on un-bordered divs (Skeleton/EmptyState). */
+.glass, .glass-strong, .glass-subtle, .glass-bar, .glass-chip, .glass-input, .menu-surface, [class*="border-"] {
   border-color: var(--color-glass-border);
 }
 
@@ -776,7 +777,7 @@ body {
 .markdown-body h1 { font-size: 1.7em; border-bottom: 1px solid rgba(255,255,255,0.06); padding-bottom: 0.3em; }
 .markdown-body h2 { font-size: 1.4em; border-bottom: 1px solid rgba(255,255,255,0.06); padding-bottom: 0.3em; }
 .markdown-body h3 { font-size: 1.2em; }
-.markdown-body a { color: #5B8CFF; text-decoration: underline; }
+.markdown-body a { color: var(--color-accent); text-decoration: underline; }
 .markdown-body code {
   font-family: var(--font-family-mono);
   font-size: 0.875em;
@@ -792,9 +793,9 @@ body {
 }
 .markdown-body pre code { background: transparent; padding: 0; font-size: 0.85em; }
 .markdown-body blockquote {
-  border-left: 3px solid #5B8CFF;
+  border-left: 3px solid var(--color-accent);
   padding: 0.2em 1em;
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
 }
 .markdown-body img { max-width: 100%; border-radius: 0.5rem; }
 
@@ -807,6 +808,31 @@ body {
 }
 .hide-scrollbar::-webkit-scrollbar {
   display: none;
+}
+
+/* Alias used across horizontal chip rails / command lists */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Fade content at the left/right edges of horizontally scrolling rails
+   (breadcrumbs, filter chips) so clipped items read as "there is more". */
+.mask-edges {
+  -webkit-mask-image: linear-gradient(to right, transparent, black 12px, black calc(100% - 16px), transparent);
+  mask-image: linear-gradient(to right, transparent, black 12px, black calc(100% - 16px), transparent);
+}
+
+/* ============================================================
+   Visible keyboard focus — one accessible default everywhere
+   ============================================================ */
+:where(button, a, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: inherit;
 }
 
 /* ============================================================
@@ -842,6 +868,27 @@ body {
 }
 
 /* ============================================================
+   Thin subtle scrollbar for the lyrics view
+   ============================================================ */
+.lyrics-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
+}
+.lyrics-scroll::-webkit-scrollbar {
+  width: 5px;
+}
+.lyrics-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.lyrics-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+}
+.lyrics-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.32);
+}
+
+/* ============================================================
    Scrollbar
    ============================================================ */
 
@@ -861,6 +908,20 @@ body {
 }
 ::-webkit-scrollbar-track {
   background: rgba(255, 255, 255, 0.05);
+}
+
+.light ::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.18);
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.light ::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.28);
+  background-clip: padding-box;
+}
+.light ::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.04);
 }
 
 /* ============================================================
@@ -1038,7 +1099,7 @@ body {
   --color-text-primary: #0F172A;
   --color-text-secondary: #334155;
   --color-text-tertiary: #64748B;
-  --color-text-quaternary: #94A3B8;
+  --color-text-quaternary: #64748B;
   --color-content: #0F172A;
   --color-content-secondary: #334155;
   --color-content-muted: #64748B;
@@ -1166,6 +1227,35 @@ body {
   border-color: rgba(0, 0, 0, 0.10);
 }
 
+/* Light-mode counterparts for utilities that only had dark styling.
+   Without these, skeletons are invisible on white surfaces and accent
+   glows look dirty grey. */
+.light .skeleton {
+  background: linear-gradient(90deg,
+    rgba(15, 23, 42, 0.05) 25%,
+    rgba(15, 23, 42, 0.11) 50%,
+    rgba(15, 23, 42, 0.05) 75%);
+  background-size: 200% 100%;
+}
+
+.light .accent-glass {
+  background: var(--accent-solid, #2563EB) !important;
+  border-color: transparent !important;
+  box-shadow: 0 2px 10px rgba(37, 99, 235, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+
+.light .accent-glass:hover {
+  box-shadow: 0 4px 18px rgba(37, 99, 235, 0.36), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+
+.light .player-glow {
+  box-shadow: 0 2px 16px rgba(37, 99, 235, 0.30);
+}
+
+.light .quota-bar {
+  background: rgba(15, 23, 42, 0.08);
+}
+
 /* ============================================================
    Theme Variants - Accent Color Overrides
    ============================================================ */
@@ -1239,12 +1329,13 @@ body {
   --color-accent-glow: rgba(251, 191, 36, 0.25);
   --color-info: #FBBF24;
   --accent: rgba(251, 191, 36, 0.15);
-  --accent-foreground: #FBBF24;
+  --accent-foreground: #0F172A;
   --primary: #FBBF24;
+  --primary-foreground: #0F172A;
   --ring: rgba(251, 191, 36, 0.5);
   --sidebar-primary: #FBBF24;
   --sidebar-accent: rgba(251, 191, 36, 0.15);
-  --sidebar-accent-foreground: #FBBF24;
+  --sidebar-accent-foreground: #0F172A;
   --sidebar-ring: rgba(251, 191, 36, 0.3);
   --chart-1: #FBBF24;
   --chart-2: #FB7185;
@@ -1443,4 +1534,19 @@ body {
     animation: none !important;
     transition: none !important;
   }
+}
+
+/* Light theme users shouldn't get a dark flash while the app boots */
+.light .splash-screen {
+  background: radial-gradient(1200px 800px at 50% -10%, #ffffff 0%, #f1f5f9 55%, #e2e8f0 100%);
+}
+
+.light .splash-wordmark {
+  background: linear-gradient(90deg, #2563eb, #7c3aed, #db2777);
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+
+.light .splash-bar-wrap {
+  background: rgba(15, 23, 42, 0.08);
 }

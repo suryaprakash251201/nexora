@@ -1,18 +1,21 @@
 package api
 
 import (
-	"database/sql"
+	"errors"
 	"fmt"
 	"github.com/nexora/nexora/internal/auth"
+	"github.com/nexora/nexora/internal/database"
 	"github.com/nexora/nexora/internal/events"
 	"github.com/nexora/nexora/internal/middleware"
 	"github.com/nexora/nexora/internal/storage"
+	"io/fs"
 	"net/http"
 	"net/url"
 	"os"
 	"sort"
 	"strconv"
 	"strings"
+	"syscall"
 )
 
 // access bundles a resolved root and its provider after permission checks.
@@ -135,7 +138,7 @@ func (s *Server) handleListFiles(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func attachTags(db *sql.DB, files []map[string]any, rootID, userID string) {
+func attachTags(db *database.DB, files []map[string]any, rootID, userID string) {
 	if len(files) == 0 {
 		return
 	}
@@ -292,22 +295,30 @@ func (s *Server) writeAccessError(w http.ResponseWriter, r *http.Request, err er
 
 func (s *Server) writeProviderError(w http.ResponseWriter, r *http.Request, err error) {
 	rid := middleware.GetRequestID(r.Context())
-	switch err {
-	case storage.ErrNotFound:
+	// errors.Is (not ==) so WRAPPED failures — e.g. *fs.PathError wrapping
+	// EACCES from an OpenFile inside a directory owned by another user — map
+	// to their real cause instead of the opaque "Storage operation failed" 500.
+	switch {
+	case errors.Is(err, storage.ErrNotFound):
 		rootID := queryParam(r, "root", "")
 		rel := queryParam(r, "path", "")
 		s.Log.Error("file not found", "error", err.Error(), "root", rootID, "path", rel, "request_id", rid)
 		writeError(w, http.StatusNotFound, "not_found", "File or directory not found", rid)
-	case storage.ErrPermission:
-		writeError(w, http.StatusForbidden, "forbidden", "Operation not permitted (read-only or no access)", rid)
-	case storage.ErrInvalidPath, storage.ErrTraversal:
-		writeError(w, http.StatusBadRequest, "invalid_path", "Invalid path", rid)
-	case os.ErrPermission:
+	case errors.Is(err, storage.ErrPermission), errors.Is(err, os.ErrPermission), errors.Is(err, fs.ErrPermission):
 		writeError(w, http.StatusForbidden, "permission_denied", "Filesystem permission denied (check storage directory ownership)", rid)
-	case storage.ErrExists:
+	case errors.Is(err, syscall.EROFS):
+		writeError(w, http.StatusForbidden, "read_only", "Storage is mounted read-only", rid)
+	case errors.Is(err, syscall.ENOSPC):
+		s.Log.Error("storage full", "error", err.Error(), "request_id", rid)
+		writeError(w, http.StatusInsufficientStorage, "storage_full", "No space left on the storage device", rid)
+	case errors.Is(err, storage.ErrInvalidPath), errors.Is(err, storage.ErrTraversal):
+		writeError(w, http.StatusBadRequest, "invalid_path", "Invalid path", rid)
+	case errors.Is(err, storage.ErrExists):
 		writeError(w, http.StatusConflict, "exists", "Target already exists", rid)
 	default:
-		s.Log.Error("storage error", "error", err.Error(), "error_type", fmt.Sprintf("%T", err))
+		rootID := queryParam(r, "root", "")
+		rel := queryParam(r, "path", "")
+		s.Log.Error("storage error", "error", err.Error(), "error_type", fmt.Sprintf("%T", err), "root", rootID, "path", rel, "request_id", rid)
 		writeError(w, http.StatusInternalServerError, "storage_error", "Storage operation failed", rid)
 	}
 }

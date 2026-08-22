@@ -3,13 +3,13 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "motion/react";
 import { Users, ScrollText, RefreshCw, Plus, Shield, Settings, HardDrive, Sun, LayoutGrid, List, Pencil, Trash2, ShieldCheck, Clock, KeyRound, Loader2, AlertCircle } from "lucide-react";
 import { accentThemes, setAccentTheme } from "../lib/useAccentTheme";
-import { get, post, put, del } from "../api/client";
+import { adminApi, versionApi, rootsApi } from "../api/endpoints";
 import { Modal } from "./Modal";
 import RootModal from "./RootModal";
 import { useUI } from "../store";
 import { formatDate } from "../lib/format";
 import { rootIcon } from "../lib/rootIcons";
-import type { AuditItem, User, Root } from "../api/types";
+import type { User, Root } from "../api/types";
 import { Button } from "./ui/Button";
 import { Input } from "./ui/Input";
 import { SkeletonList } from "./ui/Skeleton";
@@ -95,7 +95,7 @@ function AuditBadge({ action }: { action: string }) {
 function UsersTab() {
   const qc = useQueryClient();
   const pushToast = useUI((s) => s.pushToast);
-  const { data, isLoading, isError, refetch } = useQuery({ queryKey: ["admin-users"], queryFn: () => get<{ users: User[] }>("/admin/users") });
+  const { data, isLoading, isError, refetch } = useQuery({ queryKey: ["admin-users"], queryFn: () => adminApi.listUsers() });
   const [showCreate, setShowCreate] = useState(false);
   const [permUser, setPermUser] = useState<User | null>(null);
   const [pendingDelete, setPendingDelete] = useState<User | null>(null);
@@ -107,19 +107,19 @@ function UsersTab() {
   const [resetPwError, setResetPwError] = useState<string | null>(null);
 
   const reindex = async () => {
-    try { await post("/admin/search/reindex"); pushToast("success", "Reindex started in background"); }
+    try { await adminApi.reindex(); pushToast("success", "Reindex started in background"); }
     catch (e: any) { pushToast("error", e.message); }
   };
 
   const updateUser = async (id: string, body: any) => {
-    try { await put(`/admin/users/${id}`, body); pushToast("success", "User updated"); qc.invalidateQueries({ queryKey: ["admin-users"] }); }
+    try { await adminApi.updateUser(id, body); pushToast("success", "User updated"); qc.invalidateQueries({ queryKey: ["admin-users"] }); }
     catch (e: any) { pushToast("error", e.message); }
   };
 
   const removeUser = async () => {
     if (!pendingDelete) return;
     setDeleting(true);
-    try { await del(`/admin/users/${pendingDelete.id}`); pushToast("success", "User deleted"); qc.invalidateQueries({ queryKey: ["admin-users"] }); setPendingDelete(null); }
+    try { await adminApi.deleteUser(pendingDelete.id); pushToast("success", "User deleted"); qc.invalidateQueries({ queryKey: ["admin-users"] }); setPendingDelete(null); }
     catch (e: any) { pushToast("error", e.message); }
     finally { setDeleting(false); }
   };
@@ -131,7 +131,7 @@ function UsersTab() {
     if (resetPwValue.length < 8) { setResetPwError("Password must be at least 8 characters"); return; }
     setResetPwBusy(true);
     try {
-      await put(`/admin/users/${resetPwUser.id}`, { password: resetPwValue });
+      await adminApi.updateUser(resetPwUser.id, { password: resetPwValue });
       pushToast("success", `Password reset for ${resetPwUser.username}`);
       setResetPwUser(null);
       setResetPwValue("");
@@ -316,7 +316,7 @@ function CreateUserModal({ onClose, onDone }: { onClose: () => void; onDone: () 
   const submit = async () => {
     setIsSubmitting(true);
     try { 
-      await post("/admin/users", form); 
+      await adminApi.createUser(form); 
       pushToast("success", "User successfully created"); 
       onDone(); 
     }
@@ -372,12 +372,12 @@ function CreateUserModal({ onClose, onDone }: { onClose: () => void; onDone: () 
 function PermModal({ user, onClose }: { user: User; onClose: () => void }) {
   const qc = useQueryClient();
   const pushToast = useUI((s) => s.pushToast);
-  const { data, isLoading, isError, refetch } = useQuery({ queryKey: ["user-roots", user.id], queryFn: () => get<{ roots: any[] }>(`/admin/users/${user.id}/roots`) });
+  const { data, isLoading, isError, refetch } = useQuery({ queryKey: ["user-roots", user.id], queryFn: () => adminApi.getUserRoots(user.id) });
   
   const set = async (rootId: string, permission: string | null) => {
     try {
-      if (permission === null) await del(`/admin/users/${user.id}/roots/${rootId}`);
-      else await post(`/admin/users/${user.id}/roots`, { root_id: rootId, permission });
+      if (permission === null) await adminApi.revokeRoot(user.id, rootId);
+      else await adminApi.grantRoot(user.id, rootId, permission);
       qc.invalidateQueries({ queryKey: ["user-roots", user.id] });
       pushToast("success", "Permissions updated");
     } catch (e: any) { pushToast("error", e.message); }
@@ -435,7 +435,7 @@ function PermModal({ user, onClose }: { user: User; onClose: () => void }) {
 }
 
 function AuditTab() {
-  const { data, isLoading, isError, refetch } = useQuery({ queryKey: ["audit"], queryFn: () => get<{ items: AuditItem[] }>("/admin/audit", { limit: 200 }) });
+  const { data, isLoading, isError, refetch } = useQuery({ queryKey: ["audit"], queryFn: () => adminApi.listAudit(200) });
   const items = data?.items || [];
   
   return (
@@ -508,8 +508,8 @@ function SettingsTab() {
     setAccentTheme(t);
     setAccentLocal(t);
   };
-  const { data: ver } = useQuery({ queryKey: ["version"], queryFn: () => get<{ version: string; go: string; product: string; tagline: string }>("/version") });
-  const { data: roots, isLoading: rootsLoading, isError: rootsError, refetch: rootsRefetch } = useQuery({ queryKey: ["roots-admin"], queryFn: () => get<{ roots: Root[] }>("/roots") });
+  const { data: ver } = useQuery({ queryKey: ["version"], queryFn: () => versionApi.get() });
+  const { data: roots, isLoading: rootsLoading, isError: rootsError, refetch: rootsRefetch } = useQuery({ queryKey: ["roots-admin"], queryFn: () => rootsApi.list() });
   const [editRoot, setEditRoot] = useState<Root | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [pendingRootDelete, setPendingRootDelete] = useState<Root | null>(null);
@@ -518,7 +518,7 @@ function SettingsTab() {
   const removeRoot = async () => {
     if (!pendingRootDelete) return;
     setRootDeleting(true);
-    try { await del(`/admin/roots/${pendingRootDelete.id}`); pushToast("success", "Storage root deleted"); qc.invalidateQueries({ queryKey: ["roots-admin"] }); qc.invalidateQueries({ queryKey: ["roots"] }); setPendingRootDelete(null); }
+    try { await adminApi.deleteRoot(pendingRootDelete.id); pushToast("success", "Storage root deleted"); qc.invalidateQueries({ queryKey: ["roots-admin"] }); qc.invalidateQueries({ queryKey: ["roots"] }); setPendingRootDelete(null); }
     catch (e: any) { pushToast("error", e.message); }
     finally { setRootDeleting(false); }
   };

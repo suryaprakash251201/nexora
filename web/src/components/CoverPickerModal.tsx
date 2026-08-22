@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { Image, Upload, Folder, ArrowUp, Check, Loader2 } from "lucide-react";
-import { get, upload as apiUpload } from "../api/client";
+import { rootsApi, playlistsApi, filesApi } from "../api/endpoints";
 import { useQuery } from "@tanstack/react-query";
 import { Modal } from "./Modal";
 import type { FileItem, Root } from "../api/types";
@@ -25,12 +25,12 @@ export default function CoverPickerModal({ onClose, onConfirm }: CoverPickerModa
 
   const rootQuery = useQuery({
     queryKey: ["roots"],
-    queryFn: () => get<{ roots: Root[] }>("/roots"),
+    queryFn: () => rootsApi.list(),
   });
 
   const coverConfigQuery = useQuery({
     queryKey: ["cover-config"],
-    queryFn: () => get<{ cover_path: string }>("/playlists/cover-config"),
+    queryFn: () => playlistsApi.coverConfig(),
   });
 
   useEffect(() => {
@@ -49,21 +49,21 @@ export default function CoverPickerModal({ onClose, onConfirm }: CoverPickerModa
   const filesQuery = useQuery({
     queryKey: ["files", browseRoot, browsePath],
     queryFn: () =>
-      get<{ items: FileItem[] }>("/files", {
+      filesApi.list({
         root: browseRoot!,
         path: browsePath,
         sort: "name",
         order: "asc",
-      }),
+      }) as any,
     enabled: !!browseRoot && tab === "browse",
   });
 
   const images = (filesQuery.data?.items || []).filter(
-    (i) =>
+    (i: FileItem) =>
       !i.is_dir &&
       ["jpg", "jpeg", "png", "gif", "webp"].includes(i.extension?.toLowerCase())
   );
-  const folders = (filesQuery.data?.items || []).filter((i) => i.is_dir);
+  const folders = (filesQuery.data?.items || []).filter((i: FileItem) => i.is_dir);
 
   const parentPath = browsePath.includes("/")
     ? browsePath.slice(0, browsePath.lastIndexOf("/"))
@@ -75,7 +75,7 @@ export default function CoverPickerModal({ onClose, onConfirm }: CoverPickerModa
     try {
       const form = new FormData();
       form.append("files", uploadFile);
-      await apiUpload(`/files/upload?root=${encodeURIComponent(uploadRoot)}&path=${encodeURIComponent(uploadPath)}`, form);
+      await filesApi.upload(uploadRoot, uploadPath, form);
       const resultPath = uploadPath.replace(/\/?$/, "/") + uploadFile.name;
       setUploadedResult({ rootId: uploadRoot, path: resultPath });
       setSelected({ rootId: uploadRoot, path: resultPath });
@@ -176,7 +176,7 @@ export default function CoverPickerModal({ onClose, onConfirm }: CoverPickerModa
                 {!filesQuery.isLoading && folders.length === 0 && images.length === 0 && (
                   <p className="p-4 text-sm text-content-muted text-center">No images found in this folder.</p>
                 )}
-                {folders.map((f) => (
+                {folders.map((f: FileItem) => (
                   <button
                     key={f.path}
                     onClick={() => setBrowsePath(f.path)}
@@ -188,7 +188,7 @@ export default function CoverPickerModal({ onClose, onConfirm }: CoverPickerModa
                 ))}
                 {images.length > 0 && (
                   <div className="grid grid-cols-4 gap-2 p-2">
-                    {images.map((img) => {
+                    {images.map((img: FileItem) => {
                       const isSelected = selected?.rootId === browseRoot && selected?.path === img.path;
                       return (
                         <button

@@ -2,6 +2,8 @@ package auth
 
 import (
 	"database/sql"
+
+	"github.com/nexora/nexora/internal/database"
 	"fmt"
 
 	"github.com/nexora/nexora/internal/util"
@@ -33,10 +35,10 @@ type User struct {
 }
 
 // UserStore provides user persistence operations.
-type UserStore struct{ db *sql.DB }
+type UserStore struct{ db *database.DB }
 
 // NewUserStore creates a user store.
-func NewUserStore(db *sql.DB) *UserStore { return &UserStore{db: db} }
+func NewUserStore(db *database.DB) *UserStore { return &UserStore{db: db} }
 
 func (s *UserStore) scan(row interface{ Scan(...any) error }) (User, error) {
 	var u User

@@ -1,0 +1,21 @@
+# Nexora
+
+- [Home](Home)
+- **Get Started**
+  - [Getting Started](Getting-Started)
+  - [Installation](Installation)
+  - [Configuration](Configuration)
+- **Using Nexora**
+  - [Features](Features)
+  - [Storage Roots](Storage-Roots)
+  - [API Reference](API-Reference)
+- **Deploy & Operate**
+  - [Deployment](Deployment)
+  - [Security](Security)
+  - [Troubleshooting](Troubleshooting)
+- **Build & Extend**
+  - [Architecture](Architecture)
+  - [Development](Development)
+  - [Mobile & Desktop](Mobile-and-Desktop)
+  - [Design System](Design-System)
+  - [Contributing](Contributing)

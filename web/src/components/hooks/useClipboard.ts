@@ -44,27 +44,37 @@ export function useClipboard({
     setFolderPicker({ mode, paths });
   }, []);
 
+  // Move an explicit set of paths to a destination folder (used by breadcrumb
+  // drop targets and the folder picker). Skips self/descendant moves.
+  const movePathsTo = useCallback(async (paths: string[], destPath: string) => {
+    if (!rootId) return;
+    try {
+      let moved = 0;
+      for (const p of paths) {
+        if (p === destPath || destPath.startsWith(p + '/')) continue; // skip self/descendant
+        await post(`/files/move`, {
+          root: rootId,
+          source: p,
+          destination: (destPath ? destPath + '/' : '') + p.split('/').pop()
+        });
+        moved++;
+      }
+      if (moved > 0) {
+        pushToast('success', `Moved ${moved} item${moved === 1 ? '' : 's'}`);
+        clearSelection();
+        refresh();
+      }
+    } catch (e: any) {
+      pushToast('error', e.message || 'Move failed');
+    }
+  }, [rootId, pushToast, clearSelection, refresh]);
+
   const applyFolderPicker = useCallback(async (destPath: string) => {
     const fp = folderPicker;
     setFolderPicker(null);
     if (!fp || !rootId) return;
-    const verb = fp.mode === 'move' ? 'Moving' : 'Copying';
-    try {
-      for (const p of fp.paths) {
-        if (p === destPath || destPath.startsWith(p + '/')) continue; // skip self/descendant
-        await post(`/files/${fp.mode}`, { 
-          root: rootId, 
-          source: p, 
-          destination: (destPath ? destPath + '/' : '') + p.split('/').pop() 
-        });
-      }
-      pushToast('success', fp.mode === 'move' ? 'Moved' : 'Copied');
-      clearSelection();
-      refresh();
-    } catch (e: any) {
-      pushToast('error', e.message || `${verb} failed`);
-    }
-  }, [folderPicker, rootId, pushToast, clearSelection, refresh]);
+    await movePathsTo(fp.paths, destPath);
+  }, [folderPicker, rootId, movePathsTo]);
 
   return {
     folderPicker,
@@ -74,5 +84,6 @@ export function useClipboard({
     openCopyPicker,
     openPickerFor,
     applyFolderPicker,
+    movePathsTo,
   };
 }

@@ -18,6 +18,11 @@ import type {
 } from "./types";
 import { needsAudioTranscode, detectAudioQuality, androidBelow11 } from "../lib/audioQuality";
 import { Platform } from "react-native";
+import {
+  formatBytes as coreFormatBytes,
+  formatDate as coreFormatDate,
+  previewKind as corePreviewKind,
+} from "@nexora/core";
 
 /**
  * Nexora mobile API client.
@@ -549,50 +554,8 @@ export class Api {
 }
 
 /** Format a byte count as a human string. */
-export function formatBytes(n: number): string {
-  if (!Number.isFinite(n) || n < 0) return "—";
-  if (n < 1024) return `${n} B`;
-  const units = ["KB", "MB", "GB", "TB"];
-  let v = n;
-  let i = -1;
-  do {
-    v /= 1024;
-    i += 1;
-  } while (v >= 1024 && i < units.length - 1);
-  return `${v.toFixed(v >= 100 ? 0 : 1)} ${units[i]}`;
-}
+export const formatBytes = coreFormatBytes;
+export const formatDate = coreFormatDate;
 
-export function formatDate(iso: string): string {
-  try {
-    return new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
-  } catch {
-    return iso;
-  }
-}
-
-/** Preview kinds, mirroring web/src/lib/preview.ts. */
-export type PreviewKind = "image" | "video" | "audio" | "pdf" | "markdown" | "text" | "code" | "other";
-
-const IMAGE_EXT = new Set(["jpg", "jpeg", "png", "gif", "webp", "bmp", "svg", "heic", "heif", "avif"]);
-const VIDEO_EXT = new Set(["mp4", "m4v", "webm", "mov", "mkv", "avi", "ogv", "3gp"]);
-const AUDIO_EXT = new Set(["mp3", "flac", "wav", "aac", "m4a", "ogg", "opus", "wma", "alac"]);
-const PDF_EXT = new Set(["pdf"]);
-const MD_EXT = new Set(["md", "markdown"]);
-const TEXT_EXT = new Set(["txt", "log", "csv", "json", "xml", "yaml", "yml", "ini", "conf", "env", "toml", "srt", "vtt"]);
-const CODE_EXT = new Set([
-  "ts", "tsx", "js", "jsx", "mjs", "cjs", "py", "go", "rs", "rb", "php", "java", "kt", "swift",
-  "c", "h", "cpp", "hpp", "cs", "sh", "bash", "sql", "html", "css", "scss", "vue", "svelte",
-]);
-
-export function previewKind(item: FileItem): PreviewKind {
-  const ext = (item.extension || "").toLowerCase().replace(/^\./, "");
-  if (item.is_dir) return "other";
-  if (IMAGE_EXT.has(ext)) return "image";
-  if (VIDEO_EXT.has(ext)) return "video";
-  if (AUDIO_EXT.has(ext)) return "audio";
-  if (PDF_EXT.has(ext)) return "pdf";
-  if (MD_EXT.has(ext)) return "markdown";
-  if (TEXT_EXT.has(ext)) return "text";
-  if (CODE_EXT.has(ext)) return "code";
-  return "other";
-}
+export type { PreviewKind } from "@nexora/core";
+export const previewKind = corePreviewKind as unknown as (item: FileItem) => import("@nexora/core").PreviewKind;

@@ -11,6 +11,7 @@ import PdfViewer from "./PdfViewer";
 import { Button } from "./ui/Button";
 import { formatBytes, formatDate } from "../lib/format";
 import { cn } from "@/lib/utils";
+import { useFocusTrap } from "../lib/useFocusTrap";
 
 const MAX_TEXT = 400000;
 
@@ -132,10 +133,12 @@ export default function PreviewModal({
   };
 
   const editable = !current.is_dir && isEditable(current);
+  const focusTrapRef = useFocusTrap(true);
 
   return (
-    <div className={`fixed inset-0 z-50 flex items-center justify-center ${kind === "video" ? "p-0" : "p-2 md:p-6"} bg-black/60 backdrop-blur-sm animate-fade-in`} onMouseDown={handleClose} role="dialog" aria-modal="true" aria-label="File preview">
+    <div className={`fixed inset-0 z-[100] flex items-center justify-center ${kind === "video" ? "p-0" : "p-2 md:p-6"} bg-black/60 backdrop-blur-sm animate-fade-in`} onMouseDown={handleClose} role="dialog" aria-modal="true" aria-label="File preview">
       <div 
+        ref={focusTrapRef}
         className={`w-full flex flex-col glass-strong bg-background/95 shadow-2xl transition-all duration-300 ease-out overflow-hidden
           ${isFullscreen ? "h-full max-w-none rounded-none" : kind === "video" ? "h-[90vh] max-w-6xl rounded-none sm:rounded-2xl" : "h-[85vh] max-w-6xl rounded-2xl animate-scale-in"}`} 
         onMouseDown={(e) => e.stopPropagation()}

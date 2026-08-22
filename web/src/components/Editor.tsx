@@ -1,21 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { X, Save, Loader2, AlertTriangle, FileCode2 } from "lucide-react";
-import { get, post } from "../api/client";
+import { X, Save, Loader2, AlertTriangle, FileCode2, Captions } from "lucide-react";
+import { filesApi } from "../api/endpoints";
 import { useUI } from "../store";
 import { codeLanguage } from "../lib/preview";
 import type { FileItem } from "../api/types";
 import { Button } from "./ui/Button";
 import { ConfirmDialog } from "./ui/ConfirmDialog";
 import { useFocusTrap } from "../lib/useFocusTrap";
-
-interface ContentResponse {
-  content: string;
-  version: string;
-  name: string;
-  path: string;
-  extension: string;
-}
-
 export default function Editor({ item, rootId, onClose }: { item: FileItem; rootId: string; onClose: () => void }) {
   const pushToast = useUI((s) => s.pushToast);
   const [content, setContent] = useState("");
@@ -27,31 +18,23 @@ export default function Editor({ item, rootId, onClose }: { item: FileItem; root
   const taRef = useRef<HTMLTextAreaElement>(null);
   const gutterRef = useRef<HTMLDivElement>(null);
   const focusTrapRef = useFocusTrap(true);
-
   const dirty = content !== original;
-
   useEffect(() => {
     setLoading(true);
-    get<ContentResponse>("/files/content", { root: rootId, path: item.path })
+    filesApi.content(rootId, item.path)
       .then((r) => {
         setContent(r.content);
         setOriginal(r.content);
-        setVersion(r.version);
+        setVersion(r.version ?? "");
       })
       .catch((e: any) => setError(e.message || "Could not open file"))
       .finally(() => setLoading(false));
   }, [item.path, rootId]);
-
   const save = async (force = false) => {
     if (saving) return;
     setSaving(true);
     try {
-      const res = await post<{ version: string }>("/files/save", {
-        root: rootId,
-        path: item.path,
-        content,
-        version: force ? "" : version,
-      });
+      const res = await filesApi.save(rootId, item.path, content, force ? "" : version);
       setVersion(res.version);
       setOriginal(content);
       pushToast("success", "File saved successfully");
@@ -65,14 +48,12 @@ export default function Editor({ item, rootId, onClose }: { item: FileItem; root
       setSaving(false);
     }
   };
-
   const saveRef = useRef(save);
   const tryCloseRef = useRef(() => {});
   useEffect(() => {
     saveRef.current = save;
     tryCloseRef.current = tryClose;
   });
-
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
@@ -84,7 +65,6 @@ export default function Editor({ item, rootId, onClose }: { item: FileItem; root
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
-
   useEffect(() => {
     const beforeUnload = (e: BeforeUnloadEvent) => {
       if (dirty) {
@@ -95,10 +75,8 @@ export default function Editor({ item, rootId, onClose }: { item: FileItem; root
     window.addEventListener("beforeunload", beforeUnload);
     return () => window.removeEventListener("beforeunload", beforeUnload);
   }, [dirty]);
-
   const [conflictOpen, setConflictOpen] = useState(false);
   const [closeConfirmOpen, setCloseConfirmOpen] = useState(false);
-
   const tryClose = () => {
     if (dirty) {
       setCloseConfirmOpen(true);
@@ -106,14 +84,26 @@ export default function Editor({ item, rootId, onClose }: { item: FileItem; root
     }
     onClose();
   };
-
   const lineCount = content.split("\n").length;
+  // Synced-lyrics (.lrc) mode: expose a one-click cue-timestamp inserter.
+  const isLrc = (item.extension || "").toLowerCase() === "lrc";
+  const insertTimestamp = () => {
+    const ta = taRef.current;
+    if (!ta) return;
+    const start = ta.selectionStart;
+    const end = ta.selectionEnd;
+    const stamp = "[00:00.00] ";
+    setContent(content.slice(0, start) + stamp + content.slice(end));
+    requestAnimationFrame(() => {
+      ta.focus();
+      ta.selectionStart = ta.selectionEnd = start + stamp.length;
+    });
+  };
   const syncScroll = () => {
     if (gutterRef.current && taRef.current) {
       gutterRef.current.scrollTop = taRef.current.scrollTop;
     }
   };
-
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Tab") {
       e.preventDefault();
@@ -122,15 +112,12 @@ export default function Editor({ item, rootId, onClose }: { item: FileItem; root
       const start = ta.selectionStart;
       const end = ta.selectionEnd;
       const val = ta.value;
-
       setContent(val.substring(0, start) + "  " + val.substring(end));
-
       setTimeout(() => {
         ta.selectionStart = ta.selectionEnd = start + 2;
       }, 0);
     }
   };
-
   return (
     <div
       ref={focusTrapRef}
@@ -142,7 +129,6 @@ export default function Editor({ item, rootId, onClose }: { item: FileItem; root
       aria-label="Edit file"
     >
       <div className="w-full h-full max-w-7xl max-h-[90vh] flex flex-col bg-[#0d1117] rounded-2xl shadow-2xl overflow-hidden border border-[#30363d] animate-scale-in" onMouseDown={(e) => e.stopPropagation()}>
-        
         {/* Editor Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-[#30363d] bg-[#161b22]">
           <div className="flex items-center gap-3 min-w-0">
@@ -157,8 +143,18 @@ export default function Editor({ item, rootId, onClose }: { item: FileItem; root
               </span>
             )}
           </div>
-          
           <div className="flex items-center gap-2 shrink-0 pl-4">
+            {isLrc && (
+              <button
+                onClick={insertTimestamp}
+                disabled={loading}
+                className="flex items-center gap-1.5 rounded-lg border border-[#30363d] px-2.5 py-1.5 text-xs font-medium text-[#8b949e] transition-colors hover:bg-[#21262d] hover:text-[#e6edf3] disabled:opacity-40"
+                title="Insert a [mm:ss.xx] cue timestamp at the cursor"
+              >
+                <Captions className="h-4 w-4" />
+                <span className="hidden sm:inline">Timestamp</span>
+              </button>
+            )}
             <span className="text-xs text-[#8b949e] hidden md:block mr-2 font-mono">
               Ctrl+S to save
             </span>
@@ -176,7 +172,6 @@ export default function Editor({ item, rootId, onClose }: { item: FileItem; root
             </button>
           </div>
         </div>
-
         {/* Editor Body */}
         {loading ? (
           <div className="flex-1 flex flex-col items-center justify-center text-[#8b949e]">
@@ -200,7 +195,6 @@ export default function Editor({ item, rootId, onClose }: { item: FileItem; root
                 <div key={i} className="leading-6 opacity-60">{i + 1}</div>
               ))}
             </div>
-            
             {/* Main Textarea */}
             <textarea
               ref={taRef}
@@ -215,12 +209,12 @@ export default function Editor({ item, rootId, onClose }: { item: FileItem; root
             />
           </div>
         )}
-        
         {/* Editor Footer */}
         <div className="h-7 border-t border-[#30363d] bg-[#161b22] flex items-center justify-between px-3 text-[11px] font-mono text-[#8b949e]">
           <div className="flex gap-4">
             <span>{loading ? 0 : lineCount} lines</span>
             <span>{content.length} chars</span>
+            {isLrc && <span className="hidden lg:inline">Format: [mm:ss.xx] lyric line</span>}
           </div>
           <div className="flex gap-4">
             <span>UTF-8</span>

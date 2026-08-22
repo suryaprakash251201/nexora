@@ -5,14 +5,12 @@ import { useTheme } from "next-themes";
 import { useQueryClient } from "@tanstack/react-query";
 import type { User } from "../api/types";
 import { useUI } from "../store";
-import { post } from "../api/client";
+;
+import { authApi } from "../api/endpoints";
 import { Button } from "./ui/Button";
 import { useFocusTrap } from "../lib/useFocusTrap";
-
 type View = "main" | "password" | "totp";
-
 import { useAccentTheme, accentThemes } from "../lib/useAccentTheme";
-
 export default function SettingsModal({ user, onClose }: { user: User; onClose: () => void }) {
   const [view, setView] = useState<View>("main");
   const { resolvedTheme, setTheme } = useTheme();
@@ -20,12 +18,9 @@ export default function SettingsModal({ user, onClose }: { user: User; onClose: 
   const [accent, setAccent] = useAccentTheme();
   const queryClient = useQueryClient();
   const dialogRef = useFocusTrap(true);
-
   const isTauri = "__TAURI_INTERNALS__" in window;
-
   // ── Auto-start ─────────────────────────────────────────────
   const [autoStart, setAutoStart] = useState<boolean | null>(null);
-
   useEffect(() => {
     if (!isTauri) return;
     (async () => {
@@ -35,7 +30,6 @@ export default function SettingsModal({ user, onClose }: { user: User; onClose: 
       } catch { /* ignore */ }
     })();
   }, [isTauri]);
-
   const toggleAutoStart = async () => {
     try {
       const { setAutostart } = await import("./TauriShell");
@@ -44,7 +38,6 @@ export default function SettingsModal({ user, onClose }: { user: User; onClose: 
       setAutoStart(next);
     } catch { /* ignore */ }
   };
-
   const setTotpStatus = (enabled: boolean) => {
     queryClient.setQueryData<{ user: User }>(["session"], (current) => (
       current ? { ...current, user: { ...current.user, totp_enabled: enabled } } : current
@@ -58,7 +51,6 @@ export default function SettingsModal({ user, onClose }: { user: User; onClose: 
         onClose();
       }
     };
-
     document.body.style.overflow = "hidden";
     document.addEventListener("keydown", onKeyDown);
     return () => {
@@ -66,15 +58,11 @@ export default function SettingsModal({ user, onClose }: { user: User; onClose: 
       document.removeEventListener("keydown", onKeyDown);
     };
   }, [onClose]);
-
-
-
   const [pwCurrent, setPwCurrent] = useState("");
   const [pwNew, setPwNew] = useState("");
   const [pwConfirm, setPwConfirm] = useState("");
   const [pwBusy, setPwBusy] = useState(false);
   const [pwError, setPwError] = useState<string | null>(null);
-
   const [totpStep, setTotpStep] = useState<"intro" | "qr" | "verify" | "disable">("intro");
   const [totpPw, setTotpPw] = useState("");
   const [totpSecret, setTotpSecret] = useState("");
@@ -82,14 +70,13 @@ export default function SettingsModal({ user, onClose }: { user: User; onClose: 
   const [totpCode, setTotpCode] = useState("");
   const [totpBusy, setTotpBusy] = useState(false);
   const [totpError, setTotpError] = useState<string | null>(null);
-
   const changePassword = async () => {
     setPwError(null);
     if (pwNew !== pwConfirm) { setPwError("Passwords do not match"); return; }
     if (pwNew.length < 8) { setPwError("New password must be at least 8 characters"); return; }
     setPwBusy(true);
     try {
-      await post("/auth/password", { current: pwCurrent, new: pwNew });
+      await authApi.changePassword(pwCurrent, pwNew);
       useUI.getState().pushToast("success", "Password changed");
       setView("main");
       setPwCurrent(""); setPwNew(""); setPwConfirm("");
@@ -97,51 +84,44 @@ export default function SettingsModal({ user, onClose }: { user: User; onClose: 
       setPwError(e.message || "Failed to change password");
     } finally { setPwBusy(false); }
   };
-
   const startTotpSetup = async () => {
     setTotpBusy(true); setTotpError(null);
     try {
-      const res = await post<{ secret: string; uri: string; qr: string }>("/auth/totp/setup");
+      const res = await authApi.totpSetup();
       setTotpSecret(res.secret); setTotpQR(res.qr); setTotpStep("qr");
     } catch (e: any) { setTotpError(e.message || "Failed to setup TOTP"); }
     finally { setTotpBusy(false); }
   };
-
   const verifyTotp = async () => {
     setTotpBusy(true); setTotpError(null);
     try {
-      await post("/auth/totp/verify", { code: totpCode });
+      await authApi.totpVerify(totpCode);
       useUI.getState().pushToast("success", "Two-factor authentication enabled");
       setView("main"); setTotpStep("intro"); setTotpCode("");
       setTotpStatus(true);
     } catch (e: any) { setTotpError(e.message || "Invalid code"); }
     finally { setTotpBusy(false); }
   };
-
   const disableTotp = async () => {
     if (!totpPw) return;
     setTotpBusy(true); setTotpError(null);
     try {
-      await post("/auth/totp/disable", { password: totpPw });
+      await authApi.totpDisable(totpPw);
       useUI.getState().pushToast("success", "Two-factor authentication disabled");
       setTotpStatus(false);
       setTotpStep("intro"); setTotpPw("");
     } catch (e: any) { setTotpError(e.message || "Failed to disable TOTP"); }
     finally { setTotpBusy(false); }
   };
-
   const resetView = () => {
     setView("main");
     setPwCurrent(""); setPwNew(""); setPwConfirm(""); setPwError(null);
     setTotpStep("intro"); setTotpCode(""); setTotpError(null); setTotpPw("");
   };
-
   const title = view === "password" ? "Change Password" : view === "totp" ? "Two-Factor Authentication" : "Settings";
-
   const onBackdrop = (e: MouseEvent<HTMLDivElement>) => {
     if (e.target === e.currentTarget) onClose();
   };
-
   return createPortal(
     <div className="fixed inset-0 z-[100] grid place-items-center p-4 scrim backdrop-blur-sm" onMouseDown={onBackdrop}>
       <div
@@ -168,7 +148,6 @@ export default function SettingsModal({ user, onClose }: { user: User; onClose: 
             <X className="h-5 w-5" />
           </button>
         </div>
-
         {/* Body */}
         <div className="p-6 max-h-[70vh] overflow-y-auto">
           {view === "main" && (
@@ -202,7 +181,6 @@ export default function SettingsModal({ user, onClose }: { user: User; onClose: 
                       }`} />
                     </button>
                   </div>
-
                   {/* Accent Theme Selector */}
                   <div>
                     <p className="text-xs text-content-muted mb-2 px-1">Accent Color</p>
@@ -228,7 +206,6 @@ export default function SettingsModal({ user, onClose }: { user: User; onClose: 
                   </div>
                 </div>
               </div>
-
               {/* System Section — Tauri native settings */}
               {isTauri && (
                 <div>
@@ -271,7 +248,6 @@ export default function SettingsModal({ user, onClose }: { user: User; onClose: 
                   </div>
                 </div>
               )}
-
               {/* Security Section */}
               <div>
                 <h3 className="text-xs font-bold text-content-muted uppercase tracking-wider mb-3">Security</h3>
@@ -287,7 +263,6 @@ export default function SettingsModal({ user, onClose }: { user: User; onClose: 
                     </div>
                     <ChevronRight className="h-5 w-5 text-content-muted/40 group-hover:text-content-muted transition-colors" />
                   </button>
-
                   <button onClick={() => { setTotpError(null); setTotpStep("intro"); setView("totp"); }}
                     className="w-full flex items-center gap-4 px-4 py-3.5 rounded-xl bg-surface-muted/30 hover:bg-surface-muted/50 border border-border/50 transition-all group text-left">
                     <div className="p-2 rounded-lg bg-accent/10 text-accent">
@@ -307,7 +282,6 @@ export default function SettingsModal({ user, onClose }: { user: User; onClose: 
               </div>
             </div>
           )}
-
           {view === "password" && (
             <form onSubmit={(e) => { e.preventDefault(); changePassword(); }} className="space-y-4">
               <div>
@@ -336,7 +310,6 @@ export default function SettingsModal({ user, onClose }: { user: User; onClose: 
               </div>
             </form>
           )}
-
           {view === "totp" && (
             <div className="space-y-4">
               {totpStep === "intro" && (
@@ -358,11 +331,9 @@ export default function SettingsModal({ user, onClose }: { user: User; onClose: 
                   )}
                 </div>
               )}
-
               {totpStep === "qr" && (
                 <div className="space-y-5">
                   <p className="text-sm text-content-muted text-center">Scan this code with your authenticator app to enroll</p>
-
                   <div className="mx-auto max-w-[260px] bg-[#0F1119] rounded-2xl border border-border/50 shadow-lg overflow-hidden">
                     <div className="bg-gradient-to-r from-accent to-[#7A5CFF] px-5 py-3">
                       <div className="flex items-center gap-2">
@@ -386,15 +357,12 @@ export default function SettingsModal({ user, onClose }: { user: User; onClose: 
                       </div>
                     </div>
                   </div>
-
                   <Button variant="primary" onClick={() => setTotpStep("verify")} className="w-full">
                     I've scanned the QR code
                   </Button>
-
                   {totpError && <p className="text-sm text-danger flex items-center gap-1.5"><AlertCircle className="h-4 w-4" /> {totpError}</p>}
                 </div>
               )}
-
               {totpStep === "verify" && (
                 <div>
                   <p className="text-sm text-content-muted mb-3">Enter the 6-digit code from your authenticator app to verify:</p>
@@ -414,7 +382,6 @@ export default function SettingsModal({ user, onClose }: { user: User; onClose: 
                   </div>
                 </div>
               )}
-
               {totpStep === "disable" && (
                 <form onSubmit={(e) => { e.preventDefault(); disableTotp(); }} className="space-y-3">
                   <p className="text-sm text-content-muted">Enter your password to disable two-factor authentication.</p>

@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { Modal } from "./Modal";
 import { Button } from "./ui/Button";
 import { RefreshCw } from "lucide-react";
-import { post } from "../api/client";
+import { filesApi } from "../api/endpoints";
 import { useUI } from "../store";
 
 interface BulkRenameModalProps {
@@ -73,7 +73,7 @@ export function BulkRenameModal({ rootId, items, onClose, onDone }: BulkRenameMo
       if (newName === item.name) continue;
 
       try {
-        await post("/files/rename", { root: rootId, path: item.path, name: newName });
+        await filesApi.rename(rootId, item.path, newName);
         success++;
       } catch {
         failed++;

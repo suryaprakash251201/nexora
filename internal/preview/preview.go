@@ -132,18 +132,43 @@ func (s *Service) Thumbnail(provider storage.StorageProvider, rootID, rel string
 	}
 	thumb := downscale(img, maxDim)
 
-	tmp, err := os.CreateTemp(s.cacheDir, "thumb-*.jpg")
-	if err == nil {
-		_ = jpeg.Encode(tmp, thumb, &jpeg.Options{Quality: 80})
-		tmp.Close()
-		_ = os.Rename(tmp.Name(), cachePath)
-	}
-	// Return freshly encoded bytes regardless of cache write success.
-	buf := &byteBuffer{}
-	if err := jpeg.Encode(buf, thumb, &jpeg.Options{Quality: 80}); err != nil {
+	// Encode once: serve these bytes and persist them to the cache.
+	data, err := encodeAndCache(thumb, cachePath, 80)
+	if err != nil {
 		return nil, err
 	}
+	return data, nil
+}
+
+// encodeAndCache JPEG-encodes thumb a single time and returns the encoded
+// bytes, also persisting them to cachePath via an atomic temp-file rename. A
+// failed cache write is non-fatal — the caller still gets fresh bytes.
+func encodeAndCache(thumb image.Image, cachePath string, quality int) ([]byte, error) {
+	buf := &byteBuffer{}
+	if err := jpeg.Encode(buf, thumb, &jpeg.Options{Quality: quality}); err != nil {
+		return nil, err
+	}
+	writeCacheFile(cachePath, buf.data)
 	return buf.data, nil
+}
+
+// writeCacheFile writes data to cachePath through a temp file in the same
+// directory so the final rename is atomic on POSIX filesystems. All errors are
+// swallowed: caching is best-effort and must never fail a request.
+func writeCacheFile(cachePath string, data []byte) {
+	tmp, err := os.CreateTemp(filepath.Dir(cachePath), "cache-*.jpg")
+	if err != nil {
+		return
+	}
+	_, werr := tmp.Write(data)
+	cerr := tmp.Close()
+	if werr != nil || cerr != nil {
+		os.Remove(tmp.Name())
+		return
+	}
+	if err := os.Rename(tmp.Name(), cachePath); err != nil {
+		os.Remove(tmp.Name())
+	}
 }
 
 // PurgeStale removes cached thumbnails older than the configured TTL.
@@ -261,6 +286,7 @@ var EditableExtensions = map[string]bool{
 	"css": true, "scss": true, "py": true, "go": true, "sh": true, "bash": true,
 	"rs": true, "java": true, "c": true, "cpp": true, "h": true, "sql": true,
 	"csv": true, "log": true, "xml": true, "dockerfile": true, "gitignore": true,
+	"lrc": true, // synced lyrics — editable so users can author/tweak cues
 }
 
 // IsEditable reports whether a filename may be edited in the text editor.

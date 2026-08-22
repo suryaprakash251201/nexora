@@ -7,9 +7,11 @@ import (
 	"time"
 
 	_ "modernc.org/sqlite"
+
+	"github.com/nexora/nexora/internal/database"
 )
 
-func newTestDB(t *testing.T) *sql.DB {
+func newTestDB(t *testing.T) *database.DB {
 	t.Helper()
 	db, err := sql.Open("sqlite", "file:"+filepath.Join(t.TempDir(), "test.db")+"?_pragma=foreign_keys(1)")
 	if err != nil {
@@ -32,7 +34,7 @@ func newTestDB(t *testing.T) *sql.DB {
 	if _, err := db.Exec(schema); err != nil {
 		t.Fatalf("schema: %v", err)
 	}
-	return db
+	return database.Wrap(db, "sqlite")
 }
 
 func TestCreateAndAccess(t *testing.T) {

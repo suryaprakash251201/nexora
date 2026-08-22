@@ -47,3 +47,6 @@ static_analysis_codeql_*/
 
 # landing page deploy bundle
 website-dist.zip
+
+# Local AI tooling session state
+.pi/

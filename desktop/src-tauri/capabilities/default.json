@@ -16,14 +16,29 @@
     "shell:allow-open",
     {
       "identifier": "fs:allow-stat",
-      "allow": [{ "path": "**" }]
+      "allow": [
+        { "path": "$APPDATA/**" },
+        { "path": "$APPCACHE/**" },
+        { "path": "$RESOURCE/**" },
+        { "path": "$TEMP/**" },
+        { "path": "$DOWNLOAD/**" },
+        { "path": "$HOME/Downloads/**" }
+      ]
     },
     {
       "identifier": "fs:allow-read-file",
-      "allow": [{ "path": "**" }]
+      "allow": [
+        { "path": "$APPDATA/**" },
+        { "path": "$APPCACHE/**" },
+        { "path": "$RESOURCE/**" },
+        { "path": "$TEMP/**" },
+        { "path": "$DOWNLOAD/**" },
+        { "path": "$HOME/Downloads/**" }
+      ]
     },
     {
       "identifier": "shell:allow-execute",
+      "description": "Allow opening files in VLC as an external player (invoked via the frontend's 'Open in native player' action). Scoped to the well-known VLC install locations on each OS; all other executables remain blocked.",
       "allow": [
         {
           "name": "vlc",

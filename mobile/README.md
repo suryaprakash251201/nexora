@@ -6,7 +6,7 @@ self-hosted file workspace. Runs on **Android and iOS**.
 ## Features
 
 - **Connect to any Nexora server** — enter the server URL (LAN IP, Tailscale host, domain) and sign in
-- **Session auth** — Bearer token from the login response, persisted securely with AsyncStorage; TOTP 2FA supported
+- **Session auth** — Bearer token from the login response, persisted securely in the OS keychain via `expo-secure-store` (Keychain on iOS, EncryptedSharedPreferences on Android); TOTP 2FA supported
 - **Storage roots** — browse every root you have access to
 - **File browser** — folder navigation with breadcrumbs, item counts, pull-to-refresh, infinite scroll
 - **Upload** — multi-file upload via the system document picker, with progress bar

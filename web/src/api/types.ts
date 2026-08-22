@@ -44,6 +44,31 @@ export interface FileListResponse {
   has_more: boolean;
 }
 
+// Synced lyrics ----------------------------------------------------------------
+export interface LyricCue {
+  /** Position in seconds. Negative (-1) marks an unsynced (plain) line. */
+  time: number;
+  text: string;
+}
+
+export interface LyricsMeta {
+  title: string;
+  artist: string;
+  album: string;
+  offset: number;
+}
+
+export interface LyricsResponse {
+  has_lyrics: boolean;
+  raw: string;
+  format: "lrc" | "plain";
+  /** "auto" = detected sibling .lrc, "user" = saved override, "" = none. */
+  source: string;
+  synced: boolean;
+  meta: LyricsMeta;
+  cues: LyricCue[];
+}
+
 export interface TrashItem {
   id: string;
   root_id: string;

@@ -11,7 +11,9 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
-	"database/sql"
+
+	"github.com/nexora/nexora/internal/database"
+	"github.com/nexora/nexora/internal/logger"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -20,6 +22,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/nexora/nexora/internal/util"
@@ -83,13 +86,15 @@ type Bus struct {
 	mu        sync.RWMutex
 	listeners map[string][]chan Event
 	webhooks  map[string]WebhookTarget
-	db        *sql.DB
+	db        *database.DB
 	client    *http.Client
+	log       *logger.Logger // optional; nil disables delivery-failure logging
 
-	queue  chan webhookJob
-	wg     sync.WaitGroup
-	ctx    context.Context
-	cancel context.CancelFunc
+	queue   chan webhookJob
+	wg      sync.WaitGroup
+	ctx     context.Context
+	cancel  context.CancelFunc
+	stopped atomic.Bool
 }
 
 type webhookJob struct {
@@ -98,13 +103,15 @@ type webhookJob struct {
 
 // NewBus creates a new event bus and starts its webhook delivery workers.
 // Call LoadWebhooks to restore persisted targets before serving traffic.
-func NewBus(db *sql.DB) *Bus {
+// The logger is optional; pass nil to disable delivery-failure logging.
+func NewBus(db *database.DB, log *logger.Logger) *Bus {
 	ctx, cancel := context.WithCancel(context.Background())
 	b := &Bus{
 		listeners: make(map[string][]chan Event),
 		webhooks:  make(map[string]WebhookTarget),
 		db:        db,
 		client:    &http.Client{Timeout: 10 * time.Second},
+		log:       log,
 		queue:     make(chan webhookJob, webhookQueueSize),
 		ctx:       ctx,
 		cancel:    cancel,
@@ -116,10 +123,12 @@ func NewBus(db *sql.DB) *Bus {
 	return b
 }
 
-// Stop drains the delivery workers. Safe to call once at shutdown.
+// Stop drains the delivery workers. Safe for concurrent and repeated calls.
 func (b *Bus) Stop() {
+	if b.stopped.Swap(true) {
+		return
+	}
 	b.cancel()
-	close(b.queue)
 	b.wg.Wait()
 }
 
@@ -216,8 +225,13 @@ func (b *Bus) Emit(evt Event) {
 		}
 	}
 
-	// Queue webhook delivery; drop when saturated.
+	// Queue webhook delivery; drop when saturated or shutting down.
+	if b.stopped.Load() {
+		return
+	}
 	select {
+	case <-b.ctx.Done():
+		return
 	case b.queue <- webhookJob{evt: evt}:
 	default:
 	}
@@ -337,7 +351,10 @@ func (b *Bus) deliverOnce(evt Event, wh WebhookTarget) {
 		}
 		lastErr = fmt.Errorf("webhook %s returned %d", wh.URL, resp.StatusCode)
 	}
-	_ = lastErr // delivery failures are logged by callers if needed
+	if b.log != nil && lastErr != nil {
+		b.log.Warn("webhook delivery failed after retries",
+			"url", wh.URL, "event", string(evt.Type), "event_id", evt.ID, "error", lastErr)
+	}
 }
 
 func (wh WebhookTarget) subscribes(t EventType) bool {
@@ -368,7 +385,6 @@ func joinEvents(events []string) string {
 	seen := make(map[string]bool)
 	var out []string
 	for _, e := range events {
-		e = string(e)
 		if e == "" || seen[e] {
 			continue
 		}

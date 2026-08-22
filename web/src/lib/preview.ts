@@ -1,44 +1,24 @@
 import type { FileItem } from "../api/types";
-import { get, getMediaUrl } from "../api/client";
+import { getMediaUrl } from "../api/client";
+import { versionApi } from "../api/endpoints";
 import { getAudioQuality, fetchAudioInfo } from "./audioQuality";
+import {
+  previewKind as corePreviewKind,
+  isEditable as coreIsEditable,
+  isAudio as coreIsAudio,
+  cleanTrackTitle as coreCleanTrackTitle,
+} from "@nexora/core";
 
 export type PreviewKind = "image" | "video" | "audio" | "pdf" | "markdown" | "text" | "none";
-
-const TEXT_EXT = new Set([
-  "txt", "md", "markdown", "json", "yaml", "yml", "toml", "ini", "env", "conf",
-  "js", "jsx", "ts", "tsx", "html", "htm", "css", "scss", "py", "go", "sh",
-  "bash", "rs", "java", "c", "cpp", "h", "sql", "csv", "log", "xml",
-]);
-
-const EDITABLE_EXT = new Set([...TEXT_EXT]);
-const EDITABLE_NAMES = new Set(["dockerfile", "docker-compose.yml", "docker-compose.yaml", "makefile", ".gitignore", ".env"]);
-
-const IMAGE_EXT = new Set(["jpg", "jpeg", "png", "gif", "webp", "svg", "bmp", "avif"]);
-const VIDEO_EXT = new Set(["mp4", "webm", "mkv", "mov", "avi", "m4v"]);
-const AUDIO_EXT = new Set(["mp3", "flac", "wav", "ogg", "m4a", "aac", "opus", "wma", "alac", "m4b", "oga"]);
-
 export function previewKind(item: { mime: string; extension: string; name?: string }): PreviewKind {
-  const ext = item.extension?.toLowerCase() || "";
-  if (IMAGE_EXT.has(ext) || (item.mime || "").startsWith("image/")) return "image";
-  if (AUDIO_EXT.has(ext) || (item.mime || "").startsWith("audio/")) return "audio";
-  if (VIDEO_EXT.has(ext) || (item.mime || "").startsWith("video/")) return "video";
-  if (item.mime === "application/pdf" || ext === "pdf") return "pdf";
-  if (ext === "md" || ext === "markdown") return "markdown";
-  if ((item.mime || "").startsWith("text/") || TEXT_EXT.has(ext)) return "text";
-  return "none";
+  const k = corePreviewKind(item as any);
+  if (k === "code") return "text";
+  if (k === "other") return "none";
+  return k as PreviewKind;
 }
-
-export function isEditable(item: { extension: string; name: string }): boolean {
-  const lower = item.name.toLowerCase();
-  if (EDITABLE_NAMES.has(lower)) return true;
-  return EDITABLE_EXT.has((item.extension || "").toLowerCase());
-}
-
-export function isAudio(item: { mime: string; extension?: string }): boolean {
-  const ext = (item.extension || "").toLowerCase();
-  if (AUDIO_EXT.has(ext)) return true;
-  return (item.mime || "").startsWith("audio/");
-}
+export const isEditable = coreIsEditable;
+export const isAudio = coreIsAudio;
+export const cleanTrackTitle = coreCleanTrackTitle;
 
 // codeLanguage returns a coarse language label for display purposes.
 export { getAudioQuality, fetchAudioInfo, clearAudioInfoCache, isLosslessExtension } from "./audioQuality";
@@ -51,6 +31,7 @@ export function codeLanguage(ext: string): string {
     h: "C header", sh: "Shell", bash: "Shell", html: "HTML", css: "CSS",
     scss: "SCSS", json: "JSON", yaml: "YAML", yml: "YAML", toml: "TOML",
     sql: "SQL", xml: "XML", md: "Markdown", ini: "INI", csv: "CSV",
+    lrc: "Synced lyrics",
   };
   return map[ext?.toLowerCase()] || (ext ? ext.toUpperCase() : "Text");
 }
@@ -59,20 +40,9 @@ export function rawUrl(rootId: string, path: string, download = false): string {
   return getMediaUrl("/files/raw", { root: rootId, path, download: download ? 1 : undefined });
 }
 
-// cleanTrackTitle removes playback noise from a song title for display:
-// leading track numbers ("01. ", "01 - ", "1) ") and trailing
-// parenthetical/bracket tags ("(from maryaan)", "[Remastered]").
-// "01.innum konja neram(from maryaan)" → "innum konja neram"
-export function cleanTrackTitle(name: string): string {
-  if (!name) return name;
-  let t = name.replace(/\.[^.]+$/, "");
-  t = t.replace(/^\s*\d{1,3}\s*[.\-–—)_]\s*/, "");
-  let prev: string;
-  do {
-    prev = t;
-    t = t.replace(/\s*[\(（\[].*?[\)）\]]\s*$/, "");
-  } while (t !== prev);
-  return t.trim();
+// lyricsUrl builds the synced-lyrics endpoint URL for an audio file.
+export function lyricsUrl(rootId: string, path: string): string {
+  return getMediaUrl("/audio/lyrics", { root: rootId, path });
 }
 
 export function thumbUrl(item: FileItem, size = 256): string {
@@ -171,7 +141,7 @@ let transcodeSupported: boolean | null = null;
 // on-the-fly transcoding. The result is cached for the session.
 export function serverSupportsTranscode(): Promise<boolean> {
   if (transcodeSupported !== null) return Promise.resolve(transcodeSupported);
-  return get<{ transcode?: boolean }>("/version")
+  return versionApi.get()
     .then((d) => {
       transcodeSupported = !!d.transcode;
       return transcodeSupported;

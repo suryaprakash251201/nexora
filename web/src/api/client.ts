@@ -1,4 +1,4 @@
-import type { ApiError, SavedSearch, SavedSearchInput, SearchResult, FileVersion, StorageStats } from "./types";
+import type { ApiError, SavedSearch, SavedSearchInput, SearchResult, FileVersion, StorageStats, LyricsResponse } from "./types";
 
 // ── Tailscale / server discovery ──────────────────────────────────
 // Tailscale hosts are probed in order — the first to respond wins.
@@ -210,4 +210,14 @@ export const versionsApi = {
 export const statsApi = {
   get: (root: string) => get<StorageStats>("/stats", { root }),
   duplicates: (root: string) => get<{ duplicates: Array<{ name: string; path: string; size: number; root_id: string }[]> }>("/files/duplicates", { root }),
+};
+
+// Lyrics API (synced .lrc for audio files).
+export const lyricsApi = {
+  get: (root: string, path: string) =>
+    get<LyricsResponse>("/audio/lyrics", { root, path }),
+  save: (root: string, path: string, raw: string, format: "lrc" | "plain" = "lrc") =>
+    post<{ ok: boolean; source: string; format: string; path?: string }>("/audio/lyrics", { root, path, raw, format }),
+  remove: (root: string, path: string) =>
+    del<{ ok: boolean }>("/audio/lyrics", { root, path }),
 };

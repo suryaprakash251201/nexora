@@ -39,6 +39,38 @@ jobs:
       - name: go build (postgres tag)
         run: go build -tags postgres -o /tmp/nexora-pg ./cmd/nexora
 
+  postgres:
+    name: Postgres migrations
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: nexora
+          POSTGRES_PASSWORD: nexora
+          POSTGRES_DB: nexora_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U nexora"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: '1.26.5'
+          cache: true
+
+      - name: Run postgres migrations + integration test
+        env:
+          NEXORA_TEST_POSTGRES_URL: postgres://nexora:nexora@localhost:5432/nexora_test?sslmode=disable
+        run: go test -tags postgres -run TestRunPostgres ./migrations -count=1 -v
+
   frontend:
     name: Frontend (typecheck + build)
     runs-on: ubuntu-latest
@@ -64,3 +96,47 @@ jobs:
 
       - name: Production build
         run: npm run build
+
+  patches:
+    name: Patches (mobile)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./mobile
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify patches apply
+        run: npx patch-package --error-on-fail
+
+  core:
+    name: Shared core (typecheck)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./packages/core
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Install TypeScript
+        run: npm install --no-save typescript@~5.9.2
+
+      - name: Type check
+        run: npx tsc --noEmit

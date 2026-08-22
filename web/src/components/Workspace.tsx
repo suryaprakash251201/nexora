@@ -2,11 +2,12 @@ import { useRef, useState, useCallback, useMemo, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { motion, AnimatePresence } from "motion/react";
 import { useQuery, useQueryClient, keepPreviousData } from "@tanstack/react-query";
-import { get, post, del } from "../api/client";
-import type { FileItem, Root, TrashItem, User, FavoriteItem, RecentItem, SearchResult, HomeData, FileListResponse } from "../api/types";
+import { rootsApi, filesApi, trashApi, recentsApi, homeApi, authApi, favoritesApi, playlistsApi } from "../api/endpoints";
+import type { FileItem, Root, TrashItem, User, SearchResult } from "../api/types";
 import { useUI } from "../store";
 import { usePlayer } from "../store/player";
-import { usePlaylists } from "../store/playlists";
+import { useCreatePlaylist } from "../hooks/usePlaylists";
+import { useFavorites } from "../hooks/useFavorites";
 import Sidebar, { SidebarView } from "./Sidebar";
 import CommandBar from "./CommandBar";
 import FileBrowser from "./FileBrowser";
@@ -39,7 +40,7 @@ import CommandPalette from "./CommandPalette";
 import SelectionBar from "./SelectionBar";
 import KeyboardShortcutsModal from "./KeyboardShortcutsModal";
 import { formatRelative } from "../lib/format";
-import { SkeletonGrid, SkeletonList } from "./ui/Skeleton";
+import { SkeletonGrid, SkeletonList, SkeletonLine, SkeletonCard } from "./ui/Skeleton";
 import { FileThumb } from "./FileThumb";
 import { staggerContainer, staggerItem, cardHover } from "@/lib/animations";
 import { isEditable, isAudio } from "../lib/preview";
@@ -58,15 +59,6 @@ import { useClipboard } from "./hooks/useClipboard";
 import { useModals } from "./hooks/useModals";
 import DesktopDragDrop from "./DesktopDragDrop";
 import { isTauri, isLocalServer, revealInFileManager } from "../lib/desktop";
-
-// Mirrors the /home/usage payload (also typed in HomePanel).
-interface HomeUsage {
-  total: number;
-  available: number;
-  used: number;
-  file_count: number;
-  breakdown: Record<string, { count: number; size: number }>;
-}
 
 export default function Workspace({ user }: { user: User }) {
   const qc = useQueryClient();
@@ -109,7 +101,7 @@ export default function Workspace({ user }: { user: User }) {
   
   const roots = useQuery({
     queryKey: ["roots"],
-    queryFn: () => get<{ roots: Root[] }>("/roots"),
+    queryFn: () => rootsApi.list(),
     staleTime: 30_000,
   });
   const pendingFilesView = useRef(false);
@@ -186,7 +178,7 @@ export default function Workspace({ user }: { user: User }) {
 
   const files = useQuery({
     queryKey: ["files", rootId, path, sort, order, fileOffset],
-    queryFn: () => get<FileListResponse>("/files", { root: rootId!, path, sort, order, offset: String(fileOffset) }),
+    queryFn: () => filesApi.list({ root: rootId!, path, sort, order, offset: String(fileOffset) }),
     enabled: view === "files" && !!rootId,
     placeholderData: keepPreviousData,
     // Keep visited folders in cache so back-navigation is instant; refresh()
@@ -207,11 +199,17 @@ export default function Workspace({ user }: { user: User }) {
   }, [files.data, fileOffset]);
 
   const items = accumulatedItems;
-  const trash = useQuery({ queryKey: ["trash"], queryFn: () => get<{ items: TrashItem[] }>("/trash"), enabled: view === "trash" });
-  const favorites = useQuery({ queryKey: ["favorites"], queryFn: () => get<{ items: FavoriteItem[] }>("/favorites"), enabled: view === "favorites" });
-  const recents = useQuery({ queryKey: ["recents"], queryFn: () => get<{ items: RecentItem[] }>("/recents"), enabled: view === "recents" });
-  const home = useQuery({ queryKey: ["home"], queryFn: () => get<HomeData>("/home"), enabled: view === "home", staleTime: 30_000 });
-  const favSet = useQuery({ queryKey: ["fav-set"], queryFn: () => get<{ items: FavoriteItem[] }>("/favorites") });
+  const trash = useQuery({ queryKey: ["trash"], queryFn: () => trashApi.list(), enabled: view === "trash" });
+  // Unified favorites query — single source of truth for /favorites.
+  // Previously there were two queries both hitting /favorites (favorites + fav-set).
+  // Now both list display and star checks share the same ["favorites"] cache; React Query dedupes.
+  const favoritesQuery = useFavorites();
+  // Keep legacy variable names for minimal diff: favorites for the list view, favSet for star checks.
+  // Both point to the same underlying query so there is only one network request.
+  const favorites = favoritesQuery;
+  const favSet = favoritesQuery;
+  const recents = useQuery({ queryKey: ["recents"], queryFn: () => recentsApi.list(), enabled: view === "recents" });
+  const home = useQuery({ queryKey: ["home"], queryFn: () => homeApi.get(), enabled: view === "home", staleTime: 30_000 });
   
   const filtered = useMemo(() => {
     let f = items;
@@ -233,35 +231,36 @@ export default function Workspace({ user }: { user: User }) {
   
   const imageList = useMemo(() => filtered.filter((i) => (i.mime || "").startsWith("image/") || ["jpg", "jpeg", "png", "gif", "webp", "bmp", "avif"].includes((i.extension || "").toLowerCase())), [filtered]);
 
+  const createPlaylistMutation = useCreatePlaylist();
+
   const refresh = useCallback(() => {
     qc.invalidateQueries({ queryKey: ["files", rootId, path, sort, order, fileOffset] });
     qc.invalidateQueries({ queryKey: ["trash"] });
     qc.invalidateQueries({ queryKey: ["roots"] });
     qc.invalidateQueries({ queryKey: ["favorites"] });
-    qc.invalidateQueries({ queryKey: ["fav-set"] });
   }, [qc, rootId, path, sort, order, fileOffset]);
 
   // Warm the target view's data while the pointer hovers a nav item, so a
   // click swaps views with data already in the cache (no spinner / skeleton).
   const prefetchView = useCallback((v: SidebarView) => {
     if (v === "home") {
-      qc.prefetchQuery({ queryKey: ["home"], queryFn: () => get<HomeData>("/home"), staleTime: 30_000 });
-      qc.prefetchQuery({ queryKey: ["home-usage"], queryFn: () => get<HomeUsage>("/home/usage"), staleTime: 60_000 });
+      qc.prefetchQuery({ queryKey: ["home"], queryFn: () => homeApi.get(), staleTime: 30_000 });
+      qc.prefetchQuery({ queryKey: ["home-usage"], queryFn: () => homeApi.usage(), staleTime: 60_000 });
     } else if (v === "trash") {
-      qc.prefetchQuery({ queryKey: ["trash"], queryFn: () => get<{ items: TrashItem[] }>("/trash") });
+      qc.prefetchQuery({ queryKey: ["trash"], queryFn: () => trashApi.list() });
     } else if (v === "favorites") {
-      qc.prefetchQuery({ queryKey: ["favorites"], queryFn: () => get<{ items: FavoriteItem[] }>("/favorites") });
+      qc.prefetchQuery({ queryKey: ["favorites"], queryFn: () => favoritesApi.list() });
     } else if (v === "recents") {
-      qc.prefetchQuery({ queryKey: ["recents"], queryFn: () => get<{ items: RecentItem[] }>("/recents") });
+      qc.prefetchQuery({ queryKey: ["recents"], queryFn: () => recentsApi.list() });
     } else if (v === "playlists") {
-      qc.prefetchQuery({ queryKey: ["playlists"], queryFn: () => get<{ items: unknown[] }>("/playlists"), staleTime: 30_000 });
+      qc.prefetchQuery({ queryKey: ["playlists"], queryFn: () => playlistsApi.list() as any, staleTime: 30_000 });
     }
   }, [qc]);
 
   // Use custom hooks
   const { uploadFiles, downloadItem } = useTransfers(rootId, path, refresh);
   const { doDelete, bulkDelete, archivePaths, toggleFavorite } = useFileOperations({ rootId, refresh, qc, selection, clearSelection, favSet });
-  const { folderPicker, setFolderPicker, moveSelectionTo, openPickerFor, applyFolderPicker } = useClipboard({ rootId, selection, clearSelection, refresh, canWrite });
+  const { folderPicker, setFolderPicker, moveSelectionTo, openPickerFor, applyFolderPicker, movePathsTo } = useClipboard({ rootId, selection, clearSelection, refresh, canWrite });
   const { dragProps, dragActive, dropPicker, setDropPicker, pendingDrop } = useDragAndDrop({ rootId, canWrite, uploadFiles });
   
   const [shortcutsModalOpen, setShortcutsModalOpen] = useState(false);
@@ -324,13 +323,17 @@ export default function Workspace({ user }: { user: User }) {
     }
   }, [allSelected, filtered, clearSelection]);
 
-  const savePlaylist = () => {
+  const savePlaylist = async () => {
     const audio = (selectedItems.length ? selectedItems : items).filter((i) => isAudio(i));
     if (!audio.length) { pushToast("error", "No audio files selected"); setPlaylistModal(false); return; }
-    usePlaylists.getState().create(playlistName.trim() || `Playlist ${usePlaylists.getState().playlists.length + 1}`, audio);
+    try {
+      await createPlaylistMutation.mutateAsync({ name: playlistName.trim() || "New playlist", items: audio });
+      pushToast("success", "Playlist created");
+    } catch (e: any) {
+      pushToast("error", e.message || "Failed to create playlist");
+    }
     setPlaylistName("");
     setPlaylistModal(false);
-    pushToast("success", "Playlist created");
   };
 
   // Selection actions for CommandBar
@@ -433,7 +436,7 @@ export default function Workspace({ user }: { user: User }) {
   };
 
   const logout = async () => {
-    try { await post("/auth/logout"); } catch { /* ignore */ }
+    try { await authApi.logout(); } catch { /* ignore */ }
     localStorage.removeItem("nexora-token");
     window.location.reload();
   };
@@ -447,7 +450,7 @@ export default function Workspace({ user }: { user: User }) {
     clearSelection();
     if (!isDir) {
       try {
-        const info = await get<FileItem>("/files/stat", { root: rid, path: p });
+        const info = await filesApi.stat(rid, p);
         // If stat reveals it's a directory, navigate into it
         if (info.is_dir) {
           React.startTransition(() => {
@@ -520,10 +523,15 @@ export default function Workspace({ user }: { user: User }) {
             onUpload={() => fileInput.current?.click()}
             onUploadFolder={() => folderInput.current?.click()}
             onRefresh={refresh}
+            isFetching={files.isFetching}
             user={user}
             isAdmin={isAdmin}
             onLogout={logout}
             onAdmin={() => setView("admin")}
+            onDropToFolder={(p) => {
+              if (!canWrite || selection.size === 0) return;
+              void movePathsTo(Array.from(selection), p);
+            }}
           />
         )}
         {view !== "files" && view !== "home" && !videoItem && (
@@ -560,7 +568,7 @@ export default function Workspace({ user }: { user: User }) {
           transition={{ duration: 0.12, ease: "easeOut" }}
           className="flex-1 overflow-auto flex flex-col hide-scrollbar"
         >
-            <Suspense fallback={<div className="flex-1 grid place-items-center text-content-muted">Loading...</div>}>
+            <Suspense fallback={<ViewSkeleton />}>
             {view === "files" && (
               <FileBrowser
                 items={filtered}
@@ -585,7 +593,7 @@ export default function Workspace({ user }: { user: User }) {
                 folderPath={path}
               />
             )}
-            {view === "trash" && <TrashView items={trash.data?.items || []} loading={trash.isLoading} onRestore={async (id) => { await post("/trash/restore", { id }); refresh(); }} onDelete={async (id) => { await del("/trash", { id }); refresh(); }} selection={selection} selectMode={selectMode} onSelect={(id) => toggleSelect(id)} />}
+            {view === "trash" && <TrashView items={trash.data?.items || []} loading={trash.isLoading} onRestore={async (id) => { await trashApi.restore(id); refresh(); }} onDelete={async (id) => { await trashApi.delete(id); refresh(); }} selection={selection} selectMode={selectMode} onSelect={(id) => toggleSelect(id)} />}
             {view === "favorites" && <GridView
               loading={favorites.isLoading}
               empty="No favorites yet. Star files to find them here."
@@ -655,7 +663,7 @@ export default function Workspace({ user }: { user: User }) {
               )
             )}
             {view === "analytics" && (
-              <Suspense fallback={<div className="flex-1 grid place-items-center text-content-muted">Loading...</div>}>
+              <Suspense fallback={<ViewSkeleton />}>
                 <StorageAnalyticsPanel
                   roots={roots.data?.roots || []}
                   onNavigateToFile={(rid, p) => navigateTo(rid, p, false, "")}
@@ -663,12 +671,12 @@ export default function Workspace({ user }: { user: User }) {
               </Suspense>
             )}
             {view === "photos" && (
-              <Suspense fallback={<div className="flex-1 grid place-items-center text-content-muted">Loading...</div>}>
+              <Suspense fallback={<ViewSkeleton />}>
                 <PhotosView
                   roots={roots.data?.roots || []}
                   onOpen={(rid, p) => navigateTo(rid, p, false, "")}
                   onPreview={(rid, p) => {
-                    get<FileItem>("/files/stat", { root: rid, path: p }).then((info) => {
+                    filesApi.stat(rid, p).then((info) => {
                       if (info.mime?.startsWith("image/") || ["jpg", "jpeg", "png", "gif", "webp", "bmp", "avif"].includes((info.extension || "").toLowerCase())) {
                         setImageItem(info);
                       } else {
@@ -720,7 +728,7 @@ export default function Workspace({ user }: { user: User }) {
           path={drawerPath}
           canWrite={canWrite}
           revealPath={revealPath}
-          isFavorite={!!favSet.data?.items.some((f) => f.root_id === rootId && f.path === drawerPath)}
+          isFavorite={favoritesQuery.isFavorite ? favoritesQuery.isFavorite(rootId!, drawerPath) : !!favSet.data?.items.some((f) => f.root_id === rootId && f.path === drawerPath)}
           onClose={() => openDrawer(null)}
           onDownload={() => { const it = items.find((i) => i.path === drawerPath); if (it) downloadItem(it); }}
           onPreview={() => { const it = items.find((i) => i.path === drawerPath); if (it) setPreview(it); }}
@@ -987,6 +995,20 @@ function DropRootPicker({ roots, pending, onClose, onConfirm }: {
   );
 }
 
+/** Branded loading placeholder for lazily-loaded views. */
+function ViewSkeleton() {
+  return (
+    <div className="flex-1 grid place-items-center p-6" role="status" aria-label="Loading view">
+      <div className="w-full max-w-5xl space-y-3 animate-fade-in">
+        <SkeletonLine width="180px" height="24px" />
+        <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))" }}>
+          {Array.from({ length: 8 }, (_, i) => <SkeletonCard key={i} />)}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function TrashView({ items, loading, onRestore, onDelete, selection, selectMode, onSelect }: {
   items: TrashItem[]; loading: boolean; onRestore: (id: string) => void; onDelete: (id: string) => void;
   selection?: Set<string>; selectMode?: boolean; onSelect?: (id: string) => void;
@@ -1001,7 +1023,7 @@ function TrashView({ items, loading, onRestore, onDelete, selection, selectMode,
           <span className="text-sm font-medium">{selectedCount} selected</span>
           <div className="flex gap-2 ml-auto">
             <button onClick={() => { items.filter((t) => selection?.has(t.id)).forEach((t) => onRestore(t.id)); }} className="flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg glass-hover border"><RotateCcw className="h-4 w-4" /> Restore</button>
-            <button onClick={() => { items.filter((t) => selection?.has(t.id)).forEach((t) => onDelete(t.id)); }} className="flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg text-red-500 hover:bg-red-500/10"><Trash2 className="h-4 w-4" /> Delete</button>
+            <button onClick={() => { items.filter((t) => selection?.has(t.id)).forEach((t) => onDelete(t.id)); }} className="flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg text-danger hover:bg-danger/10"><Trash2 className="h-4 w-4" /> Delete</button>
           </div>
         </div>
       )}
@@ -1022,7 +1044,7 @@ function TrashView({ items, loading, onRestore, onDelete, selection, selectMode,
                   <p className="text-xs text-content-muted truncate">{t.root_name} · {t.original_path}</p>
                 </div>
                 <button onClick={() => onRestore(t.id)} className="flex items-center gap-1 px-2 py-1 text-sm rounded-lg glass-hover border"><RotateCcw className="h-4 w-4" /> Restore</button>
-                <button onClick={() => onDelete(t.id)} className="flex items-center gap-1 px-2 py-1 text-sm rounded-lg text-red-500 hover:bg-red-500/10"><Trash2 className="h-4 w-4" /> Delete</button>
+                <button onClick={() => onDelete(t.id)} className="flex items-center gap-1 px-2 py-1 text-sm rounded-lg text-danger hover:bg-danger/10"><Trash2 className="h-4 w-4" /> Delete</button>
               </div>
             </div>
           );
@@ -1050,22 +1072,46 @@ function ActionModals({ menu, rootId, path, onClose, onDone, onArchiveExtract }:
 
   if (menu.kind === "newFolder") {
     return (
-      <Modal title="New folder" onClose={onClose} footer={<button onClick={() => run(() => post("/files/directory", { root: rootId, path: base(value || "New Folder") }), "Folder created")} className="px-3 py-1.5 rounded-lg accent-glass text-sm">Create</button>}>
+      <Modal title="New folder" onClose={onClose} footer={<button onClick={() => run(() => filesApi.createDirectory(rootId, base(value || "New Folder")), "Folder created")} className="px-3 py-1.5 rounded-lg accent-glass text-sm">Create</button>}>
         <input autoFocus value={value} onChange={(e) => setValue(e.target.value)} placeholder="Folder name" className="w-full rounded-lg bg-surface border px-3 py-2 outline-none focus:ring-2 focus:ring-accent/40" />
       </Modal>
     );
   }
   if (menu.kind === "newFile") {
+    // Swap/append the filename's extension so template chips produce e.g.
+    // "song.lrc" from a bare "song" or an existing "song.txt".
+    const withExt = (ext: string) => {
+      const v = value.trim();
+      if (!v) return `untitled.${ext}`;
+      return v.replace(/\.[^./\\]+$/, "") + "." + ext;
+    };
     return (
-      <Modal title="New text file" onClose={onClose} footer={<button onClick={() => run(() => post("/files/file", { root: rootId, path: base(value || "untitled.txt"), content }), "File created")} className="px-3 py-1.5 rounded-lg accent-glass text-sm">Create</button>}>
+      <Modal title="New text file" onClose={onClose} footer={<button onClick={() => run(() => filesApi.createFile(rootId, base(value || "untitled.txt"), content), "File created")} className="px-3 py-1.5 rounded-lg accent-glass text-sm">Create</button>}>
         <input autoFocus value={value} onChange={(e) => setValue(e.target.value)} placeholder="name.txt" className="w-full mb-2 rounded-lg bg-surface border px-3 py-2 outline-none focus:ring-2 focus:ring-accent/40" />
+        <div className="mb-2 flex flex-wrap gap-1.5">
+          <button
+            type="button"
+            onClick={() => { setValue(withExt("txt")); setContent(""); }}
+            className="rounded-full border border-border bg-surface px-3 py-1 text-xs font-medium text-content-muted transition-colors hover:border-accent/50 hover:bg-accent/10 hover:text-accent"
+          >
+            Plain text
+          </button>
+          <button
+            type="button"
+            onClick={() => { setValue(withExt("lrc")); setContent("[ti:Track title]\n[ar:Artist]\n[00:00.00]\n"); }}
+            className="rounded-full border border-border bg-surface px-3 py-1 text-xs font-medium text-content-muted transition-colors hover:border-accent/50 hover:bg-accent/10 hover:text-accent"
+            title="Synced lyrics template"
+          >
+            LRC lyrics
+          </button>
+        </div>
         <textarea value={content} onChange={(e) => setContent(e.target.value)} rows={6} placeholder="Contents…" className="w-full rounded-lg bg-surface border px-3 py-2 outline-none focus:ring-2 focus:ring-accent/40 font-mono text-sm" />
       </Modal>
     );
   }
   if (menu.kind === "rename" && menu.item) {
     return (
-      <Modal title="Rename" onClose={onClose} footer={<button onClick={() => run(() => post("/files/rename", { root: rootId, path: menu.item!.path, name: value }), "Renamed")} className="px-3 py-1.5 rounded-lg accent-glass text-sm">Rename</button>}>
+      <Modal title="Rename" onClose={onClose} footer={<button onClick={() => run(() => filesApi.rename(rootId, menu.item!.path, value), "Renamed")} className="px-3 py-1.5 rounded-lg accent-glass text-sm">Rename</button>}>
         <input autoFocus defaultValue={menu.item.name} onChange={(e) => setValue(e.target.value)} className="w-full rounded-lg bg-surface border px-3 py-2 outline-none focus:ring-2 focus:ring-accent/40" />
       </Modal>
     );

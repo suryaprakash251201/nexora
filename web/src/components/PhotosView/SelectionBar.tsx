@@ -31,7 +31,7 @@ function BarButton({
         "flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-medium transition-colors",
         danger
           ? "text-red-400 hover:bg-red-500/15"
-          : "text-content-muted hover:bg-white/10 hover:text-content",
+          : "text-content-muted hover:bg-glass-bg hover:text-content",
         disabled && "pointer-events-none opacity-40"
       )}
     >
@@ -55,7 +55,7 @@ export function SelectionBar({
         <div className="mx-1 h-6 w-px bg-white/15" />
         <button
           onClick={onSelectAllOnScreen}
-          className="rounded-xl px-3 py-2 text-xs font-medium text-content-muted hover:bg-white/10 hover:text-content"
+          className="rounded-xl px-3 py-2 text-xs font-medium text-content-muted hover:bg-glass-bg hover:text-content"
         >
           {allOnScreenSelected ? "Deselect on screen" : "Select all on screen"}
           <span className="hidden text-white/50 sm:inline"> ({onScreenCount})</span>

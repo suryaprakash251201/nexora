@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Copy, Check, Link2, Globe, Shield, Clock, Download, Share2 } from "lucide-react";
 import { Modal } from "./Modal";
-import { post } from "../api/client";
+import { sharesApi } from "../api/endpoints";
 import { useUI } from "../store";
 import type { FileItem, ShareItem } from "../api/types";
 import { Button } from "./ui/Button";
@@ -20,14 +20,14 @@ export default function ShareDialog({ item, rootId, onClose }: { item: FileItem;
   const create = async () => {
     setCreating(true);
     try {
-      const res = await post<{ share: ShareItem }>("/shares", {
+      const res = await sharesApi.create({
         root: rootId,
         path: item.path,
         scope,
         password: password || undefined,
         expires_in_hours: expiresHours ? Number(expiresHours) : 0,
         max_downloads: maxDownloads ? Number(maxDownloads) : 0,
-      });
+      } as any);
       setResult(res.share);
       pushToast("success", "Share link created successfully");
     } catch (e: any) {

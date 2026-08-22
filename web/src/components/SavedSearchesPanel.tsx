@@ -6,7 +6,8 @@ import {
   Filter,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { savedSearchesApi } from "../api/client";
+;
+import { savedSearchesApi } from "../api/endpoints";
 import { SavedSearch, SavedSearchInput } from "../api/types";
 import { cn } from "@/lib/utils";
 import { Button } from "./ui/Button";
@@ -15,13 +16,11 @@ import { Input } from "./ui/Input";
 import { toast } from "sonner";
 import { ConfirmDialog } from "./ui/ConfirmDialog";
 import { QueryError } from "./ui/QueryError";
-
 interface SavedSearchesPanelProps {
   roots: { id: string; name: string }[];
   onSearch?: (query: string, rootId?: string) => void;
   onClose?: () => void;
 }
-
 const defaultFilters = {
   kind: "",
   modifiedAfter: "",
@@ -29,19 +28,16 @@ const defaultFilters = {
   minSize: "",
   maxSize: "",
 };
-
 export default function SavedSearchesPanel({ roots, onSearch, onClose }: SavedSearchesPanelProps) {
   const qc = useQueryClient();
   const [editingSearch, setEditingSearch] = useState<SavedSearch | null>(null);
   const [creating, setCreating] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
   const [filters, setFilters] = useState(defaultFilters);
-
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["saved-searches"],
     queryFn: () => savedSearchesApi.list(),
   });
-
   const createMutation = useMutation({
     mutationFn: (input: SavedSearchInput) => savedSearchesApi.create(input),
     onSuccess: () => {
@@ -51,7 +47,6 @@ export default function SavedSearchesPanel({ roots, onSearch, onClose }: SavedSe
     },
     onError: (err: any) => toast.error(err.message || "Failed to create saved search"),
   });
-
   const updateMutation = useMutation({
     mutationFn: ({ id, input }: { id: string; input: SavedSearchInput }) => savedSearchesApi.update(id, input),
     onSuccess: () => {
@@ -61,7 +56,6 @@ export default function SavedSearchesPanel({ roots, onSearch, onClose }: SavedSe
     },
     onError: (err: any) => toast.error(err.message || "Failed to update saved search"),
   });
-
   const deleteMutation = useMutation({
     mutationFn: (id: string) => savedSearchesApi.delete(id),
     onSuccess: () => {
@@ -70,7 +64,6 @@ export default function SavedSearchesPanel({ roots, onSearch, onClose }: SavedSe
     },
     onError: (err: any) => toast.error(err.message || "Failed to delete saved search"),
   });
-
   const executeMutation = useMutation({
     mutationFn: ({ id, q }: { id: string; q?: any }) => savedSearchesApi.execute(id, q),
     onSuccess: (data) => {
@@ -81,21 +74,16 @@ export default function SavedSearchesPanel({ roots, onSearch, onClose }: SavedSe
     },
     onError: (err: any) => toast.error(err.message || "Failed to execute search"),
   });
-
   const handleCreate = (input: SavedSearchInput) => {
     createMutation.mutate(input);
   };
-
   const handleUpdate = (id: string, input: SavedSearchInput) => {
     updateMutation.mutate({ id, input });
   };
-
   const [pendingDelete, setPendingDelete] = useState<SavedSearch | null>(null);
-
   const handleDelete = (search: SavedSearch) => {
     setPendingDelete(search);
   };
-
   const handleExecute = (search: SavedSearch) => {
     const q = {
       limit: 200,
@@ -104,33 +92,26 @@ export default function SavedSearchesPanel({ roots, onSearch, onClose }: SavedSe
     };
     executeMutation.mutate({ id: search.id, q });
   };
-
   const handlePin = (search: SavedSearch) => {
     handleUpdate(search.id, { ...search, is_pinned: !search.is_pinned });
   };
-
   const [draft, setDraft] = useState<SavedSearchInput | null>(null);
-
   const openCreate = () => {
     setEditingSearch(null);
     setDraft({ name: "", query: "", filters: "{}", sort: "name", sort_order: "asc", root_id: "", icon: "", color: "", is_pinned: false });
     setCreating(true);
   };
-
   const openEdit = (search: SavedSearch) => {
     setEditingSearch(search);
     setCreating(false);
   };
-
   const formData: SavedSearchInput = editingSearch
     ? { name: editingSearch.name, query: editingSearch.query, filters: editingSearch.filters, sort: editingSearch.sort, sort_order: editingSearch.sort_order, root_id: editingSearch.root_id, icon: editingSearch.icon, color: editingSearch.color, is_pinned: editingSearch.is_pinned }
     : draft ?? { name: "", query: "", filters: "{}", sort: "name", sort_order: "asc", root_id: "", icon: "", color: "", is_pinned: false };
-
   const updateField = (patch: Partial<SavedSearchInput>) => {
     if (editingSearch) setEditingSearch({ ...editingSearch, ...patch });
     else setDraft((d) => (d ? { ...d, ...patch } : d));
   };
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (editingSearch) {
@@ -139,17 +120,13 @@ export default function SavedSearchesPanel({ roots, onSearch, onClose }: SavedSe
       handleCreate(formData);
     }
   };
-
   if (isError) {
     return <div className="p-4"><QueryError message="Could not load saved searches." onRetry={() => refetch()} /></div>;
   }
-
   if (isLoading) {
     return <div className="p-4"><div className="animate-pulse space-y-3"><div className="h-12 bg-surface/50 rounded-xl" /><div className="h-12 bg-surface/50 rounded-xl" /></div></div>;
   }
-
   const searches = data?.items || [];
-
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
@@ -174,7 +151,6 @@ export default function SavedSearchesPanel({ roots, onSearch, onClose }: SavedSe
           </Button>
         </div>
       </div>
-
       {/* Filters */}
       <AnimatePresence>
         {filterOpen && (
@@ -223,7 +199,6 @@ export default function SavedSearchesPanel({ roots, onSearch, onClose }: SavedSe
           </motion.div>
         )}
       </AnimatePresence>
-
       {/* Search List */}
       <div className="flex-1 overflow-y-auto p-2">
         {searches.length === 0 ? (
@@ -252,7 +227,6 @@ export default function SavedSearchesPanel({ roots, onSearch, onClose }: SavedSe
           </ul>
         )}
       </div>
-
       {/* Create/Edit Modal */}
       {(creating || editingSearch) && (
         <Modal
@@ -348,7 +322,6 @@ export default function SavedSearchesPanel({ roots, onSearch, onClose }: SavedSe
     </div>
   );
 }
-
 function SavedSearchItem({
   search,
   roots,
@@ -413,7 +386,6 @@ function SavedSearchItem({
           </p>
         </div>
       </div>
-
       <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
         <button onClick={(e) => { e.stopPropagation(); onPin(search); }} className="p-1.5 rounded-lg hover:bg-white/5 transition-colors" title={isPinned ? "Unpin" : "Pin"}>
           {isPinned ? (

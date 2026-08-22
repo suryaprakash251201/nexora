@@ -1,4 +1,4 @@
-import { get } from "../api/client";
+import { audioApi } from "../api/endpoints";
 
 // ── Audio metadata & quality tiers ──────────────────────────────────────────
 
@@ -200,7 +200,7 @@ export async function fetchAudioInfo(rootId: string, path: string): Promise<Audi
   const cached = infoCache.get(key);
   if (cached) return cached;
   try {
-    const data = await get<AudioInfo>("/audio/info", { root: rootId, path });
+    const data = await audioApi.info(rootId, path);
     infoCache.set(key, data);
     // Bound the cache so browsing huge libraries doesn't leak memory.
     if (infoCache.size > 500) {

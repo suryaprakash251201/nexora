@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { get } from "@/api/client";
-import type { PhotoFilters, PhotoResult, PhotosResponse } from "./types";
-
+import { photosApi } from "../../api/endpoints";
+;
+import type { PhotoFilters, PhotoResult } from "./types";
 export function useDebouncedValue<T>(value: T, ms: number): T {
   const [debounced, setDebounced] = useState(value);
   useEffect(() => {
@@ -10,7 +10,6 @@ export function useDebouncedValue<T>(value: T, ms: number): T {
   }, [value, ms]);
   return debounced;
 }
-
 export function useLocalStorage<T>(key: string, initial: T): [T, (v: T | ((prev: T) => T)) => void] {
   const [value, setValue] = useState<T>(() => {
     try {
@@ -37,7 +36,6 @@ export function useLocalStorage<T>(key: string, initial: T): [T, (v: T | ((prev:
   );
   return [value, set];
 }
-
 /** Tracks the content-box size of a ref'd element (ResizeObserver). */
 export function useElementSize<T extends HTMLElement>(): [React.RefObject<T | null>, { width: number; height: number }] {
   const ref = useRef<T>(null);
@@ -54,7 +52,6 @@ export function useElementSize<T extends HTMLElement>(): [React.RefObject<T | nu
   }, []);
   return [ref, size];
 }
-
 export function buildPhotoQuery(filters: PhotoFilters, search: string): Record<string, string | number | boolean | undefined> {
   return {
     q: search || undefined,
@@ -68,9 +65,7 @@ export function buildPhotoQuery(filters: PhotoFilters, search: string): Record<s
     sort: filters.sort,
   };
 }
-
 const PAGE_SIZE = 120;
-
 /**
  * Infinite-scroll photo feed. Pages are merged into a flat list (the gallery
  * re-groups them into days on every render, so pagination never breaks a day).
@@ -88,23 +83,19 @@ export function usePhotos(
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const offsetRef = useRef(0);
-
   const query = useMemo(() => buildPhotoQuery(filters, search), [filters, search]);
-
   const reload = useCallback(() => setReloadKey((k) => k + 1), []);
-
   // Optimistic updates (favorites, deletions) applied on top of the feed.
   const patch = useCallback((fn: (prev: PhotoResult[]) => PhotoResult[]) => {
     setPhotos(fn);
   }, []);
-
   useEffect(() => {
     if (!enabled) return;
     let cancelled = false;
     setLoading(true);
     setError(null);
     offsetRef.current = 0;
-    get<PhotosResponse>("/photos", { ...query, limit: PAGE_SIZE, offset: 0 })
+    photosApi.list({ ...query, limit: PAGE_SIZE, offset: 0 } as any)
       .then((res) => {
         if (cancelled) return;
         setPhotos(res.items || []);
@@ -124,12 +115,11 @@ export function usePhotos(
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, query, reloadKey]);
-
   const loadMore = useCallback(async () => {
     if (loadingMore || !hasMore || !enabled) return;
     setLoadingMore(true);
     try {
-      const res = await get<PhotosResponse>("/photos", {
+      const res = await photosApi.list( {
         ...query,
         limit: PAGE_SIZE,
         offset: offsetRef.current,
@@ -144,6 +134,5 @@ export function usePhotos(
       setLoadingMore(false);
     }
   }, [query, hasMore, loadingMore, enabled]);
-
   return { photos, hasMore, loading, loadingMore, error, totalCount, reload, loadMore, patch };
 }

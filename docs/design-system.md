@@ -3,31 +3,32 @@
 ## Overview
 Nexora follows a modern glassmorphism design language with a focus on accessibility, performance, and consistency across light and dark themes.
 
+> **Single source of truth:** `web/src/index.css` (`@theme` + CSS variables). This document is a human-readable summary — if they diverge, `index.css` wins.
+
 ## Color Palette
 
 ### Primary Colors
-- **Primary (Blue)**: `#2563EB` (Light mode) / `#3B82F6` (Dark mode)
-- **Primary Variant**: Optimized for colorblind users with higher contrast
+- **Primary Accent**: `#5B8CFF` (both themes; `--color-accent`) with `--color-accent-secondary` `#7A5CFF` and `--color-accent-tertiary` `#35D3FF`; glow `rgba(91,140,255,0.25)`
+- **Extended Accents**: `--color-accent-cyan` `#35D3FF`, `--color-accent-purple` `#A78BFA`, `--color-accent-pink` `#F472B6`, `--color-accent-amber` `#FBBF24`, `--color-accent-emerald` `#34D399`, etc. (see `index.css:19-33`)
+- **Info**: `#5B8CFF` (same as accent, `--color-info`)
 
 ### Secondary Colors
-- **Surface**: White (#FFFFFF) / Black (#000000)
-- **Content Text**: Near-black (#1E1F24) / Near-white (#FAFAFA)
-- **Muted Text**: Medium gray (#6B7280) / Lighter gray (#9CA3AF)
+- **Surface**: via `--surface` / `--color-glass-*` tokens
+- **Content Text**: via `--content` / semantic tokens
+- **Muted Text**: via `--content-muted`
 
 ### Semantic Colors
-| Role | Light Theme | Dark Theme | Usage |
-|------|-------------|------------|-------|
-| **Danger/Red** | `#EF4444` | `#F87171` | Errors, deletes, warnings |
-| **Warning/Orange** | `#F59B0B` | `#FB923C` | Warnings, loading states |
-| **Success/Green** | `#22C55E` | `#4ADE80` | Success, completed actions |
+| Role | Token / Value | Usage |
+|------|---------------|-------|
+| **Danger/Red** | `#EF4444` (`--color-danger`) | Errors, deletes, warnings |
+| **Warning/Orange** | `#F59B0B` / `#FB923C` | Warnings, loading states |
+| **Success/Green** | `#22C55E` / `#4ADE80` | Success, completed actions |
 
 ## Typography
 
 ### Font Families
-- **UI Font**: Inter (Google Fonts)
-  - Weights: 300, 400, 500, 600, 700, 800
-- **Code Font**: JetBrains Mono
-  - Weights: 400, 500, 600
+- **UI Font**: `Geist Variable` (primary, `--font-family-sans` in `index.css:66`) with `Inter` as fallback; system-ui stack after that
+- **Code Font**: `ui-monospace` stack (`SFMono-Regular`, Menlo, Consolas, Liberation Mono; `--font-family-mono`)
 
 ### Font Scale
 | Size | Size (px) | Usage |
@@ -73,16 +74,16 @@ Nexora follows a modern glassmorphism design language with a focus on accessibil
 ## Component System
 
 ### Glassmorphism Layers
-| Layer | Opacity | Blur | Use Case |
-|-------|---------|------|----------|
-| **Subtle** | 28% | 11px | Background elements |
-| **Base** | 42% | 20px | Cards, panels |
-| **Strong** | 64% | 24px | Modals, dropdowns |
+Defined by `--color-glass-*` tokens and `.glass` / `.glass-strong` / `.glass-subtle` utilities (`index.css:54-57, 177-210`). Shadows via `--shadow-glass*` (`index.css:88-90`). The earlier 28%/42%/64% table has been superseded by these tokens — use the CSS variables, not hard-coded opacities.
 
 ### Border Radius
-- **Small**: 8px (sm)
-- **Medium**: 12px (md) - Default for most components
-- **Large**: 24px (xl) - For large cards, modals
+Via CSS variables (`index.css:70-75`):
+- **xs**: `0.375rem` — subtle rounding
+- **sm**: `0.5rem`
+- **md**: `0.625rem` (default)
+- **lg**: `0.75rem`
+- **xl**: `1rem`
+- **2xl**: `1.25rem`
 
 ### Shadows
 - **Small**: `0 2px 8px rgba(0, 0, 0, 0.06)`
@@ -174,6 +175,18 @@ Component styles are built using utility classes following Tailwind CSS conventi
 - `.glass`: Basic glass effect
 - `.accent-glass`: Primary accent button style
 - `.text-gradient`: Gradient text effect
+
+### Utilities
+- `.hide-scrollbar` / `.no-scrollbar`: scrollable but scrollbar-free rails (sidebar, chips, command lists)
+- `.mask-edges`: horizontal edge fade for scrolling breadcrumb/chip rails
+- Global `:focus-visible` baseline (`index.css`): every interactive element gets a 2px accent outline unless a component opts out with its own focus ring — do not add bare `outline-none` without providing a replacement
+
+### Light Theme Rules
+Every dark-styled utility must have a `.light` counterpart. Covered: `.glass*`, `.menu-surface`, `.overlay-surface`, `.scrim`, `.mobile-nav`, `.skeleton`, `.accent-glass`, `.player-glow`, `.quota-bar`, `.splash-screen`. When adding a new surface utility, add the light override in the same change.
+
+### Selection & Focus Affordances
+- Selected file tiles/rows: `bg-accent/10 ring-1 ring-accent/40` (grid) or `bg-accent/10 border-accent/30` (list) — never indicate selection by lowering opacity
+- Keyboard focus: accent outline via global baseline; arrow keys rove focus between items (`data-file-item` markers in `FileBrowser.tsx`)
 
 ## Update History
 - **v1.4**: Initial design system

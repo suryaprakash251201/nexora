@@ -78,7 +78,7 @@ func main() {
 		})
 	}
 
-	eventBus := events.NewBus(db)
+	eventBus := events.NewBus(db, log)
 	defer eventBus.Stop()
 	if err := eventBus.LoadWebhooks(); err != nil {
 		log.Warn("failed to load webhooks from database", "error", err)
@@ -105,12 +105,17 @@ func main() {
 	})
 
 	// Background: initial low-priority index scan (never blocks startup) and
-	// periodic maintenance.
+	// periodic maintenance — both respect the app lifecycle context.
+	appCtx, appCancel := context.WithCancel(context.Background())
+	defer appCancel()
 	go func() {
-		time.Sleep(5 * time.Second)
-		searchSvc.ScanAll(context.Background())
+		select {
+		case <-time.After(5 * time.Second):
+			searchSvc.ScanAll(appCtx)
+		case <-appCtx.Done():
+		}
 	}()
-	go runMaintenance(db, sessions, limiter, searchSvc, shareStore, previewSvc, jobMgr, log)
+	go runMaintenance(appCtx, db, sessions, limiter, searchSvc, shareStore, previewSvc, jobMgr, log)
 
 	httpSrv := &http.Server{
 		Addr:              cfg.ListenAddr,
@@ -145,7 +150,7 @@ func main() {
 	}
 }
 
-func ensureSessionSecret(db *sql.DB, cfg *config.Config, log *logger.Logger) error {
+func ensureSessionSecret(db *database.DB, cfg *config.Config, log *logger.Logger) error {
 	if cfg.SessionSecret != "" {
 		return nil
 	}
@@ -171,14 +176,16 @@ func webRoot() string {
 	return "web/dist"
 }
 
-func runMaintenance(db *sql.DB, sessions *auth.SessionStore, limiter *middleware.RateLimiter, searchSvc *search.Service, shares *sharing.Store, previewSvc *preview.Service, jobMgr *jobs.Manager, log *logger.Logger) {
-	go searchSvc.ScanMediaMetadata(context.Background())
+func runMaintenance(ctx context.Context, db *database.DB, sessions *auth.SessionStore, limiter *middleware.RateLimiter, searchSvc *search.Service, shares *sharing.Store, previewSvc *preview.Service, jobMgr *jobs.Manager, log *logger.Logger) {
+	go searchSvc.ScanMediaMetadata(ctx)
 	ticker := time.NewTicker(15 * time.Minute)
 	defer ticker.Stop()
 	scanTicker := time.NewTicker(6 * time.Hour)
 	defer scanTicker.Stop()
 	for {
 		select {
+		case <-ctx.Done():
+			return
 		case <-ticker.C:
 			if n, err := sessions.Cleanup(); err == nil && n > 0 {
 				log.Debug("cleaned expired sessions", "count", n)
@@ -190,7 +197,7 @@ func runMaintenance(db *sql.DB, sessions *auth.SessionStore, limiter *middleware
 			previewSvc.PurgeStale()
 			jobMgr.CleanupOldArchives(24 * time.Hour)
 		case <-scanTicker.C:
-			searchSvc.ScanAll(context.Background())
+			searchSvc.ScanAll(ctx)
 		}
 	}
 }

@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Search as SearchIcon, Filter } from "lucide-react";
-import { get } from "../api/client";
+;
+import { searchApi } from "../api/endpoints";
 import { formatBytes, formatDate } from "../lib/format";
 import type { Root, SearchResult, FileItem } from "../api/types";
 import { FileThumb, FolderTile } from "./FileThumb";
@@ -9,7 +10,6 @@ import { Input } from "./ui/Input";
 import { EmptyState } from "./ui/EmptyState";
 import { SkeletonList } from "./ui/Skeleton";
 import { QueryError } from "./ui/QueryError";
-
 export default function SearchView({
   initialQuery,
   roots,
@@ -32,16 +32,14 @@ export default function SearchView({
   const [ext, setExt] = useState("");
   const [sort, setSort] = useState("relevance");
   const [showFilters, setShowFilters] = useState(true);
-
   useEffect(() => {
     const t = setTimeout(() => setDebounced(q), 300);
     return () => clearTimeout(t);
   }, [q]);
-
   const { data, isFetching, isLoading, isError, refetch } = useQuery({
     queryKey: ["search", debounced, root, kind, ext, sort],
     queryFn: () =>
-      get<{ items: SearchResult[] }>("/search", {
+      searchApi.search( {
         q: debounced,
         root: root || undefined,
         kind: kind || undefined,
@@ -51,9 +49,7 @@ export default function SearchView({
       }),
     enabled: debounced.length > 0 || kind !== "" || ext !== "",
   });
-
   const results = data?.items || [];
-
   return (
     <div className="flex-1 flex flex-col h-full bg-background">
       <div className="px-6 pt-6 pb-4 border-b border-border/50 bg-surface/50 backdrop-blur-xl sticky top-0 z-10 shrink-0">
@@ -78,14 +74,12 @@ export default function SearchView({
               <Filter className="h-5 w-5" />
             </button>
           </div>
-          
           {showFilters && (
             <div className="flex flex-wrap gap-3">
               <select value={root} onChange={(e) => setRoot(e.target.value)} className="rounded-xl glass-input px-3 py-2 text-sm outline-none cursor-pointer">
                 <option value="">All storage roots</option>
                 {roots.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
               </select>
-              
               <select value={kind} onChange={(e) => setKind(e.target.value)} className="rounded-xl glass-input px-3 py-2 text-sm outline-none cursor-pointer">
                 <option value="">Any type</option>
                 <option value="image">Images</option>
@@ -94,7 +88,6 @@ export default function SearchView({
                 <option value="document">Documents</option>
                 <option value="archive">Archives</option>
               </select>
-              
               <div className="relative">
                 <input 
                   value={ext} 
@@ -103,7 +96,6 @@ export default function SearchView({
                   className="w-36 rounded-xl glass-input px-3 py-2 text-sm outline-none" 
                 />
               </div>
-              
               <select value={sort} onChange={(e) => setSort(e.target.value)} className="rounded-xl glass-input px-3 py-2 text-sm outline-none cursor-pointer ml-auto">
                 <option value="relevance">Sort: Relevance</option>
                 <option value="newest">Sort: Newest</option>
@@ -114,7 +106,6 @@ export default function SearchView({
           )}
         </div>
       </div>
-
       <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
         <div className="max-w-4xl mx-auto">
           {isError ? (
@@ -150,12 +141,10 @@ export default function SearchView({
                     <div className="shrink-0 transition-transform duration-300 group-hover:scale-105">
                       {r.is_dir ? <FolderTile /> : <FileThumb it={r as FileItem} />}
                     </div>
-                    
                     <div className="min-w-0 flex flex-col justify-center">
                       <p className="truncate font-medium text-content group-hover:text-accent transition-colors">{r.name}</p>
                       <p className="text-xs font-medium text-content-muted/80 truncate font-mono mt-0.5">{rootName} / {r.path}</p>
                     </div>
-                    
                     <div className="text-right flex flex-col justify-center">
                       <p className="text-sm font-medium text-content-muted">{r.is_dir ? "—" : formatBytes(r.size)}</p>
                       <p className="text-xs font-medium text-content-muted/70 mt-0.5 hidden sm:block">{formatDate(r.modified)}</p>

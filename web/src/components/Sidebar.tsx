@@ -3,10 +3,11 @@ import { motion, AnimatePresence } from "motion/react";
 import type { Root } from "../api/types";
 import { memo } from "react";
 import { rootIcon } from "../lib/rootIcons";
-import { get } from "../api/client";
+import { versionApi, adminApi, trashApi, sharesApi, favoritesApi } from "../api/endpoints";
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { formatBytes } from "../lib/format";
+import NexoraLogo from "./icons/NexoraLogo";
 
 export type SidebarView = "home" | "files" | "trash" | "favorites" | "recents" | "shares" | "playlists" | "search" | "admin" | "video" | "image" | "analytics" | "photos";
 
@@ -15,7 +16,7 @@ const viewColors: Record<string, string> = {
   search: "#35D3FF",
   files: "#2DD4BF",
   favorites: "#A78BFA",
-  recents: "#2DD4BF",
+  recents: "#38BDF8",
   shares: "#FBBF24",
   playlists: "#F472B6",
   trash: "#FB7185",
@@ -29,7 +30,8 @@ const NavItem = ({ v, icon, label, isActive, badge, collapsed, onSelectView, onH
   const accent = viewColors[v] || "#5B8CFF";
   return (
     <button onClick={() => onSelectView(v)} onMouseEnter={() => onHoverView?.(v)} title={collapsed ? label : undefined}
-      className={cn("relative w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl text-left text-[15px] font-medium transition-all duration-200 min-h-[48px] group overflow-hidden active:scale-[0.98]",
+      aria-current={isActive ? "page" : undefined}
+      className={cn("relative w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl text-left text-[15px] font-medium transition-all duration-200 min-h-[48px] group overflow-hidden active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:outline-none",
         collapsed ? "justify-center px-0" : "px-4",
         isActive ? "bg-glass-bg-subtle shadow-sm" : "hover:bg-glass-bg-subtle/50 hover:shadow-inner"
       )}
@@ -91,13 +93,15 @@ export default memo(function Sidebar({
   onLogout: () => void;
   onHoverView?: (v: SidebarView) => void;
 }) {
-  const version = useQuery({ queryKey: ["version"], queryFn: () => get<{ version: string }>("/version") });
-  const usage = useQuery({ queryKey: ["storage-usage"], queryFn: () => get<{ total: number; used: number; available: number }>("/admin/usage"), enabled: isAdmin, });
+  const version = useQuery({ queryKey: ["version"], queryFn: () => versionApi.get() as any });
+  const usage = useQuery({ queryKey: ["storage-usage"], queryFn: () => adminApi.getUsage(), enabled: isAdmin, });
   const usedPercent = usage.data && usage.data.total > 0 ? Math.round((usage.data.used / usage.data.total) * 100) : 0;
 
-  const trashCount = useQuery({ queryKey: ["trash-count"], queryFn: () => get<{ items: unknown[] }>("/trash").then(d => d.items?.length ?? 0), staleTime: 30000 });
-  const sharesCount = useQuery({ queryKey: ["shares-count"], queryFn: () => get<{ shares: unknown[] }>("/shares").then(d => d.shares?.length ?? 0), staleTime: 30000 });
-  const favsCount = useQuery({ queryKey: ["favs-count"], queryFn: () => get<{ favorites: unknown[] }>("/favorites").then(d => d.favorites?.length ?? 0), staleTime: 30000 });
+  // Share queryKeys with Workspace so React Query dedupes identical /trash, /shares, /favorites requests.
+  // Previously these used distinct keys (trash-count, shares-count, favs-count) causing redundant fetches.
+  const trashCount = useQuery({ queryKey: ["trash"], queryFn: () => trashApi.list() as any, staleTime: 30000, select: (d) => (d as any).items?.length ?? 0 });
+  const sharesCount = useQuery({ queryKey: ["shares"], queryFn: () => sharesApi.list() as any, staleTime: 30000, select: (d) => ((d as any).items as unknown[])?.length ?? 0 });
+  const favsCount = useQuery({ queryKey: ["favorites"], queryFn: () => favoritesApi.list() as any, staleTime: 30000, select: (d) => (d as any).items?.length ?? 0 });
 
   const badgeCounts: Partial<Record<SidebarView, number>> = {
     trash: typeof trashCount.data === "number" ? trashCount.data : 0,
@@ -121,26 +125,7 @@ export default memo(function Sidebar({
 
           {/* Header */}
           <div className={cn("flex items-center gap-3 pt-5 pb-3 shrink-0", collapsed ? "justify-center px-0" : "px-5 w-full")}>
-            <svg viewBox="0 0 36 36" width="44" height="44" xmlns="http://www.w3.org/2000/svg" className="shrink-0 drop-shadow-[0_2px_8px_rgba(139,92,246,0.5)]">
-              <defs>
-                <linearGradient id="sg" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stopColor="#3B82F6"/>
-                  <stop offset="25%" stopColor="#6366F1"/>
-                  <stop offset="50%" stopColor="#8B5CF6"/>
-                  <stop offset="75%" stopColor="#D946EF"/>
-                  <stop offset="100%" stopColor="#EC4899"/>
-                </linearGradient>
-                <linearGradient id="shine" x1="50%" y1="0%" x2="50%" y2="100%">
-                  <stop offset="0%" stopColor="white" stopOpacity="0.5"/>
-                  <stop offset="40%" stopColor="white" stopOpacity="0.15"/>
-                  <stop offset="100%" stopColor="white" stopOpacity="0"/>
-                </linearGradient>
-              </defs>
-              <path d="M18 2 L32 8 L32 20 C32 29 26 34 18 36 C10 34 4 29 4 20 L4 8 Z" fill="url(#sg)"/>
-              <path d="M18 2 L32 8 L32 20 C32 29 26 34 18 36 C10 34 4 29 4 20 L4 8 Z" fill="url(#shine)"/>
-              <path d="M18 5 L29 10 L29 20 C29 27 24.5 32 18 33.5 C11.5 32 7 27 7 20 L7 10 Z" fill="none" stroke="white" strokeOpacity="0.15" strokeWidth="0.5"/>
-              <text x="18" y="26.5" textAnchor="middle" fill="white" fontSize="21" fontWeight="900" fontFamily="-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif" letterSpacing="-0.05em">N</text>
-            </svg>
+            <NexoraLogo size={44} idPrefix="sb" className="shrink-0 drop-shadow-[0_2px_8px_rgba(139,92,246,0.5)]" />
             <AnimatePresence>
               {!collapsed && (
                 <motion.div initial={{ opacity: 0, width: 0 }} animate={{ opacity: 1, width: "auto" }} exit={{ opacity: 0, width: 0 }} transition={{ duration: 0.15 }} className="flex items-center gap-1 overflow-hidden">
@@ -153,7 +138,7 @@ export default memo(function Sidebar({
             {!collapsed && (
               <button
                 onClick={onToggleCollapse}
-                className="ml-auto group/btn relative p-2 rounded-xl transition-all duration-300 hover:bg-white/[0.08] active:scale-95"
+                className="ml-auto group/btn relative p-2 rounded-xl transition-all duration-300 hover:bg-glass-bg active:scale-95"
                 title="Collapse sidebar"
                 aria-label="Collapse sidebar"
               >
@@ -168,7 +153,7 @@ export default memo(function Sidebar({
             <div className="flex flex-col items-center py-2 shrink-0">
               <button
                 onClick={onToggleCollapse}
-                className="group/btn relative p-2.5 rounded-xl transition-all duration-300 hover:bg-white/[0.08] active:scale-95 min-h-[44px] min-w-[44px]"
+                className="group/btn relative p-2.5 rounded-xl transition-all duration-300 hover:bg-glass-bg active:scale-95 min-h-[44px] min-w-[44px]"
                 title="Expand sidebar"
                 aria-label="Expand sidebar"
               >
@@ -201,7 +186,8 @@ export default memo(function Sidebar({
               const accent = viewColors.files;
               return (
                 <button key={r.id} onClick={() => onSelectRoot(r.id)} title={collapsed ? r.name : undefined}
-                  className={cn("relative w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl text-left text-[15px] font-medium transition-all duration-200 min-h-[48px] group", collapsed ? "justify-center px-0" : "px-4", isActive ? "bg-glass-bg-subtle shadow-sm" : "hover:bg-glass-bg-subtle/50")}>
+                  aria-current={isActive ? "page" : undefined}
+                  className={cn("relative w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl text-left text-[15px] font-medium transition-all duration-200 min-h-[48px] group focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:outline-none", collapsed ? "justify-center px-0" : "px-4", isActive ? "bg-glass-bg-subtle shadow-sm" : "hover:bg-glass-bg-subtle/50")}>
                   {isActive && (
                     <motion.div layoutId="sidebar-active-root"
                       className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-full"
@@ -253,7 +239,8 @@ export default memo(function Sidebar({
 
             {isAdmin && (
               <button onClick={() => onSelectView("admin")} title={collapsed ? "Admin" : undefined}
-                className={cn("relative w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl text-left text-[15px] font-medium transition-all duration-200 min-h-[48px] group", collapsed ? "justify-center px-0" : "px-4")}
+                aria-current={view === "admin" ? "page" : undefined}
+                className={cn("relative w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl text-left text-[15px] font-medium transition-all duration-200 min-h-[48px] group focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:outline-none", collapsed ? "justify-center px-0" : "px-4")}
                 style={view === "admin" ? { color: viewColors.admin } : undefined}>
                 {view === "admin" && (
                   <motion.div layoutId="sidebar-active-admin"

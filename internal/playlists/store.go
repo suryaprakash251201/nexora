@@ -2,6 +2,8 @@ package playlists
 
 import (
 	"database/sql"
+
+	"github.com/nexora/nexora/internal/database"
 	"fmt"
 	"strings"
 
@@ -9,10 +11,10 @@ import (
 )
 
 type Store struct {
-	db *sql.DB
+	db *database.DB
 }
 
-func NewStore(db *sql.DB) *Store {
+func NewStore(db *database.DB) *Store {
 	return &Store{db: db}
 }
 

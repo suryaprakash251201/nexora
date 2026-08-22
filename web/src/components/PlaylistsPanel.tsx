@@ -1,6 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { ListMusic, Play, Pencil, Trash2, Plus, X, Music, ArrowLeft, Download, Share2, Users, UserPlus, Search, LoaderCircle, MoreVertical, Image as ImageIcon, Globe, Lock } from "lucide-react";
-import { usePlaylists, type Playlist as StorePlaylist } from "../store/playlists";
 import { usePlayer } from "../store/player";
 import { useUI } from "../store";
 import { thumbUrl } from "../lib/preview";
@@ -8,14 +7,27 @@ import { startDownload } from "../lib/transfer";
 import { Modal } from "./Modal";
 import CoverPickerModal from "./CoverPickerModal";
 import ShareDialog from "./ShareDialog";
-import type { PlaylistCollaborator, User } from "../api/types";
-import { get } from "../api/client";
-import { useQuery } from "@tanstack/react-query";
-
+import type { User } from "../api/types";
+;
+import { usersApi } from "../api/endpoints";
+import {
+  usePlaylists,
+  usePublicPlaylists,
+  useCreatePlaylist,
+  useDeletePlaylist,
+  useRenamePlaylist,
+  useAddPlaylistItems,
+  useRemovePlaylistItem,
+  useSetPlaylistCover,
+  useSetPlaylistPublic,
+  usePlaylistCollaborators,
+  useAddCollaborator,
+  useRemoveCollaborator,
+  type Playlist as StorePlaylist,
+} from "../hooks/usePlaylists";
 function PlaylistCover({ playlist, className = "" }: { playlist: any; className?: string }) {
   const [failed, setFailed] = useState(false);
   const hasCover = playlist.cover_root_id && playlist.cover_path;
-
   if (hasCover && !failed) {
     const item = { root_id: playlist.cover_root_id, path: playlist.cover_path, name: "", extension: "", mime: "image/jpeg", is_dir: false, size: 0, modified: "" };
     return (
@@ -27,14 +39,12 @@ function PlaylistCover({ playlist, className = "" }: { playlist: any; className?
       />
     );
   }
-
   return (
     <div className={`h-full w-full grid place-items-center bg-gradient-to-br from-accent/40 via-purple-500/30 to-pink-500/20 ${className}`}>
       <ListMusic className="h-8 w-8 text-white/80" />
     </div>
   );
 }
-
 // ── Playlist dot menu (⋯) ────────────────────────────────────────────────
 function PlaylistDotMenu({
   playlist,
@@ -51,7 +61,6 @@ function PlaylistDotMenu({
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-
   // Close on outside click
   useEffect(() => {
     if (!open) return;
@@ -61,7 +70,6 @@ function PlaylistDotMenu({
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
-
   return (
     <div ref={ref} className="relative">
       <button
@@ -107,24 +115,17 @@ function PlaylistDotMenu({
     </div>
   );
 }
-
 // ── Collaborator management modal ──────────────────────────────────────────
 function CollaboratorModal({ playlist, onClose }: { playlist: { id: string; name: string }; onClose: () => void }) {
   const pushToast = useUI((s) => s.pushToast);
-  const listCollaborators = usePlaylists((s) => s.listCollaborators);
-  const addCollaborator = usePlaylists((s) => s.addCollaborator);
-  const removeCollaborator = usePlaylists((s) => s.removeCollaborator);
-  const [collabs, setCollabs] = useState<PlaylistCollaborator[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: collabData, isLoading: loading } = usePlaylistCollaborators(playlist.id);
+  const addCollabMut = useAddCollaborator();
+  const removeCollabMut = useRemoveCollaborator();
+  const collabs = collabData?.collaborators ?? [];
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<{ id: string; username: string }[]>([]);
   const [searching, setSearching] = useState(false);
   const [role, setRole] = useState<"editor" | "viewer">("editor");
-
-  useEffect(() => {
-    listCollaborators(playlist.id).then(setCollabs).finally(() => setLoading(false));
-  }, [playlist.id, listCollaborators]);
-
   const search = async (q: string) => {
     setQuery(q);
     if (q.trim().length < 2) {
@@ -133,7 +134,7 @@ function CollaboratorModal({ playlist, onClose }: { playlist: { id: string; name
     }
     setSearching(true);
     try {
-      const res = await get<{ users: { id: string; username: string }[] }>(`/users/search?q=${encodeURIComponent(q.trim())}`);
+      const res = await usersApi.search(q.trim());
       setResults(res.users || []);
     } catch {
       setResults([]);
@@ -141,12 +142,9 @@ function CollaboratorModal({ playlist, onClose }: { playlist: { id: string; name
       setSearching(false);
     }
   };
-
   const add = async (userId: string, username: string) => {
     try {
-      await addCollaborator(playlist.id, userId, role);
-      const updated = await listCollaborators(playlist.id);
-      setCollabs(updated);
+      await addCollabMut.mutateAsync({ id: playlist.id, userId, role });
       setResults([]);
       setQuery("");
       pushToast("success", `Added ${username} as ${role}`);
@@ -154,18 +152,14 @@ function CollaboratorModal({ playlist, onClose }: { playlist: { id: string; name
       pushToast("error", e.message || "Could not add collaborator");
     }
   };
-
   const remove = async (userId: string, username: string) => {
     try {
-      await removeCollaborator(playlist.id, userId);
-      const updated = await listCollaborators(playlist.id);
-      setCollabs(updated);
+      await removeCollabMut.mutateAsync({ id: playlist.id, userId });
       pushToast("info", `Removed ${username}`);
     } catch (e: any) {
       pushToast("error", e.message || "Could not remove collaborator");
     }
   };
-
   return (
     <Modal title="Collaborators" description={`Who can access "${playlist.name}"`} onClose={onClose} icon={<Users className="h-5 w-5 text-accent" />}>
       <div className="py-2 space-y-4">
@@ -220,7 +214,6 @@ function CollaboratorModal({ playlist, onClose }: { playlist: { id: string; name
             </div>
           )}
         </div>
-
         {/* Current collaborators */}
         <div>
           <label className="text-xs font-bold text-content-muted uppercase tracking-wider mb-2 block">Current collaborators</label>
@@ -262,18 +255,17 @@ function CollaboratorModal({ playlist, onClose }: { playlist: { id: string; name
     </Modal>
   );
 }
-
 export default function PlaylistsPanel({ user }: { user?: User }) {
-  const playlists = usePlaylists((s) => s.playlists);
-  const remove = usePlaylists((s) => s.remove);
-  const rename = usePlaylists((s) => s.rename);
-  const removeItem = usePlaylists((s) => s.removeItem);
-  const addItems = usePlaylists((s) => s.addItems);
-  const play = usePlaylists((s) => s.play);
-  const playFrom = usePlaylists((s) => s.playFrom);
-  const create = usePlaylists((s) => s.create);
-  const setCover = usePlaylists((s) => s.setCover);
-  const setPublic = usePlaylists((s) => s.setPublic);
+  const { data: playlistsData } = usePlaylists();
+  const playlists = playlistsData?.items ?? [];
+  const { data: publicData } = usePublicPlaylists();
+  const createMutation = useCreatePlaylist();
+  const deleteMutation = useDeletePlaylist();
+  const renameMutation = useRenamePlaylist();
+  const addItemsMutation = useAddPlaylistItems();
+  const removeItemMutation = useRemovePlaylistItem();
+  const setCoverMutation = useSetPlaylistCover();
+  const setPublicMutation = useSetPlaylistPublic();
   const current = usePlayer((s) => s.current());
   const pushToast = useUI((s) => s.pushToast);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -284,35 +276,52 @@ export default function PlaylistsPanel({ user }: { user?: User }) {
   const [coverModal, setCoverModal] = useState<{ id: string } | null>(null);
   const [collabModal, setCollabModal] = useState(false);
   const [shareTarget, setShareTarget] = useState<{ item: any; rootId: string } | null>(null);
-
   const selected = selectedId ? playlists.find((p) => p.id === selectedId) : null;
   const canEditSelected = !!selected && (selected.is_owner || selected.can_edit);
   const isOwnerSelected = !!selected && !!selected.is_owner;
-
-  // Fetch public playlists from all users
-  const { data: publicData } = useQuery({
-    queryKey: ["publicPlaylists"],
-    queryFn: () => get<{ items: StorePlaylist[] }>('/playlists/public'),
-    staleTime: 60_000,
-  });
   const publicPlaylists = useMemo(() => {
     const list = publicData?.items || [];
     // Exclude playlists the user already sees in mine/shared
     const ownedIds = new Set(playlists.map(p => p.id));
     return list.filter(p => !ownedIds.has(p.id));
   }, [publicData, playlists]);
-
+  // Playback helpers (previously on Zustand store)
+  const play = (id: string) => {
+    const pl = playlists.find((p) => p.id === id);
+    if (pl?.items.length) usePlayer.getState().play(pl.items as any, 0);
+  };
+  const playFrom = (id: string, index: number) => {
+    const pl = playlists.find((p) => p.id === id);
+    if (pl?.items.length) usePlayer.getState().play(pl.items as any, Math.max(0, Math.min(index, pl.items.length - 1)));
+  };
+  const create = (name: string, items: any[]) => createMutation.mutateAsync({ name, items });
+  const remove = (id: string) => deleteMutation.mutateAsync(id);
+  const rename = (id: string, name: string) => renameMutation.mutateAsync({ id, name });
+  const addItems = (id: string, items: any[]) => addItemsMutation.mutateAsync({ id, items });
+  const removeItem = (id: string, path: string) => {
+    const pl = playlists.find((p) => p.id === id);
+    const itemToRemove: any = pl?.items.find((i: any) => i.path === path);
+    const apiItemId = itemToRemove?.id;
+    if (!apiItemId) {
+      pushToast("error", "Cannot remove item without its server ID");
+      return Promise.resolve();
+    }
+    return removeItemMutation.mutateAsync({ playlistId: id, itemId: apiItemId });
+  };
+  const setCover = (id: string, coverRootId: string, coverPath: string) =>
+    setCoverMutation.mutateAsync({ id, coverRootId, coverPath });
+  const setPublic = (id: string, isPublic: boolean) =>
+    setPublicMutation.mutateAsync({ id, isPublic });
   // Group into "My Playlists" and "Shared with me".
   const { mine, shared } = useMemo(() => {
     const mine: StorePlaylist[] = [];
     const shared: StorePlaylist[] = [];
-    for (const p of playlists) {
+    for (const p of playlists as unknown as StorePlaylist[]) {
       if (p.is_owner) mine.push(p);
       else shared.push(p);
     }
     return { mine, shared };
   }, [playlists]);
-
   const addCurrent = async (id: string) => {
     if (!current) {
       pushToast("info", "Nothing is playing right now");
@@ -330,69 +339,57 @@ export default function PlaylistsPanel({ user }: { user?: User }) {
       pushToast("error", "Failed to add track");
     }
   };
-
   const newPlaylist = () => {
     setNewName(`Playlist ${playlists.length + 1}`);
     setNewModal(true);
   };
-
   const doCreate = async () => {
     if (!newName.trim()) return;
     const pl = await create(newName.trim(), []);
     setSelectedId(pl.id);
     setNewModal(false);
   };
-
   const doRename = (id: string, current: string) => {
     setRenameTarget({ id, name: current });
   };
-
   const doRenameConfirm = () => {
     if (renameTarget && renameTarget.name.trim()) {
       rename(renameTarget.id, renameTarget.name.trim());
       setRenameTarget(null);
     }
   };
-
   const doRemove = (id: string, name: string) => {
     setDeleteTarget({ id, name });
   };
-
   const doRemoveItem = (id: string, path: string) => {
     removeItem(id, path);
     pushToast("info", "Track removed");
   };
-
   const doSetCover = (id: string) => {
     setCoverModal({ id });
   };
-
   const doCoverConfirm = (rootId: string, path: string) => {
     if (!coverModal) return;
     setCover(coverModal.id, rootId, path);
     pushToast("success", "Cover image updated");
     setCoverModal(null);
   };
-
   const doTogglePublic = (id: string, currentState: boolean) => {
     setPublic(id, !currentState);
     pushToast("success", !currentState ? "Playlist is now public" : "Playlist is now private");
   };
-
   if (selected) {
     return (
       <div className="flex-1 overflow-auto p-4 pb-24 md:pb-20">
         <button onClick={() => setSelectedId(null)} className="flex items-center gap-1.5 text-sm text-content-muted hover:text-content transition-colors mb-4">
           <ArrowLeft className="h-4 w-4" /> Playlists
         </button>
-
         <div className="flex flex-col md:flex-row gap-6 mb-8">
           <div className="w-full md:w-56 lg:w-64 shrink-0">
             <div className="aspect-square rounded-2xl overflow-hidden shadow-xl ring-1 ring-white/10">
               <PlaylistCover playlist={selected} className="rounded-2xl" />
             </div>
           </div>
-
           <div className="flex-1 min-w-0 flex flex-col justify-end">
             <h1 className="text-2xl md:text-3xl font-extrabold truncate">{selected.name}</h1>
             <div className="flex items-center gap-2 mt-1.5 text-sm text-content-muted flex-wrap">
@@ -411,7 +408,6 @@ export default function PlaylistsPanel({ user }: { user?: User }) {
                 <span className="px-1.5 py-0.5 rounded-md bg-accent/10 text-accent text-[10px] font-bold uppercase">Public</span>
               )}
             </div>
-
             <div className="flex items-center gap-2 mt-4 flex-wrap">
               <button
                 onClick={() => play(selected.id)}
@@ -448,7 +444,6 @@ export default function PlaylistsPanel({ user }: { user?: User }) {
             </div>
           </div>
         </div>
-
         {selected.items.length === 0 ? (
           <div className="text-center text-content-muted py-16 glass rounded-2xl">
             <div className="h-16 w-16 mx-auto mb-4 rounded-2xl bg-accent/10 grid place-items-center">
@@ -507,12 +502,10 @@ export default function PlaylistsPanel({ user }: { user?: User }) {
             })}
           </div>
         )}
-
         {collabModal && <CollaboratorModal playlist={selected} onClose={() => setCollabModal(false)} />}
         {shareTarget && (
           <ShareDialog item={shareTarget.item} rootId={shareTarget.rootId} onClose={() => setShareTarget(null)} />
         )}
-
         {renameTarget && (
           <Modal title="Rename playlist" onClose={() => setRenameTarget(null)}
             footer={<button onClick={doRenameConfirm} className="px-3 py-1.5 rounded-lg accent-glass text-sm font-medium">Rename</button>}>
@@ -525,7 +518,6 @@ export default function PlaylistsPanel({ user }: { user?: User }) {
             />
           </Modal>
         )}
-
         {deleteTarget && (
           <Modal title="Delete playlist" onClose={() => setDeleteTarget(null)}
             description={`Are you sure you want to delete "${deleteTarget.name}"?`}
@@ -538,7 +530,6 @@ export default function PlaylistsPanel({ user }: { user?: User }) {
             <></>
           </Modal>
         )}
-
         {coverModal && (
           <CoverPickerModal
             onClose={() => setCoverModal(null)}
@@ -548,7 +539,6 @@ export default function PlaylistsPanel({ user }: { user?: User }) {
       </div>
     );
   }
-
   const renderGrid = (list: StorePlaylist[]) => (
     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
       {list.map((pl) => (
@@ -585,14 +575,12 @@ export default function PlaylistsPanel({ user }: { user?: User }) {
       ))}
     </div>
   );
-
   return (
     <div className="flex-1 overflow-auto p-4 pb-24 md:pb-20">
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-lg font-semibold flex items-center gap-2"><ListMusic className="h-5 w-5 text-accent" /> Playlists</h2>
         <button onClick={newPlaylist} className="flex items-center gap-1.5 px-4 py-2 rounded-xl accent-glass text-sm font-medium"><Plus className="h-4 w-4" /> New</button>
       </div>
-
       {playlists.length === 0 ? (
         <div className="text-center text-content-muted p-10 glass rounded-2xl">
           <div className="h-16 w-16 mx-auto mb-4 rounded-2xl bg-accent/10 grid place-items-center">
@@ -624,12 +612,11 @@ export default function PlaylistsPanel({ user }: { user?: User }) {
               <h3 className="text-xs font-bold uppercase tracking-wider text-content-muted mb-3 flex items-center gap-1.5">
                 <Globe className="h-3.5 w-3.5" /> Public Playlists ({publicPlaylists.length})
               </h3>
-              {renderGrid(publicPlaylists)}
+              {renderGrid(publicPlaylists as unknown as StorePlaylist[])}
             </section>
           )}
         </div>
       )}
-
       {newModal && (
         <Modal title="New playlist" onClose={() => setNewModal(false)}
           footer={<button onClick={doCreate} className="px-3 py-1.5 rounded-lg accent-glass text-sm font-medium">Create</button>}>

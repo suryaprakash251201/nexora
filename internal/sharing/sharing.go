@@ -6,6 +6,8 @@ package sharing
 
 import (
 	"database/sql"
+
+	"github.com/nexora/nexora/internal/database"
 	"errors"
 	"time"
 
@@ -59,10 +61,10 @@ type CreateInput struct {
 }
 
 // Store persists shares.
-type Store struct{ db *sql.DB }
+type Store struct{ db *database.DB }
 
 // NewStore constructs a sharing store.
-func NewStore(db *sql.DB) *Store { return &Store{db: db} }
+func NewStore(db *database.DB) *Store { return &Store{db: db} }
 
 // Create inserts a new share and returns it (including the secret token).
 func (s *Store) Create(in CreateInput) (Share, error) {

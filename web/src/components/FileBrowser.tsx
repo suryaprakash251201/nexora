@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, memo, useCallback } from "react";
 import { motion } from "motion/react";
 import { useUI } from "../store";
-import { Play, MoreVertical, AlertTriangle, RefreshCw } from "lucide-react";
+import { Play, MoreVertical, AlertTriangle, RefreshCw, Eye, FolderOpen } from "lucide-react";
 import { FileItem } from "../api/types";
 import { formatBytes, formatDate } from "../lib/format";
 import { FileThumb } from "./FileThumb";
@@ -34,6 +34,141 @@ interface FileBrowserProps {
   density?: DensityMode;
   /** Current folder path — resets the scroll container to top when it changes. */
   folderPath?: string;
+}
+
+/** Media extensions that get a "Play" hover action rather than "Preview". */
+const MEDIA_EXTS = new Set(["mp3", "flac", "wav", "ogg", "m4a", "aac", "opus", "mp4", "webm", "mkv", "mov", "avi"]);
+
+/** Contextual primary hover action — Play for media, Preview otherwise. */
+function hoverActionFor(item: FileItem): { Icon: typeof Play; label: string; filled?: boolean } {
+  if (item.is_dir) return { Icon: FolderOpen, label: "Open folder" };
+  const ext = (item.extension || "").toLowerCase();
+  if (item.mime.startsWith("audio/") || item.mime.startsWith("video/") || MEDIA_EXTS.has(ext)) {
+    return { Icon: Play, label: "Play", filled: true };
+  }
+  return { Icon: Eye, label: "Preview" };
+}
+
+// Density-based class helpers (module scope: stable reference, not rebuilt per render)
+const DENSITY_CLASSES = {
+  grid: {
+    compact: "p-1.5 gap-1.5",
+    comfortable: "p-2 sm:p-3 gap-2 sm:gap-3",
+    spacious: "p-3 sm:p-4 gap-3 sm:gap-4",
+  },
+  gridItem: {
+    compact: "p-2",
+    comfortable: "p-3",
+    spacious: "p-4",
+  },
+  gridIcon: {
+    compact: "h-28 w-28",
+    comfortable: "h-32 w-32",
+    spacious: "h-36 w-36",
+  },
+  gridIconInner: {
+    compact: "h-20 w-20",
+    comfortable: "h-24 w-24",
+    spacious: "h-28 w-28",
+  },
+  gridName: {
+    compact: "text-[11px]",
+    comfortable: "text-xs",
+    spacious: "text-sm",
+  },
+  gridMeta: {
+    compact: "text-[9px]",
+    comfortable: "text-[10px]",
+    spacious: "text-[11px]",
+  },
+  listContainer: {
+    compact: "p-2",
+    comfortable: "p-3",
+    spacious: "p-4",
+  },
+  listHeader: {
+    compact: "px-2 py-2 text-[10px]",
+    comfortable: "px-3 sm:px-6 py-4 text-xs",
+    spacious: "px-4 sm:px-8 py-5 text-sm",
+  },
+  listRow: {
+    compact: "gap-2 px-3 py-2",
+    comfortable: "gap-3 px-4 sm:px-6 py-3",
+    spacious: "gap-4 px-5 sm:px-8 py-4",
+  },
+  listIcon: {
+    compact: "w-8 h-8",
+    comfortable: "w-10 h-10",
+    spacious: "w-12 h-12",
+  },
+  listIconInner: {
+    compact: "w-5 h-5",
+    comfortable: "w-6 h-6",
+    spacious: "w-7 h-7",
+  },
+  listName: {
+    compact: "text-xs",
+    comfortable: "text-sm",
+    spacious: "text-base",
+  },
+  listMeta: {
+    compact: "text-[11px]",
+    comfortable: "text-xs",
+    spacious: "text-sm",
+  },
+  listKindWidth: {
+    compact: "w-20",
+    comfortable: "w-28",
+    spacious: "w-32",
+  },
+  listSizeWidth: {
+    compact: "w-16",
+    comfortable: "w-20",
+    spacious: "w-24",
+  },
+  listDateWidth: {
+    compact: "w-28",
+    comfortable: "w-36",
+    spacious: "w-40",
+  },
+  checkbox: {
+    compact: "w-4 h-4",
+    comfortable: "w-4.5 h-4.5",
+    spacious: "w-5 h-5",
+  },
+  headerCheckbox: {
+    compact: "w-4 h-4",
+    comfortable: "w-4.5 h-4.5",
+    spacious: "w-5 h-5",
+  },
+} satisfies Record<string, Record<DensityMode, string>>;
+
+/**
+ * Roving-focus neighbour lookup for ArrowUp/ArrowDown/Left/Right.
+ * Works for both the multi-column grid and the single-column list:
+ * Left/Right step through DOM order; Up/Down jump to whichever item in the
+ * adjacent visual row sits closest to the current column.
+ */
+function focusNeighbour(items: HTMLElement[], currentIdx: number, key: string): HTMLElement | undefined {
+  const cur = items[currentIdx];
+  if (!cur) return undefined;
+  if (key === "ArrowRight") return items[currentIdx + 1];
+  if (key === "ArrowLeft") return items[currentIdx - 1];
+  if (key !== "ArrowUp" && key !== "ArrowDown") return undefined;
+
+  const colLeft = cur.offsetLeft;
+  const step = key === "ArrowDown" ? 1 : -1;
+  for (let i = currentIdx + step; i >= 0 && i < items.length; i += step) {
+    const crossedRow = key === "ArrowDown" ? items[i].offsetTop > cur.offsetTop : items[i].offsetTop < cur.offsetTop;
+    if (!crossedRow) continue;
+    // First item of the adjacent row found — pick the closest column within it.
+    let best = i;
+    for (let j = i; j >= 0 && j < items.length && items[j].offsetTop === items[i].offsetTop; j += step) {
+      if (Math.abs(items[j].offsetLeft - colLeft) < Math.abs(items[best].offsetLeft - colLeft)) best = j;
+    }
+    return items[best];
+  }
+  return undefined;
 }
 
 const FileIconForItem = memo(function FileIconForItem({ item, large, fill, className }: { item: FileItem; large?: boolean; fill?: boolean; className?: string }) {
@@ -87,6 +222,7 @@ export default function FileBrowser({
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const dropZoneRef = useRef<HTMLDivElement>(null);
+  const itemsGridRef = useRef<HTMLDivElement>(null);
 
   // When the visible folder changes, jump back to the top instead of
   // preserving the old scroll offset mid-list.
@@ -153,7 +289,7 @@ export default function FileBrowser({
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent, item: FileItem, index: number) => {
+  const handleKeyDown = (e: React.KeyboardEvent, item: FileItem) => {
     switch (e.key) {
       case "Enter":
       case " ":
@@ -161,11 +297,24 @@ export default function FileBrowser({
         e.preventDefault();
         onOpen(item);
         break;
-      case "ArrowRight":
-        if (item.is_dir) { e.preventDefault(); onOpen(item); }
-        break;
     }
   };
+
+  // Roving focus: arrows move keyboard focus between items (grid-aware).
+  const handleArrowNavigation = useCallback((e: React.KeyboardEvent) => {
+    if (e.defaultPrevented) return;
+    const key = e.key;
+    if (key !== "ArrowDown" && key !== "ArrowUp" && key !== "ArrowLeft" && key !== "ArrowRight") return;
+    if (!itemsGridRef.current) return;
+    const tiles = Array.from(itemsGridRef.current.querySelectorAll<HTMLElement>("[data-file-item]"));
+    const idx = tiles.indexOf(document.activeElement as HTMLElement);
+    if (idx === -1) return;
+    const next = focusNeighbour(tiles, idx, key);
+    if (next) {
+      e.preventDefault();
+      next.focus();
+    }
+  }, []);
 
   if ((loading && items.length === 0) || (isFetching && items.length === 0)) {
     return viewMode === "grid" ? (
@@ -183,7 +332,7 @@ export default function FileBrowser({
     return (
       <div className="h-full grid place-items-center p-8">
         <div className="text-center max-w-md">
-          <div className="inline-flex p-4 rounded-2xl bg-red-500/10 text-red-400 mb-4">
+          <div className="inline-flex p-4 rounded-2xl bg-danger/10 text-danger mb-4">
             <AlertTriangle className="h-8 w-8" />
           </div>
           <h3 className="text-lg font-semibold mb-2">Failed to load files</h3>
@@ -222,100 +371,7 @@ export default function FileBrowser({
     );
   }
 
-  // Density-based class helpers
-  const dc = {
-    grid: {
-      compact: "p-1.5 gap-1.5",
-      comfortable: "p-2 sm:p-3 gap-2 sm:gap-3",
-      spacious: "p-3 sm:p-4 gap-3 sm:gap-4",
-    },
-    gridItem: {
-      compact: "p-2",
-      comfortable: "p-3",
-      spacious: "p-4",
-    },
-    gridIcon: {
-      compact: "h-28 w-28",
-      comfortable: "h-32 w-32",
-      spacious: "h-36 w-36",
-    },
-    gridIconInner: {
-      compact: "h-20 w-20",
-      comfortable: "h-24 w-24",
-      spacious: "h-28 w-28",
-    },
-    gridName: {
-      compact: "text-[11px]",
-      comfortable: "text-xs",
-      spacious: "text-sm",
-    },
-    gridMeta: {
-      compact: "text-[9px]",
-      comfortable: "text-[10px]",
-      spacious: "text-[11px]",
-    },
-    listContainer: {
-      compact: "p-2",
-      comfortable: "p-3",
-      spacious: "p-4",
-    },
-    listHeader: {
-      compact: "px-2 py-2 text-[10px]",
-      comfortable: "px-3 sm:px-6 py-4 text-xs",
-      spacious: "px-4 sm:px-8 py-5 text-sm",
-    },
-    listRow: {
-      compact: "gap-2 px-3 py-2",
-      comfortable: "gap-3 px-4 sm:px-6 py-3",
-      spacious: "gap-4 px-5 sm:px-8 py-4",
-    },
-    listIcon: {
-      compact: "w-8 h-8",
-      comfortable: "w-10 h-10",
-      spacious: "w-12 h-12",
-    },
-    listIconInner: {
-      compact: "w-5 h-5",
-      comfortable: "w-6 h-6",
-      spacious: "w-7 h-7",
-    },
-    listName: {
-      compact: "text-xs",
-      comfortable: "text-sm",
-      spacious: "text-base",
-    },
-    listMeta: {
-      compact: "text-[11px]",
-      comfortable: "text-xs",
-      spacious: "text-sm",
-    },
-    listKindWidth: {
-      compact: "w-20",
-      comfortable: "w-28",
-      spacious: "w-32",
-    },
-    listSizeWidth: {
-      compact: "w-16",
-      comfortable: "w-20",
-      spacious: "w-24",
-    },
-    listDateWidth: {
-      compact: "w-28",
-      comfortable: "w-36",
-      spacious: "w-40",
-    },
-    checkbox: {
-      compact: "w-4 h-4",
-      comfortable: "w-4.5 h-4.5",
-      spacious: "w-5 h-5",
-    },
-    headerCheckbox: {
-      compact: "w-4 h-4",
-      comfortable: "w-4.5 h-4.5",
-      spacious: "w-5 h-5",
-    },
-  };
-
+  const dc = DENSITY_CLASSES;
   const d = density;
 
   return (
@@ -323,12 +379,16 @@ export default function FileBrowser({
       {viewMode === "grid" ? (
         <>
           <div
-            className={cn(dc.grid[d], "grid")} style={{ gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))" }}
-            role="grid"
+            ref={itemsGridRef}
+            onKeyDown={handleArrowNavigation}
+            className={cn(DENSITY_CLASSES.grid[d], "grid")} style={{ gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))" }}
+            role="list"
             aria-label="File grid"
           >
               {items.map((item, index) => {
                 const selected = selection.has(item.path);
+                const action = hoverActionFor(item);
+                const ActionIcon = action.Icon;
                 return (
                   <motion.div
                     key={item.path}
@@ -336,9 +396,12 @@ export default function FileBrowser({
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     transition={{ duration: 0.16, ease: "easeOut", delay: Math.min(index * 0.006, 0.24) }}
                     tabIndex={0}
+                    data-file-item
+                    role="listitem"
+                    aria-selected={selectMode || selection.size > 0 ? selected : undefined}
                     onClick={(e) => handleItemClick(item, e)}
                     onContextMenu={(e) => onContextMenu(e, item)}
-                    onKeyDown={(e) => handleKeyDown(e, item, index)}
+                    onKeyDown={(e) => handleKeyDown(e, item)}
                     onDragOver={(e) => { if (canDrop && item.is_dir) { e.preventDefault(); setDropTarget(item.path); } }}
                     onDragLeave={() => { if (dropTarget === item.path) setDropTarget(null); }}
                     onDrop={(e) => {
@@ -351,11 +414,12 @@ export default function FileBrowser({
                     whileHover={{ y: -6 }}
                     whileTap={{ scale: 0.98 }}
                     className={cn(
-                      "group relative flex flex-col items-center text-center transition-all duration-200 outline-none cursor-pointer",
+                      "group relative flex flex-col items-center text-center transition-all duration-200 cursor-pointer rounded-2xl",
+                      // Clear, consistent selection + hover affordance (was opacity dimming)
                       selected
-                        ? "opacity-80"
-                        : "opacity-100 hover:opacity-90",
-                      dropTarget === item.path ? "ring-2 ring-accent scale-105" : "",
+                        ? "bg-accent/10 ring-1 ring-inset ring-accent/40"
+                        : "hover:bg-glass-bg-subtle",
+                      dropTarget === item.path ? "ring-2 ring-accent scale-105 bg-accent/15" : "",
                       dragOver ? "opacity-50" : ""
                     )}
                   >
@@ -363,16 +427,17 @@ export default function FileBrowser({
                       <FileIconForItem item={item} large className={dc.gridIcon[d]} />
 
                       {!selectMode && (
-                        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 group-focus-visible:opacity-100 transition-opacity duration-200">
                           <div className="flex gap-2 p-1.5 rounded-2xl bg-glass-bg-strong backdrop-blur-2xl border border-glass-border shadow-2xl dark:border-white/10" onClick={(e) => e.stopPropagation()}>
                             <motion.button
                               whileHover={{ scale: 1.1 }}
                               whileTap={{ scale: 0.9 }}
                               onClick={(e) => { e.stopPropagation(); onOpen(item); }}
                               className="p-2 rounded-xl text-white hover:bg-accent transition-colors bg-accent/60"
-                              title="Open"
+                              title={action.label}
+                              aria-label={action.label}
                             >
-                              <Play className="h-4 w-4" fill="currentColor" />
+                              <ActionIcon className="h-4 w-4" fill={action.filled ? "currentColor" : "none"} />
                             </motion.button>
                             <motion.button
                               whileHover={{ scale: 1.1 }}
@@ -383,6 +448,7 @@ export default function FileBrowser({
                               }}
                               className="p-2 rounded-xl text-text-secondary hover:bg-glass-bg hover:text-foreground transition-colors"
                               title="More actions"
+                              aria-label={`More actions for ${item.name}`}
                             >
                               <MoreVertical className="h-4 w-4" />
                             </motion.button>
@@ -411,6 +477,7 @@ export default function FileBrowser({
                               checked={selected}
                               onChange={(e) => onSelect(item, e)}
                               title="Select"
+                              aria-label={`Select ${item.name}`}
                             />
                           </label>
                         </div>
@@ -461,6 +528,7 @@ export default function FileBrowser({
                 type="checkbox"
                 checked={allSelected}
                 onChange={toggleSelectAll}
+                aria-label="Select all files"
                 className={cn("rounded border-2 border-glass-border bg-glass-bg text-accent focus:ring-accent cursor-pointer transition-all", dc.headerCheckbox[d])}
               />
             </span>
@@ -473,9 +541,11 @@ export default function FileBrowser({
             )}
           </div>
 
-          <div className="mt-1">
+          <div ref={itemsGridRef} role="list" aria-label="File list" onKeyDown={handleArrowNavigation} className="mt-1">
               {items.map((item, index) => {
                 const selected = selection.has(item.path);
+                const action = hoverActionFor(item);
+                const ActionIcon = action.Icon;
                 return (
                   <motion.div
                     key={item.path}
@@ -483,9 +553,12 @@ export default function FileBrowser({
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.14, ease: "easeOut", delay: Math.min(index * 0.004, 0.12) }}
                     tabIndex={0}
+                    data-file-item
+                    role="listitem"
+                    aria-selected={selectMode || selection.size > 0 ? selected : undefined}
                     onClick={(e) => handleItemClick(item, e)}
                     onContextMenu={(e) => onContextMenu(e, item)}
-                    onKeyDown={(e) => handleKeyDown(e, item, index)}
+                    onKeyDown={(e) => handleKeyDown(e, item)}
                     onDragOver={(e) => { if (canDrop && item.is_dir) { e.preventDefault(); setDropTarget(item.path); } }}
                     onDragLeave={() => { if (dropTarget === item.path) setDropTarget(null); }}
                     onDrop={(e) => {
@@ -496,7 +569,7 @@ export default function FileBrowser({
                       }
                     }}
                     className={cn(
-                      "group grid grid-cols-[auto_1fr_auto_auto] items-center cursor-pointer transition-all duration-150 border border-transparent",
+                      "group grid grid-cols-[auto_1fr_auto_auto] items-center cursor-pointer transition-all duration-150 border border-transparent rounded-xl",
                       dc.listRow[d],
                       index % 2 === 0 ? "bg-glass-bg-subtle/30" : "",
                       selected
@@ -511,7 +584,7 @@ export default function FileBrowser({
                         type="checkbox"
                         className={cn(
                           "rounded border-2 border-glass-border bg-glass-bg text-accent focus:ring-2 focus:ring-accent/50 cursor-pointer transition-all",
-                          selected ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+                          selected ? "opacity-100" : "opacity-0 group-hover:opacity-100 [@media(pointer:coarse)]:opacity-40 [@media(pointer:coarse)]:group-hover:opacity-100",
                           dc.checkbox[d]
                         )}
                         checked={selected}
@@ -543,20 +616,22 @@ export default function FileBrowser({
 
                       {/* Hover action buttons */}
                       {!selectMode && (
-                        <div className="ml-auto flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-150" onClick={(e) => e.stopPropagation()}>
+                        <div className="ml-auto flex items-center gap-0.5 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150" onClick={(e) => e.stopPropagation()}>
                           <motion.button
                             whileTap={{ scale: 0.9 }}
                             onClick={(e) => { e.stopPropagation(); onOpen(item); }}
                             className="p-1.5 rounded-lg text-text-tertiary hover:text-accent hover:bg-accent/10 transition-colors"
-                            title="Open"
+                            title={action.label}
+                            aria-label={action.label}
                           >
-                            <Play className="h-3.5 w-3.5" />
+                            <ActionIcon className="h-3.5 w-3.5" fill={action.filled ? "currentColor" : "none"} />
                           </motion.button>
                           <motion.button
                             whileTap={{ scale: 0.9 }}
                             onClick={(e) => { e.stopPropagation(); onContextMenu(e, item); }}
                             className="p-1.5 rounded-lg text-text-tertiary hover:text-foreground hover:bg-glass-bg transition-colors"
                             title="More actions"
+                            aria-label={`More actions for ${item.name}`}
                           >
                             <MoreVertical className="h-3.5 w-3.5" />
                           </motion.button>

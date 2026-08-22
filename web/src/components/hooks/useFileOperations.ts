@@ -64,8 +64,8 @@ export function useFileOperations({
         await post('/favorites', { root: rootId, path: item.path }); 
         pushToast('success', 'Added to favorites'); 
       }
+      // Single source of truth: ["favorites"]. All consumers (Workspace, Sidebar, Drawer) share this key so React Query dedupes.
       qc.invalidateQueries({ queryKey: ['favorites'] });
-      qc.invalidateQueries({ queryKey: ['fav-set'] });
     } catch (e: any) { 
       pushToast('error', e.message); 
     }

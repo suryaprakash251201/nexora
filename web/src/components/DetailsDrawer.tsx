@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { X, Download, Eye, Pencil, Trash2, Scissors, Copy, Info, Star, Share2, Activity, FileText, Share, Clock, Link, FolderOpen } from "lucide-react";
-import { get, post, del } from "../api/client";
+import { filesApi, sharesApi, activityApi } from "../api/endpoints";
 import { formatBytes, formatDate } from "../lib/format";
 import { useUI } from "../store";
 import { FileThumb, FolderTile } from "./FileThumb";
@@ -44,7 +44,7 @@ export default function DetailsDrawer({
 
   const { data: stat, isLoading, isError, refetch } = useQuery({
     queryKey: ["stat", rootId, path],
-    queryFn: () => get<any>("/files/stat", { root: rootId, path }),
+    queryFn: () => filesApi.stat(rootId, path),
     enabled: !!path,
   });
 
@@ -52,7 +52,7 @@ export default function DetailsDrawer({
     if (!stat) return;
     setDeleting(true);
     try {
-      await del("/files", { root: rootId, path: stat.path });
+      await filesApi.delete(rootId, stat.path);
       pushToast("success", "Moved to trash");
       onClose();
       qc?.invalidateQueries({ queryKey: ["files", rootId] });
@@ -252,7 +252,7 @@ function InfoTile({ label, value, mono }: { label: string; value: string; mono?:
 function ActivityFeed({ rootId, path }: { rootId: string; path: string }) {
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["activity", rootId, path],
-    queryFn: () => get<{ items: any[] }>("/activity", { root: rootId, path }),
+    queryFn: () => activityApi.list(rootId, path),
     enabled: !!path,
   });
 
@@ -293,14 +293,14 @@ function SharesList({ rootId, path }: { rootId: string; path: string }) {
 
   const { data: shares, isLoading, isError, refetch } = useQuery({
     queryKey: shareKey,
-    queryFn: () => get<{ items: any[] }>("/shares", { root: rootId, path }),
+    queryFn: () => sharesApi.list({ root: rootId, path }) as any,
     enabled: !!path,
   });
 
   const createShare = async () => {
     setCreating(true);
     try {
-      await post("/shares", { root: rootId, path, scope: "preview", expires_in_hours: 0, max_downloads: 0 });
+      await sharesApi.create({ root: rootId, path, scope: "preview", expires_in_hours: 0, max_downloads: 0 });
       pushToast("success", "Share link created");
       qc.invalidateQueries({ queryKey: shareKey });
     } catch (e: any) { pushToast("error", e.message); }
@@ -309,7 +309,7 @@ function SharesList({ rootId, path }: { rootId: string; path: string }) {
 
   const deleteShare = async (id: string) => {
     try {
-      await del("/shares", { id });
+      await sharesApi.delete(id);
       pushToast("success", "Share removed");
       qc.invalidateQueries({ queryKey: shareKey });
     } catch (e: any) { pushToast("error", e.message); }
@@ -333,7 +333,7 @@ function SharesList({ rootId, path }: { rootId: string; path: string }) {
         </button>
       ) : (
         <div className="space-y-3">
-          {items.map((s) => (
+          {items.map((s: any) => (
             <div key={s.id} className="p-3 rounded-xl glass-subtle border border-border/40">
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">

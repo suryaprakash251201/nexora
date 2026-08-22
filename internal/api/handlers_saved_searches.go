@@ -299,7 +299,7 @@ func (s *Server) handleExecuteSavedSearch(w http.ResponseWriter, r *http.Request
 		searchReq.RootID = rootParam
 	}
 
-	results, err := s.Search.Search(searchReq)
+	results, err := s.Search.Search(r.Context(), searchReq)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error", "search failed", middleware.GetRequestID(r.Context()))
 		return

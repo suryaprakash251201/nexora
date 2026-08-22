@@ -2,7 +2,7 @@ import { useState } from "react";
 import { HardDrive, Cloud, Eye, EyeOff } from "lucide-react";
 import { Modal } from "./Modal";
 import { useUI } from "../store";
-import { post, put } from "../api/client";
+import { adminApi } from "../api/endpoints";
 import { ROOT_ICONS } from "../lib/rootIcons";
 import type { Root } from "../api/types";
 
@@ -93,10 +93,10 @@ export default function RootModal({
 
     try {
       if (isEdit) {
-        await put(`/admin/roots/${root!.id}`, body);
+        await adminApi.updateRoot(root!.id, body);
         pushToast("success", "Storage root updated");
       } else {
-        await post("/admin/roots", body);
+        await adminApi.createRoot(body as any);
         pushToast("success", "Storage root created");
       }
       onDone();

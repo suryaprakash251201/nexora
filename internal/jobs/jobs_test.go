@@ -5,6 +5,8 @@ import (
 	"bytes"
 	"database/sql"
 	"io"
+
+	"github.com/nexora/nexora/internal/database"
 	"sync"
 	"testing"
 
@@ -133,11 +135,11 @@ func newJobsManager(t *testing.T, archiveRel string, archiveData []byte) (*Manag
 		VALUES('r1','root','/data','','local','{}',0,1,1,'','')`); err != nil {
 		t.Fatal(err)
 	}
-	rs := storage.NewRootService(rootsDB)
+	rs := storage.NewRootService(database.Wrap(rootsDB, "sqlite"))
 	// Override the cache so ProviderFor returns our memProvider for r1.
 	rs.SetProviderForTest("r1", mp)
 
-	m := NewManager(db, rs, logger.New("info", "test"), t.TempDir(), 1)
+	m := NewManager(database.Wrap(db, "sqlite"), rs, logger.New("info", "test"), t.TempDir(), 1)
 	t.Cleanup(m.Stop)
 	return m, mp
 }

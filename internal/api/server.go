@@ -1,7 +1,6 @@
 package api
 
 import (
-	"database/sql"
 	"net/http"
 	"strings"
 
@@ -11,6 +10,7 @@ import (
 	"github.com/nexora/nexora/internal/audit"
 	"github.com/nexora/nexora/internal/auth"
 	"github.com/nexora/nexora/internal/config"
+	"github.com/nexora/nexora/internal/database"
 	"github.com/nexora/nexora/internal/events"
 	"github.com/nexora/nexora/internal/jobs"
 	"github.com/nexora/nexora/internal/logger"
@@ -27,7 +27,7 @@ import (
 type Server struct {
 	Cfg          *config.Config
 	Log          *logger.Logger
-	DB           *sql.DB
+	DB           *database.DB
 	Sessions     *auth.SessionStore
 	Users        *auth.UserStore
 	Audit        *audit.Store
@@ -51,7 +51,7 @@ type Server struct {
 type Deps struct {
 	Cfg       *config.Config
 	Log       *logger.Logger
-	DB        *sql.DB
+	DB        *database.DB
 	Users     *auth.UserStore
 	Sessions  *auth.SessionStore
 	Audit     *audit.Store
@@ -205,9 +205,12 @@ func (s *Server) Routes() http.Handler {
 	authed.Get("/files/hls/playlist.m3u8", s.handleHLSPlaylist)
 	authed.Get("/files/hls/segment.ts", s.handleHLSSegment)
 
-	// Lossless audio metadata and server capabilities.
-	authed.Get("/audio/info", s.handleAudioInfo)
-	authed.Get("/audio/formats", s.handleAudioFormats)
+  // Lossless audio metadata and server capabilities.
+  authed.Get("/audio/info", s.handleAudioInfo)
+  authed.Get("/audio/formats", s.handleAudioFormats)
+  authed.Get("/audio/lyrics", s.handleAudioLyrics)
+  authed.Post("/audio/lyrics", s.handleSaveAudioLyrics)
+  authed.Delete("/audio/lyrics", s.handleDeleteAudioLyrics)
 	authed.Get("/trash", s.handleListTrash)
 	authed.Post("/trash/restore", s.handleRestoreTrash)
 	authed.Delete("/trash", s.handleDeleteTrash)

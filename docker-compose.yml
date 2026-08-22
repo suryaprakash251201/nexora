@@ -19,7 +19,8 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        VERSION: "${NEXORA_VERSION:-1.7.2}"
+        # Single source of truth is the repo-root VERSION file (and git tags for releases).
+        VERSION: "${NEXORA_VERSION:-1.8.0}"
       # Build with host networking: on hosts where the container DNS is broken
       # (e.g. Tailscale MagicDNS 100.100.100.100 doesn't answer container
       # queries), pulling packages inside the image fails with "no such

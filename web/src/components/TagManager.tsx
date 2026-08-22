@@ -2,10 +2,10 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { X, Plus, Tag as TagIcon, Check } from "lucide-react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
-import { get, post, del } from "../api/client";
+;
+import { tagsApi } from "../api/endpoints";
 import type { Tag } from "../api/types";
 import { cn } from "@/lib/utils";
-
 const TAG_COLORS = [
   { name: "Red", value: "#EF4444" },
   { name: "Orange", value: "#F97316" },
@@ -20,7 +20,6 @@ const TAG_COLORS = [
   { name: "Rose", value: "#F43F5E" },
   { name: "Slate", value: "#64748B" },
 ];
-
 export function TagChip({ tag, onRemove, small }: { tag: Tag; onRemove?: () => void; small?: boolean }) {
   return (
     <motion.span
@@ -53,7 +52,6 @@ export function TagChip({ tag, onRemove, small }: { tag: Tag; onRemove?: () => v
     </motion.span>
   );
 }
-
 export function TagDot({ color, size = "sm" }: { color: string; size?: "sm" | "md" }) {
   const dim = size === "sm" ? "h-2 w-2" : "h-3 w-3";
   return (
@@ -63,7 +61,6 @@ export function TagDot({ color, size = "sm" }: { color: string; size?: "sm" | "m
     />
   );
 }
-
 export function TagPicker({
   rootId,
   paths,
@@ -79,42 +76,36 @@ export function TagPicker({
   const [newTagName, setNewTagName] = useState("");
   const [newTagColor, setNewTagColor] = useState(TAG_COLORS[6].value);
   const [showCreate, setShowCreate] = useState(false);
-
   const tags = useQuery({
     queryKey: ["tags"],
-    queryFn: () => get<{ tags: Tag[] }>("/tags").then((d) => d.tags || []),
+    queryFn: () => tagsApi.listRaw().then((d) => d.tags || []),
   });
-
   const createTag = useMutation({
     mutationFn: (data: { name: string; color: string }) =>
-      post<Tag>("/tags", data),
+      tagsApi.create(data as any),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["tags"] });
       setNewTagName("");
       setShowCreate(false);
     },
   });
-
   const applyTag = useMutation({
     mutationFn: (tagId: string) =>
-      post("/files/tag", { tag_id: tagId, root_id: rootId, paths }),
+      tagsApi.tagFile({ tag_id: tagId, root_id: rootId, paths }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["file-tags"] });
       qc.invalidateQueries({ queryKey: ["tags"] });
     },
   });
-
   const removeTag = useMutation({
     mutationFn: (tagId: string) =>
-      del("/files/tag", { tag_id: tagId, root_id: rootId, paths: paths.join(",") }),
+      tagsApi.untagFile({ tag_id: tagId, root_id: rootId, paths: paths.join(",") }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["file-tags"] });
       qc.invalidateQueries({ queryKey: ["tags"] });
     },
   });
-
   const appliedIds = new Set(existingTags?.map((t) => t.id) || []);
-
   return (
     <motion.div
       initial={{ opacity: 0, y: 8, scale: 0.96 }}
@@ -128,11 +119,10 @@ export function TagPicker({
           <TagIcon className="h-4 w-4 text-accent" />
           <span className="text-sm font-semibold">Tags</span>
         </div>
-        <button onClick={onClose} className="p-1 rounded-lg hover:bg-white/10 transition-colors">
+        <button onClick={onClose} className="p-1 rounded-lg hover:bg-glass-bg transition-colors">
           <X className="h-4 w-4 text-text-tertiary" />
         </button>
       </div>
-
       <div className="p-3 max-h-64 overflow-y-auto space-y-1">
         {(tags.data || []).map((tag) => {
           const applied = appliedIds.has(tag.id);
@@ -159,14 +149,12 @@ export function TagPicker({
             </button>
           );
         })}
-
         {tags.data?.length === 0 && !showCreate && (
           <p className="text-center text-text-tertiary text-xs py-4">
             No tags yet. Create one below.
           </p>
         )}
       </div>
-
       <div className="border-t border-white/[0.06] p-3">
         <AnimatePresence>
           {showCreate ? (
@@ -239,7 +227,6 @@ export function TagPicker({
     </motion.div>
   );
 }
-
 export function TagFilterBar({
   activeTags,
   onToggle,
@@ -251,11 +238,9 @@ export function TagFilterBar({
 }) {
   const tags = useQuery({
     queryKey: ["tags"],
-    queryFn: () => get<{ tags: Tag[] }>("/tags").then((d) => d.tags || []),
+    queryFn: () => tagsApi.listRaw().then((d) => d.tags || []),
   });
-
   if (!tags.data?.length) return null;
-
   return (
     <motion.div
       initial={{ height: 0, opacity: 0 }}

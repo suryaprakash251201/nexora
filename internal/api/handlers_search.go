@@ -75,7 +75,7 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	q.Limit, _ = strconv.Atoi(queryParam(r, "limit", "100"))
 	q.Offset, _ = strconv.Atoi(queryParam(r, "offset", "0"))
 
-	results, err := s.Search.Search(q)
+	results, err := s.Search.Search(r.Context(), q)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "search_error", "search failed", middleware.GetRequestID(r.Context()))
 		return

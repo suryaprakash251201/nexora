@@ -2,14 +2,6 @@ import { useState, useEffect, useMemo } from "react";
 import { motion } from "motion/react";
 import { Search, Clock, Sparkles, FileText, Music, Film, Plus, FilePlus, Upload, FolderUp, HardDrive, FolderPlus, Play, Sun, FolderOpen, Share, TrendingUp, Sunrise, Sunset, CloudMoon } from "lucide-react";
 import type { RecentItem, FileItem, HomeData, User } from "../api/types";
-
-interface HomeUsage {
-  total: number;
-  available: number;
-  used: number;
-  file_count: number;
-  breakdown: Record<string, { count: number; size: number }>;
-}
 import { FileThumb } from "./FileThumb";
 import { formatRelative } from "../lib/format";
 import { Input } from "./ui/Input";
@@ -17,7 +9,8 @@ import { EmptyState } from "./ui/EmptyState";
 import { staggerContainer, staggerItem, cardHover, slideUp } from "@/lib/animations";
 import { cn } from "@/lib/utils";
 import { formatBytes } from "../lib/format";
-import { get, getMediaUrl } from "../api/client";
+import { getMediaUrl } from "../api/client";
+import { homeApi } from "../api/endpoints";
 import { useQuery } from "@tanstack/react-query";
 
 function extOf(name: string): string {
@@ -35,8 +28,8 @@ function mediaKind(item: RecentItem): "music" | "video" | "doc" | "file" {
 }
 
 function StatsBar() {
-  const usage = useQuery({ queryKey: ["home-usage"], queryFn: () => get<HomeUsage>("/home/usage"), staleTime: 60000 });
-  const home = useQuery({ queryKey: ["home"], queryFn: () => get<HomeData>("/home"), staleTime: 30000 });
+  const usage = useQuery({ queryKey: ["home-usage"], queryFn: () => homeApi.usage(), staleTime: 60000 });
+  const home = useQuery({ queryKey: ["home"], queryFn: () => homeApi.get(), staleTime: 30000 });
 
   const stats = [
     {
@@ -99,7 +92,7 @@ function StatsBar() {
 }
 
 function StorageBreakdown() {
-  const usage = useQuery({ queryKey: ["home-usage"], queryFn: () => get<HomeUsage>("/home/usage"), staleTime: 60000 });
+  const usage = useQuery({ queryKey: ["home-usage"], queryFn: () => homeApi.usage(), staleTime: 60000 });
 
   const b = usage.data?.breakdown;
   const totalBytes = b ? Object.values(b).reduce((acc, c) => acc + c.size, 0) : 0;

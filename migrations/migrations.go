@@ -43,14 +43,7 @@ func All() ([]Migration, error) {
 
 // MigratePostgresSQL converts SQLite SQL to PostgreSQL compatible syntax.
 func MigratePostgresSQL(sql string) string {
-	// Common SQLite to PostgreSQL conversions
-	sql = strings.ReplaceAll(sql, "datetime('now')", "NOW()::text")
-	sql = strings.ReplaceAll(sql, "datetime('now','localtime')", "NOW()::text")
-	sql = strings.ReplaceAll(sql, "TEXT PRIMARY KEY", "TEXT PRIMARY KEY")
-	sql = strings.ReplaceAll(sql, "INTEGER PRIMARY KEY", "INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY")
-	sql = strings.ReplaceAll(sql, "BOOLEAN NOT NULL DEFAULT 0", "BOOLEAN NOT NULL DEFAULT FALSE")
-	sql = strings.ReplaceAll(sql, "BOOLEAN NOT NULL DEFAULT 1", "BOOLEAN NOT NULL DEFAULT TRUE")
-	return sql
+	return ToPostgres(sql)
 }
 
 // Run applies all migrations inside a transaction, tracking applied state in

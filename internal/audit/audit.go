@@ -2,7 +2,7 @@
 package audit
 
 import (
-	"database/sql"
+	"github.com/nexora/nexora/internal/database"
 
 	"github.com/nexora/nexora/internal/util"
 )
@@ -19,10 +19,10 @@ type Entry struct {
 }
 
 // Store writes audit entries to the database.
-type Store struct{ db *sql.DB }
+type Store struct{ db *database.DB }
 
 // NewStore creates an audit store.
-func NewStore(db *sql.DB) *Store { return &Store{db: db} }
+func NewStore(db *database.DB) *Store { return &Store{db: db} }
 
 // Record inserts an audit entry. Failures are non-fatal but logged by caller.
 func (s *Store) Record(userID, action, target, detail, ip string) error {

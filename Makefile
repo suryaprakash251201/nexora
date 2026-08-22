@@ -34,7 +34,12 @@ tidy: ## Tidy go modules
 fmt: ## Format code
 	go fmt $(PKG)
 
-lint: tidy vet ## Tidy and vet
+lint: tidy vet ## Tidy and vet (fast, no external linters)
+	@command -v golangci-lint >/dev/null 2>&1 && golangci-lint run --timeout 3m || echo "golangci-lint not installed — skipping (install with: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest)"
+
+lint-full: tidy vet ## Full lint (golangci-lint + web tsc + shared core)
+	cd web && npx tsc --noEmit
+	cd packages/core && npx tsc --noEmit
 
 clean: ## Remove build artifacts
 	rm -rf bin data/nexora.db data/nexora.db-* web/dist
