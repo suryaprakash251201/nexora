@@ -9,6 +9,9 @@ All notable changes to Nexora are documented here. The format is based on [Keep 
 - Web UI: hover action on files is contextual — Play for audio/video, Preview (eye) for documents/images, Open folder for directories.
 - Web UI: breadcrumb crumbs are real drop targets again — dropping a selection moves it into that folder (`onDropToFolder` → `useClipboard.movePathsTo`).
 - Web UI: theme follows OS preference by default (`enableSystem`); users who toggled explicitly keep their choice. Light-mode splash, skeleton shimmer, accent buttons and quota bars no longer render dark artifacts.
+- Web UI: z-index stacking now flows through documented CSS tokens (`--z-float/60`, `--z-transfers/65`, `--z-veil/70`, `--z-fullscreen/80`, `--z-modal/100`, `--z-palette/110`, `--z-toast/130`); all arbitrary `z-[n]` classes replaced, toasts explicitly topmost.
+- Web UI: player cover-art/play-button/EQ-bar gradients and analytics category colors use accent palette tokens (`accent-secondary`, multi-accent palette) instead of hardcoded purple/pink Tailwind stops — the four accent themes now restyle media surfaces and charts.
+- Web UI: shared `Modal` locks body scroll while open; header/footer tints use glass tokens instead of `white/[0.02]`.
 
 ### Fixed
 - Web UI: defined the previously-missing `no-scrollbar` / `mask-edges` utilities (breadcrumbs and filter chips showed native scrollbars); removed invalid `role="grid"` ARIA in favor of list semantics; `aria-current` on sidebar navigation; `role="alert"` on login errors; password visibility toggle restored to tab order; checkmarks replace chevrons in sort/filter menus; hardcoded palette colors replaced with semantic tokens in TrashView, error states and chrome hovers; deduplicated logo SVGs into `NexoraLogo` (Sidebar, Login, Setup); scrubbed private hostname from login error text.
