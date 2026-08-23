@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"os"
 	"testing"
+	"time"
 
 	_ "github.com/lib/pq"
 )
@@ -43,7 +44,10 @@ func TestRunPostgres(t *testing.T) {
 	}
 	// Verify a core table exists and is writable with a placeholder query
 	// (exercises the ?→$N rewriting via the DB wrapper in a real postgres session).
-	_, err = db.Exec(`INSERT INTO users (id, username, email, password_hash) VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO NOTHING`, "test-id", "testuser", "test@example.com", "hash")
+	// created_at/updated_at are NOT NULL without defaults — app code always
+	// supplies them, and so does this insert.
+	now := time.Now().UTC().Format(time.RFC3339)
+	_, err = db.Exec(`INSERT INTO users (id, username, email, password_hash, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $5) ON CONFLICT (id) DO NOTHING`, "test-id", "testuser", "test@example.com", "hash", now)
 	if err != nil {
 		t.Fatalf("insert users: %v", err)
 	}

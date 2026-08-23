@@ -146,3 +146,34 @@ jobs:
 
       - name: Type check
         run: npx tsc --noEmit
+
+  desktop-audio:
+    name: Native audio engine (Rust)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: desktop/src-tauri/crates/nexora-audio
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v7
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Cache cargo registry + build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            desktop/src-tauri/target
+          key: ${{ runner.os }}-cargo-audio-${{ hashFiles('desktop/src-tauri/crates/nexora-audio/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-audio-
+
+      - name: "Tests (headless: source + decode features)"
+        run: cargo test --features decode --locked
+
+      - name: Clippy (deny warnings)
+        run: cargo clippy --all-targets --features decode -- -D warnings

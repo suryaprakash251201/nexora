@@ -1,6 +1,6 @@
 {
   "name": "@nexora/core",
-  "version": "1.8.0",
+  "version": "1.9.0",
   "description": "Shared pure helpers and types for Nexora web + mobile — single source of truth for format helpers, file-type detection, and transcode codec tables",
   "type": "module",
   "main": "src/index.ts",
