@@ -2,6 +2,9 @@ use tauri::{Emitter, Manager};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 
+#[cfg(feature = "native-audio")]
+mod audio_bridge;
+
 static SLEEP_INHIBITED: AtomicBool = AtomicBool::new(false);
 /// PID of the platform inhibitor process we spawned (macOS `caffeinate` /
 /// Linux `systemd-inhibit`). Stored so release can stop exactly that process
@@ -10,6 +13,14 @@ static INHIBIT_PID: Mutex<Option<u32>> = Mutex::new(None);
 /// Set once the system tray was successfully created. When true, closing the
 /// window hides it to the tray instead of quitting (standard media-app UX).
 static TRAY_READY: AtomicBool = AtomicBool::new(false);
+
+/// Feature-detection stub registered when the native audio engine is NOT
+/// compiled in; the real one lives in audio_bridge.
+#[cfg(not(feature = "native-audio"))]
+#[tauri::command]
+fn audio_native_available() -> bool {
+    false
+}
 
 /// Returns platform info to the frontend so it can adapt its UI.
 #[tauri::command]
@@ -216,13 +227,39 @@ pub fn run() {
             // again). Bring the existing window back to the foreground —
             // including the case where it is currently hidden in the tray.
             show_main_window(app);
-        }))
+        }));
 
         // ── Custom commands ──────────────────────────────────────
-        .invoke_handler(tauri::generate_handler![get_platform, set_sleep_inhibition])
-
-        // ── System tray (created after the event loop starts) ────
-        .setup(|app| {
+        // Both arms register identical frontend-visible names so the web
+// layer can probe uniformly via audio_native_available.
+        #[cfg(feature = "native-audio")]
+        let builder = builder.invoke_handler(tauri::generate_handler![
+            get_platform,
+            set_sleep_inhibition,
+            audio_bridge::audio_native_available,
+            audio_bridge::audio_native_codecs,
+            audio_bridge::audio_native_open,
+            audio_bridge::audio_native_play,
+            audio_bridge::audio_native_pause,
+            audio_bridge::audio_native_stop,
+            audio_bridge::audio_native_seek,
+            audio_bridge::audio_native_set_volume,
+            audio_bridge::audio_native_position,
+            audio_bridge::audio_native_duration
+        ]);
+        #[cfg(not(feature = "native-audio"))]
+        let builder = builder.invoke_handler(tauri::generate_handler![
+            get_platform,
+            set_sleep_inhibition,
+            audio_native_available
+        ]);
+        let builder = builder
+            // ── System tray (created after the event loop starts) ────
+            .setup(|app| {
+            #[cfg(feature = "native-audio")]
+            app.manage(audio_bridge::AudioSession(
+                std::sync::Mutex::new(None),
+            ));
             if let Err(e) = setup_tray(app.handle()) {
                 // Tray unsupported (e.g. some Wayland setups): the window close
                 // button then quits the app normally instead of hiding to tray.

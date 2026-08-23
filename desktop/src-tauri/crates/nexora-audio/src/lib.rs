@@ -15,7 +15,12 @@
 pub mod http_source;
 #[cfg(feature = "decode")]
 pub mod decoder;
+#[cfg(feature = "decode")]
+pub mod player;
+pub mod output;
 
 pub use http_source::{HttpRangeConfig, HttpRangeReader, HttpSourceError};
 #[cfg(feature = "decode")]
-pub use decoder::{decode_all, DecodedAudio, DecoderError, TrackInfo};
+pub use decoder::{decode_all, TrackDecoder, DecodedAudio, DecoderError, TrackInfo};
+#[cfg(feature = "decode")]
+pub use player::{Phase, PlayerError, PlayerEvent, PlayerHandle};

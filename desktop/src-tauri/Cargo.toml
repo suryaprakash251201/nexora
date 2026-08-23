@@ -22,6 +22,13 @@ tauri-plugin-global-shortcut = "2"
 tauri-plugin-autostart = "2"
 tauri-plugin-window-state = "2"
 tauri-plugin-single-instance = "2"
+nexora-audio = { path = "crates/nexora-audio", optional = true }
+
+[features]
+# Native in-app audio engine (symphonia decode + rodio/WASAPI output).
+# Windows/macOS release builds enable this; Linux dev boxes need
+# libasound2-dev + pkg-config for the cpal/ALSA backend.
+native-audio = ["dep:nexora-audio", "nexora-audio/decode", "nexora-audio/output"]
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-updater = "2"

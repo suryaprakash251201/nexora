@@ -7,7 +7,6 @@
 //!
 //! All sample formats are normalized to interleaved f32.
 
-use std::io::{Read, Seek};
 
 use symphonia::core::audio::SampleBuffer;
 use symphonia::core::codecs::{DecoderOptions, CODEC_TYPE_NULL};
@@ -70,7 +69,7 @@ impl From<SymphoniaError> for DecoderError {
 pub fn decode_all(source: Box<dyn MediaSource>) -> Result<DecodedAudio, DecoderError> {
     let mss = MediaSourceStream::new(source, MediaSourceStreamOptions::default());
 
-    let mut hint = Hint::new();
+    let hint = Hint::new();
     let probed = default::get_probe()
         .format(&hint, mss, &FormatOptions::default(), &MetadataOptions::default())
         .map_err(|e| DecoderError::Probe(e.to_string()))?;
@@ -143,7 +142,7 @@ pub fn decode_all(source: Box<dyn MediaSource>) -> Result<DecodedAudio, DecoderE
                 }
                 let needs_new = match &sbuf_state {
                     Some((existing_spec, existing_buf)) => {
-                        existing_spec != &spec || existing_buf.capacity() < decoded.frames() as usize
+                        existing_spec != &spec || existing_buf.capacity() < decoded.frames()
                             * spec.channels.count()
                     }
                     None => true,
@@ -187,4 +186,204 @@ pub fn decode_all(source: Box<dyn MediaSource>) -> Result<DecodedAudio, DecoderE
     }
 
     Ok(DecodedAudio { info, samples_f32: samples })
+}
+
+// ── Incremental decoding (player path) ──────────────────────────────────────
+
+use symphonia::core::audio::SignalSpec;
+use symphonia::core::formats::{SeekMode, SeekTo};
+use symphonia::core::units::Time;
+
+/// A track opened for incremental playback: pull chunks with [`next_chunk`],
+/// seek with [`seek_seconds`]. Owned by the player's decode thread.
+pub struct TrackDecoder {
+    format: Box<dyn symphonia::core::formats::FormatReader>,
+    decoder: Box<dyn symphonia::core::codecs::Decoder>,
+    track_id: u32,
+    spec: SignalSpec,
+    bits_per_sample: u32,
+    info: TrackInfo,
+    sbuf: Option<SampleBuffer<f32>>,
+    /// Samples decoded during open() not yet handed out.
+    pending: Vec<f32>,
+    eos: bool,
+}
+
+impl TrackDecoder {
+    /// Opens and probes the source; eagerly decodes the first packet so
+    /// sample-rate/channels are known immediately (MP4/ALAC containers often
+    /// omit them from codec params).
+    pub fn open(source: Box<dyn MediaSource>) -> Result<Self, DecoderError> {
+        let mss = MediaSourceStream::new(source, MediaSourceStreamOptions::default());
+        let hint = Hint::new();
+        let probed = default::get_probe()
+            .format(&hint, mss, &FormatOptions::default(), &MetadataOptions::default())
+            .map_err(|e| DecoderError::Probe(e.to_string()))?;
+        let format = probed.format;
+
+        let track = format
+            .tracks()
+            .iter()
+            .find(|t| t.codec_params.codec != CODEC_TYPE_NULL)
+            .ok_or(DecoderError::NoAudioTrack)?
+            .clone();
+        let track_id = track.id;
+        let codec_name = default::get_codecs()
+            .get_codec(track.codec_params.codec)
+            .map(|d| d.short_name.to_string())
+            .unwrap_or_else(|| track.codec_params.codec.to_string());
+
+        let decoder =
+            default::get_codecs().make(&track.codec_params, &DecoderOptions::default())?;
+
+        let mut td = Self {
+            format,
+            decoder,
+            track_id,
+            spec: SignalSpec::new(
+                0,
+                symphonia::core::audio::Channels::empty(),
+            ),
+            bits_per_sample: track.codec_params.bits_per_sample.unwrap_or(0),
+            info: TrackInfo {
+                codec: codec_name,
+                sample_rate: track.codec_params.sample_rate.unwrap_or(0),
+                channels: track
+                    .codec_params
+                    .channels
+                    .map(|c| c.count())
+                    .unwrap_or(0),
+                bits_per_sample: track.codec_params.bits_per_sample.unwrap_or(0),
+                duration_sec: track
+                    .codec_params
+                    .n_frames
+                    .zip(track.codec_params.sample_rate)
+                    .map(|(frames, sr)| frames as f64 / f64::from(sr)),
+            },
+            sbuf: None,
+            pending: Vec::new(),
+            eos: false,
+        };
+        // Prime the spec by decoding one packet (buffers its samples into the
+        // first next_chunk() call via pending buffer below).
+        let mut pending: Vec<f32> = Vec::new();
+        while let Ok(packet) = td.format.next_packet() {
+            if packet.track_id() != track_id {
+                continue;
+            }
+            match td.decoder.decode(&packet) {
+                Ok(decoded) => {
+                    td.spec = *decoded.spec();
+                    if td.info.sample_rate == 0 {
+                        td.info.sample_rate = td.spec.rate;
+                        td.info.channels = td.spec.channels.count();
+                    }
+                    if td.bits_per_sample == 0 {
+                        use symphonia::core::audio::AudioBufferRef as Abr;
+                        td.bits_per_sample = match &decoded {
+                            Abr::U8(_) => 8,
+                            Abr::S16(_) => 16,
+                            Abr::S24(_) => 24,
+                            Abr::S32(_) => 32,
+                            _ => 0,
+                        };
+                        td.info.bits_per_sample = td.bits_per_sample;
+                    }
+                    let sb = SampleBuffer::<f32>::new(decoded.frames() as u64, td.spec);
+                    let mut sb = sb;
+                    sb.copy_interleaved_ref(decoded);
+                    pending.extend_from_slice(sb.samples());
+                    td.sbuf = Some(sb);
+                    break;
+                }
+                Err(SymphoniaError::DecodeError(_)) => continue,
+                Err(e) => return Err(e.into()),
+            }
+        }
+        td.pending = pending;
+        Ok(td)
+    }
+
+    pub fn info(&self) -> &TrackInfo {
+        &self.info
+    }
+
+    pub fn is_eos(&self) -> bool {
+        self.eos
+    }
+
+    /// Returns the next chunk of interleaved f32 samples (≈ one packet),
+    /// `None` at end-of-stream.
+    pub fn next_chunk(&mut self) -> Result<Option<Vec<f32>>, DecoderError> {
+        if !self.pending.is_empty() {
+            return Ok(Some(std::mem::take(&mut self.pending)));
+        }
+        if self.eos {
+            return Ok(None);
+        }
+        loop {
+            let packet = match self.format.next_packet() {
+                Ok(p) => p,
+                Err(SymphoniaError::IoError(ref e))
+                    if e.kind() == std::io::ErrorKind::UnexpectedEof =>
+                {
+                    self.eos = true;
+                    return Ok(None);
+                }
+                Err(SymphoniaError::ResetRequired) => {
+                    self.eos = true;
+                    return Ok(None);
+                }
+                Err(e) => return Err(e.into()),
+            };
+            if packet.track_id() != self.track_id {
+                continue;
+            }
+            return match self.decoder.decode(&packet) {
+                Ok(decoded) => {
+                    let spec = *decoded.spec();
+                    if self.spec != spec {
+                        self.sbuf = None; // spec changed → reallocate
+                        self.spec = spec;
+                    }
+                    if self.info.sample_rate == 0 {
+                        self.info.sample_rate = spec.rate;
+                        self.info.channels = spec.channels.count();
+                    }
+                    let need = decoded.frames() * spec.channels.count();
+                    let insufficient = self.sbuf.as_ref().map(|s| s.capacity() < need).unwrap_or(true);
+                    if insufficient {
+                        self.sbuf = Some(SampleBuffer::<f32>::new(
+                            decoded.frames() as u64,
+                            spec,
+                        ));
+                    }
+                    if let Some(sb) = self.sbuf.as_mut() {
+                        sb.copy_interleaved_ref(decoded);
+                        Ok(Some(sb.samples().to_vec()))
+                    } else {
+                        Ok(None)
+                    }
+                }
+                Err(SymphoniaError::DecodeError(_)) => continue, // skip bad packet
+                Err(e) => Err(e.into()),
+            };
+        }
+    }
+
+    /// Coarse time seek (container sample-table based). After seeking, the
+    /// caller should treat subsequent chunks as starting exactly at `sec`.
+    pub fn seek_seconds(&mut self, sec: f64) -> Result<(), DecoderError> {
+        let to = SeekTo::Time {
+            time: Time::from(sec.max(0.0)),
+            track_id: Some(self.track_id),
+        };
+        self.format.seek(SeekMode::Coarse, to)?;
+        self.eos = false;
+        if let Some(sb) = self.sbuf.as_mut() {
+            sb.clear();
+        }
+        self.pending.clear();
+        Ok(())
+    }
 }
