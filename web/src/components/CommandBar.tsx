@@ -13,6 +13,8 @@ import {
   X,
   Filter,
   Check,
+  Copy,
+  Scissors,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import Breadcrumbs from "./Breadcrumbs";
@@ -51,6 +53,9 @@ interface CommandBarProps {
   onDropToFolder?: (path: string) => void;
   /** Drop OS files onto a breadcrumb to upload them into that folder. */
   onUploadFiles?: (files: FileList, path: string) => void;
+  /** Pending clipboard operation shown as a chip (Ctrl+X/C). */
+  clipboard?: { mode: "copy" | "move"; paths: string[]; rootId: string } | null;
+  onCancelClipboard?: () => void;
 }
 
 export default function CommandBar({
@@ -79,6 +84,8 @@ export default function CommandBar({
   onCommandPalette,
   onDropToFolder,
   onUploadFiles,
+  clipboard,
+  onCancelClipboard,
 }: CommandBarProps) {
   const viewMode = useUI((s) => s.viewMode);
   const setViewMode = useUI((s) => s.setViewMode);
@@ -189,6 +196,19 @@ export default function CommandBar({
         {/* Left: Breadcrumbs + Search */}
         <div className="min-w-0 flex-1 flex items-center gap-2 sm:gap-3">
           <Breadcrumbs rootName={rootName} path={path} onNavigate={onNavigate} onDropToFolder={onDropToFolder} onUploadFiles={onUploadFiles} />
+
+          {/* Pending clipboard chip (Ctrl+X/C then Ctrl+V) */}
+          {clipboard && clipboard.paths.length > 0 && (
+            <button
+              onClick={onCancelClipboard}
+              title={`${clipboard.mode === "move" ? "Cut" : "Copied"} ${clipboard.paths.length} item${clipboard.paths.length === 1 ? "" : "s"} — click or press Esc to cancel`}
+              className="shrink-0 hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-accent/15 text-accent border border-accent/30 hover:bg-accent/25 transition-colors"
+            >
+              {clipboard.mode === "move" ? <Scissors className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+              {clipboard.paths.length}
+              <X className="h-3 w-3 opacity-60" />
+            </button>
+          )}
 
           {/* Search — icon-only when collapsed, expands on click */}
           <div className="relative">

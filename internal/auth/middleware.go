@@ -10,8 +10,9 @@ import (
 const SessionCookieName = "nexora_session"
 
 // SessionAuth enriches the request context with the authenticated user when a
-// valid session cookie is present. It does not reject unauthenticated requests.
-func SessionAuth(store *SessionStore, users *UserStore) func(http.Handler) http.Handler {
+// valid session cookie is present, or a personal API token bearer is valid.
+// It does not reject unauthenticated requests.
+func SessionAuth(store *SessionStore, users *UserStore, tokens *TokenStore) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			var token string
@@ -27,6 +28,14 @@ func SessionAuth(store *SessionStore, users *UserStore) func(http.Handler) http.
 				if sess, ok := store.Lookup(token); ok {
 					if u, ok, _ := users.GetByID(sess.UserID); ok && u.IsAuthorized() {
 						r = r.WithContext(withUser(r.Context(), u))
+					}
+				} else if tokens != nil && strings.HasPrefix(token, "nxr_") {
+					// Personal API token (scripting access). Session lookup has
+					// already failed; "nxr_" prefix avoids extra DB hits.
+					if uid, ok := tokens.Lookup(token); ok {
+						if u, ok, _ := users.GetByID(uid); ok && u.IsAuthorized() {
+							r = r.WithContext(withUser(r.Context(), u))
+						}
 					}
 				}
 			}

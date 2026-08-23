@@ -1,6 +1,10 @@
 # Changelog
 All notable changes to Nexora are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/) and the project adheres to [Semantic Versioning](https://semver.org/). The single source of truth for the current version is the repo-root `VERSION` file (`1.9.0`) — `web`, `desktop`, and the Docker image all derive from it; `mobile` has an independent app-store version (`1.0.0`).
 
+## [Unreleased]
+### Changed
+- Audio: `.m4a` playback is now fully lightweight — AAC tracks stream natively with HTTP Range support (no transcode, no server CPU, instant seek). Safari additionally decodes **ALAC** .m4a natively via codec capability detection; Chrome/Firefox probe the codec once per file (ffprobe results now cached server-side and deduplicated client-side).
+
 ## [1.9.0] - 2026-08-22
 
 ### Added
@@ -16,6 +20,14 @@ All notable changes to Nexora are documented here. The format is based on [Keep 
 - Project wiki (`wiki/`) with API reference, architecture, deployment, troubleshooting and more.
 
 ### Added
+- Backend + web: file comments/notes (`N9`) — discussion thread per file/folder path. `GET|POST /files/comments`, `DELETE /files/comments/{id}` (author or admin; read access suffices to comment). DetailsDrawer gains a "Notes" tab with composer (Ctrl+Enter) and delete-own. Migration `0017_file_comments.sql`. Comments are path-keyed, so renames start fresh threads (v1).
+- Backend + web: personal API tokens (`N6`) — `nxr_`-prefixed bearer credentials accepted by the auth middleware alongside sessions; create/list/revoke via `GET|POST /auth/tokens`, `DELETE /auth/tokens/{id}` (own tokens only, audited, optional expiry). UI: profile menu → "API tokens" with one-time raw-token reveal. Migration `0016_api_tokens.sql`. Token store unit-tested (lifecycle, expiry, user scoping).
+- Web: duplicate cleanup wizard — the analytics duplicates list now shows per-group "Keep newest / Keep oldest" actions, per-file dates, total reclaimable size, and a confirm dialog that trashes all non-kept copies (invalidates duplicates/usage/trash queries).
+- Backend: trash auto-purge — `NEXORA_TRASH_TTL` (e.g. `30d`; day suffixes now accepted by env durations) enables a batched maintenance purge that deletes expired `.nexora-trash` files and rows via each root's provider, skipping read-only roots. Unit-tested.
+- Web: clipboard keyboard operations — Ctrl/Cmd+C stashes the selection, X cuts, V pastes into the current folder (paste took over view-toggle, now Ctrl/Cmd+Shift+V; Esc cancels). Pending op shows as a chip in the CommandBar. Also fixes a regression where copy-via-folder-picker silently moved files.
+- Web: per-folder view memory — sort/order/filter/density/viewMode are remembered per storage-root+folder (localStorage) and restored on navigation.
+- Web: session management — Settings → Security → "Active Sessions" and "API Tokens" views (same settings-box design: main list rows with chevrons, back-arrow sub-views). Sessions lists live devices (device label from UA, IP, signed-in/expires) with per-session revoke and "Revoke all others"; API tokens create/list/revoke `nxr_` bearer credentials with one-time raw-token reveal. Backed by new `GET /auth/sessions`, `DELETE /auth/sessions/{id}`, `POST /auth/sessions/revoke-others` (own-sessions only, audited). Profile-menu entries deep-link into these settings views.
+- Web: virtualized keyboard navigation now works across unmounted rows — arrow keys compute absolute indices (grid-aware `perRow`), scroll the target into range and focus it; Shift+range selection uses absolute positions too.
 - Backend: scheduled SQLite database backups — set `NEXORA_BACKUP_DIR` to enable daily `VACUUM INTO` snapshots (`NEXORA_BACKUP_KEEP`, default 7, prunes oldest; `NEXORA_BACKUP_HOUR`, default 3am local). Postgres deployments are skipped with a hint to use pg_dump. Package `internal/backup` with unit tests (filename format, pruning, snapshot validity, dialect skip).
 - Web: PWA support — installable app via `manifest.webmanifest` and a conservative service worker (network-first shell so updates land on reload; cache-first only for content-hashed `/assets/*`; `/api/*` never cached; registration skipped under Tauri/non-secure origins).
 - Web: virtualized file list and grid (`@tanstack/react-virtual`, dependency already present but previously unused) — large folders no longer render thousands of DOM nodes; grid columns adapt to container width via ResizeObserver.

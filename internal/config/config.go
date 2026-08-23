@@ -48,7 +48,8 @@ type Config struct {
 	MaxEditableSize    int64
 	DefaultRoots       []RootConfig
 	AllowRegistration  bool
-	BackupDir          string // "" disables scheduled backups
+	BackupDir          string        // "" disables scheduled backups
+	TrashTTL           time.Duration // 0 disables auto-purge
 	BackupKeep         int
 	BackupHour         int
 	SecureCookies      bool
@@ -96,6 +97,7 @@ func Load() (*Config, error) {
 	c.BackupDir = env("NEXORA_BACKUP_DIR", "")
 	c.BackupKeep = envInt("NEXORA_BACKUP_KEEP", 7)
 	c.BackupHour = envInt("NEXORA_BACKUP_HOUR", 3)
+	c.TrashTTL = envDuration("NEXORA_TRASH_TTL", 0)
 
 	if err := os.MkdirAll(c.DataDir, 0o755); err != nil {
 		return nil, fmt.Errorf("create data dir: %w", err)
@@ -192,11 +194,29 @@ func envBool(key string, def bool) bool {
 
 func envDuration(key string, def time.Duration) time.Duration {
 	if v, ok := os.LookupEnv(key); ok && v != "" {
-		if d, err := time.ParseDuration(v); err == nil {
+		// Accept day suffixes ("30d", "7d12h") in addition to Go units.
+		if d, err := parseDurationWithDays(v); err == nil {
 			return d
 		}
 	}
 	return def
+}
+
+func parseDurationWithDays(v string) (time.Duration, error) {
+	if i := strings.IndexByte(v, 'd'); i >= 0 {
+		daysPart, rest := v[:i], v[i+1:]
+		if n, err := strconv.Atoi(daysPart); err == nil && rest != "" && !strings.ContainsAny(rest[:1], "0123456789") {
+			extra, err := time.ParseDuration(rest)
+			if err != nil {
+				return 0, err
+			}
+			return time.Duration(n)*24*time.Hour + extra, nil
+		}
+		if n, err := strconv.Atoi(daysPart); err == nil && rest == "" {
+			return time.Duration(n) * 24 * time.Hour, nil
+		}
+	}
+	return time.ParseDuration(v)
 }
 
 func envList(key string, def []string) []string {

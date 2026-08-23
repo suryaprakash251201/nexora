@@ -79,6 +79,53 @@ func (s *SessionStore) DeleteAllForUser(userID string) error {
 	return err
 }
 
+// SessionMeta is the client-safe view of a stored session (no token hashes).
+type SessionMeta struct {
+	ID        string `json:"id"`
+	IP        string `json:"ip"`
+	UserAgent string `json:"user_agent"`
+	CreatedAt string `json:"created_at"`
+	ExpiresAt string `json:"expires_at"`
+}
+
+// ListForUser returns all live (non-expired) sessions for a user, newest first.
+func (s *SessionStore) ListForUser(userID string) ([]SessionMeta, error) {
+	rows, err := s.db.Query(
+		`SELECT id, ip, user_agent, created_at, expires_at FROM sessions
+		 WHERE user_id = ? AND expires_at >= ? ORDER BY created_at DESC`,
+		userID, util.NowUTC(),
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []SessionMeta{}
+	for rows.Next() {
+		var m SessionMeta
+		if err := rows.Scan(&m.ID, &m.IP, &m.UserAgent, &m.CreatedAt, &m.ExpiresAt); err != nil {
+			return nil, err
+		}
+		out = append(out, m)
+	}
+	return out, rows.Err()
+}
+
+// DeleteByID revokes one session, scoped to the owning user.
+func (s *SessionStore) DeleteByID(id, userID string) error {
+	_, err := s.db.Exec(`DELETE FROM sessions WHERE id = ? AND user_id = ?`, id, userID)
+	return err
+}
+
+// DeleteOthersForUser revokes every session except keepID; returns count.
+func (s *SessionStore) DeleteOthersForUser(userID, keepID string) (int64, error) {
+	res, err := s.db.Exec(`DELETE FROM sessions WHERE user_id = ? AND id <> ?`, userID, keepID)
+	if err != nil {
+		return 0, err
+	}
+	n, _ := res.RowsAffected()
+	return n, nil
+}
+
 // Cleanup deletes expired sessions. Safe to call periodically.
 func (s *SessionStore) Cleanup() (int64, error) {
 	res, err := s.db.Exec(`DELETE FROM sessions WHERE expires_at < ?`, util.NowUTC())

@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-chi/chi/v5"
+
 	"github.com/nexora/nexora/internal/auth"
 	"github.com/nexora/nexora/internal/config"
 	"github.com/nexora/nexora/internal/middleware"
@@ -17,36 +19,36 @@ import (
 )
 
 type userDTO struct {
-	ID           string `json:"id"`
-	Username     string `json:"username"`
-	Email        string `json:"email"`
-	DisplayName  string `json:"display_name"`
-	Role         string `json:"role"`
-	Status       string `json:"status"`
-	TOTPEnabled  bool   `json:"totp_enabled"`
-	CreatedAt    string `json:"created_at"`
-	UpdatedAt    string `json:"updated_at"`
+	ID          string `json:"id"`
+	Username    string `json:"username"`
+	Email       string `json:"email"`
+	DisplayName string `json:"display_name"`
+	Role        string `json:"role"`
+	Status      string `json:"status"`
+	TOTPEnabled bool   `json:"totp_enabled"`
+	CreatedAt   string `json:"created_at"`
+	UpdatedAt   string `json:"updated_at"`
 }
 
 func toUserDTO(u auth.User) userDTO {
 	return userDTO{
-		ID:           u.ID,
-		Username:     u.Username,
-		Email:        u.Email,
-		DisplayName:  u.DisplayName,
-		Role:         string(u.Role),
-		Status:       u.Status,
-		TOTPEnabled:  u.TOTPEnabled,
-		CreatedAt:    u.CreatedAt,
-		UpdatedAt:    u.UpdatedAt,
+		ID:          u.ID,
+		Username:    u.Username,
+		Email:       u.Email,
+		DisplayName: u.DisplayName,
+		Role:        string(u.Role),
+		Status:      u.Status,
+		TOTPEnabled: u.TOTPEnabled,
+		CreatedAt:   u.CreatedAt,
+		UpdatedAt:   u.UpdatedAt,
 	}
 }
 
 type setupRequest struct {
-	Username     string `json:"username"`
-	Email        string `json:"email"`
-	Password     string `json:"password"`
-	DisplayName  string `json:"display_name"`
+	Username    string `json:"username"`
+	Email       string `json:"email"`
+	Password    string `json:"password"`
+	DisplayName string `json:"display_name"`
 }
 
 func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
@@ -77,12 +79,12 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	admin := auth.User{
-		Username:    req.Username,
-		Email:       req.Email,
-		DisplayName: req.DisplayName,
+		Username:     req.Username,
+		Email:        req.Email,
+		DisplayName:  req.DisplayName,
 		PasswordHash: hash,
-		Role:        auth.RoleAdmin,
-		Status:      "active",
+		Role:         auth.RoleAdmin,
+		Status:       "active",
 	}
 	created, err := s.Users.Create(admin)
 	if err != nil {
@@ -562,4 +564,152 @@ func emailLooksValid(email string) bool {
 		}
 	}
 	return at > 0 && at < len(email)-1 && email[len(email)-1] != '@'
+}
+
+// ---- Session management (user's own sessions) ----
+
+func (s *Server) handleListSessions(w http.ResponseWriter, r *http.Request) {
+	user, ok := auth.UserFromContext(r.Context())
+	if !ok || user.ID == "" {
+		writeError(w, http.StatusUnauthorized, "unauthenticated", "login required", middleware.GetRequestID(r.Context()))
+		return
+	}
+	sessions, err := s.Sessions.ListForUser(user.ID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "server_error", err.Error(), middleware.GetRequestID(r.Context()))
+		return
+	}
+	currentID := s.currentSessionID(r)
+	out := make([]map[string]any, 0, len(sessions))
+	for _, m := range sessions {
+		out = append(out, map[string]any{
+			"id": m.ID, "ip": m.IP, "user_agent": m.UserAgent,
+			"created_at": m.CreatedAt, "expires_at": m.ExpiresAt,
+			"is_current": m.ID == currentID,
+		})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": out})
+}
+
+func (s *Server) handleRevokeSession(w http.ResponseWriter, r *http.Request) {
+	user, ok := auth.UserFromContext(r.Context())
+	if !ok || user.ID == "" {
+		writeError(w, http.StatusUnauthorized, "unauthenticated", "login required", middleware.GetRequestID(r.Context()))
+		return
+	}
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		writeError(w, http.StatusBadRequest, "bad_request", "missing session id", middleware.GetRequestID(r.Context()))
+		return
+	}
+	if id == s.currentSessionID(r) {
+		writeError(w, http.StatusBadRequest, "bad_request", "use logout to end the current session", middleware.GetRequestID(r.Context()))
+		return
+	}
+	if err := s.Sessions.DeleteByID(id, user.ID); err != nil {
+		writeError(w, http.StatusInternalServerError, "server_error", err.Error(), middleware.GetRequestID(r.Context()))
+		return
+	}
+	_ = s.Audit.Record(user.ID, "session.revoke", user.Username, id, clientIP(r))
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+func (s *Server) handleRevokeOtherSessions(w http.ResponseWriter, r *http.Request) {
+	user, ok := auth.UserFromContext(r.Context())
+	if !ok || user.ID == "" {
+		writeError(w, http.StatusUnauthorized, "unauthenticated", "login required", middleware.GetRequestID(r.Context()))
+		return
+	}
+	currentID := s.currentSessionID(r)
+	if currentID == "" {
+		writeError(w, http.StatusBadRequest, "bad_request", "no current session", middleware.GetRequestID(r.Context()))
+		return
+	}
+	n, err := s.Sessions.DeleteOthersForUser(user.ID, currentID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "server_error", err.Error(), middleware.GetRequestID(r.Context()))
+		return
+	}
+	_ = s.Audit.Record(user.ID, "session.revoke_others", user.Username, fmt.Sprintf("%d", n), clientIP(r))
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "revoked": n})
+}
+
+// currentSessionID resolves the caller's own session id from its cookie.
+func (s *Server) currentSessionID(r *http.Request) string {
+	c, err := r.Cookie(auth.SessionCookieName)
+	if err != nil || c.Value == "" {
+		return ""
+	}
+	if sess, ok := s.Sessions.Lookup(c.Value); ok {
+		return sess.ID
+	}
+	return ""
+}
+
+// ---- Personal API tokens ----
+
+func (s *Server) handleListTokens(w http.ResponseWriter, r *http.Request) {
+	user, ok := auth.UserFromContext(r.Context())
+	if !ok || user.ID == "" {
+		writeError(w, http.StatusUnauthorized, "unauthenticated", "Authentication required", middleware.GetRequestID(r.Context()))
+		return
+	}
+	items, err := s.Tokens.List(user.ID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "server_error", err.Error(), middleware.GetRequestID(r.Context()))
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": items})
+}
+
+func (s *Server) handleCreateToken(w http.ResponseWriter, r *http.Request) {
+	user, ok := auth.UserFromContext(r.Context())
+	if !ok || user.ID == "" {
+		writeError(w, http.StatusUnauthorized, "unauthenticated", "Authentication required", middleware.GetRequestID(r.Context()))
+		return
+	}
+	var body struct {
+		Name          string `json:"name"`
+		ExpiresInDays int    `json:"expires_in_days"` // 0 = never
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		body.Name = ""
+	}
+	name := strings.TrimSpace(body.Name)
+	if name == "" {
+		name = "api-token"
+	}
+	if len(name) > 80 {
+		name = name[:80]
+	}
+	expires := time.Time{}
+	if body.ExpiresInDays > 0 && body.ExpiresInDays <= 3650 {
+		expires = time.Now().AddDate(0, 0, body.ExpiresInDays)
+	}
+	raw, err := s.Tokens.Create(user.ID, name, expires)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "server_error", err.Error(), middleware.GetRequestID(r.Context()))
+		return
+	}
+	_ = s.Audit.Record(user.ID, "token.create", user.Username, name, clientIP(r))
+	writeJSON(w, http.StatusCreated, map[string]any{"token": raw})
+}
+
+func (s *Server) handleRevokeToken(w http.ResponseWriter, r *http.Request) {
+	user, ok := auth.UserFromContext(r.Context())
+	if !ok || user.ID == "" {
+		writeError(w, http.StatusUnauthorized, "unauthenticated", "Authentication required", middleware.GetRequestID(r.Context()))
+		return
+	}
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		writeError(w, http.StatusBadRequest, "bad_request", "missing token id", middleware.GetRequestID(r.Context()))
+		return
+	}
+	if err := s.Tokens.Delete(id, user.ID); err != nil {
+		writeError(w, http.StatusInternalServerError, "server_error", err.Error(), middleware.GetRequestID(r.Context()))
+		return
+	}
+	_ = s.Audit.Record(user.ID, "token.revoke", user.Username, id, clientIP(r))
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }

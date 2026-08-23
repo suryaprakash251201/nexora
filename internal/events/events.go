@@ -41,6 +41,8 @@ const (
 	EventFileRestored    EventType = "file.restored"
 	EventDirCreated      EventType = "directory.created"
 	EventShareCreated    EventType = "share.created"
+	EventShareOpened     EventType = "share.opened"
+	EventShareDownload   EventType = "share.download"
 	EventShareRevoked    EventType = "share.revoked"
 	EventVersionCreated  EventType = "version.created"
 	EventVersionRestored EventType = "version.restored"

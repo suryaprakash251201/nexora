@@ -145,31 +145,21 @@ const DENSITY_CLASSES = {
 } satisfies Record<string, Record<DensityMode, string>>;
 
 /**
- * Roving-focus neighbour lookup for ArrowUp/ArrowDown/Left/Right.
- * Works for both the multi-column grid and the single-column list:
- * Left/Right step through DOM order; Up/Down jump to whichever item in the
- * adjacent visual row sits closest to the current column.
+ * Roving-focus navigation is ARITHMETIC on absolute item indices (data-idx):
+ * we own the virtualized layout, so Up/Down move by `perRow` and Left/Right by
+ * 1 — exact in both the grid and the list, including rows that are not
+ * currently mounted (the caller scrolls them into view first).
  */
-function focusNeighbour(items: HTMLElement[], currentIdx: number, key: string): HTMLElement | undefined {
-  const cur = items[currentIdx];
-  if (!cur) return undefined;
-  if (key === "ArrowRight") return items[currentIdx + 1];
-  if (key === "ArrowLeft") return items[currentIdx - 1];
-  if (key !== "ArrowUp" && key !== "ArrowDown") return undefined;
-
-  const colLeft = cur.offsetLeft;
-  const step = key === "ArrowDown" ? 1 : -1;
-  for (let i = currentIdx + step; i >= 0 && i < items.length; i += step) {
-    const crossedRow = key === "ArrowDown" ? items[i].offsetTop > cur.offsetTop : items[i].offsetTop < cur.offsetTop;
-    if (!crossedRow) continue;
-    // First item of the adjacent row found — pick the closest column within it.
-    let best = i;
-    for (let j = i; j >= 0 && j < items.length && items[j].offsetTop === items[i].offsetTop; j += step) {
-      if (Math.abs(items[j].offsetLeft - colLeft) < Math.abs(items[best].offsetLeft - colLeft)) best = j;
-    }
-    return items[best];
+function neighbourIndex(currentIdx: number, key: string, perRow: number, total: number): number {
+  switch (key) {
+    case "ArrowRight": return currentIdx + 1;
+    case "ArrowLeft": return currentIdx - 1;
+    case "ArrowDown": return currentIdx + perRow;
+    case "ArrowUp": return currentIdx - perRow;
+    case "Home": return 0;
+    case "End": return total - 1;
+    default: return -1;
   }
-  return undefined;
 }
 
 const FileIconForItem = memo(function FileIconForItem({ item, large, fill, className }: { item: FileItem; large?: boolean; fill?: boolean; className?: string }) {
@@ -324,35 +314,6 @@ export default function FileBrowser({
     useUI.getState().setSelection(items.slice(lo, hi + 1).map((i) => i.path));
   }, [items]);
 
-  const handleArrowNavigation = useCallback((e: React.KeyboardEvent) => {
-    if (e.defaultPrevented) return;
-    const key = e.key;
-    const isArrow = key === "ArrowDown" || key === "ArrowUp" || key === "ArrowLeft" || key === "ArrowRight";
-    if (!isArrow && key !== "Home" && key !== "End") return;
-    if (!itemsGridRef.current) return;
-    const tiles = Array.from(itemsGridRef.current.querySelectorAll<HTMLElement>("[data-file-item]"));
-    const idx = tiles.indexOf(document.activeElement as HTMLElement);
-    if (idx === -1) return;
-
-    let targetIdx = -1;
-    if (isArrow) {
-      const next = focusNeighbour(tiles, idx, key);
-      if (!next) return;
-      targetIdx = tiles.indexOf(next);
-    } else {
-      targetIdx = key === "Home" ? 0 : tiles.length - 1;
-      if (targetIdx === idx && !e.shiftKey) { e.preventDefault(); return; }
-    }
-
-    e.preventDefault();
-    tiles[targetIdx]?.focus();
-    if (e.shiftKey) {
-      selectRange(anchorIdxRef.current ?? idx, targetIdx);
-    } else {
-      anchorIdxRef.current = targetIdx;
-    }
-  }, [selectRange]);
-
   // --- Virtualization (react-virtual): keeps DOM small for huge folders ---
   // NOTE: every hook here runs unconditionally — this block sits ABOVE all
   // early returns so React sees a stable hook count across renders.
@@ -383,6 +344,47 @@ export default function FileBrowser({
     estimateSize: () => (density === "compact" ? 210 : density === "spacious" ? 256 : 236),
     overscan: 4,
   });
+
+  const handleArrowNavigation = useCallback((e: React.KeyboardEvent) => {
+    if (e.defaultPrevented) return;
+    const key = e.key;
+    const isArrow = key === "ArrowDown" || key === "ArrowUp" || key === "ArrowLeft" || key === "ArrowRight";
+    if (!isArrow && key !== "Home" && key !== "End") return;
+
+    // Absolute index of the focused item (rendered tiles carry data-idx).
+    const active = document.activeElement as HTMLElement | null;
+    if (!active?.hasAttribute("data-file-item")) return;
+    const idx = Number(active.dataset.idx);
+    if (!Number.isFinite(idx)) return;
+
+    const perRow = viewMode === "grid" ? gridCols : 1;
+    const want = neighbourIndex(idx, key, perRow, items.length);
+    e.preventDefault(); // we handle the key — stop native scrolling
+    if (want < 0 || want >= items.length) return;
+
+    // Focus the target tile; if its row is not mounted (virtualized out),
+    // scroll it into range first and focus after the re-render settles.
+    const focusAbs = () => {
+      itemsGridRef.current
+        ?.querySelector<HTMLElement>(`[data-file-item][data-idx="${want}"]`)
+        ?.focus();
+    };
+    const mounted = itemsGridRef.current?.querySelector<HTMLElement>(`[data-file-item][data-idx="${want}"]`);
+    if (mounted) {
+      mounted.focus();
+    } else {
+      const row = viewMode === "grid" ? Math.floor(want / gridCols) : want;
+      const virt = viewMode === "grid" ? gridVirt : listVirt;
+      virt.scrollToIndex(row, { align: key === "Home" ? "start" : key === "End" ? "end" : "auto" });
+      requestAnimationFrame(() => requestAnimationFrame(focusAbs));
+    }
+
+    if (e.shiftKey) {
+      selectRange(anchorIdxRef.current ?? idx, want);
+    } else {
+      anchorIdxRef.current = want;
+    }
+  }, [items.length, viewMode, gridCols, gridVirt, listVirt, selectRange]);
 
   if ((loading && items.length === 0) || (isFetching && items.length === 0)) {
     return viewMode === "grid" ? (

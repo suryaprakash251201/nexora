@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Shield, LogOut, CheckCircle2, Settings, Moon, Sun } from "lucide-react";
+import { Shield, LogOut, CheckCircle2, Settings, Moon, Sun, MonitorSmartphone, KeyRound } from "lucide-react";
 import { useTheme } from "next-themes";
 import type { User } from "../api/types";
 import SettingsModal from "./SettingsModal";
@@ -47,7 +47,8 @@ export default function ProfileMenu({
   onAdmin: () => void;
 }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const { resolvedTheme, setTheme } = useTheme();
+  const [settingsView, setSettingsView] = useState<"main" | "sessions" | "tokens" | undefined>(undefined);
+    const { resolvedTheme, setTheme } = useTheme();
   const isDark = resolvedTheme !== "light";
 
   return (
@@ -108,6 +109,18 @@ export default function ProfileMenu({
                 </span>
               )}
             </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => { setSettingsView("tokens"); setSettingsOpen(true); }}>
+              <div className="p-1.5 rounded-lg bg-accent/10 border border-accent/20 mr-3">
+                <KeyRound className="h-4 w-4 text-accent" />
+              </div>
+              <span className="font-medium">API tokens</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => { setSettingsView("sessions"); setSettingsOpen(true); }}>
+              <div className="p-1.5 rounded-lg bg-accent/10 border border-accent/20 mr-3">
+                <MonitorSmartphone className="h-4 w-4 text-accent" />
+              </div>
+              <span className="font-medium">Active sessions</span>
+            </DropdownMenuItem>
             {isAdmin && (
               <DropdownMenuItem onClick={() => { onAdmin(); }}>
                 <div className="p-1.5 rounded-lg bg-accent/10 border border-accent/20 mr-3">
@@ -129,7 +142,7 @@ export default function ProfileMenu({
         </DropdownMenuContent>
       </DropdownMenu>
       {settingsOpen && (
-        <SettingsModal user={user} onClose={() => setSettingsOpen(false)} />
+        <SettingsModal user={user} initialView={settingsView} onClose={() => { setSettingsOpen(false); setSettingsView(undefined); }} />
       )}
     </>
   );

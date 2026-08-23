@@ -21,6 +21,9 @@ interface UIState {
   drawerPath: string | null;
   mobileNavOpen: boolean;
   toasts: Toast[];
+  /** Pending clipboard operation (Ctrl+X/C) — paths are root-relative. */
+  clipboard: { mode: "copy" | "move"; paths: string[]; rootId: string } | null;
+  setClipboard: (c: UIState["clipboard"]) => void;
   setViewMode: (v: ViewMode) => void;
   setDensity: (d: DensityMode) => void;
   toggleColumn: (key: ColumnKey) => void;
@@ -55,6 +58,8 @@ export const useUI = create<UIState>((set, get) => ({
   drawerPath: null,
   mobileNavOpen: false,
   toasts: [],
+  clipboard: null,
+  setClipboard: (c) => set({ clipboard: c }),
   setViewMode: (v) => {
     localStorage.setItem("nexora.view", v);
     set({ viewMode: v });

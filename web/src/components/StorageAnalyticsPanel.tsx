@@ -1,13 +1,37 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "motion/react";
 import {
   HardDrive, Image, Video, Music, FileText, Archive, Code2, FolderSearch,
   ChevronDown, ChevronRight, Copy, ExternalLink
 } from "lucide-react";
-import { statsApi } from "../api/endpoints";
+import { statsApi, filesApi } from "../api/endpoints";
 import { Root } from "../api/types";
 import { formatBytes } from "../lib/format";
+import { useUI } from "../store";
+import { ConfirmDialog } from "./ui/ConfirmDialog";
+
+interface DuplicateFile {
+  name: string;
+  path: string;
+  size: number;
+  root_id: string;
+  modified?: string;
+}
+
+/** Send every file in `targets` to trash, sequentially. Returns success count. */
+async function trashFiles(targets: DuplicateFile[]): Promise<number> {
+  let ok = 0;
+  for (const f of targets) {
+    try {
+      await filesApi.delete(f.root_id, f.path);
+      ok++;
+    } catch {
+      /* keep going — partial cleanup is better than none */
+    }
+  }
+  return ok;
+}
 interface StorageAnalyticsProps {
   roots: Root[];
   onClose?: () => void;
@@ -28,6 +52,34 @@ export default function StorageAnalyticsPanel({ roots, onClose, onNavigateToFile
   const [selectedRoot, setSelectedRoot] = useState<string>(roots[0]?.id || "");
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(["images", "videos", "documents"]));
   const [showDuplicates, setShowDuplicates] = useState(false);
+  const [wizard, setWizard] = useState<{ files: DuplicateFile[]; keep: "newest" | "oldest" } | null>(null);
+  const [wizardBusy, setWizardBusy] = useState(false);
+  const pushToast = useUI((s) => s.pushToast);
+  const qc = useQueryClient();
+
+  /** Wizard confirmation: trash every duplicate except the kept one. */
+  const runDuplicateCleanup = async () => {
+    if (!wizard) return;
+    const sorted = [...wizard.files].sort(
+      (a, b) => new Date(b.modified || 0).getTime() - new Date(a.modified || 0).getTime()
+    );
+    const keepIdx = wizard.keep === "newest" ? 0 : sorted.length - 1;
+    const keep = sorted[keepIdx];
+    const targets = sorted.filter((_, i) => i !== keepIdx);
+    setWizardBusy(true);
+    const ok = await trashFiles(targets);
+    setWizardBusy(false);
+    setWizard(null);
+    if (ok > 0) {
+      pushToast("success", `Trashed ${ok} duplicate${ok === 1 ? "" : "s"} — kept ${keep?.name ?? "one copy"}`);
+      void qc.invalidateQueries({ queryKey: ["duplicates", selectedRoot] });
+      void qc.invalidateQueries({ queryKey: ["storage-usage"] });
+      void qc.invalidateQueries({ queryKey: ["trash"] });
+    } else {
+      pushToast("error", "Could not clean up duplicates");
+    }
+  };
+
   const { data: stats, isLoading: statsLoading } = useQuery({
     queryKey: ["storage-stats", selectedRoot],
     queryFn: () => statsApi.get(selectedRoot),
@@ -205,14 +257,44 @@ export default function StorageAnalyticsPanel({ roots, onClose, onNavigateToFile
                 ) : !duplicates?.duplicates || duplicates.duplicates.length === 0 ? (
                   <p className="text-xs text-content-muted py-4 text-center">No duplicates found</p>
                 ) : (
-                  (duplicates.duplicates as any[][]).map((group, gIdx) => (
+                  <>
+                    {(() => {
+                      const groups = (duplicates.duplicates as unknown as DuplicateFile[][]);
+                      const reclaimable = groups.reduce((sum, g) => sum + (g.length - 1) * (g[0]?.size ?? 0), 0);
+                      return (
+                        <p className="text-xs text-content-muted px-1 pb-1">
+                          {groups.length} group{groups.length === 1 ? "" : "s"} · up to{" "}
+                          <span className="text-accent font-semibold">{formatBytes(reclaimable)}</span> reclaimable
+                          (duplicates go to trash)
+                        </p>
+                      );
+                    })()}
+                  {(duplicates.duplicates as any[][]).map((group, gIdx) => {
+                    const files = group as DuplicateFile[];
+                    return (
                     <div key={gIdx} className="p-3 rounded-xl glass border border-white/5">
-                      <p className="text-xs font-medium text-content-muted mb-2 flex items-center gap-1">
-                        <Copy className="h-3 w-3 text-amber-400" />
-                        {group.length} duplicates{group[0] ? ` · ${formatBytes(group[0].size)} each` : ""}
-                      </p>
+                      <div className="flex items-center justify-between gap-2 mb-2">
+                        <p className="text-xs font-medium text-content-muted flex items-center gap-1">
+                          <Copy className="h-3 w-3 text-amber-400" />
+                          {files.length} duplicates{files[0] ? ` · ${formatBytes(files[0].size)} each` : ""}
+                        </p>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => setWizard({ files, keep: "newest" })}
+                            className="px-2 py-0.5 rounded-md text-[11px] font-medium bg-accent/10 text-accent border border-accent/25 hover:bg-accent/20 transition-colors"
+                          >
+                            Keep newest
+                          </button>
+                          <button
+                            onClick={() => setWizard({ files, keep: "oldest" })}
+                            className="px-2 py-0.5 rounded-md text-[11px] font-medium bg-glass-bg text-text-secondary border border-glass-border hover:bg-glass-bg-strong transition-colors"
+                          >
+                            Keep oldest
+                          </button>
+                        </div>
+                      </div>
                       <div className="space-y-1">
-                        {group.map((file: any) => (
+                        {files.map((file: any) => (
                           <div
                             key={file.path}
                             className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-white/5 text-xs cursor-pointer"
@@ -220,11 +302,18 @@ export default function StorageAnalyticsPanel({ roots, onClose, onNavigateToFile
                           >
                             <FolderSearch className="h-3 w-3 text-content-muted shrink-0" />
                             <span className="truncate">{file.name}</span>
+                            {file.modified && (
+                              <span className="ml-auto shrink-0 text-[10px] text-content-muted/70 font-mono">
+                                {new Date(file.modified).toLocaleDateString()}
+                              </span>
+                            )}
                           </div>
                         ))}
                       </div>
                     </div>
-                  ))
+                    );
+                  })}
+                  </>
                 )}
               </div>
             )}
@@ -235,6 +324,20 @@ export default function StorageAnalyticsPanel({ roots, onClose, onNavigateToFile
           <p className="text-sm">Select a storage root to view analytics</p>
         </div>
       )}
+      <ConfirmDialog
+        open={wizard !== null}
+        danger
+        title={`Trash ${wizard ? wizard.files.length - 1 : 0} duplicates?`}
+        description={
+          wizard
+            ? `Keeps the ${wizard.keep === "newest" ? "newest" : "oldest"} copy of ${wizard.files[0]?.name ?? "the file"} and moves the rest to trash.`
+            : undefined
+        }
+        confirmLabel="Move to trash"
+        loading={wizardBusy}
+        onConfirm={() => void runDuplicateCleanup()}
+        onCancel={() => setWizard(null)}
+      />
     </div>
   );
 }

@@ -14,6 +14,9 @@ export function useKeyboardShortcuts({
   isModalOpen,
   setCommandPaletteOpen,
   setShortcutsModalOpen,
+  onCopy,
+  onCut,
+  onPaste,
 }: {
   canWrite: boolean;
   view: string;
@@ -26,6 +29,9 @@ export function useKeyboardShortcuts({
   isModalOpen: boolean;
   setCommandPaletteOpen: (open: boolean) => void;
   setShortcutsModalOpen?: (open: boolean) => void;
+  onCopy?: () => void;
+  onCut?: () => void;
+  onPaste?: () => void;
 }) {
   const setSelectMode = useUI((s) => s.setSelectMode);
   const setSelection = useUI((s) => s.setSelection);
@@ -74,19 +80,41 @@ export function useKeyboardShortcuts({
         e.preventDefault();
         bulkDelete();
       }
+      // F2 rename (exactly one selected file/folder)
+      else if (e.key === 'F2' && canWrite && view === 'files' && selection.size === 1) {
+        e.preventDefault();
+        const item = items.find((i) => selection.has(i.path));
+        if (item) setMenu({ kind: 'rename', item });
+      }
       // Select all
       else if (mod && e.key.toLowerCase() === 'a' && view === 'files' && items.length) {
         e.preventDefault();
         if (!selectMode) setSelectMode(true);
         setSelection(items.map((i) => i.path));
       }
-      // Escape to clear selection
-      else if (e.key === 'Escape' && selection.size > 0) {
-        e.preventDefault();
-        clearSelection();
+      // Escape to clear selection, then pending clipboard
+      else if (e.key === 'Escape') {
+        if (selection.size > 0) { e.preventDefault(); clearSelection(); }
+        else if (useUI.getState().clipboard) {
+          e.preventDefault();
+          useUI.getState().setClipboard(null);
+        }
       }
-      // Toggle view mode
-      else if (mod && e.key.toLowerCase() === 'v') {
+      // Clipboard: copy / cut / paste (paste takes over old Ctrl+V view toggle)
+      else if (mod && e.key.toLowerCase() === 'c' && !e.shiftKey && selection.size > 0) {
+        e.preventDefault();
+        onCopy?.();
+      }
+      else if (mod && e.key.toLowerCase() === 'x' && selection.size > 0 && canWrite) {
+        e.preventDefault();
+        onCut?.();
+      }
+      else if (mod && e.key.toLowerCase() === 'v' && !e.shiftKey) {
+        e.preventDefault();
+        onPaste?.();
+      }
+      // Toggle view mode (moved to Ctrl/Cmd+Shift+V to free Ctrl+V for paste)
+      else if (mod && e.shiftKey && e.key.toLowerCase() === 'v') {
         e.preventDefault();
         setViewMode(viewMode === 'grid' ? 'list' : 'grid');
       }

@@ -29,6 +29,7 @@ type Server struct {
 	Log          *logger.Logger
 	DB           *database.DB
 	Sessions     *auth.SessionStore
+	Tokens       *auth.TokenStore
 	Users        *auth.UserStore
 	Audit        *audit.Store
 	Guard        *auth.LoginGuard
@@ -54,6 +55,7 @@ type Deps struct {
 	DB        *database.DB
 	Users     *auth.UserStore
 	Sessions  *auth.SessionStore
+	Tokens    *auth.TokenStore
 	Audit     *audit.Store
 	Guard     *auth.LoginGuard
 	Limiter   *middleware.RateLimiter
@@ -78,6 +80,7 @@ func NewServer(d Deps) *Server {
 		DB:           d.DB,
 		Users:        d.Users,
 		Sessions:     d.Sessions,
+		Tokens:       d.Tokens,
 		Audit:        d.Audit,
 		Guard:        d.Guard,
 		Limiter:      d.Limiter,
@@ -114,7 +117,7 @@ func (s *Server) Routes() http.Handler {
 	}
 	r.Use(middleware.SecurityHeaders(s.Cfg))
 	r.Use(middleware.CSRF(csrfExempt, s.Cfg.SecureCookies))
-	r.Use(auth.SessionAuth(s.Sessions, s.Users))
+	r.Use(auth.SessionAuth(s.Sessions, s.Users, s.Tokens))
 
 	// CORS — origins come from NEXORA_CORS_ORIGINS (comma-separated) when set;
 	// with an empty list the server falls back to allow-any-origin so desktop
@@ -176,6 +179,12 @@ func (s *Server) Routes() http.Handler {
 	authRouter.Group(func(protected chi.Router) {
 		protected.Use(auth.RequireAuth)
 		protected.Post("/logout", s.handleLogout)
+		protected.Get("/sessions", s.handleListSessions)
+		protected.Delete("/sessions/{id}", s.handleRevokeSession)
+		protected.Post("/sessions/revoke-others", s.handleRevokeOtherSessions)
+		protected.Get("/tokens", s.handleListTokens)
+		protected.With(s.Limiter.RateLimit(middleware.KeyByClientIP())).Post("/tokens", s.handleCreateToken)
+		protected.Delete("/tokens/{id}", s.handleRevokeToken)
 		protected.Post("/password", s.handleChangePassword)
 		protected.Post("/totp/setup", s.handleTOTPSetup)
 		protected.Post("/totp/verify", s.handleTOTPVerify)
@@ -191,6 +200,9 @@ func (s *Server) Routes() http.Handler {
 	authed.Get("/files", s.handleListFiles)
 	authed.Get("/files/stat", s.handleStatFile)
 	authed.Get("/files/duplicates", s.handleFindDuplicates)
+	authed.Get("/files/comments", s.listFileComments)
+	authed.Post("/files/comments", s.createFileComment)
+	authed.Delete("/files/comments/{id}", s.deleteFileComment)
 	authed.Get("/stats", s.handleStorageStats)
 	authed.Post("/files/directory", s.handleCreateDir)
 	authed.Post("/files/rename", s.handleRename)

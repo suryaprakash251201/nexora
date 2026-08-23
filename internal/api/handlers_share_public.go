@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/nexora/nexora/internal/events"
 	"github.com/nexora/nexora/internal/middleware"
 	"github.com/nexora/nexora/internal/sharing"
 	"github.com/nexora/nexora/internal/storage"
@@ -17,6 +18,21 @@ import (
 // maxShareEntries caps how many folder entries the public info endpoint lists.
 // Downloading the whole folder streams everything regardless of this cap.
 const maxShareEntries = 500
+
+// emitShareEvent publishes a share event with the share owner as UserID so
+// webhook consumers can filter by the sharing user even on public routes.
+func (s *Server) emitShareEvent(typ events.EventType, r *http.Request, sh sharing.Share, path string) {
+	if s.Events == nil {
+		return
+	}
+	s.Events.Emit(events.Event{
+		Type:     typ,
+		UserID:   sh.UserID,
+		RootID:   sh.RootID,
+		Path:     path,
+		Metadata: map[string]string{"share_id": sh.ID},
+	})
+}
 
 // shareEntry is a single file/folder row listed for a directory share.
 type shareEntry struct {
@@ -219,9 +235,15 @@ func (s *Server) streamShared(w http.ResponseWriter, r *http.Request, sh sharing
 	mime := storage.MimeFor(name, false)
 	total := info.Size
 
+	if !download {
+		// Preview/raw view — notify webhooks (no download counter).
+		s.emitShareEvent(events.EventShareOpened, r, sh, rel)
+	}
+
 	if download {
-		// Count the download (best-effort) and force attachment.
+		// Count the download (best-effort), notify webhooks, force attachment.
 		_ = s.Shares.IncrementDownload(sh.ID)
+		s.emitShareEvent(events.EventShareDownload, r, sh, rel)
 		_ = s.Audit.Record(sh.UserID, "share_download", rel, "via share link", clientIP(r))
 		rc, rerr := provider.Read(rel)
 		if rerr != nil {

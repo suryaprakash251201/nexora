@@ -10,6 +10,8 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 
 	"github.com/nexora/nexora/internal/middleware"
 	"github.com/nexora/nexora/internal/storage"
@@ -167,8 +169,19 @@ func (s *Server) writeAudioInputError(w http.ResponseWriter, r *http.Request, er
 
 // handleAudioInfo returns rich ffprobe metadata (codec, sample rate, bit depth,
 // channels, tags, duration) for the audio file at root+path.
+//
+// Results are memoized per resolved input + size + modtime: the client probes
+// every ambiguous .m4a/.m4b on first play, and multiple clients (or a cleared
+// browser cache) would otherwise respawn ffprobe for identical files. A
+// replaced file gets a new size/mtime and re-probes naturally.
+var (
+	audioInfoCache   sync.Map // string -> audioInfo
+	audioInfoCacheN  atomic.Int64
+	audioInfoCacheMax = 4096
+)
+
 func (s *Server) handleAudioInfo(w http.ResponseWriter, r *http.Request) {
-	inputArg, rc, _, err := s.resolveAudioInput(r)
+	inputArg, rc, fi, err := s.resolveAudioInput(r)
 	if err != nil {
 		s.writeAudioInputError(w, r, err)
 		return
@@ -178,6 +191,20 @@ func (s *Server) handleAudioInfo(w http.ResponseWriter, r *http.Request) {
 			rc.Close()
 		}
 	}()
+
+	// Freshness-aware cache key from root|path|size|modtime (NOT inputArg:
+	// non-local inputs all resolve to "pipe:0"). Unknown stat info skips
+	// caching rather than serving potentially stale metadata forever.
+	var cacheKey string
+	cacheable := !fi.Modified.IsZero() || fi.Size != 0
+	if cacheable {
+		cacheKey = fmt.Sprintf("%s|%s|%d|%d",
+			queryParam(r, "root", ""), queryParam(r, "path", ""), fi.Size, fi.Modified.Unix())
+		if cached, ok := audioInfoCache.Load(cacheKey); ok {
+			writeJSON(w, http.StatusOK, cached.(audioInfo))
+			return
+		}
+	}
 
 	ffp, ffprobeP, err := detectFfmpeg()
 	if err != nil {
@@ -220,6 +247,17 @@ func (s *Server) handleAudioInfo(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(info.Tags) == 0 {
 		info.Tags = probe.Format.Tags
+	}
+	if cacheable && audioInfoCacheN.Add(1) > int64(audioInfoCacheMax) {
+		// Naive bound: wipe and start over rather than growing unbounded.
+		audioInfoCache.Range(func(k, _ any) bool {
+			audioInfoCache.Delete(k)
+			return true
+		})
+		audioInfoCacheN.Store(0)
+	}
+	if cacheable {
+		audioInfoCache.Store(cacheKey, info)
 	}
 	writeJSON(w, http.StatusOK, info)
 }

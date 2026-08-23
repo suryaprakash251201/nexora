@@ -155,6 +155,41 @@ export default function Workspace({ user }: { user: User }) {
   const [filter, setFilter] = useState("all");
   const [sort, setSort] = useState("name");
   const [order, setOrder] = useState("asc");
+
+  // ---- Per-folder view memory (like Finder/Explorer) ------------------------
+  // Remembers sort/order/filter/density/viewMode per root+path and restores
+  // them on navigation. Global setters stay the source of truth; localStorage
+  // is just a side-channel keyed by folder.
+  const folderKey = `${rootId ?? ""}|${path}`;
+  const loadedFolderKey = useRef<string | null>(null);
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(`nexora-fv:${folderKey}`);
+      if (raw) {
+        const v = JSON.parse(raw);
+        if (typeof v.sort === "string") setSort(v.sort);
+        if (typeof v.order === "string") setOrder(v.order);
+        if (typeof v.filter === "string") setFilter(v.filter);
+        if (v.density) useUI.getState().setDensity(v.density);
+        if (v.viewMode) useUI.getState().setViewMode(v.viewMode);
+      }
+    } catch { /* ignore malformed entries */ }
+    loadedFolderKey.current = folderKey;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [folderKey]);
+
+  useEffect(() => {
+    // Don't persist until we've (re)loaded for this folder — avoids writing
+    // the previous folder's state onto the new key during transitions.
+    if (loadedFolderKey.current !== folderKey) return;
+    try {
+      localStorage.setItem(
+        `nexora-fv:${folderKey}`,
+        JSON.stringify({ sort, order, filter, density, viewMode })
+      );
+    } catch { /* storage full/blocked — non-fatal */ }
+  }, [folderKey, sort, order, filter, density, viewMode]);
+
   const [fileOffset, setFileOffset] = useState(0);
   const [accumulatedItems, setAccumulatedItems] = useState<FileItem[]>([]);
   const [hasMoreFiles, setHasMoreFiles] = useState(false);
@@ -273,7 +308,7 @@ export default function Workspace({ user }: { user: User }) {
   // Use custom hooks
   const { uploadFiles, downloadItem } = useTransfers(rootId, path, refresh);
   const { doDelete, bulkDelete, archivePaths, toggleFavorite } = useFileOperations({ rootId, refresh, qc, selection, clearSelection, favSet });
-  const { folderPicker, setFolderPicker, moveSelectionTo, openPickerFor, applyFolderPicker, movePathsTo } = useClipboard({ rootId, selection, clearSelection, refresh, canWrite });
+  const { folderPicker, setFolderPicker, moveSelectionTo, openPickerFor, applyFolderPicker, movePathsTo, clipboard, copySelection, cutSelection, pasteClipboard, clearClipboard } = useClipboard({ rootId, path, selection, clearSelection, refresh, canWrite });
   const { dragProps, dragActive, dropPicker, setDropPicker, pendingDrop } = useDragAndDrop({ rootId, canWrite, uploadFiles });
   
   const [shortcutsModalOpen, setShortcutsModalOpen] = useState(false);
@@ -282,7 +317,10 @@ export default function Workspace({ user }: { user: User }) {
   useKeyboardShortcuts({
     canWrite, view, setView, selection, items, bulkDelete, setMenu,
     fileInputRef: fileInput, isModalOpen,
-    setCommandPaletteOpen, setShortcutsModalOpen
+    setCommandPaletteOpen, setShortcutsModalOpen,
+    onCopy: copySelection,
+    onCut: cutSelection,
+    onPaste: () => void pasteClipboard(),
   });
 
   // Clipboard paste upload: Ctrl/Cmd+V pastes files or screenshots from the
@@ -566,6 +604,8 @@ export default function Workspace({ user }: { user: User }) {
               if (!canWrite) return;
               void uploadFiles(files, rootId ?? undefined, p);
             }}
+            clipboard={clipboard}
+            onCancelClipboard={clearClipboard}
           />
         )}
         {view !== "files" && view !== "home" && !videoItem && (
@@ -761,6 +801,8 @@ export default function Workspace({ user }: { user: User }) {
           rootId={rootId!}
           path={drawerPath}
           canWrite={canWrite}
+          userId={user?.id}
+          isAdmin={isAdmin}
           revealPath={revealPath}
           isFavorite={favoritesQuery.isFavorite ? favoritesQuery.isFavorite(rootId!, drawerPath) : !!favSet.data?.items.some((f) => f.root_id === rootId && f.path === drawerPath)}
           onClose={() => openDrawer(null)}

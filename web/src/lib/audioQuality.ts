@@ -216,3 +216,24 @@ export async function fetchAudioInfo(rootId: string, path: string): Promise<Audi
 export function clearAudioInfoCache(): void {
   infoCache.clear();
 }
+
+// ── Browser codec capability (cached) ───────────────────────────────────────
+
+let alacNative: boolean | null = null;
+
+/**
+ * browserSupportsAlac reports whether this browser can decode ALAC-in-MP4
+ * natively. Safari/WebKit: yes ("probably") — ALAC .m4a files then stream
+ * directly with Range support, no ffprobe probe and no server transcode.
+ * Chrome/Firefox: no — those keep the ffprobe pre-route for ALAC files.
+ */
+export function browserSupportsAlac(): boolean {
+  if (alacNative === null) {
+    try {
+      alacNative = document.createElement("audio").canPlayType('audio/mp4; codecs="alac"') !== "";
+    } catch {
+      alacNative = false;
+    }
+  }
+  return alacNative;
+}

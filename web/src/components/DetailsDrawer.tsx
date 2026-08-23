@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { X, Download, Eye, Pencil, Trash2, Scissors, Copy, Info, Star, Share2, Activity, FileText, Share, Clock, Link, FolderOpen } from "lucide-react";
+import { X, Download, Eye, Pencil, Trash2, Scissors, Copy, Info, Star, Share2, Activity, FileText, Share, Clock, Link, FolderOpen, MessageSquare } from "lucide-react";
 import { filesApi, sharesApi, activityApi } from "../api/endpoints";
 import { formatBytes, formatDate } from "../lib/format";
 import { useUI } from "../store";
@@ -10,14 +10,18 @@ import { ConfirmDialog } from "./ui/ConfirmDialog";
 import { QueryError } from "./ui/QueryError";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetClose } from "./ui/sheet";
 import { revealInFileManager } from "../lib/desktop";
+import { FileComments } from "./FileComments";
 
-type Tab = "details" | "activity" | "shares";
+type Tab = "details" | "activity" | "shares" | "comments";
 
 interface DetailsDrawerProps {
   rootName: string;
   rootId: string;
   path: string;
   canWrite: boolean;
+  /** Current user id — enables deleting own comments. */
+  userId?: string;
+  isAdmin?: boolean;
   /** Absolute path to reveal in the OS file manager (desktop, local roots only). */
   revealPath?: string | null;
   isFavorite: boolean;
@@ -34,7 +38,7 @@ interface DetailsDrawerProps {
 }
 
 export default function DetailsDrawer({
-  rootName, rootId, path, canWrite, isFavorite, revealPath, onClose, onDownload, onPreview, onRename, onDelete, onMove, onCopy, onShare, onFavorite, onEdit,
+  rootName, rootId, path, canWrite, userId, isAdmin, isFavorite, revealPath, onClose, onDownload, onPreview, onRename, onDelete, onMove, onCopy, onShare, onFavorite, onEdit,
 }: DetailsDrawerProps) {
   const [activeTab, setActiveTab] = useState<Tab>("details");
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -127,6 +131,7 @@ export default function DetailsDrawer({
               <TabButton active={activeTab === "details"} onClick={() => setActiveTab("details")} icon={<FileText className="h-3.5 w-3.5" />} label="Details" />
               <TabButton active={activeTab === "activity"} onClick={() => setActiveTab("activity")} icon={<Activity className="h-3.5 w-3.5" />} label="Activity" />
               <TabButton active={activeTab === "shares"} onClick={() => setActiveTab("shares")} icon={<Share className="h-3.5 w-3.5" />} label="Shares" />
+              <TabButton active={activeTab === "comments"} onClick={() => setActiveTab("comments")} icon={<MessageSquare className="h-3.5 w-3.5" />} label="Notes" />
             </div>
 
             {/* Content area */}
@@ -177,6 +182,7 @@ export default function DetailsDrawer({
               )}
 
               {activeTab === "activity" && <ActivityFeed rootId={rootId} path={stat.path} />}
+              {activeTab === "comments" && <FileComments rootId={rootId} path={stat.path} currentUserId={userId} isAdmin={isAdmin} />}
               {activeTab === "shares" && <SharesList rootId={rootId} path={stat.path} />}
             </div>
 

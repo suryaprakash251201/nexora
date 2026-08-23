@@ -1,7 +1,7 @@
 import type { FileItem } from "../api/types";
 import { getMediaUrl } from "../api/client";
 import { versionApi } from "../api/endpoints";
-import { getAudioQuality, fetchAudioInfo } from "./audioQuality";
+import { getAudioQuality, fetchAudioInfo, browserSupportsAlac } from "./audioQuality";
 import {
   previewKind as corePreviewKind,
   isEditable as coreIsEditable,
@@ -21,7 +21,7 @@ export const isAudio = coreIsAudio;
 export const cleanTrackTitle = coreCleanTrackTitle;
 
 // codeLanguage returns a coarse language label for display purposes.
-export { getAudioQuality, fetchAudioInfo, clearAudioInfoCache, isLosslessExtension } from "./audioQuality";
+export { getAudioQuality, fetchAudioInfo, clearAudioInfoCache, isLosslessExtension, browserSupportsAlac } from "./audioQuality";
 export type { AudioQualityInfo, AudioInfo, AudioTier } from "./audioQuality";
 
 export function codeLanguage(ext: string): string {
@@ -108,21 +108,48 @@ export function isTauriRuntime(): boolean {
 // pipeline.
 //
 // The extension check is fast, but .m4a/.m4b are ambiguous: they may carry
-// native AAC (plays everywhere) or ALAC (Apple Lossless — no browser decoder).
-// For those we probe real ffprobe metadata via /audio/info so ALAC files are
-// pre-routed to transcoding instead of failing on the raw stream first (which
-// cost a full error round-trip and a visible stutter on every ALAC track).
+// native AAC (plays everywhere) or ALAC (Apple Lossless — unsupported by
+// Chrome/Firefox). For those we probe real ffprobe metadata via /audio/info so
+// ALAC files are pre-routed to transcoding instead of failing on the raw
+// stream first (which cost a full error round-trip and a visible stutter on
+// every ALAC track).
+//
+// Lightweight paths:
+//  - Safari decodes ALAC in MP4 natively (canPlayType says so) → no probe,
+//    no transcode, straight native streaming with Range support.
+//  - Decisions are memoized per root|path and in-flight probes deduplicated —
+//    AudioPlayer and PlayerBar both ask on track change; only one request flies.
+
+const nativityMemo = new Map<string, Promise<boolean>>();
+
 export function needsAudioTranscode(item: { extension?: string; root_id: string; path: string }): Promise<boolean> {
+  const ext = (item.extension || "").toLowerCase();
+  // Safari (and WebKit-based views) can decode ALAC-in-MP4 natively.
+  if ((ext === "m4a" || ext === "m4b") && browserSupportsAlac()) {
+    return Promise.resolve(false);
+  }
   const q = getAudioQuality(item);
   if (q.needsTranscode) return Promise.resolve(true);
-  const ext = (item.extension || "").toLowerCase();
-  if (ext === "m4a" || ext === "m4b") {
-    return fetchAudioInfo(item.root_id, item.path).then((info) => {
-      if (!info) return false; // no ffprobe metadata — let onError fallback catch it
-      return getAudioQuality(item, info).needsTranscode;
-    });
+  if (ext !== "m4a" && ext !== "m4b") return Promise.resolve(false);
+
+  const key = `${item.root_id}|${item.path}`;
+  const memo = nativityMemo.get(key);
+  if (memo) return memo;
+
+  const p = fetchAudioInfo(item.root_id, item.path).then((info) => {
+    if (!info) return false; // no ffprobe metadata — let onError fallback catch it
+    return getAudioQuality(item, info).needsTranscode;
+  });
+  nativityMemo.set(key, p);
+  // Bound the memo like infoCache; drop-oldest keeps memory flat.
+  if (nativityMemo.size > 1000) {
+    const firstKey = nativityMemo.keys().next().value as string | undefined;
+    if (firstKey) nativityMemo.delete(firstKey);
   }
-  return Promise.resolve(false);
+  // Memoized promises must never surface unhandled-rejection warnings when a
+  // later caller also attaches .then without catch.
+  p.catch(() => {});
+  return p;
 }
 
 export function audioTranscodeUrl(rootId: string, path: string, opts?: { start?: number; session?: string; format?: AudioTranscodeFormat; quality?: AudioTranscodeQuality }): string {

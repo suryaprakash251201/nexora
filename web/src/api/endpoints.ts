@@ -75,6 +75,14 @@ export const filesApi = {
   stat: (root: string, path: string) => get<any>("/files/stat", { root, path }),
   /** DELETE /files?root=&path= — moves to trash */
   delete: (root: string, path: string) => del<{ ok: boolean }>("/files", { root, path }),
+  /** Comments thread attached to a file/folder path. */
+  comments: {
+    list: (root: string, path: string) =>
+      get<{ items: FileComment[] }>("/files/comments", { root, path }),
+    add: (root: string, path: string, body: string) =>
+      post<{ item: FileComment }>("/files/comments", { root, path, body }),
+    remove: (id: string) => del<{ ok: boolean }>(`/files/comments/${id}`),
+  },
   /** POST /files/directory { root, path } */
   createDirectory: (root: string, path: string) => post<{ ok: boolean; path: string }>("/files/directory", { root, path }),
   /** POST /files/file { root, path, content } */
@@ -172,7 +180,44 @@ export const authApi = {
   totpVerify: (code: string) => post<{ ok?: boolean }>("/auth/totp/verify", { code }),
   /** POST /auth/totp/disable { password } */
   totpDisable: (password: string) => post<{ ok?: boolean }>("/auth/totp/disable", { password }),
+  /** GET /auth/sessions — this user's live sessions (is_current flagged) */
+  sessions: {
+    list: () => get<{ items: SessionInfo[] }>("/auth/sessions"),
+    revoke: (id: string) => del<{ ok?: boolean }>(`/auth/sessions/${id}`),
+    revokeOthers: () => post<{ ok?: boolean; revoked: number }>("/auth/sessions/revoke-others", {}),
+  },
+  tokens: {
+    list: () => get<{ items: TokenInfo[] }>("/auth/tokens"),
+    create: (name: string, expires_in_days: number) => post<{ token: string }>("/auth/tokens", { name, expires_in_days }),
+    revoke: (id: string) => del<{ ok?: boolean }>(`/auth/tokens/${id}`),
+  },
 };
+
+// ── Auth/session types (client-safe views; no token material) ───────────
+export interface SessionInfo {
+  id: string;
+  ip: string;
+  user_agent: string;
+  created_at: string;
+  expires_at: string;
+  is_current?: boolean;
+}
+
+export interface TokenInfo {
+  id: string;
+  name: string;
+  created_at: string;
+  last_used_at?: string | null;
+  expires_at?: string | null;
+}
+
+export interface FileComment {
+  id: string;
+  user_id: string;
+  username: string;
+  body: string;
+  created_at: string;
+}
 
 // ── Admin ───────────────────────────────────────────────────────────────
 export const adminApi = {

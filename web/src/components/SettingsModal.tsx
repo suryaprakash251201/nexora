@@ -1,6 +1,6 @@
 import { useEffect, useState, type MouseEvent } from "react";
 import { createPortal } from "react-dom";
-import { KeyRound, Smartphone, Shield, ShieldAlert, Check, AlertCircle, ArrowLeft, ChevronRight, X, Sun, Moon, Power } from "lucide-react";
+import { KeyRound, Smartphone, MonitorSmartphone, Shield, ShieldAlert, Check, AlertCircle, ArrowLeft, ChevronRight, X, Sun, Moon, Power } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useQueryClient } from "@tanstack/react-query";
 import type { User } from "../api/types";
@@ -9,10 +9,12 @@ import { useUI } from "../store";
 import { authApi } from "../api/endpoints";
 import { Button } from "./ui/Button";
 import { useFocusTrap } from "../lib/useFocusTrap";
-type View = "main" | "password" | "totp";
+type View = "main" | "password" | "totp" | "sessions" | "tokens";
 import { useAccentTheme, accentThemes } from "../lib/useAccentTheme";
-export default function SettingsModal({ user, onClose }: { user: User; onClose: () => void }) {
-  const [view, setView] = useState<View>("main");
+import { SessionsBody } from "./SessionsModal";
+import { TokensBody } from "./TokensModal";
+export default function SettingsModal({ user, onClose, initialView = "main" }: { user: User; onClose: () => void; initialView?: View }) {
+  const [view, setView] = useState<View>(initialView);
   const { resolvedTheme, setTheme } = useTheme();
   const isDark = resolvedTheme !== "light";
   const [accent, setAccent] = useAccentTheme();
@@ -118,7 +120,12 @@ export default function SettingsModal({ user, onClose }: { user: User; onClose: 
     setPwCurrent(""); setPwNew(""); setPwConfirm(""); setPwError(null);
     setTotpStep("intro"); setTotpCode(""); setTotpError(null); setTotpPw("");
   };
-  const title = view === "password" ? "Change Password" : view === "totp" ? "Two-Factor Authentication" : "Settings";
+  const title =
+    view === "password" ? "Change Password"
+    : view === "totp" ? "Two-Factor Authentication"
+    : view === "sessions" ? "Active Sessions"
+    : view === "tokens" ? "API Tokens"
+    : "Settings";
   const onBackdrop = (e: MouseEvent<HTMLDivElement>) => {
     if (e.target === e.currentTarget) onClose();
   };
@@ -278,10 +285,34 @@ export default function SettingsModal({ user, onClose }: { user: User; onClose: 
                       <ChevronRight className="h-5 w-5 text-content-muted/40 group-hover:text-content-muted transition-colors" />
                     )}
                   </button>
+                  <button onClick={() => setView("sessions")}
+                    className="w-full flex items-center gap-4 px-4 py-3.5 rounded-xl bg-surface-muted/30 hover:bg-surface-muted/50 border border-border/50 transition-all group text-left">
+                    <div className="p-2 rounded-lg bg-accent/10 text-accent">
+                      <MonitorSmartphone className="h-5 w-5" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-content">Active Sessions</p>
+                      <p className="text-xs text-content-muted">Devices signed into your account</p>
+                    </div>
+                    <ChevronRight className="h-5 w-5 text-content-muted/40 group-hover:text-content-muted transition-colors" />
+                  </button>
+                  <button onClick={() => setView("tokens")}
+                    className="w-full flex items-center gap-4 px-4 py-3.5 rounded-xl bg-surface-muted/30 hover:bg-surface-muted/50 border border-border/50 transition-all group text-left">
+                    <div className="p-2 rounded-lg bg-accent/10 text-accent">
+                      <KeyRound className="h-5 w-5" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-content">API Tokens</p>
+                      <p className="text-xs text-content-muted">Bearer credentials for scripts and apps</p>
+                    </div>
+                    <ChevronRight className="h-5 w-5 text-content-muted/40 group-hover:text-content-muted transition-colors" />
+                  </button>
                 </div>
               </div>
             </div>
           )}
+          {view === "sessions" && <SessionsBody />}
+          {view === "tokens" && <TokensBody />}
           {view === "password" && (
             <form onSubmit={(e) => { e.preventDefault(); changePassword(); }} className="space-y-4">
               <div>

@@ -91,6 +91,7 @@ func main() {
 		DB:        db,
 		Users:     users,
 		Sessions:  sessions,
+		Tokens:    auth.NewTokenStore(db),
 		Audit:     auditStore,
 		Guard:     guard,
 		Limiter:   limiter,
@@ -116,7 +117,7 @@ func main() {
 		case <-appCtx.Done():
 		}
 	}()
-	go runMaintenance(appCtx, db, sessions, limiter, searchSvc, shareStore, previewSvc, jobMgr, log)
+	go runMaintenance(appCtx, db, sessions, limiter, searchSvc, shareStore, previewSvc, jobMgr, roots, cfg, log)
 
 	// Scheduled SQLite snapshots (disabled unless NEXORA_BACKUP_DIR is set).
 	if cfg.BackupDir != "" {
@@ -182,7 +183,7 @@ func webRoot() string {
 	return "web/dist"
 }
 
-func runMaintenance(ctx context.Context, db *database.DB, sessions *auth.SessionStore, limiter *middleware.RateLimiter, searchSvc *search.Service, shares *sharing.Store, previewSvc *preview.Service, jobMgr *jobs.Manager, log *logger.Logger) {
+func runMaintenance(ctx context.Context, db *database.DB, sessions *auth.SessionStore, limiter *middleware.RateLimiter, searchSvc *search.Service, shares *sharing.Store, previewSvc *preview.Service, jobMgr *jobs.Manager, roots *storage.RootService, cfg *config.Config, log *logger.Logger) {
 	go searchSvc.ScanMediaMetadata(ctx)
 	ticker := time.NewTicker(15 * time.Minute)
 	defer ticker.Stop()
@@ -202,6 +203,7 @@ func runMaintenance(ctx context.Context, db *database.DB, sessions *auth.Session
 			}
 			previewSvc.PurgeStale()
 			jobMgr.CleanupOldArchives(24 * time.Hour)
+			storage.PurgeExpiredTrash(ctx, db, roots, cfg.TrashTTL, log)
 		case <-scanTicker.C:
 			searchSvc.ScanAll(ctx)
 		}
