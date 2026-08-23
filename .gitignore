@@ -50,3 +50,7 @@ website-dist.zip
 
 # Local AI tooling session state
 .pi/
+
+# Rust build artifacts
+desktop/src-tauri/target/
+desktop/src-tauri/crates/**/target/
