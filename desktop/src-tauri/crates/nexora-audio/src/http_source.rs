@@ -24,6 +24,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+#[cfg(feature = "decode")]
+use symphonia::core::io::MediaSource as SymMediaSource;
+
 /// Errors surfaced by [`HttpRangeReader`].
 #[derive(Debug, thiserror::Error)]
 pub enum HttpSourceError {
@@ -453,3 +456,17 @@ fn parse_content_range_total(value: &str) -> Option<u64> {
     }
     total.parse().ok()
 }
+
+// ── symphonia integration ───────────────────────────────────────────────────
+// With the `decode` feature, HttpRangeReader plugs straight into
+// MediaSourceStream as a seekable source of known length.
+#[cfg(feature = "decode")]
+impl SymMediaSource for HttpRangeReader {
+    fn is_seekable(&self) -> bool {
+        true
+    }
+    fn byte_len(&self) -> Option<u64> {
+        Some(self.len())
+    }
+}
+

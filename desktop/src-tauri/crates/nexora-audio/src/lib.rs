@@ -13,5 +13,9 @@
 //! this one; nothing here knows about Tauri.
 
 pub mod http_source;
+#[cfg(feature = "decode")]
+pub mod decoder;
 
 pub use http_source::{HttpRangeConfig, HttpRangeReader, HttpSourceError};
+#[cfg(feature = "decode")]
+pub use decoder::{decode_all, DecodedAudio, DecoderError, TrackInfo};
