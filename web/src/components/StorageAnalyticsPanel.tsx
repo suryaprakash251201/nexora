@@ -5,6 +5,7 @@ import {
   HardDrive, Image, Video, Music, FileText, Archive, Code2, FolderSearch,
   ChevronDown, ChevronRight, Copy, ExternalLink
 } from "lucide-react";
+import { ViewHeader } from "./ui/ViewHeader";
 import { statsApi, filesApi } from "../api/endpoints";
 import { Root } from "../api/types";
 import { formatBytes } from "../lib/format";
@@ -101,23 +102,20 @@ export default function StorageAnalyticsPanel({ roots, onClose, onNavigateToFile
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-white/5">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-accent via-accent-secondary to-accent-tertiary grid place-items-center">
-            <HardDrive className="h-4 w-4 text-white" />
-          </div>
-          <h2 className="font-semibold">Storage Analytics</h2>
-        </div>
-        <div className="flex items-center gap-2">
+      <ViewHeader
+        icon={HardDrive}
+        title="Storage Analytics"
+        subtitle={`${stats ? stats.total_files.toLocaleString() : "…"} files · ${roots.length} root${roots.length === 1 ? "" : "s"}`}
+        actions={
           <select
             value={selectedRoot}
             onChange={(e) => setSelectedRoot(e.target.value)}
-            className="rounded-lg glass-input px-3 py-1.5 text-sm outline-none"
+            className="rounded-lg glass-input px-3 py-1.5 text-sm outline-none cursor-pointer"
           >
             {roots.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
           </select>
-        </div>
-      </div>
+        }
+      />
       {statsLoading ? (
         <div className="flex-1 grid place-items-center">
           <div className="text-center text-content-muted">

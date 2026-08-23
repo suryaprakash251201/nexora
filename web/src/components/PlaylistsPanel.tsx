@@ -6,6 +6,7 @@ import { thumbUrl } from "../lib/preview";
 import { startDownload } from "../lib/transfer";
 import { Modal } from "./Modal";
 import { Button } from "./ui/Button";
+import { ViewHeader } from "./ui/ViewHeader";
 import CoverPickerModal from "./CoverPickerModal";
 import ShareDialog from "./ShareDialog";
 import type { User } from "../api/types";
@@ -578,10 +579,16 @@ export default function PlaylistsPanel({ user }: { user?: User }) {
   );
   return (
     <div className="flex-1 overflow-auto p-4 pb-24 md:pb-20">
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-lg font-semibold flex items-center gap-2"><ListMusic className="h-5 w-5 text-accent" /> Playlists</h2>
-        <Button variant="primary" onClick={newPlaylist}><Plus className="h-4 w-4" /> New</Button>
-      </div>
+      <ViewHeader
+        icon={ListMusic}
+        title="Playlists"
+        subtitle={`${playlists.length} playlist${playlists.length === 1 ? "" : "s"}`}
+        actions={
+          <Button variant="primary" onClick={newPlaylist}>
+            <Plus className="h-4 w-4" /> New
+          </Button>
+        }
+      />
       {playlists.length === 0 ? (
         <div className="text-center text-content-muted p-10 glass rounded-2xl">
           <div className="h-16 w-16 mx-auto mb-4 rounded-2xl bg-accent/10 grid place-items-center">

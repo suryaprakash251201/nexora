@@ -5,6 +5,7 @@ import { useUI } from "../store";
 import { formatDate } from "../lib/format";
 import type { ShareItem } from "../api/types";
 import { Button } from "./ui/Button";
+import { ViewHeader } from "./ui/ViewHeader";
 import { SkeletonList } from "./ui/Skeleton";
 import { EmptyState } from "./ui/EmptyState";
 import { ConfirmDialog } from "./ui/ConfirmDialog";
@@ -47,20 +48,19 @@ export default function SharesPanel() {
   return (
     <div className="flex-1 overflow-auto bg-background custom-scrollbar">
       {/* Header */}
-      <div className="bg-surface/50 backdrop-blur-xl border-b border-border/50 sticky top-0 z-10 p-6">
-        <div className="max-w-4xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-xl bg-accent/10 flex items-center justify-center text-accent">
-              <Link2 className="h-5 w-5" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold tracking-tight">Active Shares</h1>
-              <p className="text-sm text-content-muted">Manage your shared files and links</p>
-            </div>
-          </div>
-          <div className="px-3 py-1 rounded-full bg-surface-strong border border-border/50 text-xs font-bold text-content-muted">
-            {items.length} {items.length === 1 ? 'Link' : 'Links'}
-          </div>
+      <div className="sticky top-0 z-10 px-3 pt-3 sm:px-6 sm:pt-4 pb-2 bg-background/60 backdrop-blur-sm">
+        <div className="max-w-4xl mx-auto">
+          <ViewHeader
+            sticky={false}
+            icon={Link2}
+            title="Active Shares"
+            subtitle="Manage your shared files and links"
+            badge={
+              <span className="rounded-full bg-surface-strong border border-border/50 px-2.5 py-0.5 text-xs font-bold text-content-muted">
+                {items.length} {items.length === 1 ? "Link" : "Links"}
+              </span>
+            }
+          />
         </div>
       </div>
 

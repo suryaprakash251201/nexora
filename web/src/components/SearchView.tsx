@@ -7,6 +7,7 @@ import { formatBytes, formatDate } from "../lib/format";
 import type { Root, SearchResult, FileItem } from "../api/types";
 import { FileThumb, FolderTile } from "./FileThumb";
 import { Input } from "./ui/Input";
+import { ViewHeader } from "./ui/ViewHeader";
 import { EmptyState } from "./ui/EmptyState";
 import { SkeletonList } from "./ui/Skeleton";
 import { QueryError } from "./ui/QueryError";
@@ -52,8 +53,15 @@ export default function SearchView({
   const results = data?.items || [];
   return (
     <div className="flex-1 flex flex-col h-full bg-background">
-      <div className="px-6 pt-6 pb-4 border-b border-border/50 bg-surface/50 backdrop-blur-xl sticky top-0 z-10 shrink-0">
-        <div className="max-w-4xl mx-auto space-y-4 animate-slide-up">
+      <div className="px-3 pt-3 sm:px-6 sm:pt-4 pb-2 bg-background/60 backdrop-blur-sm sticky top-0 z-10 shrink-0">
+        <div className="max-w-4xl mx-auto space-y-3 animate-slide-up rounded-2xl glass border border-border/50 p-3 sm:p-4">
+          <ViewHeader
+            sticky={false}
+            className="!p-0"
+            icon={SearchIcon}
+            title="Search"
+            subtitle={q ? `${results.length} result${results.length === 1 ? "" : "s"} for “${q}”` : "Find any file across your storage roots"}
+          />
           <div className="flex gap-2">
             <div className="flex-1">
               <Input

@@ -15,6 +15,7 @@ export default function Editor({ item, rootId, onClose }: { item: FileItem; root
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [caret, setCaret] = useState({ line: 1, col: 1 });
   const taRef = useRef<HTMLTextAreaElement>(null);
   const gutterRef = useRef<HTMLDivElement>(null);
   const focusTrapRef = useFocusTrap(true);
@@ -99,6 +100,13 @@ export default function Editor({ item, rootId, onClose }: { item: FileItem; root
       ta.selectionStart = ta.selectionEnd = start + stamp.length;
     });
   };
+  const updateCaret = () => {
+    const ta = taRef.current;
+    if (!ta) return;
+    const upto = ta.value.slice(0, ta.selectionStart);
+    const lines = upto.split("\n");
+    setCaret({ line: lines.length, col: lines[lines.length - 1].length + 1 });
+  };
   const syncScroll = () => {
     if (gutterRef.current && taRef.current) {
       gutterRef.current.scrollTop = taRef.current.scrollTop;
@@ -132,7 +140,9 @@ export default function Editor({ item, rootId, onClose }: { item: FileItem; root
         {/* Editor Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-[#30363d] bg-[#161b22]">
           <div className="flex items-center gap-3 min-w-0">
-            <FileCode2 className="h-5 w-5 text-accent opacity-80 shrink-0" />
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-accent/12 ring-1 ring-accent/25">
+              <FileCode2 className="h-4 w-4 text-accent" />
+            </span>
             <span className="font-semibold text-[#e6edf3] truncate text-sm md:text-base">{item.name}</span>
             <span className="text-[10px] uppercase font-bold tracking-wider text-[#8b949e] px-2 py-0.5 rounded-md bg-[#21262d] border border-[#30363d] hidden sm:block">
               {codeLanguage(item.extension)}
@@ -202,6 +212,9 @@ export default function Editor({ item, rootId, onClose }: { item: FileItem; root
               onChange={(e) => setContent(e.target.value)}
               onScroll={syncScroll}
               onKeyDown={handleKeyDown}
+              onKeyUp={updateCaret}
+              onClick={updateCaret}
+              onSelect={updateCaret}
               spellCheck={false}
               autoFocus
               className="flex-1 resize-none outline-none bg-transparent py-4 px-4 text-[#e6edf3] whitespace-pre custom-scrollbar"
@@ -209,15 +222,24 @@ export default function Editor({ item, rootId, onClose }: { item: FileItem; root
             />
           </div>
         )}
-        {/* Editor Footer */}
+        {/* Editor status bar */}
         <div className="h-7 border-t border-[#30363d] bg-[#161b22] flex items-center justify-between px-3 text-[11px] font-mono text-[#8b949e]">
-          <div className="flex gap-4">
-            <span>{loading ? 0 : lineCount} lines</span>
-            <span>{content.length} chars</span>
-            {isLrc && <span className="hidden lg:inline">Format: [mm:ss.xx] lyric line</span>}
+          <div className="flex items-center gap-3 min-w-0 overflow-hidden">
+            <span className="shrink-0">{loading ? 0 : lineCount} lines</span>
+            <span className="hidden sm:inline shrink-0">{content.length} chars</span>
+            {!loading && (
+              <span className="shrink-0 rounded bg-[#21262d] px-1.5 py-px">
+                Ln {caret.line}, Col {caret.col}
+              </span>
+            )}
+            {isLrc && (
+              <span className="hidden lg:inline truncate text-[#c99ce8]">
+                LRC · [mm:ss.xx] lyric line
+              </span>
+            )}
           </div>
-          <div className="flex gap-4">
-            <span>UTF-8</span>
+          <div className="flex items-center gap-3 shrink-0">
+            <span className="hidden md:inline">UTF-8</span>
             <span>Spaces: 2</span>
           </div>
         </div>

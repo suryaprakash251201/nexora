@@ -42,13 +42,14 @@ import KeyboardShortcutsModal from "./KeyboardShortcutsModal";
 import { formatRelative } from "../lib/format";
 import { SkeletonGrid, SkeletonList, SkeletonLine, SkeletonCard } from "./ui/Skeleton";
 import { Button } from "./ui/Button";
+import { ViewHeader } from "./ui/ViewHeader";
 import { FileThumb } from "./FileThumb";
 import { staggerContainer, staggerItem, cardHover } from "@/lib/animations";
 import { isEditable, isAudio } from "../lib/preview";
 import {
   Download, Trash2, Pencil, Copy, Eye, FolderOpen, RotateCcw,
   Star, Share2, Archive, FolderInput, FileEdit, ListMusic, HardDrive, Upload,
-  Move, Info, Tag as TagIcon, CheckSquare
+  Move, Info, Tag as TagIcon, CheckSquare, Heart, Clock
 } from "lucide-react";
 
 // Hooks
@@ -668,9 +669,8 @@ export default function Workspace({ user }: { user: User }) {
               />
             )}
             {view === "trash" && <TrashView items={trash.data?.items || []} loading={trash.isLoading} onRestore={async (id) => { await trashApi.restore(id); refresh(); }} onDelete={async (id) => { await trashApi.delete(id); refresh(); }} selection={selection} selectMode={selectMode} onSelect={(id) => toggleSelect(id)} />}
-            {view === "favorites" && <GridView
+            {view === "favorites" && <FavouritesView
               loading={favorites.isLoading}
-              empty="No favorites yet. Star files to find them here."
               items={(favorites.data?.items || []).map((f) => ({
                 id: f.root_id + f.path,
                 name: f.name,
@@ -682,9 +682,8 @@ export default function Workspace({ user }: { user: User }) {
               }))}
               onOpen={(item) => navigateTo(item.root_id, item.path, false, item.name)}
             />}
-            {view === "recents" && <GridView
+            {view === "recents" && <RecentsView
               loading={recents.isLoading}
-              empty="No recent files yet."
               items={(recents.data?.items || []).map((f) => ({
                 id: f.root_id + f.path,
                 name: f.name,
@@ -1081,6 +1080,50 @@ function ViewSkeleton() {
   );
 }
 
+function FavouritesView({ loading, items, onOpen }: {
+  loading: boolean;
+  items: GridItem[];
+  onOpen: (item: GridItem) => void;
+}) {
+  return (
+    <>
+      <ViewHeader
+        icon={Heart}
+        title="Favourites"
+        subtitle={loading ? "Loading…" : `${items.length} item${items.length === 1 ? "" : "s"} you starred`}
+      />
+      <GridView
+        loading={loading}
+        empty="No favorites yet. Star files to find them here."
+        items={items}
+        onOpen={onOpen}
+      />
+    </>
+  );
+}
+
+function RecentsView({ loading, items, onOpen }: {
+  loading: boolean;
+  items: GridItem[];
+  onOpen: (item: GridItem) => void;
+}) {
+  return (
+    <>
+      <ViewHeader
+        icon={Clock}
+        title="Recent Files"
+        subtitle={loading ? "Loading…" : `${items.length} item${items.length === 1 ? "" : "s"} opened lately`}
+      />
+      <GridView
+        loading={loading}
+        empty="No recent files yet."
+        items={items}
+        onOpen={onOpen}
+      />
+    </>
+  );
+}
+
 function TrashView({ items, loading, onRestore, onDelete, selection, selectMode, onSelect }: {
   items: TrashItem[]; loading: boolean; onRestore: (id: string) => void; onDelete: (id: string) => void;
   selection?: Set<string>; selectMode?: boolean; onSelect?: (id: string) => void;
@@ -1090,6 +1133,11 @@ function TrashView({ items, loading, onRestore, onDelete, selection, selectMode,
   const selectedCount = selection?.size ?? 0;
   return (
     <div>
+      <ViewHeader
+        icon={Trash2}
+        title="Trash"
+        subtitle={`${items.length} item${items.length === 1 ? "" : "s"} · restore or delete forever`}
+      />
       {selectedCount > 0 && (
         <div className="sticky top-0 z-10 flex items-center gap-3 px-4 py-2 glass-bar border-b border-border/50">
           <span className="text-sm font-medium">{selectedCount} selected</span>

@@ -10,6 +10,7 @@ import { useUI } from "../store";
 import { formatDate } from "../lib/format";
 import { rootIcon } from "../lib/rootIcons";
 import type { User, Root } from "../api/types";
+import { ViewHeader } from "./ui/ViewHeader";
 import { Button } from "./ui/Button";
 import { Input } from "./ui/Input";
 import { SkeletonList } from "./ui/Skeleton";
@@ -26,18 +27,14 @@ export default function AdminPanel() {
     <div className="flex-1 overflow-hidden flex flex-col bg-background">
       {/* Header & Tabs */}
       <div className="bg-surface/50 backdrop-blur-xl border-b border-border/50 shrink-0 sticky top-0 z-10">
-        <div className="max-w-6xl mx-auto px-6 py-6">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="h-10 w-10 rounded-xl bg-accent/10 flex items-center justify-center text-accent">
-              <ShieldCheck className="h-5 w-5" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight">Administration</h1>
-              <p className="text-sm text-content-muted">Manage users, security, and system configuration</p>
-            </div>
-          </div>
-          
-          <div className="flex items-center gap-1">
+        <div className="max-w-6xl mx-auto px-3 sm:px-6 pt-3 sm:pt-4 pb-6">
+          <ViewHeader
+            sticky={false}
+            icon={ShieldCheck}
+            title="Administration"
+            subtitle="Manage users, security, and system configuration"
+          />
+          <div className="mt-4 flex items-center gap-1">
             <TabButton active={tab === "users"} onClick={() => setTab("users")} icon={<Users className="h-4 w-4" />}>Users</TabButton>
             <TabButton active={tab === "audit"} onClick={() => setTab("audit")} icon={<ScrollText className="h-4 w-4" />}>Audit Log</TabButton>
             <TabButton active={tab === "settings"} onClick={() => setTab("settings")} icon={<Settings className="h-4 w-4" />}>Settings</TabButton>

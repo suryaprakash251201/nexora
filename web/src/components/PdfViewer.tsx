@@ -7,6 +7,7 @@ import {
   Download,
   ExternalLink,
   PanelLeft,
+  FileText,
   Loader2,
   FileWarning,
 } from "lucide-react";
@@ -232,120 +233,140 @@ export default function PdfViewer({ url, name }: { url: string; name: string }) 
 
   return (
     <div className="flex-1 min-h-0 flex flex-col bg-[#0d1117]/60">
-      {/* Toolbar */}
-      <div className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-2 border-b border-border/50 bg-surface/40 shrink-0 flex-wrap">
-        <button
-          onClick={() => setShowThumbs((s) => !s)}
-          className={cn(
-            "p-1.5 rounded-lg transition-colors",
-            showThumbs ? "text-accent bg-accent/10" : "text-content-muted hover:text-content"
-          )}
-          title={showThumbs ? "Hide thumbnails" : "Show thumbnails"}
-          aria-label="Toggle thumbnails"
-        >
-          <PanelLeft className="h-4 w-4" />
-        </button>
-
-        <div className="w-px h-5 bg-border/50 mx-1 hidden sm:block" />
-
-        <button
-          onClick={() => goTo(pageNum - 1)}
-          disabled={!doc || pageNum <= 1}
-          className="p-1.5 rounded-lg text-content-muted hover:text-content disabled:opacity-30 disabled:pointer-events-none transition-colors"
-          title="Previous page (←)"
-          aria-label="Previous page"
-        >
-          <ChevronLeft className="h-4 w-4" />
-        </button>
-
-        <div className="flex items-center gap-1.5 text-xs font-mono text-content-muted">
-          <input
-            value={pageInput}
-            onChange={(e) => setPageInput(e.target.value.replace(/[^0-9]/g, ""))}
-            onKeyDown={onPageInputKey}
-            onBlur={() => setPageInput(String(pageNum))}
-            className="w-10 text-center rounded-md bg-surface-muted border border-border/50 py-1 text-content focus:outline-none focus:ring-1 focus:ring-accent/40"
-            aria-label="Page number"
-            inputMode="numeric"
-          />
-          <span>/ {numPages || "—"}</span>
-        </div>
-
-        <button
-          onClick={() => goTo(pageNum + 1)}
-          disabled={!doc || pageNum >= numPages}
-          className="p-1.5 rounded-lg text-content-muted hover:text-content disabled:opacity-30 disabled:pointer-events-none transition-colors"
-          title="Next page (→)"
-          aria-label="Next page"
-        >
-          <ChevronRight className="h-4 w-4" />
-        </button>
-
-        <div className="w-px h-5 bg-border/50 mx-1 hidden sm:block" />
-
-        <button
-          onClick={() => zoomBy(1 / ZOOM_STEP)}
-          disabled={!doc}
-          className="p-1.5 rounded-lg text-content-muted hover:text-content disabled:opacity-30 transition-colors"
-          title="Zoom out"
-          aria-label="Zoom out"
-        >
-          <ZoomOut className="h-4 w-4" />
-        </button>
-        <span className="text-xs font-mono w-12 text-center text-content-muted tabular-nums">{pct}%</span>
-        <button
-          onClick={() => zoomBy(ZOOM_STEP)}
-          disabled={!doc}
-          className="p-1.5 rounded-lg text-content-muted hover:text-content disabled:opacity-30 transition-colors"
-          title="Zoom in"
-          aria-label="Zoom in"
-        >
-          <ZoomIn className="h-4 w-4" />
-        </button>
-
-        <div className="flex items-center rounded-lg overflow-hidden border border-border/50 ml-1 hidden sm:flex">
-          {(
-            [
-              ["width", "Fit W"],
-              ["page", "Fit P"],
-              ["none", "1:1"],
-            ] as [FitMode, string][]
-          ).map(([mode, label]) => (
-            <button
-              key={mode}
-              onClick={() => setFitMode(mode)}
-              className={cn(
-                "px-2 py-1 text-[11px] font-medium transition-colors",
-                fit === mode ? "bg-accent text-accent-fg" : "text-content-muted hover:text-content hover:bg-surface-muted"
-              )}
-              title={mode === "width" ? "Fit to width" : mode === "page" ? "Fit whole page" : "Actual size"}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-
-        <div className="flex-1" />
-
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => startDownloadFromUrl(url, name)}
-          icon={<Download className="h-3.5 w-3.5" />}
-          className="px-2.5"
-        >
-          <span className="hidden md:inline">Download</span>
-        </Button>
-        {isTauri && (
-          <button
-            onClick={() => openExternally(url)}
-            className="p-1.5 rounded-lg text-content-muted hover:text-content transition-colors"
-            title="Open in system PDF viewer"
-            aria-label="Open in system viewer"
+      {/* Toolbar — floating segmented glass bar */}
+      <div className="shrink-0 px-3 py-2 border-b border-border/40 bg-[#0b0f14]/80 backdrop-blur-sm">
+        <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-1.5 rounded-xl border border-border/50 bg-surface/60 px-2 py-1.5 shadow-lg shadow-black/20">
+          {/* File chip */}
+          <span
+            title={name}
+            className="mr-1 hidden min-w-0 max-w-[15rem] items-center gap-1.5 truncate rounded-lg bg-surface-muted/70 px-2.5 py-1 text-xs font-medium text-content md:flex"
           >
-            <ExternalLink className="h-4 w-4" />
-          </button>
-        )}
+            <FileText className="h-3.5 w-3.5 shrink-0 text-accent" />
+            <span className="truncate">{name}</span>
+          </span>
+
+          <PdfDivider />
+
+          {/* Thumbnails toggle */}
+          <ToolBtn
+            active={showThumbs}
+            onClick={() => setShowThumbs((s) => !s)}
+            title={showThumbs ? "Hide thumbnails" : "Show thumbnails"}
+            label="Toggle thumbnails"
+          >
+            <PanelLeft className="h-4 w-4" />
+          </ToolBtn>
+
+          <PdfDivider />
+
+          {/* Page navigation group */}
+          <div className="flex items-center gap-0.5 rounded-lg bg-surface-muted/60 p-0.5">
+            <button
+              onClick={() => goTo(pageNum - 1)}
+              disabled={!doc || pageNum <= 1}
+              className="rounded-md p-1.5 text-content-muted transition-colors hover:text-content disabled:opacity-30 disabled:pointer-events-none"
+              title="Previous page (←)"
+              aria-label="Previous page"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <div className="flex items-center gap-1 px-1 text-xs font-mono tabular-nums text-content-muted">
+              <input
+                value={pageInput}
+                onChange={(e) => setPageInput(e.target.value.replace(/[^0-9]/g, ""))}
+                onKeyDown={onPageInputKey}
+                onBlur={() => setPageInput(String(pageNum))}
+                className="w-9 rounded-md border border-border/40 bg-transparent py-0.5 text-center text-content focus:border-accent/50 focus:outline-none focus:ring-1 focus:ring-accent/30"
+                aria-label="Page number"
+                inputMode="numeric"
+              />
+              <span>/ {numPages || "—"}</span>
+            </div>
+            <button
+              onClick={() => goTo(pageNum + 1)}
+              disabled={!doc || pageNum >= numPages}
+              className="rounded-md p-1.5 text-content-muted transition-colors hover:text-content disabled:opacity-30 disabled:pointer-events-none"
+              title="Next page (→)"
+              aria-label="Next page"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+
+          <PdfDivider />
+
+          {/* Zoom group */}
+          <div className="flex items-center gap-0.5 rounded-lg bg-surface-muted/60 p-0.5">
+            <button
+              onClick={() => zoomBy(1 / ZOOM_STEP)}
+              disabled={!doc}
+              className="rounded-md p-1.5 text-content-muted transition-colors hover:text-content disabled:opacity-30 disabled:pointer-events-none"
+              title="Zoom out (−)"
+              aria-label="Zoom out"
+            >
+              <ZoomOut className="h-4 w-4" />
+            </button>
+            <span className="w-11 select-none text-center text-xs font-mono tabular-nums text-content">{pct}%</span>
+            <button
+              onClick={() => zoomBy(ZOOM_STEP)}
+              disabled={!doc}
+              className="rounded-md p-1.5 text-content-muted transition-colors hover:text-content disabled:opacity-30 disabled:pointer-events-none"
+              title="Zoom in (+)"
+              aria-label="Zoom in"
+            >
+              <ZoomIn className="h-4 w-4" />
+            </button>
+          </div>
+
+          {/* Fit modes */}
+          <div className="hidden items-center overflow-hidden rounded-lg border border-border/40 sm:flex">
+            {(
+              [
+                ["width", "Fit W"],
+                ["page", "Fit P"],
+                ["none", "1:1"],
+              ] as [FitMode, string][]
+            ).map(([mode, label]) => (
+              <button
+                key={mode}
+                onClick={() => setFitMode(mode)}
+                className={cn(
+                  "px-2 py-1 text-[11px] font-medium transition-colors",
+                  fit === mode
+                    ? "bg-accent text-accent-fg"
+                    : "text-content-muted hover:bg-surface-muted hover:text-content",
+                )}
+                title={mode === "width" ? "Fit to width" : mode === "page" ? "Fit whole page" : "Actual size"}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex-1" />
+
+          {rendering && <Loader2 className="mr-1 h-4 w-4 animate-spin text-accent" />}
+
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => startDownloadFromUrl(url, name)}
+            icon={<Download className="h-3.5 w-3.5" />}
+            className="px-2.5"
+          >
+            <span className="hidden md:inline">Download</span>
+          </Button>
+          {isTauri && (
+            <button
+              onClick={() => openExternally(url)}
+              className="rounded-lg p-1.5 text-content-muted transition-colors hover:bg-surface-muted hover:text-content"
+              title="Open in system PDF viewer"
+              aria-label="Open in system viewer"
+            >
+              <ExternalLink className="h-4 w-4" />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Body */}
@@ -422,6 +443,34 @@ export default function PdfViewer({ url, name }: { url: string; name: string }) 
         </div>
       </div>
     </div>
+  );
+}
+
+function PdfDivider() {
+  return <div className="mx-0.5 hidden h-5 w-px bg-border/40 sm:block" aria-hidden />;
+}
+
+function ToolBtn({ children, onClick, title, label, active, disabled }: {
+  children: React.ReactNode;
+  onClick: () => void;
+  title: string;
+  label: string;
+  active?: boolean;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      aria-label={label}
+      className={cn(
+        "rounded-lg p-1.5 transition-colors disabled:opacity-30 disabled:pointer-events-none",
+        active ? "bg-accent/15 text-accent" : "text-content-muted hover:bg-surface-muted hover:text-content",
+      )}
+    >
+      {children}
+    </button>
   );
 }
 

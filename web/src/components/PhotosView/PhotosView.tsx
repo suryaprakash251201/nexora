@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { favoritesApi, filesApi, sharesApi } from "../../api/endpoints";
 import { AnimatePresence, motion } from "motion/react";
 import {
+  Images,
   Download, FolderOpen, LayoutGrid, Map as MapIcon, MapPin, Search,
   Share2, Star, Trash2, X, Check, Copy,
 } from "lucide-react";
@@ -13,6 +14,7 @@ import { Gallery } from "./Gallery";
 import { MapGallery } from "./MapGallery";
 import { PhotoViewer } from "./PhotoViewer";
 import { FilterMenu } from "./FilterMenu";
+import { ViewHeader, HeaderSegment } from "../ui/ViewHeader";
 import { SelectionBar } from "./SelectionBar";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { useDebouncedValue, useElementSize, useLocalStorage, usePhotos } from "./hooks";
@@ -274,108 +276,94 @@ export default function PhotosView({ roots, onOpen, onPreview }: PhotosViewProps
   return (
     <div className="flex min-h-full flex-1 flex-col">
       {/* ------------------------------ Header ------------------------------ */}
-      <div ref={headerRef} className="sticky top-0 z-20 border-b border-border/30 bg-surface-1/80 backdrop-blur-xl">
-        <div className="flex flex-wrap items-center gap-2 px-3 pb-2 pt-3 sm:px-5">
-          <div className="mr-2 min-w-0">
-            <h1 className="text-lg font-bold tracking-tight text-content">Photos</h1>
-            <p className="text-xs text-content-muted">
-              {totalCount ?? photos.length.toLocaleString()} photo{(totalCount ?? photos.length) === 1 ? "" : "s"}
-              {geoCount > 0 && <> · {geoCount} geotagged</>}
-              {favoriteCount > 0 && <> · {favoriteCount} favorite{favoriteCount === 1 ? "" : "s"}</>}
+      <div ref={headerRef}>
+        <ViewHeader
+          icon={Images}
+          title="Photos"
+          subtitle={
+            <>
+              {(totalCount ?? photos.length).toLocaleString()} photo{((totalCount ?? photos.length) === 1) ? "" : "s"}
+              {geoCount > 0 && <> · {geoCount.toLocaleString()} geotagged</>}
+              {favoriteCount > 0 && <> · {favoriteCount.toLocaleString()} favorite{favoriteCount === 1 ? "" : "s"}</>}
               {topCamera && photos.length > 20 && <> · mostly {topCamera[0]}</>}
-            </p>
-          </div>
-          <div className="ml-auto flex items-center gap-1.5">
-            {/* search */}
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-content-muted" />
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search photos…"
-                className="w-40 rounded-lg border border-border/40 bg-surface-2 py-1.5 pl-8 pr-7 text-sm outline-none transition-all placeholder:text-content-muted focus:w-56 focus:border-accent sm:w-48"
+            </>
+          }
+          actions={
+            <>
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-content-muted" />
+                <input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search photos…"
+                  className="w-36 rounded-lg border border-border/40 bg-surface-2 py-1.5 pl-8 pr-7 text-sm outline-none transition-all placeholder:text-content-muted focus:w-52 focus:border-accent sm:w-44"
+                />
+                {search && (
+                  <button onClick={() => setSearch("")} aria-label="Clear search" className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-content-muted glass-hover">
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+              <FilterMenu filters={filters} onChange={setFilters} availableCameras={cameras} activeCount={activeFilterCount} />
+              <HeaderSegment
+                ariaPrefix="Density"
+                value={density}
+                onChange={(v) => setDensity(v)}
+                options={[
+                  { value: "cozy", label: "Cozy" },
+                  { value: "compact", label: "Compact" },
+                ]}
               />
-              {search && (
-                <button onClick={() => setSearch("")} aria-label="Clear search" className="absolute right-2 top-1/2 -translate-y-1/2 text-content-muted glass-hover rounded p-0.5">
-                  <X className="h-3.5 w-3.5" />
+              <HeaderSegment
+                ariaPrefix="View"
+                value={viewMode}
+                onChange={(v) => setViewMode(v)}
+                options={[
+                  { value: "gallery", label: "Gallery", icon: LayoutGrid, labelHidden: true },
+                  { value: "map", label: "Map", icon: MapIcon, labelHidden: true },
+                ]}
+              />
+            </>
+          }
+        >
+          {(years.length > 1 || filtered) && (
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 hide-scrollbar">
+              {years.map((y) => (
+                <button
+                  key={y}
+                  onClick={() => setFilters((f) => ({ ...f, year: f.year === y ? undefined : y, month: undefined }))}
+                  className={cn(
+                    "shrink-0 rounded-full border px-3 py-1 text-xs transition-colors",
+                    filters.year === y ? "border-accent/50 bg-accent/15 text-accent" : "border-border/40 text-content-muted hover:text-content"
+                  )}
+                >
+                  {y}
+                </button>
+              ))}
+              {filters.favoritesOnly && (
+                <button onClick={() => setFilters((f) => ({ ...f, favoritesOnly: false }))} className="flex shrink-0 items-center gap-1 rounded-full border border-amber-400/40 bg-amber-400/10 px-3 py-1 text-xs text-amber-300">
+                  <Star className="h-3 w-3 fill-current" /> Favorites <X className="h-3 w-3" />
+                </button>
+              )}
+              {filters.hasLocation && (
+                <button onClick={() => setFilters((f) => ({ ...f, hasLocation: false }))} className="flex shrink-0 items-center gap-1 rounded-full border border-emerald-400/40 bg-emerald-400/10 px-3 py-1 text-xs text-emerald-300">
+                  <MapPin className="h-3 w-3" /> With location <X className="h-3 w-3" />
+                </button>
+              )}
+              {(filtered || search) && (
+                <button
+                  onClick={() => {
+                    setFilters(EMPTY_FILTERS);
+                    setSearch("");
+                  }}
+                  className="ml-auto flex shrink-0 items-center gap-1 rounded-full border border-border/40 px-3 py-1 text-xs text-content-muted hover:text-content"
+                >
+                  <Check className="h-3 w-3" /> Clear all
                 </button>
               )}
             </div>
-            <FilterMenu filters={filters} onChange={setFilters} availableCameras={cameras} activeCount={activeFilterCount} />
-            {/* density */}
-            <div className="hidden items-center rounded-lg border border-border/40 p-0.5 sm:flex">
-              <button
-                onClick={() => setDensity("cozy")}
-                aria-label="Cozy density"
-                className={cn("rounded-md px-2.5 py-1 text-xs transition-colors", density === "cozy" ? "bg-accent/15 text-accent" : "text-content-muted hover:text-content")}
-              >
-                Cozy
-              </button>
-              <button
-                onClick={() => setDensity("compact")}
-                aria-label="Compact density"
-                className={cn("rounded-md px-2.5 py-1 text-xs transition-colors", density === "compact" ? "bg-accent/15 text-accent" : "text-content-muted hover:text-content")}
-              >
-                Compact
-              </button>
-            </div>
-            {/* view mode */}
-            <div className="flex items-center rounded-lg border border-border/40 p-0.5">
-              <button
-                onClick={() => setViewMode("gallery")}
-                aria-label="Gallery view"
-                className={cn("rounded-md p-1.5 transition-colors", viewMode === "gallery" ? "bg-accent/15 text-accent" : "text-content-muted hover:text-content")}
-              >
-                <LayoutGrid className="h-4 w-4" />
-              </button>
-              <button
-                onClick={() => setViewMode("map")}
-                aria-label="Map view"
-                className={cn("rounded-md p-1.5 transition-colors", viewMode === "map" ? "bg-accent/15 text-accent" : "text-content-muted hover:text-content")}
-              >
-                <MapIcon className="h-4 w-4" />
-              </button>
-            </div>
-          </div>
-        </div>
-        {/* year chips + active filter chips */}
-        {(years.length > 1 || filtered) && (
-          <div className="flex items-center gap-1.5 overflow-x-auto px-3 pb-2 hide-scrollbar sm:px-5">
-            {years.map((y) => (
-              <button
-                key={y}
-                onClick={() => setFilters((f) => ({ ...f, year: f.year === y ? undefined : y, month: undefined }))}
-                className={cn(
-                  "shrink-0 rounded-full border px-3 py-1 text-xs transition-colors",
-                  filters.year === y ? "border-accent/50 bg-accent/15 text-accent" : "border-border/40 text-content-muted hover:text-content"
-                )}
-              >
-                {y}
-              </button>
-            ))}
-            {filters.favoritesOnly && (
-              <button onClick={() => setFilters((f) => ({ ...f, favoritesOnly: false }))} className="flex shrink-0 items-center gap-1 rounded-full border border-amber-400/40 bg-amber-400/10 px-3 py-1 text-xs text-amber-300">
-                <Star className="h-3 w-3 fill-current" /> Favorites <X className="h-3 w-3" />
-              </button>
-            )}
-            {filters.hasLocation && (
-              <button onClick={() => setFilters((f) => ({ ...f, hasLocation: false }))} className="flex shrink-0 items-center gap-1 rounded-full border border-emerald-400/40 bg-emerald-400/10 px-3 py-1 text-xs text-emerald-300">
-                <MapPin className="h-3 w-3" /> With location <X className="h-3 w-3" />
-              </button>
-            )}
-            {(filtered || search) && (
-              <button
-                onClick={() => {
-                  setFilters(EMPTY_FILTERS);
-                  setSearch("");
-                }}
-                className="ml-auto flex shrink-0 items-center gap-1 rounded-full border border-border/40 px-3 py-1 text-xs text-content-muted hover:text-content"
-              >
-                <Check className="h-3 w-3" /> Clear all
-              </button>
-            )}
-          </div>
-        )}
+          )}
+        </ViewHeader>
       </div>
       {/* ------------------------------ Content ------------------------------ */}
       <GalleryContainer>
