@@ -15,6 +15,7 @@ import (
 	"github.com/nexora/nexora/internal/api"
 	"github.com/nexora/nexora/internal/audit"
 	"github.com/nexora/nexora/internal/auth"
+	"github.com/nexora/nexora/internal/backup"
 	"github.com/nexora/nexora/internal/config"
 	"github.com/nexora/nexora/internal/database"
 	"github.com/nexora/nexora/internal/events"
@@ -116,6 +117,11 @@ func main() {
 		}
 	}()
 	go runMaintenance(appCtx, db, sessions, limiter, searchSvc, shareStore, previewSvc, jobMgr, log)
+
+	// Scheduled SQLite snapshots (disabled unless NEXORA_BACKUP_DIR is set).
+	if cfg.BackupDir != "" {
+		go backup.Start(appCtx, db, cfg.BackupDir, cfg.BackupKeep, cfg.BackupHour, log)
+	}
 
 	httpSrv := &http.Server{
 		Addr:              cfg.ListenAddr,

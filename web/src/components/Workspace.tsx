@@ -244,6 +244,18 @@ export default function Workspace({ user }: { user: User }) {
   // Warm the target view's data while the pointer hovers a nav item, so a
   // click swaps views with data already in the cache (no spinner / skeleton).
   const prefetchView = useCallback((v: SidebarView) => {
+    // Prefetch the lazy chunk so first click paints instantly (data is
+    // prefetched below; this covers the JS bundle).
+    const chunkLoaders: Partial<Record<SidebarView, () => Promise<unknown>>> = {
+      admin: () => import("./AdminPanel"),
+      search: () => import("./SearchView"),
+      shares: () => import("./SharesPanel"),
+      playlists: () => import("./PlaylistsPanel"),
+      analytics: () => import("./StorageAnalyticsPanel"),
+      photos: () => import("./PhotosView/index"),
+    };
+    void chunkLoaders[v]?.().catch(() => {});
+
     if (v === "home") {
       qc.prefetchQuery({ queryKey: ["home"], queryFn: () => homeApi.get(), staleTime: 30_000 });
       qc.prefetchQuery({ queryKey: ["home-usage"], queryFn: () => homeApi.usage(), staleTime: 60_000 });
@@ -272,6 +284,23 @@ export default function Workspace({ user }: { user: User }) {
     fileInputRef: fileInput, isModalOpen,
     setCommandPaletteOpen, setShortcutsModalOpen
   });
+
+  // Clipboard paste upload: Ctrl/Cmd+V pastes files or screenshots from the
+  // OS clipboard into the current folder (files view only).
+  useEffect(() => {
+    if (!canWrite || view !== "files") return;
+    const onPaste = (e: ClipboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || (e.target as HTMLElement)?.isContentEditable) return;
+      const files = Array.from(e.clipboardData?.files ?? []);
+      if (files.length === 0) return;
+      e.preventDefault();
+      void uploadFiles(files);
+      pushToast("success", `Uploading ${files.length} pasted item${files.length === 1 ? "" : "s"}`);
+    };
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, [canWrite, view, uploadFiles, pushToast]);
 
   const openItem = (item: FileItem) => {
     if (item.is_dir) {

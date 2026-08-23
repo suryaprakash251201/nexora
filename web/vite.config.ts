@@ -6,6 +6,10 @@ import path from "path";
 export default defineConfig({
   base: "/",
   plugins: [react(), tailwindcss()],
+  // Vitest: unit tests only — Playwright specs live in ./e2e
+  test: {
+    exclude: ["**/node_modules/**", "**/dist/**", "e2e/**"],
+  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),

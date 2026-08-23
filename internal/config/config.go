@@ -48,6 +48,9 @@ type Config struct {
 	MaxEditableSize    int64
 	DefaultRoots       []RootConfig
 	AllowRegistration  bool
+	BackupDir          string // "" disables scheduled backups
+	BackupKeep         int
+	BackupHour         int
 	SecureCookies      bool
 	ReadonlyFS         bool
 	PlaylistCoverPath  string
@@ -90,6 +93,9 @@ func Load() (*Config, error) {
 	c.DatabaseType = env("NEXORA_DATABASE_TYPE", "sqlite")
 	c.DatabaseURL = env("NEXORA_DATABASE_URL", "")
 	c.ThumbnailCacheDir = env("NEXORA_THUMBNAIL_CACHE_DIR", c.DataDir+"/cache/thumbnails")
+	c.BackupDir = env("NEXORA_BACKUP_DIR", "")
+	c.BackupKeep = envInt("NEXORA_BACKUP_KEEP", 7)
+	c.BackupHour = envInt("NEXORA_BACKUP_HOUR", 3)
 
 	if err := os.MkdirAll(c.DataDir, 0o755); err != nil {
 		return nil, fmt.Errorf("create data dir: %w", err)

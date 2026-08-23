@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, memo, useCallback } from "react";
 import { motion } from "motion/react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { useUI } from "../store";
 import { Play, MoreVertical, AlertTriangle, RefreshCw, Eye, FolderOpen } from "lucide-react";
 import { FileItem } from "../api/types";
@@ -222,6 +223,15 @@ export default function FileBrowser({
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const dropZoneRef = useRef<HTMLDivElement>(null);
+  // Reactive handle to the real scroll container. The loading/error branches
+  // render WITHOUT this element, so a mount-time-only ref/observer would
+  // never attach (grid columns would collapse to 1). State re-runs the
+  // measurement effects once the element actually exists.
+  const [scrollEl, setScrollEl] = useState<HTMLDivElement | null>(null);
+  const attachScroll = useCallback((el: HTMLDivElement | null) => {
+    dropZoneRef.current = el;
+    setScrollEl(el);
+  }, []);
   const itemsGridRef = useRef<HTMLDivElement>(null);
 
   // When the visible folder changes, jump back to the top instead of
@@ -230,6 +240,7 @@ export default function FileBrowser({
   useEffect(() => {
     if (prevFolder.current !== folderPath) {
       prevFolder.current = folderPath;
+      anchorIdxRef.current = null;
       dropZoneRef.current?.scrollTo({ top: 0 });
     }
   }, [folderPath]);
@@ -264,7 +275,7 @@ export default function FileBrowser({
       e.stopPropagation();
       setDragOver(false);
     };
-    const zone = dropZoneRef.current;
+    const zone = scrollEl;
     if (zone) {
       zone.addEventListener("dragover", handleDragOver);
       zone.addEventListener("dragleave", handleDragLeave);
@@ -277,9 +288,11 @@ export default function FileBrowser({
         zone.removeEventListener("drop", handleDrop);
       }
     };
-  }, [canDrop, onDropItem]);
+  }, [canDrop, onDropItem, scrollEl]);
 
   const handleItemClick = (item: FileItem, e: React.MouseEvent) => {
+    const idx = Number((e.currentTarget as HTMLElement).dataset.idx);
+    if (Number.isFinite(idx) && !e.shiftKey && !e.metaKey && !e.ctrlKey) anchorIdxRef.current = idx;
     if (selectMode) {
       onSelect(item, e);
     } else if (e.metaKey || e.ctrlKey || e.shiftKey) {
@@ -301,20 +314,75 @@ export default function FileBrowser({
   };
 
   // Roving focus: arrows move keyboard focus between items (grid-aware).
+  // Shift+arrows/Home/End extend the selection from the anchor item;
+  // plain navigation just moves focus and moves the anchor.
+  const anchorIdxRef = useRef<number | null>(null);
+
+  const selectRange = useCallback((from: number, to: number) => {
+    const lo = Math.min(from, to);
+    const hi = Math.max(from, to);
+    useUI.getState().setSelection(items.slice(lo, hi + 1).map((i) => i.path));
+  }, [items]);
+
   const handleArrowNavigation = useCallback((e: React.KeyboardEvent) => {
     if (e.defaultPrevented) return;
     const key = e.key;
-    if (key !== "ArrowDown" && key !== "ArrowUp" && key !== "ArrowLeft" && key !== "ArrowRight") return;
+    const isArrow = key === "ArrowDown" || key === "ArrowUp" || key === "ArrowLeft" || key === "ArrowRight";
+    if (!isArrow && key !== "Home" && key !== "End") return;
     if (!itemsGridRef.current) return;
     const tiles = Array.from(itemsGridRef.current.querySelectorAll<HTMLElement>("[data-file-item]"));
     const idx = tiles.indexOf(document.activeElement as HTMLElement);
     if (idx === -1) return;
-    const next = focusNeighbour(tiles, idx, key);
-    if (next) {
-      e.preventDefault();
-      next.focus();
+
+    let targetIdx = -1;
+    if (isArrow) {
+      const next = focusNeighbour(tiles, idx, key);
+      if (!next) return;
+      targetIdx = tiles.indexOf(next);
+    } else {
+      targetIdx = key === "Home" ? 0 : tiles.length - 1;
+      if (targetIdx === idx && !e.shiftKey) { e.preventDefault(); return; }
     }
-  }, []);
+
+    e.preventDefault();
+    tiles[targetIdx]?.focus();
+    if (e.shiftKey) {
+      selectRange(anchorIdxRef.current ?? idx, targetIdx);
+    } else {
+      anchorIdxRef.current = targetIdx;
+    }
+  }, [selectRange]);
+
+  // --- Virtualization (react-virtual): keeps DOM small for huge folders ---
+  // NOTE: every hook here runs unconditionally — this block sits ABOVE all
+  // early returns so React sees a stable hook count across renders.
+  const [containerW, setContainerW] = useState(0);
+  useEffect(() => {
+    if (!scrollEl || typeof ResizeObserver === "undefined") return;
+    setContainerW(scrollEl.clientWidth);
+    const ro = new ResizeObserver((entries) => setContainerW(entries[0].contentRect.width));
+    ro.observe(scrollEl);
+    return () => ro.disconnect();
+  }, [scrollEl]);
+
+  // Horizontal padding of the grid container per density (matches DENSITY_CLASSES.grid p-*)
+  const padX = density === "compact" ? 12 : density === "spacious" ? 32 : 24;
+  const gridGap = density === "compact" ? 6 : density === "spacious" ? 16 : 12;
+  const gridCols = Math.max(1, Math.floor((containerW - padX * 2 + gridGap) / (150 + gridGap)));
+  const gridRowCount = Math.max(1, Math.ceil(items.length / gridCols));
+
+  const listVirt = useVirtualizer({
+    count: items.length,
+    getScrollElement: () => scrollEl,
+    estimateSize: () => (density === "compact" ? 46 : density === "spacious" ? 76 : 62),
+    overscan: 10,
+  });
+  const gridVirt = useVirtualizer({
+    count: gridRowCount,
+    getScrollElement: () => scrollEl,
+    estimateSize: () => (density === "compact" ? 210 : density === "spacious" ? 256 : 236),
+    overscan: 4,
+  });
 
   if ((loading && items.length === 0) || (isFetching && items.length === 0)) {
     return viewMode === "grid" ? (
@@ -375,29 +443,41 @@ export default function FileBrowser({
   const d = density;
 
   return (
-    <div ref={dropZoneRef} className="flex-1 overflow-auto hide-scrollbar">
+    <div ref={attachScroll} className="flex-1 overflow-auto hide-scrollbar">
       {viewMode === "grid" ? (
         <>
           <div
             ref={itemsGridRef}
             onKeyDown={handleArrowNavigation}
-            className={cn(DENSITY_CLASSES.grid[d], "grid")} style={{ gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))" }}
+            className={cn(DENSITY_CLASSES.grid[d])}
             role="listbox"
             aria-multiselectable="true"
             aria-label="File grid"
           >
-              {items.map((item, index) => {
+              {/* Virtualized rows of gridCols tiles each */}
+              <div style={{ height: gridVirt.getTotalSize(), position: "relative" }}>
+              {gridVirt.getVirtualItems().map((vr) => {
+                const rowStart = vr.index * gridCols;
+                const rowItems = items.slice(rowStart, rowStart + gridCols);
+                return (
+                <div
+                  key={vr.key}
+                  data-index={vr.index}
+                  ref={gridVirt.measureElement}
+                  style={{ position: "absolute", top: 0, left: 0, width: "100%", transform: `translateY(${vr.start}px)` }}
+                >
+                <div style={{ display: "grid", gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))`, gap: gridGap }}>
+                {rowItems.map((item, colIdx) => {
+                const index = rowStart + colIdx;
                 const selected = selection.has(item.path);
                 const action = hoverActionFor(item);
                 const ActionIcon = action.Icon;
                 return (
                   <motion.div
                     key={item.path}
-                    initial={{ opacity: 0, y: 6, scale: 0.99 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    transition={{ duration: 0.16, ease: "easeOut", delay: Math.min(index * 0.006, 0.24) }}
                     tabIndex={0}
                     data-file-item
+                    data-idx={index}
                     role="option"
                     aria-selected={selected}
                     onClick={(e) => handleItemClick(item, e)}
@@ -501,10 +581,15 @@ export default function FileBrowser({
                           </p>
                         )}
                       </div>
-                    </div>
-                  </motion.div>
-                );
+                     </div>
+                   </motion.div>
+                 );
+                })}
+                </div>
+                </div>
+              );
               })}
+              </div>
           </div>
           {hasMore && onLoadMore && (
             <div className="flex justify-center py-6 pb-40">
@@ -544,18 +629,25 @@ export default function FileBrowser({
             )}
           </div>
 
-              {items.map((item, index) => {
+              {/* Virtualized rows: plain positioning wrapper (measured) + row content */}
+              <div style={{ height: listVirt.getTotalSize(), position: "relative", width: "100%" }}>
+              {listVirt.getVirtualItems().map((vr) => {
+                const item = items[vr.index];
+                const index = vr.index;
                 const selected = selection.has(item.path);
                 const action = hoverActionFor(item);
                 const ActionIcon = action.Icon;
                 return (
-                  <motion.div
+                  <div
                     key={item.path}
-                    initial={{ opacity: 0, y: 4 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.14, ease: "easeOut", delay: Math.min(index * 0.004, 0.12) }}
+                    data-index={vr.index}
+                    ref={listVirt.measureElement}
+                    style={{ position: "absolute", top: 0, left: 0, width: "100%", transform: `translateY(${vr.start}px)` }}
+                  >
+                  <div
                     tabIndex={0}
                     data-file-item
+                    data-idx={index}
                     role="row"
                     aria-selected={selected}
                     onClick={(e) => handleItemClick(item, e)}
@@ -655,9 +747,11 @@ export default function FileBrowser({
                         {formatDate(item.modified)}
                       </span>
                     )}
-                  </motion.div>
+                  </div>
+                  </div>
                 );
               })}
+              </div>
           </div>
           {hasMore && onLoadMore && (
             <div className="flex justify-center py-6 pb-40">

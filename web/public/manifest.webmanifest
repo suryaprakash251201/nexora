@@ -1,0 +1,15 @@
+{
+  "name": "Nexora — Your private file workspace",
+  "short_name": "Nexora",
+  "description": "Self-hosted file workspace: files, photos, music and sharing on your own server.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#090B12",
+  "theme_color": "#090B12",
+  "icons": [
+    { "src": "/logo.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}
