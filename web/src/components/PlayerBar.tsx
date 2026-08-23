@@ -105,30 +105,60 @@ export default memo(function PlayerBar() {
   // Browsers stay on the small AAC default and only try FLAC as a last resort
   // (Chromium/WebKit decode FLAC-in-MP4 natively, so it always plays).
   const [fallbackStage, setFallbackStage] = useState(-1);
+  /** True while the Tauri native engine owns playback (no <audio> src). */
+  const [useNative, setUseNative] = useState(false);
   const [seekStart, setSeekStart] = useState(0);
   const fallbackFormats: AudioTranscodeFormat[] = isTauriRuntime() ? ["flac", "flac24", "aac"] : ["aac", "flac"];
   const sessionIdRef = useRef(generateSessionId());
 
-  // Reset fallback + transcode seek state when the track changes, and
-  // pre-route codecs the webview cannot decode natively (ALAC inside .m4a/
-  // .m4b, WMA, …) straight to the transcode pipeline instead of failing on
-  // the raw stream first — that removes a full error round-trip from start
-  // latency and makes ALAC .m4a reliably playable in the browser.
+  // Track-change routing. Order of preference:
+  //   1. Native engine (Tauri + nexora-audio) — zero transcode buffering.
+  //   2. Browser-native codec (AAC/MP3…) via raw stream.
+  //   3. Server transcode pipeline (webview-undecodable codecs).
   useEffect(() => {
     setFallbackStage(-1);
     setSeekStart(0);
     engine.timeOffset = 0;
     usePlayer.getState().setAudioError("");
-    if (!current) return;
+    if (!current) {
+      engine.stopNative();
+      setUseNative(false);
+      return;
+    }
     let cancelled = false;
-    needsAudioTranscode(current).then((needs) => {
-      if (!needs || cancelled) return;
-      serverSupportsTranscode().then((supp) => {
-        if (supp && !cancelled) setFallbackStage(0);
+
+    (async () => {
+      if (isTauriRuntime()) {
+        const took = await engine.tryUseNative(current);
+        if (cancelled) {
+          if (took) void engine.stopNative();
+          return;
+        }
+        if (took) {
+          setUseNative(true);
+          return;
+        }
+      }
+      setUseNative(false);
+      // Legacy pre-route: webview-undecodable codecs go straight to the
+      // transcode pipeline instead of failing on the raw stream first.
+      needsAudioTranscode(current).then((needs) => {
+        if (!needs || cancelled) return;
+        serverSupportsTranscode().then((supp) => {
+          if (supp && !cancelled) setFallbackStage(0);
+        });
       });
-    });
+    })();
+
     return () => { cancelled = true; };
   }, [current?.path]);
+
+  // Native → html5 fallback signal (engine error path).
+  useEffect(() => {
+    const onFallback = () => setUseNative(false);
+    window.addEventListener("nexora:native-fallback", onFallback);
+    return () => window.removeEventListener("nexora:native-fallback", onFallback);
+  }, []);
 
   // Transcoded streams can't be seeked via HTTP Range; route seeks through a
   // ?start= URL rebuild so ffmpeg fast-seeks to the target.
@@ -236,7 +266,9 @@ export default memo(function PlayerBar() {
 
   return (
     <>
-      <audio ref={audioRef} preload="auto" playsInline webkit-playsinline="true" onError={handleError} />
+      {!useNative && (
+        <audio ref={audioRef} preload="auto" playsInline webkit-playsinline="true" onError={handleError} />
+      )}
 
       {hasActivePlayer && showMini && !expanded && (
         <div className="fixed bottom-32 md:bottom-6 left-1/2 -translate-x-1/2 z-[var(--z-float)] w-[calc(100%-2rem)] max-w-lg pointer-events-none">

@@ -20,7 +20,7 @@ Events: `audio://event` {ready|playing|paused|ended|error}; position polled.
 | M1 | HttpRangeReader + mock-server tests | 11 tests green | ✅ done |
 | M2 | symphonia decode_all/TrackDecoder + fixtures (AAC/ALAC faststart+moov-end/FLAC/MP3) via Cursor **and** HTTP-Range streaming; wav_dump harness | 5 tests green | ✅ done |
 | M3 | PlayerHandle state machine (NullSink-testable) + Tauri commands/events bridge (`native-audio` feature) + frontend probe module | cargo tests green; headless check passes; Windows build enables feature | ✅ code complete — Windows soak pending |
-| M4 | Player-store engine router + selection/fallback + settings kill-switch | A/B live switch; fallback parity | ⬜ |
+| M4 | Player-store engine router + selection/fallback + settings kill-switch | A/B live switch; fallback parity | ✅ code complete — Windows soak pending |
 | M5 | Perf tuning, seek latency, docs, default-on | gates: open<300ms seek<200ms CPU<5% | ⬜ |
 
 ## Notes / constraints

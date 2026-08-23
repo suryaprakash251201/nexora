@@ -1,6 +1,6 @@
 import { useEffect, useState, type MouseEvent } from "react";
 import { createPortal } from "react-dom";
-import { KeyRound, Smartphone, MonitorSmartphone, Shield, ShieldAlert, Check, AlertCircle, ArrowLeft, ChevronRight, X, Sun, Moon, Power } from "lucide-react";
+import { KeyRound, Smartphone, MonitorSmartphone, Shield, ShieldAlert, Check, AlertCircle, ArrowLeft, ChevronRight, X, Sun, Moon, Power, Music } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useQueryClient } from "@tanstack/react-query";
 import type { User } from "../api/types";
@@ -21,6 +21,22 @@ export default function SettingsModal({ user, onClose, initialView = "main" }: {
   const queryClient = useQueryClient();
   const dialogRef = useFocusTrap(true);
   const isTauri = "__TAURI_INTERNALS__" in window;
+  const [nativeAudioOn, setNativeAudioOn] = useState<boolean>(
+    () => localStorage.getItem("nexora.nativeAudio") !== "0",
+  );
+  const toggleNativeAudio = () => {
+    const next = !nativeAudioOn;
+    setNativeAudioOn(next);
+    localStorage.setItem("nexora.nativeAudio", next ? "1" : "0");
+    // Takes effect on the next track; current playback continues on the
+    // active engine so we never cut audio mid-note.
+    useUI.getState().pushToast(
+      "info",
+      next
+        ? "Native audio enabled — applies to the next track"
+        : "Native audio disabled — applies to the next track",
+    );
+  };
   // ── Auto-start ─────────────────────────────────────────────
   const [autoStart, setAutoStart] = useState<boolean | null>(null);
   useEffect(() => {
@@ -218,6 +234,36 @@ export default function SettingsModal({ user, onClose, initialView = "main" }: {
                 <div>
                   <h3 className="text-xs font-bold text-content-muted uppercase tracking-wider mb-3">System</h3>
                   <div className="space-y-2">
+                    <div className="flex items-center justify-between px-4 py-3.5 rounded-xl bg-surface-muted/30 border border-border/50">
+                      <div className="flex items-center gap-4">
+                        <div className="p-2 rounded-lg bg-accent/10 text-accent">
+                          <Music className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-content">Native audio engine</p>
+                          <p className="text-xs text-content-muted">
+                            {nativeAudioOn
+                              ? "Decodes in-app — no server buffering (next track)"
+                              : "Uses browser/transcode pipeline (next track)"}
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={toggleNativeAudio}
+                        role="switch"
+                        aria-checked={nativeAudioOn}
+                        aria-label="Native audio engine"
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                          nativeAudioOn ? "bg-accent" : "bg-surface-muted"
+                        }`}
+                      >
+                        <span
+                          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                            nativeAudioOn ? "translate-x-6" : "translate-x-1"
+                          }`}
+                        />
+                      </button>
+                    </div>
                     <div
                       className="flex items-center justify-between px-4 py-3.5 rounded-xl bg-surface-muted/30 border border-border/50"
                     >

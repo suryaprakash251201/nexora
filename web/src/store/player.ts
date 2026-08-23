@@ -1,6 +1,15 @@
 import { create } from "zustand";
 import type { FileItem } from "../api/types";
-import { rawUrl } from "../lib/preview";
+import { isTauriRuntime, rawUrl } from "../lib/preview";
+import {
+  nativeAudio,
+  nativeAudioAvailable,
+  openTrack as nativeOpenTrack,
+  stopTrack as nativeStopTrack,
+} from "../lib/nativeAudio";
+
+/** Extensions symphonia decodes natively in our build configuration. */
+const NATIVE_EXTS = new Set(["m4a", "m4b", "aac", "mp3", "flac", "wav", "aiff", "alac"]);
 
 export type Repeat = "off" | "all" | "one";
 
@@ -65,6 +74,9 @@ function savePersist(p: Persist) {
 // PlayerEngine owns the single <audio> element so playback survives navigation.
 class PlayerEngine {
   audio: HTMLAudioElement | null = null;
+  /** Active backend. 'native' routes transport to the Tauri audio engine;
+   *  'html5' is the classic <audio> (+transcode) pipeline. */
+  mode: "html5" | "native" = "html5";
   /** Displayed-time offset for transcoded streams: the server fast-seeks via
    *  ?start= (which resets stream timestamps to 0), so we add the seek target
    *  back on top of the element's currentTime for correct UI time. */
@@ -72,6 +84,8 @@ class PlayerEngine {
   /** Registered by PlayerBar: called when a seek targets a transcoded stream
    *  so the URL can be rebuilt with a ?start= parameter. */
   onTranscodeSeek: ((t: number) => void) | null = null;
+  private pollTimer: number | null = null;
+  private nativeDuration = 0;
 
   bind(el: HTMLAudioElement) {
     this.audio = el;
@@ -88,10 +102,115 @@ class PlayerEngine {
     el.addEventListener("loadedmetadata", sync);
     el.addEventListener("ended", () => usePlayer.getState().next(true));
   }
-  play() { this.audio?.play().catch(() => {}); }
-  pause() { this.audio?.pause(); }
-  toggle() { if (this.audio?.paused) this.play(); else this.pause(); }
+
+  /**
+   * Attempts to hand the track to the native engine. Returns true when it
+   * took ownership; false → caller uses the html5/transcode path.
+   */
+  async tryUseNative(item: FileItem): Promise<boolean> {
+    if (!isTauriRuntime()) return false;
+    if (localStorage.getItem("nexora.nativeAudio") === "0") return false;
+    if (!(await nativeAudioAvailable())) return false;
+    const ext = (item.extension || "").toLowerCase();
+    if (!NATIVE_EXTS.has(ext)) return false;
+
+    // Stop any previous native session before deciding.
+    await nativeStopTrack();
+    this.stopPolling();
+
+    const info = await nativeOpenTrack(rawUrl(item.root_id, item.path), {
+      onEvent: (e) => this.onNativeEvent(e),
+    });
+    if (!info) return false;
+
+    this.mode = "native";
+    this.nativeDuration = info.duration_sec ?? 0;
+    const s = usePlayer.getState();
+    void nativeAudio.setVolume(s.muted ? 0 : s.volume);
+    if (s.playbackRate !== 1) void nativeAudio.setSpeed(s.playbackRate);
+    this.startPolling();
+    usePlayer.setState({
+      isPlaying: true,
+      buffering: false,
+      duration: info.duration_sec ?? 0,
+      currentTime: 0,
+    });
+    return true;
+  }
+
+  /** Native engine hit an unrecoverable error → drop back to html5. */
+  fallbackToHtml5(msg?: string) {
+    if (this.mode !== "native") return;
+    this.mode = "html5";
+    this.stopPolling();
+    void nativeStopTrack();
+    if (msg) usePlayer.getState().setAudioError(msg);
+    window.dispatchEvent(new CustomEvent("nexora:native-fallback"));
+  }
+
+  stopNative() {
+    this.mode = "html5";
+    this.stopPolling();
+    void nativeStopTrack();
+  }
+
+  private onNativeEvent(e: { kind: string; message?: string }) {
+    switch (e.kind) {
+      case "playing":
+        usePlayer.setState({ isPlaying: true, buffering: false });
+        break;
+      case "paused":
+        usePlayer.setState({ isPlaying: false, buffering: false });
+        break;
+      case "ended":
+        usePlayer.setState({ isPlaying: false });
+        usePlayer.getState().next(true);
+        break;
+      case "error":
+        this.fallbackToHtml5(
+          e.message
+            ? `Native playback failed (${e.message}) — switching to browser player`
+            : "Native playback failed — switching to browser player",
+        );
+        break;
+      default:
+        break;
+    }
+  }
+
+  private startPolling() {
+    if (this.pollTimer !== null) return;
+    this.pollTimer = window.setInterval(async () => {
+      if (this.mode !== "native") return;
+      const pos = await nativeAudio.position();
+      usePlayer.getState()._syncTime(pos, this.nativeDuration || usePlayer.getState().duration);
+    }, 250);
+  }
+  private stopPolling() {
+    if (this.pollTimer !== null) {
+      window.clearInterval(this.pollTimer);
+      this.pollTimer = null;
+    }
+  }
+
+  play() {
+    if (this.mode === "native") return void nativeAudio.play();
+    this.audio?.play().catch(() => {});
+  }
+  pause() {
+    if (this.mode === "native") return void nativeAudio.pause();
+    this.audio?.pause();
+  }
+  toggle() {
+    if (this.mode === "native") {
+      usePlayer.getState().isPlaying ? this.pause() : this.play();
+      return;
+    }
+    if (this.audio?.paused) this.play();
+    else this.pause();
+  }
   seek(t: number) {
+    if (this.mode === "native") return void nativeAudio.seek(Math.max(0, t));
     const a = this.audio;
     if (!a) return;
     // The transcode endpoint does not honor HTTP Range; a plain currentTime
@@ -104,9 +223,18 @@ class PlayerEngine {
     }
     a.currentTime = t;
   }
-  setVolume(v: number) { if (this.audio) { this.audio.volume = v; this.audio.muted = false; } }
-  setMuted(m: boolean) { if (this.audio) this.audio.muted = m; }
-  setPlaybackRate(r: number) { if (this.audio) this.audio.playbackRate = r; }
+  setVolume(v: number) {
+    if (this.mode === "native") return void nativeAudio.setVolume(v);
+    if (this.audio) { this.audio.volume = v; this.audio.muted = false; }
+  }
+  setMuted(m: boolean) {
+    if (this.mode === "native") return void nativeAudio.setVolume(m ? 0 : usePlayer.getState().volume);
+    if (this.audio) this.audio.muted = m;
+  }
+  setPlaybackRate(r: number) {
+    if (this.mode === "native") return void nativeAudio.setSpeed(r);
+    if (this.audio) this.audio.playbackRate = r;
+  }
 }
 
 export const engine = new PlayerEngine();

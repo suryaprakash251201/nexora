@@ -3,6 +3,8 @@ All notable changes to Nexora are documented here. The format is based on [Keep 
 
 ## [Unreleased]
 ### Added
+- Desktop: native audio engine milestone 4 — the player store now routes supported tracks (m4a/AAC/ALAC, FLAC, MP3, WAV…) through the Rust engine automatically when available, with automatic fallback to the browser/transcode pipeline on any error and a Settings → System kill-switch. Bearer auth bridges the desktop HTTP client via a self-managed `nxr_` media token.
+### Added
 - Desktop (plan → Phase 1 started): `nexora-audio` Rust crate for native in-app audio decode/playback — M1 lands an HTTP-Range streaming source (`HttpRangeReader`: chunked LRU cache, read-ahead, bearer auth, moov-tail prefetch) with 11 mock-server tests; decode (symphonia: mp4/ALAC/AAC/FLAC/PCM/MP3) and output (rodio/WASAPI) gated behind `decode`/`output` features.
 
 ### Changed

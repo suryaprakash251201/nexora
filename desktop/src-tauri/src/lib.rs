@@ -244,6 +244,7 @@ pub fn run() {
             audio_bridge::audio_native_stop,
             audio_bridge::audio_native_seek,
             audio_bridge::audio_native_set_volume,
+            audio_bridge::audio_native_set_speed,
             audio_bridge::audio_native_position,
             audio_bridge::audio_native_duration
         ]);

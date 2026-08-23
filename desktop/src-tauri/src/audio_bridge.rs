@@ -125,6 +125,11 @@ pub fn audio_native_set_volume(session: State<'_, AudioSession>, volume: f32) ->
 }
 
 #[tauri::command]
+pub fn audio_native_set_speed(session: State<'_, AudioSession>, rate: f64) -> Result<(), String> {
+    with_player!(session, |p: &PlayerHandle| p.set_speed(rate))
+}
+
+#[tauri::command]
 pub fn audio_native_position(session: State<'_, AudioSession>) -> Result<f64, String> {
     with_player!(session, |p: &PlayerHandle| Ok(p.position()))
 }
