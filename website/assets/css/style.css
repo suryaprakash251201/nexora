@@ -1269,8 +1269,10 @@ body {
   letter-spacing: 0.08em;
   white-space: nowrap;
 }
-.docs-table td { padding: 0.65rem 0.9rem; border-top: 1px solid var(--nx-border); color: var(--nx-muted); vertical-align: top; }
-.docs-table tr:hover td { background: var(--nx-glass); }
+.docs-table td { padding: 0.65rem 0.9rem; border-top: 1px solid var(--nx-border); color: var(--nx-muted); vertical-align: top; transition: background-color 0.15s ease; }
+/* Zebra rows for scanability on long reference tables (hover stays stronger) */
+.docs-table tbody tr:nth-child(even) td { background: color-mix(in srgb, var(--nx-glass) 42%, transparent); }
+.docs-table tbody tr:hover td { background: var(--nx-glass); }
 .docs-table code {
   color: var(--c-purple);
   font-family: 'JetBrains Mono', monospace;

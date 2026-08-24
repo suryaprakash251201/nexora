@@ -144,6 +144,7 @@
               <li><a href="#security">Security &amp; Operations</a></li>
               <li><a href="#backup">Backup &amp; Upgrade</a></li>
               <li><a href="#api">API &amp; Health Checks</a></li>
+              <li><a href="#troubleshooting">Troubleshooting</a></li>
               <li><a href="#faq">FAQ</a></li>
             </ul>
             <hr class="my-3" style="border-color:var(--nx-border)" />
@@ -168,6 +169,7 @@
               <option value="security">Security &amp; Operations</option>
               <option value="backup">Backup &amp; Upgrade</option>
               <option value="api">API &amp; Health Checks</option>
+              <option value="troubleshooting">Troubleshooting</option>
               <option value="faq">FAQ</option>
             </select>
           </div>
@@ -198,7 +200,7 @@ curl -f http://localhost/healthz" aria-label="Copy quick start"><i class="bi bi-
 
 <span class="c"># 3. Verify it's healthy</span>
 <span class="k">curl</span> -f http://localhost/healthz
-<span class="p">→</span> {<span class="s">"service"</span>:<span class="s">"nexora"</span>,<span class="s">"status"</span>:<span class="s">"ok"</span>,<span class="s">"version"</span>:<span class="s">"1.7.2"</span>}
+<span class="p">→</span> {<span class="s">"service"</span>:<span class="s">"nexora"</span>,<span class="s">"status"</span>:<span class="s">"ok"</span>,<span class="s">"version"</span>:<span class="s">"1.9.0"</span>}
 
 <span class="c"># 4. Open your browser and complete first-run setup</span>
 <span class="n">open</span> http://localhost</code></pre>
@@ -313,7 +315,7 @@ cd web && npm install && npm run dev" aria-label="Copy source install"><i class=
               </ol>
               <div class="docs-callout warn">
                 <i class="bi bi-exclamation-triangle-fill"></i>
-                <span>Do not enable <code>NEXORA_SECURE_COOKIES=true</code> for a plain <code>http://localhost</code> installation — secure cookies require HTTPS.</span>
+                <span>Leave <code>NEXORA_SECURE_COOKIES=false</code> while testing on plain <code>http://localhost</code> — secure cookies are only sent over HTTPS, so enabling them early will lock you out of logging in. Flip it to <code>true</code> once a TLS proxy is in front (see the next section).</span>
               </div>
             </div>
 
@@ -328,6 +330,57 @@ cd web && npm install && npm run dev" aria-label="Copy source install"><i class=
                 <li>Set <code>NEXORA_TRUSTED_PROXIES</code> only to the proxy networks that should be trusted for <code>X-Forwarded-For</code> and <code>X-Real-IP</code>.</li>
                 <li>Prevent direct public access to the HTTP port when the proxy is on the same server.</li>
               </ol>
+
+              <h3>Minimal proxy configs</h3>
+              <p>Two copy-paste starting points. Caddy handles certificates automatically; Nginx needs certbot or your own certificate.</p>
+              <div class="row g-3">
+                <div class="col-lg-6">
+                  <div class="code-shell">
+                    <div class="code-bar">
+                      <div class="dots"><span></span><span></span><span></span></div>
+                      <span style="margin-left:auto">Caddyfile</span>
+                      <button class="copy-btn ms-2" type="button" data-copy="files.example.com {
+    reverse_proxy 127.0.0.1:8080
+}" aria-label="Copy Caddy config"><i class="bi bi-clipboard"></i></button>
+                    </div>
+                    <pre><code>files.example.com <span class="p">{</span>
+    <span class="k">reverse_proxy</span> <span class="n">127.0.0.1:8080</span>
+<span class="p">}</span></code></pre>
+                  </div>
+                </div>
+                <div class="col-lg-6">
+                  <div class="code-shell">
+                    <div class="code-bar">
+                      <div class="dots"><span></span><span></span><span></span></div>
+                      <span style="margin-left:auto">nginx.conf</span>
+                      <button class="copy-btn ms-2" type="button" data-copy="server {
+    listen 443 ssl;
+    server_name files.example.com;
+    client_max_body_size 0;
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+}" aria-label="Copy Nginx config"><i class="bi bi-clipboard"></i></button>
+                    </div>
+                    <pre><code>server <span class="p">{</span>
+    <span class="k">listen</span> <span class="n">443</span> ssl;
+    <span class="k">server_name</span> files.example.com;
+    <span class="k">client_max_body_size</span> <span class="n">0</span>;   <span class="c"># no upload ceiling at the proxy</span>
+    <span class="k">location</span> / <span class="p">{</span>
+        <span class="k">proxy_pass</span> http://127.0.0.1:8080;
+        <span class="k">proxy_set_header</span> Host <span class="v">$host</span>;
+        <span class="k">proxy_set_header</span> X-Forwarded-For <span class="v">$proxy_add_x_forwarded_for</span>;
+    <span class="p">}</span>
+<span class="p">}</span></code></pre>
+                  </div>
+                </div>
+              </div>
+              <div class="docs-callout info">
+                <i class="bi bi-info-circle-fill"></i>
+                <span><code>client_max_body_size 0</code> (Nginx) matters — Nginx caps request bodies at 1&nbsp;MB by default, which surfaces as mysterious failed uploads.</span>
+              </div>
               <div class="code-shell">
                 <div class="code-bar">
                   <div class="dots"><span></span><span></span><span></span></div>
@@ -377,6 +430,9 @@ NEXORA_SECURE_COOKIES=true
                   <tr><td><code>NEXORA_THUMBNAIL_MAX_SIZE</code> / <code>NEXORA_THUMBNAIL_TTL</code></td><td>Thumbnail cache policy (default <code>20MB</code> / <code>168h</code>).</td></tr>
                   <tr><td><code>NEXORA_ENABLE_PROMETHEUS</code></td><td>Enables the <code>/metrics</code> endpoint.</td></tr>
                   <tr><td><code>NEXORA_MAX_EDITABLE_SIZE</code></td><td>Maximum file size for the built-in editor.</td></tr>
+                  <tr><td><code>NEXORA_LOG_LEVEL</code></td><td>Log verbosity: <code>debug</code>, <code>info</code> (default), <code>warn</code>, or <code>error</code>.</td></tr>
+                  <tr><td><code>NEXORA_LOG_FORMAT</code></td><td>Log output format: <code>text</code> (default) or <code>json</code>.</td></tr>
+                  <tr><td><code>NEXORA_THUMBNAIL_CACHE_DIR</code></td><td>Override the thumbnail cache location (inside <code>NEXORA_DATA_DIR</code> by default).</td></tr>
                 </tbody>
               </table>
             </div>
@@ -487,8 +543,7 @@ NEXORA_SECURE_COOKIES=true
                 <li>Thumbnail cache</li>
                 <li>Archive workspace</li>
               </ul>
-              <div class="code-shell">
-                <div class="code-bar">
+              <div class="code-shell">                <div class="code-bar">
                   <div class="dots"><span></span><span></span><span></span></div>
                   <span style="margin-left:auto">terminal — bash</span>
                   <button class="copy-btn ms-2" type="button" data-copy="docker run --rm -v nexora-data:/data -v $(pwd):/backup alpine tar czf /backup/nexora-data.tar.gz -C /data ." aria-label="Copy backup"><i class="bi bi-clipboard"></i></button>
@@ -552,6 +607,30 @@ curl -f http://localhost/readyz" aria-label="Copy health checks"><i class="bi bi
               <p>Mount the exact folder into the container and register it as its own root — roots are paths, not whole drives.</p>
             </div>
 
+            <!-- TROUBLESHOOTING -->
+            <div class="doc-section" id="troubleshooting">
+              <h2><span class="doc-ico ic-rose"><i class="bi bi-wrench-adjustable"></i></span>Troubleshooting</h2>
+              <p>The failure modes people actually hit, and the fix for each.</p>
+
+              <h3>Uploads fail with large files behind a reverse proxy</h3>
+              <p>Nginx caps request bodies at 1&nbsp;MB by default. Set <code>client_max_body_size 0;</code> in your <code>server</code> block (see the config above). Caddy and Traefik have no default cap.</p>
+
+              <h3>Can't log in after switching to HTTPS</h3>
+              <p>If <code>NEXORA_SECURE_COOKIES=true</code> is set while the site is still served over HTTP, the browser silently drops the session cookie. Only enable it once TLS is actually in front — or test locally with it set to <code>false</code>.</p>
+
+              <h3>No video thumbnails / playback won't start</h3>
+              <p>Thumbnails and transcoding need FFmpeg inside the container (the official image includes it). Verify with <code>docker exec nexora ffmpeg -version</code>, and confirm <code>NEXORA_ENABLE_FFMPEG_THUMBS=true</code>. Direct streaming still works without it via HTTP Range requests.</p>
+
+              <h3>TOTP codes always rejected</h3>
+              <p>Two-factor codes depend on server clock accuracy. Check <code>docker exec nexora date</code> against real time — drift breaks RFC 6238 validation. On hosts without RTC (some VPS/ARM boards), enable NTP.</p>
+
+              <h3>Search results are stale or missing files</h3>
+              <p>Newly added files are picked up automatically, but if an external process modified the storage folder directly, trigger <strong>Admin → Reindex</strong> to rebuild the search index.</p>
+
+              <h3><code>session secret must be at least 32 bytes</code> on startup</h3>
+              <p>The config validator enforces a strong signing key. Generate one with <code>openssl rand -hex 32</code> and put it in <code>NEXORA_SESSION_SECRET</code> — or leave it empty once and Nexora will generate and persist one for you.</p>
+            </div>
+
             <!-- prev / next -->
             <div class="doc-prevnext">
               <a href="index.html#features"><i class="bi bi-arrow-left me-1"></i>Features overview</a>
@@ -588,7 +667,7 @@ curl -f http://localhost/readyz" aria-label="Copy health checks"><i class="bi bi
           <ul class="list-unstyled d-grid gap-2">
             <li><a href="index.html#features">Features</a></li>
             <li><a href="index.html#screenshots">Screenshots</a></li>
-            <li><a href="index.html#stack">Tech stack</a></li>
+            <li><a href="index.html#downloads">Downloads</a></li>
             <li><a href="index.html#faq">FAQ</a></li>
           </ul>
         </div>
@@ -597,6 +676,7 @@ curl -f http://localhost/readyz" aria-label="Copy health checks"><i class="bi bi
           <ul class="list-unstyled d-grid gap-2">
             <li><a href="docs.html">Documentation</a></li>
             <li><a href="docs.html#configuration">Configuration</a></li>
+            <li><a href="docs.html#troubleshooting">Troubleshooting</a></li>
             <li><a href="https://github.com/suryaprakash251201/nexora" target="_blank" rel="noopener">GitHub</a></li>
             <li><a href="https://github.com/suryaprakash251201/nexora/issues" target="_blank" rel="noopener">Issues</a></li>
           </ul>
