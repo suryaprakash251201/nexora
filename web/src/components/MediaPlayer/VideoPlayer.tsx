@@ -19,9 +19,10 @@ import type { FileItem } from "../../api/types";
 import { needsTranscode, transcodeUrl, serverSupportsTranscode, rawUrl } from "../../lib/preview";
 import { startDownload } from "../../lib/transfer";
 import { Button } from "../ui/Button";
+import { isTauri as isTauriFn } from "../../lib/desktop";
 import { fmtTime } from "@nexora/core";
 
-const isTauri = "__TAURI_INTERNALS__" in window;
+const isTauri = isTauriFn();
 
 export function srtToVtt(srt: string): string {
   let out = "WEBVTT\n\n";
@@ -196,6 +197,14 @@ export function VideoPlayer({ url, item, autoPlay }: { url?: string; item?: File
     }
   }, [playing]);
 
+  // Clear the auto-hide timer on unmount to avoid setState-after-unmount.
+  useEffect(() => () => window.clearTimeout(controlsTimeout.current), []);
+
+  // Live handles for the global key handler: `seek` closes over isTranscode/
+  // item which flip during transcode fallback — reading them through a ref
+  // keeps arrow-key seeks correct without resubscribing.
+  const keyHandlersRef = useRef({ seek: (_v: number) => {}, toggle: () => {}, changeVol: (_v: number) => {}, doMute: () => {} });
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const v = ref.current;
@@ -203,16 +212,17 @@ export function VideoPlayer({ url, item, autoPlay }: { url?: string; item?: File
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA") return;
       handleMouseMove();
+      const h = keyHandlersRef.current;
       switch (e.key) {
-        case "ArrowLeft": e.preventDefault(); seek(Math.max(0, (v.currentTime || 0) - 10)); break;
-        case "ArrowRight": e.preventDefault(); seek(Math.min(v.duration || 0, (v.currentTime || 0) + 10)); break;
-        case "ArrowUp": e.preventDefault(); changeVol(Math.min(1, v.volume + 0.1)); break;
-        case "ArrowDown": e.preventDefault(); changeVol(Math.max(0, v.volume - 0.1)); break;
-        case " ": e.preventDefault(); toggle(); break;
+        case "ArrowLeft": e.preventDefault(); h.seek(Math.max(0, (v.currentTime || 0) - 10)); break;
+        case "ArrowRight": e.preventDefault(); h.seek(Math.min(v.duration || 0, (v.currentTime || 0) + 10)); break;
+        case "ArrowUp": e.preventDefault(); h.changeVol(Math.min(1, v.volume + 0.1)); break;
+        case "ArrowDown": e.preventDefault(); h.changeVol(Math.max(0, v.volume - 0.1)); break;
+        case " ": e.preventDefault(); h.toggle(); break;
         case "f": case "F": toggleFull(); break;
         case "t": case "T": setTheater(t => !t); break;
-        case "m": case "M": doMute(); break;
-        case "Escape": 
+        case "m": case "M": h.doMute(); break;
+        case "Escape":
            if (full) { e.preventDefault(); exitFull(); }
            else if (theater) { e.preventDefault(); setTheater(false); }
           break;
@@ -220,7 +230,10 @@ export function VideoPlayer({ url, item, autoPlay }: { url?: string; item?: File
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [url, full, theater]);
+    // handleMouseMove/toggleFull/exitFull are stable enough for the overlay's
+    // lifetime; seek/vol/mute go through keyHandlersRef to avoid staleness.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [full, theater]);
 
   useEffect(() => {
     const onFs = () => {
@@ -282,6 +295,9 @@ export function VideoPlayer({ url, item, autoPlay }: { url?: string; item?: File
     v.muted = !v.muted;
     setMuted(v.muted);
   };
+  // Keep the key handler's function refs fresh on every render (declared
+  // after seek/toggle/changeVol/doMute so the closure captures them).
+  keyHandlersRef.current = { seek, toggle, changeVol, doMute };
   const skip = (d: number) => {
     const v = ref.current;
     if (!v) return;
@@ -304,7 +320,12 @@ export function VideoPlayer({ url, item, autoPlay }: { url?: string; item?: File
   const onSubtitle = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     if (!f) return;
-    const text = await f.text();
+    let text: string;
+    try {
+      text = await f.text();
+    } catch {
+      return; // unreadable file — nothing to attach
+    }
     const vtt = f.name.toLowerCase().endsWith(".srt") ? srtToVtt(text) : text;
     const blob = new Blob([vtt], { type: "text/vtt" });
     if (subUrl) URL.revokeObjectURL(subUrl);

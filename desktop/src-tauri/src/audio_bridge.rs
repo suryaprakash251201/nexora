@@ -45,7 +45,7 @@ pub fn audio_native_codecs() -> Vec<String> {
 
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
-pub fn audio_native_open(
+pub async fn audio_native_open(
     app: AppHandle,
     session: State<'_, AudioSession>,
     url: String,
@@ -54,23 +54,34 @@ pub fn audio_native_open(
 ) -> Result<serde_json::Value, String> {
     use nexora_audio::output::rodio_out::RodioSink;
 
-    let source = bearer_cfg(url.clone(), bearer)?;
+    // Opening performs blocking network I/O (HTTP open + 256 KiB tail
+    // prefetch). Run it on a worker thread so a slow server can never stall
+    // the main thread / UI.
+    let app_for_task = app.clone();
+    let handle = tauri::async_runtime::spawn_blocking(move || -> Result<PlayerHandle, String> {
+        use nexora_audio::output::rodio_out::RodioSink;
 
-    let mut handle = PlayerHandle::open(Box::new(source), Box::new(RodioSink::try_new()?), start_sec, true)
-        .map_err(|e| e.to_string())?;
+        let source = bearer_cfg(url.clone(), bearer)?;
+        let mut h = PlayerHandle::open(Box::new(source), Box::new(RodioSink::try_new()?), start_sec, true)
+            .map_err(|e| e.to_string())?;
 
-    // Forward player events to the WebView on one channel.
-    let app_for_cb = app.clone();
-    handle.on_event(Box::new(move |ev| {
-        let payload = match ev {
-            PlayerEvent::Ready => serde_json::json!({"kind": "ready"}),
-            PlayerEvent::Playing => serde_json::json!({"kind": "playing"}),
-            PlayerEvent::Paused => serde_json::json!({"kind": "paused"}),
-            PlayerEvent::Ended => serde_json::json!({"kind": "ended"}),
-            PlayerEvent::Error(m) => serde_json::json!({"kind": "error", "message": m}),
-        };
-        let _ = app_for_cb.emit("audio://event", payload);
-    }));
+        // Forward player events to the WebView on one channel.
+        let app_for_cb = app_for_task.clone();
+        h.on_event(Box::new(move |ev| {
+            let payload = match ev {
+                PlayerEvent::Ready => serde_json::json!({"kind": "ready"}),
+                PlayerEvent::Playing => serde_json::json!({"kind": "playing"}),
+                PlayerEvent::Paused => serde_json::json!({"kind": "paused"}),
+                PlayerEvent::Ended => serde_json::json!({"kind": "ended"}),
+                PlayerEvent::Error(m) => serde_json::json!({"kind": "error", "message": m}),
+            };
+            let _ = app_for_cb.emit("audio://event", payload);
+        }));
+
+        Ok(h)
+    })
+    .await
+    .map_err(|e| format!("open task failed: {e}"))??;
 
     let info = handle.track_info();
     *session.0.lock().expect("session lock") = Some(handle);

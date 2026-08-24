@@ -1,6 +1,7 @@
 import { getCsrfToken, getBaseUrl } from "../api/client";
 import { useTransfers, uid, type Transfer } from "../store/transfers";
 import { formatBytes } from "./format";
+import { isTauri } from "./desktop";
 
 function fmtSpeed(bps: number): string {
   if (bps >= 1 << 30) return (bps / (1 << 30)).toFixed(1) + " GB/s";
@@ -173,6 +174,10 @@ async function putChunk(st: ChunkedState, index: number, onByte: (delta: number)
 
   for (let attempt = 0; attempt <= CHUNK_RETRIES; attempt++) {
     if (st.cancelled) throw new DOMException("Cancelled", "AbortError");
+    // Zero this chunk's in-flight counter on every attempt: the previous
+    // attempt's partial bytes were already counted, and re-counting them on
+    // retry would inflate the progress bar past reality.
+    st.inflight.set(index, 0);
     try {
       const xhr = new XMLHttpRequest();
       const xhrDone = new Promise<void>((resolve, reject) => {
@@ -221,7 +226,7 @@ export function startUpload(
   const files = Array.from(fileList);
   if (!files.length || !rootId) return;
 
-  const isTauri = "__TAURI_INTERNALS__" in window;
+  const isTauriRuntime = isTauri();
   const baseUrl = getBaseUrl();
 
   files.forEach((file) => {
@@ -248,7 +253,7 @@ export function startUpload(
     useTransfers.getState().add(transfer);
     filesById.set(id, file);
 
-    enqueue(id, () => runUpload(id, file, rootId, targetPath, isTauri, baseUrl, onDone));
+    enqueue(id, () => runUpload(id, file, rootId, targetPath, isTauriRuntime, baseUrl, onDone));
   });
 }
 
@@ -332,7 +337,7 @@ function runUpload(
 // download progress can be shown, then triggers a browser save. The transfer
 // is recorded in the store.
 export async function startDownload(rootId: string, path: string, name: string) {
-  const isTauri = "__TAURI_INTERNALS__" in window;
+  const isTauriRuntime = isTauri();
   const baseUrl = getBaseUrl();
   const pathUrl = `/api/v1/files/download?root=${encodeURIComponent(rootId)}&path=${encodeURIComponent(path)}`;
   const fullUrl = baseUrl + pathUrl;
@@ -343,7 +348,7 @@ export async function startDownload(rootId: string, path: string, name: string) 
   });
 
   enqueue(id, () => {
-    void runDownload(id, name, fullUrl, isTauri);
+    void runDownload(id, name, fullUrl, isTauriRuntime);
   });
 }
 
@@ -417,12 +422,33 @@ async function runDownload(id: string, name: string, fullUrl: string, isTauri: b
   // Browser download
   const controller = new AbortController();
   activeControllers.set(id, controller);
+  /** Writable from the File System Access API when available. */
+  let writable: { write: (d: Uint8Array) => Promise<void>; close: () => Promise<void> } | null = null;
   try {
     const res = await fetch(fullUrl, { credentials: "include", signal: controller.signal });
     if (!res.ok || !res.body) throw new Error(`Download failed (${res.status})`);
     const total = Number(res.headers.get("Content-Length")) || 0;
+
+    // Prefer streaming straight to disk so multi-GB files never buffer in
+    // tab memory. The save-picker needs recent user activation and browser
+    // support (Chromium); otherwise fall back to the in-memory blob path.
+    const anyWin = window as unknown as { showSaveFilePicker?: (opts?: unknown) => Promise<{ createWritable: () => Promise<{ write: (d: Uint8Array) => Promise<void>; close: () => Promise<void> }> }> };
+    if (typeof anyWin.showSaveFilePicker === "function") {
+      try {
+        const handle = await anyWin.showSaveFilePicker({ suggestedName: name });
+        writable = await handle.createWritable();
+      } catch (pickerErr) {
+        if ((pickerErr as DOMException)?.name === "AbortError") {
+          // User explicitly cancelled the save dialog.
+          useTransfers.getState().update(id, { status: "error", error: "Download cancelled" });
+          return;
+        }
+        writable = null; // unsupported/gesture expired — use blob fallback
+      }
+    }
+
     const reader = res.body.getReader();
-    const chunks: Uint8Array[] = [];
+    const chunks: Uint8Array[] = writable ? [] : [];
     let loaded = 0;
     let lastTime = performance.now();
     let lastLoaded = 0;
@@ -431,7 +457,8 @@ async function runDownload(id: string, name: string, fullUrl: string, isTauri: b
       const { done, value } = await reader.read();
       if (done) break;
       if (value) {
-        chunks.push(value);
+        if (writable) await writable.write(value);
+        else chunks.push(value);
         loaded += value.length;
         const now = performance.now();
         const dt = (now - lastTime) / 1000;
@@ -446,17 +473,24 @@ async function runDownload(id: string, name: string, fullUrl: string, isTauri: b
       }
     }
 
-    const blob = new Blob(chunks as BlobPart[]);
-    const objUrl = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = objUrl;
-    a.download = name;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(objUrl), 1000);
-    useTransfers.getState().update(id, { loaded: total || loaded, total: total || loaded, speed: 0, status: "done" });
+    if (writable) {
+      await writable.close();
+      useTransfers.getState().update(id, { loaded: total || loaded, total: total || loaded, speed: 0, status: "done" });
+    } else {
+      const blob = new Blob(chunks as BlobPart[]);
+      const objUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = objUrl;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(objUrl), 1000);
+      useTransfers.getState().update(id, { loaded: total || loaded, total: total || loaded, speed: 0, status: "done" });
+    }
   } catch (e: any) {
+    // If disk-streaming was underway, abandon the partial file.
+    try { await (writable as { abort?: () => Promise<void> } | null)?.abort?.(); } catch { /* ignore */ }
     if (e?.name !== "AbortError") {
       useTransfers.getState().update(id, { status: "error", error: e?.message || "Download failed" });
     }
@@ -520,7 +554,12 @@ async function runChunkedUpload(
     const present: Record<number, boolean> | undefined = status.present;
     let next: number = Math.max(0, status.nextChunk ?? 0);
     st.ackedBytes = status.uploadedBytes ?? 0;
-    const totalChunks: number = status.totalChunks;
+    // Guard against a server response missing totalChunks — without it the
+    // worker count below would be NaN and zero chunks would be uploaded.
+    const totalChunks: number =
+      Number.isFinite(status.totalChunks) && status.totalChunks > 0
+        ? status.totalChunks
+        : Math.max(1, Math.ceil(file.size / CHUNK_SIZE));
     setP({ loaded: st.ackedBytes, total });
 
     // ── Bounded-parallelism chunk pump ──
@@ -560,8 +599,9 @@ async function runChunkedUpload(
     } catch (e: any) {
       if (e?.code === "chunks_missing" || e?.code === "size_mismatch") {
         // Server lost a chunk mid-flight — re-sync from its status and continue.
-        activeChunked.delete(id);
-        finish(id);
+        // Do NOT release this job's slot here: the `finally` block below owns
+        // slot accounting (calling finish() twice corrupts the concurrency
+        // pool). The re-queued run starts as soon as the slot frees.
         enqueue(id, () => runChunkedUpload(id, file, rootId, targetPath, isTauri, baseUrl, onDone, st.uploadId));
         return;
       }
@@ -619,5 +659,27 @@ export function resumeTransfer(id: string) {
   }
   const uploadId = localStorage.getItem(sessionKey(f, t.rootId, t.path)) ?? null;
   useTransfers.getState().update(id, { status: "queued" });
-  enqueue(id, () => runChunkedUpload(id, f, t.rootId, t.path, "__TAURI_INTERNALS__" in window, getBaseUrl(), undefined, uploadId));
+  enqueue(id, () => runChunkedUpload(id, f, t.rootId, t.path, isTauri(), getBaseUrl(), undefined, uploadId));
+}
+
+/**
+ * Retry a failed upload. The chunked session (uploadId in localStorage) was
+ * deliberately kept on error so the server can report which chunks it still
+ * has — resuming skips everything already acknowledged.
+ */
+export function retryTransfer(id: string) {
+  const t = useTransfers.getState().transfers.find((x) => x.id === id);
+  if (!t || t.status !== "error" || t.kind !== "upload") return;
+  const f = filesById.get(id);
+  if (!f) {
+    // After a page refresh the File handle is gone; retrying needs the bytes.
+    useTransfers.getState().update(id, {
+      status: "error",
+      error: "File handle lost on page reload — add the file again to upload it.",
+    });
+    return;
+  }
+  const uploadId = localStorage.getItem(sessionKey(f, t.rootId, t.path)) ?? null;
+  useTransfers.getState().update(id, { status: "queued", error: undefined });
+  enqueue(id, () => runChunkedUpload(id, f, t.rootId, t.path, isTauri(), getBaseUrl(), undefined, uploadId));
 }

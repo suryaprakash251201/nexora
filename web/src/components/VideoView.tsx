@@ -3,6 +3,7 @@ import { ArrowLeft, Download, Share2 } from "lucide-react";
 import type { FileItem } from "../api/types";
 import { rawUrl } from "../lib/preview";
 import { startDownload } from "../lib/transfer";
+import { formatBytes } from "../lib/format";
 import MediaPlayer from "./MediaPlayer";
 
 export default function VideoView({
@@ -26,15 +27,7 @@ export default function VideoView({
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  const sizeStr = item.size > 0
-    ? item.size >= 1073741824
-      ? `${(item.size / 1073741824).toFixed(1)} GB`
-      : item.size >= 1048576
-        ? `${(item.size / 1048576).toFixed(1)} MB`
-        : item.size >= 1024
-          ? `${(item.size / 1024).toFixed(1)} KB`
-          : `${item.size} B`
-    : "";
+  const sizeStr = item.size > 0 ? formatBytes(item.size) : "";
 
   return (
     <div className="fixed inset-0 z-[var(--z-fullscreen)] flex h-[100dvh] min-h-0 flex-col bg-black text-white">

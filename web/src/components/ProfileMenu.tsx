@@ -54,12 +54,22 @@ export default function ProfileMenu({
   return (
     <>
       <DropdownMenu>
-        <DropdownMenuTrigger className="flex items-center gap-2 pl-1 pr-2 py-1 rounded-full transition-all duration-200 border border-transparent hover:border-glass-border hover:bg-glass-bg-subtle" aria-label="Account menu">
-          <Avatar className="h-8 w-8 ring-2 ring-accent/20 hover:ring-accent/40 transition-all">
-            <AvatarFallback className="bg-gradient-to-br from-accent to-accent-secondary text-white text-xs font-bold">
-              {initials(user.display_name || user.username)}
-            </AvatarFallback>
-          </Avatar>
+        <DropdownMenuTrigger
+          className="group flex items-center gap-2 pl-1 pr-2 py-1 rounded-full transition-all duration-200 ease-out border border-transparent hover:border-glass-border hover:bg-glass-bg-subtle focus-visible:outline focus-visible:outline-accent"
+          aria-label="Account menu"
+        >
+          <span className="relative grid place-items-center">
+            {/* Soft accent glow behind the avatar on hover (§6 user control). */}
+            <span
+              aria-hidden="true"
+              className="absolute -inset-1 rounded-full bg-accent/25 opacity-0 blur-md transition-opacity duration-200 group-hover:opacity-100"
+            />
+            <Avatar className="relative h-9 w-9 ring-1 ring-white/10 shadow-[0_1px_3px_rgba(0,0,0,0.25)] transition-all duration-200 group-hover:ring-accent/50">
+              <AvatarFallback className="bg-gradient-to-br from-accent to-accent-secondary text-white text-xs font-bold">
+                {initials(user.display_name || user.username)}
+              </AvatarFallback>
+            </Avatar>
+          </span>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-72 mt-2">
           {/* User info header - plain div, not DropdownMenuLabel (avoids Base UI #31) */}

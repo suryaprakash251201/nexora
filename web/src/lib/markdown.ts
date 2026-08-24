@@ -14,7 +14,11 @@ function escapeHtml(s: string): string {
 
 function safeHref(url: string): string {
   const u = url.trim();
-  if (/^(https?:\/\/|mailto:|\/)/i.test(u)) return u;
+  // Reject protocol-relative URLs ("//host/path") — they would be resolved
+  // against arbitrary external origins, turning private documents into
+  // third-party tracking beacons. Only same-origin absolute paths,
+  // http(s) and mailto are allowed.
+  if (/^(https?:\/\/|mailto:|\/(?!\/))/i.test(u)) return u;
   return "#";
 }
 

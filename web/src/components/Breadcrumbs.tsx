@@ -1,6 +1,12 @@
-import { ChevronRight, FolderInput } from "lucide-react";
+import { ChevronRight, MoveHorizontal } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import {
+  canDropInto,
+  currentDragPaths,
+  endDragMove,
+  isInternalMoveDrag,
+} from "../lib/dragMove";
 
 export default function Breadcrumbs({
   rootName,
@@ -14,7 +20,8 @@ export default function Breadcrumbs({
   rootName: string;
   path: string;
   onNavigate: (path: string) => void;
-  onDropToFolder?: (path: string) => void;
+  /** `paths` is the internal move-drag payload when available. */
+  onDropToFolder?: (path: string, paths?: string[]) => void;
   onUploadFiles?: (files: FileList, path: string) => void;
 }) {
   const segments = path.split("/").filter(Boolean);
@@ -22,15 +29,20 @@ export default function Breadcrumbs({
 
   const [dragTarget, setDragTarget] = useState<string | null>(null);
 
-  // External file drags advertise a "Files" type; internal selection drags don't.
+  // External file drags advertise a "Files" type; internal move drags
+  // advertise the Nexora move MIME (see lib/dragMove).
   const isFileDrag = (e: React.DragEvent) => [...e.dataTransfer.types].includes("Files");
-  const canAccept = (e: React.DragEvent, targetPath: string) =>
-    isFileDrag(e) ? !!onUploadFiles : !!onDropToFolder;
+  const canAccept = (e: React.DragEvent, targetPath: string) => {
+    if (isFileDrag(e)) return !!onUploadFiles;
+    if (!isInternalMoveDrag(e)) return false;
+    // Never accept a drop into itself or its own descendants.
+    return !!onDropToFolder && canDropInto(targetPath, currentDragPaths());
+  };
 
   const handleDragOver = (e: React.DragEvent, targetPath: string) => {
     if (!canAccept(e, targetPath)) return;
-    if (!isFileDrag(e) && [...e.dataTransfer.types].includes("text/plain")) return; // ignore selection text
     e.preventDefault();
+    e.dataTransfer.dropEffect = isFileDrag(e) ? "copy" : "move";
     setDragTarget(targetPath);
   };
 
@@ -40,23 +52,26 @@ export default function Breadcrumbs({
   };
 
   const handleDrop = (e: React.DragEvent, targetPath: string) => {
+    const wasInternal = isInternalMoveDrag(e);
     e.preventDefault();
     setDragTarget(null);
     if (isFileDrag(e)) {
       if (onUploadFiles && e.dataTransfer.files.length > 0) onUploadFiles(e.dataTransfer.files, targetPath);
-    } else if (onDropToFolder && !([...e.dataTransfer.types].includes("text/plain"))) {
-      onDropToFolder(targetPath);
+    } else if (wasInternal && onDropToFolder) {
+      const paths = currentDragPaths();
+      endDragMove();
+      onDropToFolder(targetPath, paths);
     }
   };
 
   const crumbClass = (targetPath: string, isLast: boolean) =>
     cn(
-      "truncate max-w-[5rem] sm:max-w-[12rem] px-2 py-1 rounded-lg transition-colors duration-200",
+      "truncate max-w-[5rem] sm:max-w-[12rem] px-2 py-1 rounded-lg transition-all duration-200",
       dragTarget === targetPath
-        ? "bg-accent/20 text-accent outline-dashed outline-1 outline-accent"
+        ? "bg-accent/15 text-accent ring-2 ring-accent/60 shadow-[0_0_0_4px_rgba(91,140,255,0.12)] scale-105"
         : isLast
           ? "text-content font-bold bg-surface/50"
-          : "hover:bg-surface text-content-muted hover:text-accent font-medium"
+          : "hover:bg-surface text-content-muted hover:text-accent font-medium",
     );
 
   return (
@@ -66,12 +81,13 @@ export default function Breadcrumbs({
         onDragOver={(e) => handleDragOver(e, "")}
         onDragLeave={handleDragLeave}
         onDrop={(e) => handleDrop(e, "")}
-        className={cn("shrink-0 flex items-center gap-1 px-2 py-1 rounded-lg transition-colors duration-200",
+        className={cn("shrink-0 flex items-center gap-1.5 px-2 py-1 rounded-lg transition-all duration-200",
           dragTarget === ""
-            ? "bg-accent/20 text-accent outline-dashed outline-1 outline-accent"
+            ? "bg-accent/15 text-accent ring-2 ring-accent/60 shadow-[0_0_0_4px_rgba(91,140,255,0.12)]"
             : "hover:bg-surface text-content hover:text-accent font-medium")}
+        aria-label={`Move into ${rootName}`}
       >
-        {dragTarget === "" && <FolderInput className="h-3.5 w-3.5" aria-hidden />}
+        {dragTarget === "" ? <MoveHorizontal className="h-3.5 w-3.5" aria-hidden /> : null}
         {rootName}
       </button>
 
@@ -83,19 +99,18 @@ export default function Breadcrumbs({
         return (
           <span key={i} className="flex items-center gap-1 shrink-0 animate-scale-in" style={{ animationDelay: `${i * 0.05}s` }}>
             <ChevronRight className="h-4 w-4 text-content-muted/50" />
-            <span className={cn(dragTarget === p && "flex items-center gap-1 rounded-lg")}>
-              <button
-                onClick={() => onNavigate(p)}
-                aria-current={isLast ? "page" : undefined}
-                onDragOver={(e) => handleDragOver(e, p)}
-                onDragLeave={handleDragLeave}
-                onDrop={(e) => handleDrop(e, p)}
-                className={crumbClass(p, isLast)}
-              >
-                {seg}
-              </button>
-              {dragTarget === p && <FolderInput className="h-3.5 w-3.5 text-accent" aria-hidden />}
-            </span>
+            <button
+              onClick={() => onNavigate(p)}
+              aria-current={isLast ? "page" : undefined}
+              aria-label={isLast ? seg : `Move into ${seg}`}
+              onDragOver={(e) => handleDragOver(e, p)}
+              onDragLeave={handleDragLeave}
+              onDrop={(e) => handleDrop(e, p)}
+              className={crumbClass(p, isLast)}
+            >
+              {dragTarget === p ? <MoveHorizontal className="inline h-3 w-3 mr-1 -mt-0.5" aria-hidden /> : null}
+              {seg}
+            </button>
           </span>
         );
       })}

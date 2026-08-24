@@ -189,19 +189,15 @@ pub fn run() {
     );
 
     // Set a custom panic hook to capture startup crashes
-    std::panic::set_hook(Box::new(|panic_info| {
+    std::panic::set_hook(Box::new(move |panic_info| {
         eprintln!("[nexora] PANIC: {}", panic_info);
-        // Try to log to a file in the app data directory
+        // Per-process filename: predictable shared temp names let any local
+        // user pre-create/overwrite the file (symlink attacks, info leaks).
+        let path = std::env::temp_dir().join(format!("nexora-crash-{}.log", std::process::id()));
         if let Some(msg) = panic_info.payload().downcast_ref::<&str>() {
-            let _ = std::fs::write(
-                std::env::temp_dir().join("nexora-crash.log"),
-                format!("Panic: {}\n{:?}", msg, panic_info.location()),
-            );
+            let _ = std::fs::write(&path, format!("Panic: {}\n{:?}", msg, panic_info.location()));
         } else if let Some(msg) = panic_info.payload().downcast_ref::<String>() {
-            let _ = std::fs::write(
-                std::env::temp_dir().join("nexora-crash.log"),
-                format!("Panic: {}\n{:?}", msg, panic_info.location()),
-            );
+            let _ = std::fs::write(&path, format!("Panic: {}\n{:?}", msg, panic_info.location()));
         }
     }));
 
@@ -292,9 +288,9 @@ pub fn run() {
     // Run with better error reporting
     if let Err(e) = builder.run(tauri::generate_context!()) {
         eprintln!("[nexora] Fatal error: {}", e);
-        // Also write to crash log file
+        // Also write to a per-process crash log file (see panic hook above).
         let _ = std::fs::write(
-            std::env::temp_dir().join("nexora-error.log"),
+            std::env::temp_dir().join(format!("nexora-error-{}.log", std::process::id())),
             format!(
                 "Nexora Desktop v{} - Fatal error\nPlatform: {}/{}\nError: {}\n",
                 env!("CARGO_PKG_VERSION"),

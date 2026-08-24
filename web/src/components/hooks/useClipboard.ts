@@ -24,13 +24,6 @@ export function useClipboard({
   const clipboard = useUI((s) => s.clipboard);
   const setClipboard = useUI((s) => s.setClipboard);
 
-  const moveSelectionTo = useCallback(() => {
-    if (!rootId || !canWrite) return;
-    const srcPaths = Array.from(selection);
-    if (srcPaths.length === 0) return;
-    setFolderPicker({ mode: 'move', paths: srcPaths });
-  }, [rootId, canWrite, selection]);
-
   const openMovePicker = useCallback(() => {
     const paths = Array.from(selection);
     if (!paths.length) return;
@@ -53,27 +46,35 @@ export function useClipboard({
   // Transfer an explicit set of paths into destPath. Skips self/descendant
   // targets for moves; copies never descend into themselves either but the
   // API handles nesting by suffixing names server-side.
-  const transferPaths = useCallback(async (paths: string[], destPath: string, mode: ClipMode) => {
-    if (!rootId) return;
-    try {
-      let moved = 0;
-      for (const p of paths) {
-        if (p === destPath || destPath.startsWith(p + '/')) continue; // skip self/descendant
+  // Returns true only when every path transferred — callers that clear
+  // state (clipboard, selection) key off this.
+  const transferPaths = useCallback(async (paths: string[], destPath: string, mode: ClipMode): Promise<boolean> => {
+    if (!rootId) return false;
+    let moved = 0;
+    const failures: string[] = [];
+    for (const p of paths) {
+      if (p === destPath || destPath.startsWith(p + '/')) continue; // skip self/descendant
+      try {
         await post(`/files/${mode}`, {
           root: rootId,
           source: p,
           destination: (destPath ? destPath + '/' : '') + p.split('/').pop()
         });
         moved++;
+      } catch (e: any) {
+        // Per-item errors must not abort the rest of the batch, and the
+        // summary must reflect what actually happened.
+        failures.push(`${p.split('/').pop() || p}: ${e?.message || 'failed'}`);
       }
-      if (moved > 0) {
-        pushToast('success', `${mode === 'move' ? 'Moved' : 'Copied'} ${moved} item${moved === 1 ? '' : 's'}`);
-        clearSelection();
-        refresh();
-      }
-    } catch (e: any) {
-      pushToast('error', e.message || (mode === 'move' ? 'Move failed' : 'Copy failed'));
     }
+    if (moved > 0) {
+      pushToast('success', `${mode === 'move' ? 'Moved' : 'Copied'} ${moved} item${moved === 1 ? '' : 's'}`);
+      refresh();
+    }
+    for (const f of failures.slice(0, 3)) pushToast('error', f);
+    if (failures.length > 3) pushToast('error', `+${failures.length - 3} more failed`);
+    if (moved > 0 && failures.length === 0) clearSelection();
+    return moved > 0 && failures.length === 0;
   }, [rootId, pushToast, clearSelection, refresh]);
 
   const applyFolderPicker = useCallback(async (destPath: string) => {
@@ -107,9 +108,10 @@ export function useClipboard({
     if (!canWrite) { pushToast('error', 'No write access here'); return; }
     if (clipboard.rootId !== rootId) { pushToast('error', 'Clipboard items belong to a different storage'); return; }
     const target = destPath ?? path ?? '';
-    // Cut clears the clipboard after a successful paste; copy stays for repeats.
-    await transferPaths(clipboard.paths, target, clipboard.mode);
-    if (clipboard.mode === 'move') setClipboard(null);
+    // Cut clears the clipboard only after a fully successful paste — a
+    // failed or partial move keeps the items so the user can retry.
+    const ok = await transferPaths(clipboard.paths, target, clipboard.mode);
+    if (ok && clipboard.mode === 'move') setClipboard(null);
   }, [clipboard, canWrite, rootId, path, transferPaths, setClipboard, pushToast]);
 
   const clearClipboard = useCallback(() => setClipboard(null), [setClipboard]);
@@ -117,7 +119,6 @@ export function useClipboard({
   return {
     folderPicker,
     setFolderPicker,
-    moveSelectionTo,
     openMovePicker,
     openCopyPicker,
     openPickerFor,

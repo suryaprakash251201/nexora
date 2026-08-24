@@ -54,3 +54,12 @@ export function isAudio(item: { mime: string; extension?: string }): boolean {
   if (AUDIO_EXT.has(ext)) return true;
   return (item.mime || "").startsWith("audio/");
 }
+
+// ── Canonical extension sets ────────────────────────────────────────────────
+// Re-exported so web/mobile derive their helpers from these instead of
+// maintaining divergent hardcoded lists.
+export const IMAGE_EXTS: ReadonlySet<string> = IMAGE_EXT;
+export const VIDEO_EXTS: ReadonlySet<string> = VIDEO_EXT;
+export const AUDIO_EXTS: ReadonlySet<string> = AUDIO_EXT;
+export const CODE_EXTS: ReadonlySet<string> = CODE_EXT;
+export const TEXT_EXTS: ReadonlySet<string> = TEXT_EXT;

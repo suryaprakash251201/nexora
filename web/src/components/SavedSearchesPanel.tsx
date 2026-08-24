@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "./ui/Button";
 import { Modal } from "./Modal";
 import { Input } from "./ui/Input";
-import { toast } from "sonner";
+import { toast } from "../lib/toast";
 import { ConfirmDialog } from "./ui/ConfirmDialog";
 import { QueryError } from "./ui/QueryError";
 interface SavedSearchesPanelProps {

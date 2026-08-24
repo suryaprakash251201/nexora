@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Modal } from "./Modal";
 import type { FileItem, Root } from "../api/types";
 import { thumbUrl } from "../lib/preview";
+import { IMAGE_EXTS } from "@nexora/core";
 
 interface CoverPickerModalProps {
   onClose: () => void;
@@ -62,7 +63,7 @@ export default function CoverPickerModal({ onClose, onConfirm }: CoverPickerModa
   const images = (filesQuery.data?.items || []).filter(
     (i: FileItem) =>
       !i.is_dir &&
-      ["jpg", "jpeg", "png", "gif", "webp"].includes(i.extension?.toLowerCase())
+      IMAGE_EXTS.has(i.extension?.toLowerCase() ?? "")
   );
   const folders = (filesQuery.data?.items || []).filter((i: FileItem) => i.is_dir);
 

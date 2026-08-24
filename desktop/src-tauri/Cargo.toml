@@ -1,8 +1,8 @@
 [package]
 name = "nexora-desktop"
-version = "1.8.0"
+version = "1.9.0"
 description = "Nexora Desktop - Native file management"
-authors = ["you"]
+authors = ["suryaprakash251201"]
 edition = "2021"
 
 [build-dependencies]

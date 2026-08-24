@@ -217,6 +217,105 @@ body {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
+/* ============================================================
+   Workspace Header Chrome — "blended workspace shell"
+   The header surface is meant to disappear into the page:
+   a barely-there translucent sheet with ambient accent light
+   emitted from behind it. Pure CSS; no animation loops.
+   ============================================================ */
+
+.ws-header {
+  position: relative;
+  /* Keep the ::before glow inside this stacking context so it can never
+     paint behind ancestor backgrounds (nexora-bg etc.). */
+  isolation: isolate;
+}
+
+/* Ambient lighting — soft blue/violet light from the app itself. */
+.ws-header::before {
+  content: "";
+  position: absolute;
+  top: -72px;
+  left: 10%;
+  right: 16%;
+  height: 160px;
+  background:
+    radial-gradient(ellipse at 28% 55%,
+      color-mix(in srgb, var(--color-accent) 9%, transparent), transparent 66%),
+    radial-gradient(ellipse at 74% 45%,
+      color-mix(in srgb, var(--color-accent-purple) 6%, transparent), transparent 70%);
+  filter: blur(40px);
+  pointer-events: none;
+  z-index: -1;
+}
+
+.ws-surface {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  height: 56px;
+  padding: 0 0.875rem 0 1.125rem;
+  border-radius: 16px;
+  border: 1px solid var(--color-glass-border-soft);
+  background: linear-gradient(120deg,
+    var(--color-glass-bg-subtle),
+    transparent 90%);
+  -webkit-backdrop-filter: blur(20px) saturate(1.15);
+  backdrop-filter: blur(20px) saturate(1.15);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+  transition:
+    background-color 0.22s ease-out,
+    border-color 0.22s ease-out,
+    box-shadow 0.22s ease-out,
+    backdrop-filter 0.22s ease-out;
+}
+
+/* Hover — very subtle brightness lift. */
+.ws-surface:hover {
+  border-color: var(--color-glass-border);
+}
+
+/* Scrolled — slightly stronger glass so the surface reads while content
+   moves beneath it. Smooth ~220ms via the transition above. */
+.ws-surface[data-scrolled="true"] {
+  background: linear-gradient(120deg,
+    var(--color-glass-bg),
+    var(--color-glass-bg-subtle) 90%);
+  border-color: var(--color-glass-border);
+  box-shadow:
+    0 4px 10px rgba(0, 0, 0, 0.10),
+    0 14px 36px rgba(0, 0, 0, 0.14);
+  -webkit-backdrop-filter: blur(26px) saturate(1.2);
+  backdrop-filter: blur(26px) saturate(1.2);
+}
+
+/* Active-location indicator — tiny glowing dot (replaces the old
+   thick vertical bar). Two layers: blurred halo + crisp core. */
+.ws-dot {
+  position: relative;
+  display: inline-flex;
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+}
+.ws-dot::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background: var(--color-accent);
+  opacity: 0.45;
+  filter: blur(3px);
+}
+.ws-dot::after {
+  content: "";
+  position: absolute;
+  inset: 1.5px;
+  border-radius: 9999px;
+  background: linear-gradient(135deg, var(--color-accent), var(--color-accent-secondary));
+}
+
 .glass-bar {
   background: linear-gradient(135deg,
     rgba(13, 15, 23, 0.80) 0%,

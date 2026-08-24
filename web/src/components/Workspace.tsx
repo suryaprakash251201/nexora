@@ -3,8 +3,9 @@ import { useLocation, useNavigate } from "react-router";
 import { motion, AnimatePresence } from "motion/react";
 import { useQuery, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { rootsApi, filesApi, trashApi, recentsApi, homeApi, authApi, favoritesApi, playlistsApi } from "../api/endpoints";
-import type { FileItem, Root, TrashItem, User, SearchResult } from "../api/types";
+import type { FileItem, User, SearchResult } from "../api/types";
 import { useUI } from "../store";
+import { clearMediaToken } from "../lib/nativeAudio";
 import { usePlayer } from "../store/player";
 import { useCreatePlaylist } from "../hooks/usePlaylists";
 import { useFavorites } from "../hooks/useFavorites";
@@ -16,6 +17,10 @@ import ContextMenu, { MenuItem } from "./ContextMenu";
 import React, { Suspense } from "react";
 import Toaster from "./Toaster";
 import PlayerBar from "./PlayerBar";
+import { ViewSkeleton } from "./views/ViewSkeleton";
+import { FavouritesView, RecentsView, TrashView } from "./views/LibraryViews";
+import { DropRootPicker } from "./views/DropRootPicker";
+import { ActionModals } from "./views/ActionModals";
 import HomePanel from "./HomePanel";
 const PreviewModal = React.lazy(() => import("./PreviewModal"));
 const Editor = React.lazy(() => import("./Editor"));
@@ -39,18 +44,28 @@ import ProfileMenu from "./ProfileMenu";
 import CommandPalette from "./CommandPalette";
 import SelectionBar from "./SelectionBar";
 import KeyboardShortcutsModal from "./KeyboardShortcutsModal";
-import { formatRelative } from "../lib/format";
-import { SkeletonGrid, SkeletonList, SkeletonLine, SkeletonCard } from "./ui/Skeleton";
 import { Button } from "./ui/Button";
-import { ViewHeader } from "./ui/ViewHeader";
-import { FileThumb } from "./FileThumb";
-import { staggerContainer, staggerItem, cardHover } from "@/lib/animations";
 import { isEditable, isAudio } from "../lib/preview";
 import {
-  Download, Trash2, Pencil, Copy, Eye, FolderOpen, RotateCcw,
-  Star, Share2, Archive, FolderInput, FileEdit, ListMusic, HardDrive, Upload,
-  Move, Info, Tag as TagIcon, CheckSquare, Heart, Clock
+  Download, Trash2, Pencil, Copy, Eye, FolderOpen, Star, Share2, Archive, FolderInput, FileEdit, ListMusic, Upload, Move, Info, Tag as TagIcon, CheckSquare,
+  Home, Search, Clock, Images, BarChart3, Shield
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import { WorkspaceHeader } from "./layout/WorkspaceHeader";
+
+// ── Workspace header meta — label + icon per view (matches the sidebar) ──
+const VIEW_HEADER_META: Partial<Record<SidebarView, { label: string; icon: LucideIcon }>> = {
+  home: { label: "Home", icon: Home },
+  search: { label: "Search", icon: Search },
+  recents: { label: "Recent", icon: Clock },
+  favorites: { label: "Favorites", icon: Star },
+  shares: { label: "Shared", icon: Share2 },
+  playlists: { label: "Playlists", icon: ListMusic },
+  trash: { label: "Trash", icon: Trash2 },
+  photos: { label: "Photos", icon: Images },
+  analytics: { label: "Analytics", icon: BarChart3 },
+  admin: { label: "Admin", icon: Shield },
+};
 
 // Hooks
 import { useTransfers } from "./hooks/useTransfers";
@@ -61,6 +76,7 @@ import { useClipboard } from "./hooks/useClipboard";
 import { useModals } from "./hooks/useModals";
 import DesktopDragDrop from "./DesktopDragDrop";
 import { isTauri, isLocalServer, revealInFileManager } from "../lib/desktop";
+import { IMAGE_EXTS } from "@nexora/core";
 
 export default function Workspace({ user }: { user: User }) {
   const qc = useQueryClient();
@@ -115,6 +131,9 @@ export default function Workspace({ user }: { user: User }) {
     }
   }, [roots.data]);
 
+  // ── Search ↔ URL sync ─────────────────────────────────────────────
+  const qParam = useMemo(() => new URLSearchParams(location.search).get("q") ?? "", [location.search]);
+
   const setView = useCallback((v: SidebarView, rId?: string) => {
     const targetRootId = rId ?? rootId ?? roots.data?.roots[0]?.id;
     React.startTransition(() => {
@@ -152,7 +171,36 @@ export default function Workspace({ user }: { user: User }) {
       });
     }
   }, [rootId, navigate]);
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(() => new URLSearchParams(window.location.search).get("q") ?? "");
+
+  // The active search term lives in ?q= so searches survive reloads, work
+  // with browser back/forward, and can be shared as links.
+  useEffect(() => {
+    if (view !== "search") return;
+    if ((search || "") !== qParam) {
+      navigate(`/search${search ? `?q=${encodeURIComponent(search)}` : ""}`, { replace: true });
+    }
+  }, [search, view, qParam, navigate]);
+  // Back/forward: pull the previous term back into state.
+  useEffect(() => {
+    setSearch((cur) => (cur !== qParam ? qParam : cur));
+  }, [qParam]);
+
+  // ── Workspace header scroll awareness ──────────────────────────────
+  // Capture-phase listener catches every scroller in the workspace
+  // (main content pane AND views with internal scroll like Home).
+  // State flips only when the threshold is crossed → no render spam.
+  const [contentScrolled, setContentScrolled] = useState(false);
+  useEffect(() => {
+    const onScrollCapture = (e: Event) => {
+      const t = e.target;
+      if (!(t instanceof HTMLElement)) return;
+      const down = t.scrollTop > 8;
+      setContentScrolled((prev) => (prev === down ? prev : down));
+    };
+    window.addEventListener("scroll", onScrollCapture, { capture: true, passive: true });
+    return () => window.removeEventListener("scroll", onScrollCapture, { capture: true });
+  }, []);
   const [filter, setFilter] = useState("all");
   const [sort, setSort] = useState("name");
   const [order, setOrder] = useState("asc");
@@ -266,7 +314,7 @@ export default function Workspace({ user }: { user: User }) {
     return f;
   }, [items, filter, search]);
   
-  const imageList = useMemo(() => filtered.filter((i) => (i.mime || "").startsWith("image/") || ["jpg", "jpeg", "png", "gif", "webp", "bmp", "avif"].includes((i.extension || "").toLowerCase())), [filtered]);
+  const imageList = useMemo(() => filtered.filter((i) => (i.mime || "").startsWith("image/") || IMAGE_EXTS.has((i.extension || "").toLowerCase())), [filtered]);
 
   const createPlaylistMutation = useCreatePlaylist();
 
@@ -309,7 +357,7 @@ export default function Workspace({ user }: { user: User }) {
   // Use custom hooks
   const { uploadFiles, downloadItem } = useTransfers(rootId, path, refresh);
   const { doDelete, bulkDelete, archivePaths, toggleFavorite } = useFileOperations({ rootId, refresh, qc, selection, clearSelection, favSet });
-  const { folderPicker, setFolderPicker, moveSelectionTo, openPickerFor, applyFolderPicker, movePathsTo, clipboard, copySelection, cutSelection, pasteClipboard, clearClipboard } = useClipboard({ rootId, path, selection, clearSelection, refresh, canWrite });
+  const { folderPicker, setFolderPicker, openPickerFor, applyFolderPicker, transferPaths, clipboard, copySelection, cutSelection, pasteClipboard, clearClipboard } = useClipboard({ rootId, path, selection, clearSelection, refresh, canWrite });
   const { dragProps, dragActive, dropPicker, setDropPicker, pendingDrop } = useDragAndDrop({ rootId, canWrite, uploadFiles });
   
   const [shortcutsModalOpen, setShortcutsModalOpen] = useState(false);
@@ -351,7 +399,7 @@ export default function Workspace({ user }: { user: User }) {
       const audio = items.filter((i) => isAudio(i));
       const idx = audio.findIndex((i) => i.path === item.path);
       usePlayer.getState().play(audio, idx >= 0 ? idx : 0);
-    } else if (item.mime.startsWith("image/") || ["jpg", "jpeg", "png", "gif", "webp", "bmp", "avif"].includes((item.extension || "").toLowerCase())) {
+    } else if (item.mime.startsWith("image/") || IMAGE_EXTS.has((item.extension || "").toLowerCase())) {
       setImageItem(item);
     } else if (item.mime.startsWith("video/")) {
       setPrevView("files");
@@ -507,6 +555,8 @@ export default function Workspace({ user }: { user: User }) {
   const logout = async () => {
     try { await authApi.logout(); } catch { /* ignore */ }
     localStorage.removeItem("nexora-token");
+    // Also drop the desktop media bearer so no long-lived credential survives logout.
+    clearMediaToken();
     window.location.reload();
   };
 
@@ -527,18 +577,20 @@ export default function Workspace({ user }: { user: User }) {
           });
           return;
         }
-        if (info.mime?.startsWith("image/") || ["jpg", "jpeg", "png", "gif", "webp", "bmp", "avif"].includes((info.extension || "").toLowerCase())) {
+        if (info.mime?.startsWith("image/") || IMAGE_EXTS.has((info.extension || "").toLowerCase())) {
           setImageItem(info);
         } else if (info.mime?.startsWith("video/")) {
           setVideoItem(info);
           setPrevView("files");
           setView("video");
         } else {
-          setTimeout(() => setPreview(info), 50);
+          // Set immediately — React batches this with the transition, and a
+          // magic 50ms delay just raced fast successive clicks.
+          setPreview(info);
         }
       } catch {
         const ext = name.includes(".") ? name.slice(name.lastIndexOf(".") + 1).toLowerCase() : "";
-        setTimeout(() => setPreview({ name, path: p, size: 0, is_dir: false, modified: "", mime: "", root_id: rid, extension: ext } as FileItem), 50);
+        setPreview({ name, path: p, size: 0, is_dir: false, modified: "", mime: "", root_id: rid, extension: ext } as FileItem);
       }
     }
   };
@@ -564,6 +616,11 @@ export default function Workspace({ user }: { user: User }) {
         view={view}
         isAdmin={isAdmin}
         collapsed={sidebarCollapsed}
+        canWrite={canWrite}
+        onDropToActiveRoot={(paths) => {
+          if (!canWrite || !rootId) return;
+          void transferPaths(paths, "", 'move');
+        }}
         onToggleCollapse={() => setSidebarCollapsed((c) => !c)}
         onSelectRoot={(id) => { setRootId(id); clearSelection(); }}
         onSelectView={(v) => { setView(v); clearSelection(); }}
@@ -597,9 +654,11 @@ export default function Workspace({ user }: { user: User }) {
             isAdmin={isAdmin}
             onLogout={logout}
             onAdmin={() => setView("admin")}
-            onDropToFolder={(p) => {
-              if (!canWrite || selection.size === 0) return;
-              void movePathsTo(Array.from(selection), p);
+            onDropToFolder={(p, paths) => {
+              if (!canWrite) return;
+              const src = paths && paths.length > 0 ? paths : Array.from(selection);
+              if (src.length === 0) return;
+              void transferPaths(src, p, 'move');
             }}
             onUploadFiles={(files, p) => {
               if (!canWrite) return;
@@ -609,17 +668,15 @@ export default function Workspace({ user }: { user: User }) {
             onCancelClipboard={clearClipboard}
           />
         )}
-        {view !== "files" && view !== "home" && !videoItem && (
-          <div className="relative mx-4 mt-4 mb-2">
-            <div className="h-14 flex items-center justify-between px-5 rounded-t-[24px] rounded-b-[20px] bg-gradient-to-b from-glass-bg-strong/80 to-glass-bg/60 border border-glass-border-soft/80 shadow-[0_4px_20px_rgba(0,0,0,0.15)] backdrop-blur-xl">
-              <div className="flex items-center gap-3">
-                <div className="w-1.5 h-8 rounded-full bg-gradient-to-b from-accent to-accent-secondary" />
-                <span className="font-semibold text-lg capitalize tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-foreground to-foreground/80">{view}</span>
-              </div>
+        {view !== "files" && !videoItem && (
+          <WorkspaceHeader
+            title={VIEW_HEADER_META[view]?.label ?? view.charAt(0).toUpperCase() + view.slice(1)}
+            icon={VIEW_HEADER_META[view]?.icon}
+            scrolled={contentScrolled}
+            actions={
               <ProfileMenu user={user} isAdmin={isAdmin} onLogout={logout} onAdmin={() => setView("admin")} />
-            </div>
-            <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-accent/30 to-transparent" />
-          </div>
+            }
+          />
         )}
 
         <input ref={fileInput} type="file" multiple className="hidden" onChange={(e) => { uploadFiles(e.target.files); e.target.value = ""; }} />
@@ -656,7 +713,16 @@ export default function Workspace({ user }: { user: User }) {
                 onOpen={openItem}
                 onSelect={handleSelect}
                 onContextMenu={onContextMenu}
-                onDropItem={(folder) => moveSelectionTo()}
+                onDropItem={(folder, paths) => {
+                  // Drop directly onto the folder that was dropped on —
+                  // no second "pick a destination" round-trip. `paths` is the
+                  // drag payload (selection-aware from FileBrowser).
+                  void transferPaths(paths ?? Array.from(selection), folder.path, 'move');
+                }}
+                onUploadToPath={(files, p) => {
+                  if (!canWrite) return;
+                  void uploadFiles(files, rootId ?? undefined, p);
+                }}
                 onUpload={() => fileInput.current?.click()}
                 onUploadFolder={() => folderInput.current?.click()}
                 hasMore={hasMoreFiles}
@@ -696,18 +762,7 @@ export default function Workspace({ user }: { user: User }) {
               onOpen={(item) => navigateTo(item.root_id, item.path, false, item.name)}
             />}
             {view === "home" && (
-              <>
-                <div className="relative mx-4 mt-4 mb-2">
-                  <div className="h-14 flex items-center justify-between px-5 rounded-t-[24px] rounded-b-[20px] bg-gradient-to-b from-glass-bg-strong/80 to-glass-bg/60 border border-glass-border-soft/80 shadow-[0_4px_20px_rgba(0,0,0,0.15)] backdrop-blur-xl">
-                    <div className="flex items-center gap-3">
-                      <div className="w-1.5 h-8 rounded-full bg-gradient-to-b from-accent to-accent-secondary" />
-                      <span className="font-semibold text-lg tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-foreground to-foreground/80">Home</span>
-                    </div>
-                    <ProfileMenu user={user} isAdmin={isAdmin} onLogout={logout} onAdmin={() => setView("admin")} />
-                  </div>
-                  <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-accent/30 to-transparent" />
-                </div>
-                <HomePanel
+              <HomePanel
                   user={user}
                   data={home.data}
                   isLoading={home.isLoading}
@@ -721,7 +776,6 @@ export default function Workspace({ user }: { user: User }) {
                   onNewRoot={() => isAdmin && setRootModal(true)}
                   onOpenPlaylist={() => setView("playlists")}
                 />
-              </>
             )}
             {view === "shares" && <SharesPanel />}
             {view === "playlists" && <PlaylistsPanel user={user} />}
@@ -750,7 +804,7 @@ export default function Workspace({ user }: { user: User }) {
                   onOpen={(rid, p) => navigateTo(rid, p, false, "")}
                   onPreview={(rid, p) => {
                     filesApi.stat(rid, p).then((info) => {
-                      if (info.mime?.startsWith("image/") || ["jpg", "jpeg", "png", "gif", "webp", "bmp", "avif"].includes((info.extension || "").toLowerCase())) {
+                      if (info.mime?.startsWith("image/") || IMAGE_EXTS.has((info.extension || "").toLowerCase())) {
                         setImageItem(info);
                       } else {
                         setPreview(info);
@@ -772,8 +826,6 @@ export default function Workspace({ user }: { user: User }) {
             )}
             </Suspense>
           </motion.main>
-
-        {!videoItem && null}
 
         <PlayerBar />
       </div>
@@ -870,7 +922,7 @@ export default function Workspace({ user }: { user: User }) {
             className="glass-input w-full rounded-xl px-3 py-2 outline-none"
           />
           <p className="mt-2 text-xs opacity-60">
-            {(selectedItems.length ? selectedItems : items).filter((i) => i.mime.startsWith("audio/")).length} audio track(s) will be added.
+            {(selectedItems.length ? selectedItems : items).filter((i) => typeof i.mime === "string" && i.mime.startsWith("audio/")).length} audio track(s) will be added.
           </p>
         </Modal>
       )}
@@ -938,313 +990,4 @@ export default function Workspace({ user }: { user: User }) {
       />
     </div>
   );
-}
-
-interface GridItem {
-  id: string;
-  name: string;
-  root_name: string;
-  path: string;
-  root_id: string;
-  date: string;
-  extension: string;
-}
-
-function GridView({ loading, empty, items, onOpen }: {
-  loading: boolean;
-  empty: string;
-  items: GridItem[];
-  onOpen: (item: GridItem) => void;
-}) {
-  if (loading) return <div className="p-6"><SkeletonGrid count={6} /></div>;
-  if (!items.length) return <div className="p-10 text-center text-content-muted">{empty}</div>;
-  return (
-    <motion.div
-      variants={staggerContainer}
-      initial="initial"
-      animate="animate"
-      className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-6"
-    >
-      {items.map((item) => {
-        const fi: FileItem = {
-          name: item.name,
-          path: item.path,
-          size: 0,
-          is_dir: false,
-          modified: item.date,
-          mime: "",
-          root_id: item.root_id,
-          extension: item.extension,
-        };
-        return (
-          <motion.button
-            key={item.id}
-            variants={staggerItem}
-            {...cardHover}
-            onClick={() => onOpen(item)}
-            className="group w-full min-w-0 text-left outline-none flex items-center gap-4 p-3 rounded-2xl glass-strong border border-glass-border hover:border-accent/40 focus-visible:ring-2 focus-visible:ring-accent transition-all duration-300 overflow-hidden relative"
-          >
-            {/* Inner card glow */}
-            <div className="absolute inset-0 bg-gradient-to-br from-white/[0.03] via-transparent to-transparent pointer-events-none rounded-2xl" />
-            <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/8 to-transparent" />
-            
-            <div className="relative h-14 w-14 shrink-0 rounded-xl overflow-hidden shadow-sm">
-              <FileThumb it={fi} fill />
-              <div className="absolute inset-0 bg-black/[0.05] dark:bg-black/10 group-hover:bg-black/[0.1] dark:group-hover:bg-black/20 transition-colors duration-300" />
-            </div>
-            
-            <div className="flex-1 min-w-0">
-              <p className="truncate text-[15px] font-semibold text-content group-hover:text-accent transition-colors">
-                {item.name}
-              </p>
-              <div className="flex min-w-0 items-center gap-2 mt-1">
-                <p className="min-w-0 truncate text-xs font-medium text-content-muted">
-                  {item.root_name}
-                </p>
-                <span className="h-1 w-1 shrink-0 rounded-full bg-border/80" />
-                <p className="min-w-0 truncate text-xs font-medium text-content-muted/70 uppercase tracking-wider">
-                  {formatRelative(item.date)}
-                </p>
-              </div>
-            </div>
-          </motion.button>
-        );
-      })}
-    </motion.div>
-  );
-}
-
-function DropRootPicker({ roots, pending, onClose, onConfirm }: {
-  roots: Root[];
-  pending: React.MutableRefObject<FileList | null>;
-  onClose: () => void;
-  onConfirm: (rootId: string, destPath: string) => void;
-}) {
-  const [picked, setPicked] = useState<string>("");
-  const [destPath, setDestPath] = useState("");
-  const writable = roots.filter((r) => r.permission === "write" && !r.read_only);
-  const fileCount = pending.current?.length ?? 0;
-  const effective = picked || writable[0]?.id || "";
-  return (
-    <Modal
-      title="Upload to…"
-      onClose={onClose}
-      footer={
-        <Button variant="primary" size="sm" disabled={!effective} onClick={() => onConfirm(effective, destPath.trim())}>
-          Upload {fileCount > 0 ? `${fileCount} file${fileCount > 1 ? "s" : ""}` : ""}
-        </Button>
-      }
-    >
-      <p className="text-sm text-content-muted mb-3">
-        {fileCount} file{fileCount !== 1 ? "s" : ""} selected. Choose a storage root and optional subfolder.
-      </p>
-      <div className="space-y-2 max-h-60 overflow-auto">
-        {writable.length === 0 && <p className="text-sm text-content-muted">No writable storage roots available.</p>}
-        {writable.map((r) => (
-          <button
-            key={r.id}
-            onClick={() => setPicked(r.id)}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left border transition ${
-              effective === r.id ? "border-accent bg-accent/10" : "border-transparent glass-hover"
-            }`}
-          >
-            <HardDrive className="h-5 w-5 text-accent shrink-0" />
-            <div className="min-w-0">
-              <p className="font-medium truncate">{r.name}</p>
-              <p className="text-xs text-content-muted truncate">{r.path || "root"}</p>
-            </div>
-          </button>
-        ))}
-      </div>
-      <input
-        value={destPath}
-        onChange={(e) => setDestPath(e.target.value)}
-        placeholder="Subfolder (optional, e.g. photos/2024)"
-        className="w-full mt-3 rounded-lg glass-input px-3 py-2 outline-none"
-      />
-    </Modal>
-  );
-}
-
-/** Branded loading placeholder for lazily-loaded views. */
-function ViewSkeleton() {
-  return (
-    <div className="flex-1 grid place-items-center p-6" role="status" aria-label="Loading view">
-      <div className="w-full max-w-5xl space-y-3 animate-fade-in">
-        <SkeletonLine width="180px" height="24px" />
-        <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))" }}>
-          {Array.from({ length: 8 }, (_, i) => <SkeletonCard key={i} />)}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function FavouritesView({ loading, items, onOpen }: {
-  loading: boolean;
-  items: GridItem[];
-  onOpen: (item: GridItem) => void;
-}) {
-  return (
-    <>
-      <ViewHeader
-        icon={Heart}
-        title="Favourites"
-        subtitle={loading ? "Loading…" : `${items.length} item${items.length === 1 ? "" : "s"} you starred`}
-      />
-      <GridView
-        loading={loading}
-        empty="No favorites yet. Star files to find them here."
-        items={items}
-        onOpen={onOpen}
-      />
-    </>
-  );
-}
-
-function RecentsView({ loading, items, onOpen }: {
-  loading: boolean;
-  items: GridItem[];
-  onOpen: (item: GridItem) => void;
-}) {
-  return (
-    <>
-      <ViewHeader
-        icon={Clock}
-        title="Recent Files"
-        subtitle={loading ? "Loading…" : `${items.length} item${items.length === 1 ? "" : "s"} opened lately`}
-      />
-      <GridView
-        loading={loading}
-        empty="No recent files yet."
-        items={items}
-        onOpen={onOpen}
-      />
-    </>
-  );
-}
-
-function TrashView({ items, loading, onRestore, onDelete, selection, selectMode, onSelect }: {
-  items: TrashItem[]; loading: boolean; onRestore: (id: string) => void; onDelete: (id: string) => void;
-  selection?: Set<string>; selectMode?: boolean; onSelect?: (id: string) => void;
-}) {
-  if (loading) return <div className="p-2"><SkeletonList count={5} /></div>;
-  if (!items.length) return <div className="p-10 text-center text-content-muted">Trash is empty.</div>;
-  const selectedCount = selection?.size ?? 0;
-  return (
-    <div>
-      <ViewHeader
-        icon={Trash2}
-        title="Trash"
-        subtitle={`${items.length} item${items.length === 1 ? "" : "s"} · restore or delete forever`}
-      />
-      {selectedCount > 0 && (
-        <div className="sticky top-0 z-10 flex items-center gap-3 px-4 py-2 glass-bar border-b border-border/50">
-          <span className="text-sm font-medium">{selectedCount} selected</span>
-          <div className="flex gap-2 ml-auto">
-            <button onClick={() => { items.filter((t) => selection?.has(t.id)).forEach((t) => onRestore(t.id)); }} className="flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg glass-hover border"><RotateCcw className="h-4 w-4" /> Restore</button>
-            <button onClick={() => { items.filter((t) => selection?.has(t.id)).forEach((t) => onDelete(t.id)); }} className="flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg text-danger hover:bg-danger/10"><Trash2 className="h-4 w-4" /> Delete</button>
-          </div>
-        </div>
-      )}
-      <div className="p-2">
-        {items.map((t) => {
-          const selected = selection?.has(t.id) ?? false;
-          return (
-            <div key={t.id} className={`flex items-center gap-2 rounded-lg transition-colors ${selected ? "bg-accent/10 ring-1 ring-accent/30" : "hover:bg-surface/50"}`}>
-              {onSelect && (
-                <label className="pl-3 py-2 flex items-center cursor-pointer">
-                  <input type="checkbox" checked={selected} onChange={() => onSelect(t.id)}
-                    className="w-4 h-4 rounded border-2 border-border/80 bg-surface/80 text-accent focus:ring-accent cursor-pointer transition-all" />
-                </label>
-              )}
-              <div className="flex-1 grid grid-cols-[1fr_auto_auto] gap-2 py-2 pr-3">
-                <div className="min-w-0">
-                  <p className="truncate font-medium">{t.name}</p>
-                  <p className="text-xs text-content-muted truncate">{t.root_name} · {t.original_path}</p>
-                </div>
-                <button onClick={() => onRestore(t.id)} className="flex items-center gap-1 px-2 py-1 text-sm rounded-lg glass-hover border"><RotateCcw className="h-4 w-4" /> Restore</button>
-                <button onClick={() => onDelete(t.id)} className="flex items-center gap-1 px-2 py-1 text-sm rounded-lg text-danger hover:bg-danger/10"><Trash2 className="h-4 w-4" /> Delete</button>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function ActionModals({ menu, rootId, path, onClose, onDone, onArchiveExtract }: {
-  menu: { kind: string; item?: FileItem };
-  rootId: string;
-  path: string;
-  onClose: () => void;
-  onDone: () => void;
-  onArchiveExtract: (src: string, dest: string) => void;
-}) {
-  const [value, setValue] = useState("");
-  const [content, setContent] = useState("");
-  const pushToast = useUI((s) => s.pushToast);
-  const base = (name: string) => (path ? `${path}/${name}` : name);
-  const run = async (fn: () => Promise<any>, ok: string) => {
-    try { await fn(); pushToast("success", ok); onDone(); } catch (e: any) { pushToast("error", e.message); }
-  };
-
-  if (menu.kind === "newFolder") {
-    return (
-      <Modal title="New folder" onClose={onClose} footer={<Button variant="primary" size="sm" onClick={() => run(() => filesApi.createDirectory(rootId, base(value || "New Folder")), "Folder created")}>Create</Button>}>
-        <input autoFocus value={value} onChange={(e) => setValue(e.target.value)} placeholder="Folder name" className="glass-input w-full rounded-xl px-3 py-2" />
-      </Modal>
-    );
-  }
-  if (menu.kind === "newFile") {
-    // Swap/append the filename's extension so template chips produce e.g.
-    // "song.lrc" from a bare "song" or an existing "song.txt".
-    const withExt = (ext: string) => {
-      const v = value.trim();
-      if (!v) return `untitled.${ext}`;
-      return v.replace(/\.[^./\\]+$/, "") + "." + ext;
-    };
-    return (
-      <Modal title="New text file" onClose={onClose} footer={<Button variant="primary" size="sm" onClick={() => run(() => filesApi.createFile(rootId, base(value || "untitled.txt"), content), "File created")}>Create</Button>}>
-        <input autoFocus value={value} onChange={(e) => setValue(e.target.value)} placeholder="name.txt" className="glass-input mb-2 w-full rounded-xl px-3 py-2" />
-        <div className="mb-2 flex flex-wrap gap-1.5">
-          <button
-            type="button"
-            onClick={() => { setValue(withExt("txt")); setContent(""); }}
-            className="rounded-full border border-border bg-surface px-3 py-1 text-xs font-medium text-content-muted transition-colors hover:border-accent/50 hover:bg-accent/10 hover:text-accent"
-          >
-            Plain text
-          </button>
-          <button
-            type="button"
-            onClick={() => { setValue(withExt("lrc")); setContent("[ti:Track title]\n[ar:Artist]\n[00:00.00]\n"); }}
-            className="rounded-full border border-border bg-surface px-3 py-1 text-xs font-medium text-content-muted transition-colors hover:border-accent/50 hover:bg-accent/10 hover:text-accent"
-            title="Synced lyrics template"
-          >
-            LRC lyrics
-          </button>
-        </div>
-        <textarea value={content} onChange={(e) => setContent(e.target.value)} rows={6} placeholder="Contents…" className="glass-input w-full rounded-xl px-3 py-2 font-mono text-sm" />
-      </Modal>
-    );
-  }
-  if (menu.kind === "rename" && menu.item) {
-    return (
-      <Modal title="Rename" onClose={onClose} footer={<Button variant="primary" size="sm" onClick={() => run(() => filesApi.rename(rootId, menu.item!.path, value), "Renamed")}>Rename</Button>}>
-        <input autoFocus defaultValue={menu.item.name} onChange={(e) => setValue(e.target.value)} className="glass-input w-full rounded-xl px-3 py-2" />
-      </Modal>
-    );
-  }
-  if (menu.kind === "extract" && menu.item) {
-    const defaultDest = path;
-    return (
-      <Modal title={`Extract "${menu.item.name}"`} onClose={onClose} footer={<Button variant="primary" size="sm" onClick={() => onArchiveExtract(menu.item!.path, value || defaultDest)}>Extract</Button>}>
-        <p className="text-sm text-content-muted mb-2">Destination folder (relative path, empty = current):</p>
-        <input autoFocus value={value} onChange={(e) => setValue(e.target.value)} placeholder={defaultDest || "root"} className="glass-input w-full rounded-xl px-3 py-2" />
-        <p className="mt-2 text-xs text-content-muted">Archives are extracted safely with zip-slip protection.</p>
-      </Modal>
-    );
-  }
-  return null;
 }

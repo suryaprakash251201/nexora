@@ -12,6 +12,7 @@ import { formatBytes, formatDate } from "../lib/format";
 import { cn } from "@/lib/utils";
 import { useFocusTrap } from "../lib/useFocusTrap";
 import TextWorkspace from "./text/TextWorkspace";
+import { IMAGE_EXTS } from "@nexora/core";
 
 
 // The Document Space (PDF) is code-split on its own — pdf.js only ever
@@ -49,7 +50,7 @@ export default function PreviewModal({
   const galleryItems = useMemo(() => {
     if (!playlist) return [];
     return playlist.filter(
-      (f) => f.mime.startsWith("image/") || ["jpg", "jpeg", "png", "gif", "webp", "bmp", "avif"].includes((f.extension || "").toLowerCase())
+      (f) => f.mime.startsWith("image/") || IMAGE_EXTS.has((f.extension || "").toLowerCase())
     );
   }, [playlist]);
   

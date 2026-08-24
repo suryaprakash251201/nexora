@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { KeyRound, Smartphone, MonitorSmartphone, Shield, ShieldAlert, Check, AlertCircle, ArrowLeft, ChevronRight, X, Sun, Moon, Power, Music } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useQueryClient } from "@tanstack/react-query";
+import { isTauri as isTauriRuntime } from "../lib/desktop";
 import type { User } from "../api/types";
 import { useUI } from "../store";
 ;
@@ -20,7 +21,7 @@ export default function SettingsModal({ user, onClose, initialView = "main" }: {
   const [accent, setAccent] = useAccentTheme();
   const queryClient = useQueryClient();
   const dialogRef = useFocusTrap(true);
-  const isTauri = "__TAURI_INTERNALS__" in window;
+  const isTauri = isTauriRuntime();
   const [nativeAudioOn, setNativeAudioOn] = useState<boolean>(
     () => localStorage.getItem("nexora.nativeAudio") !== "0",
   );

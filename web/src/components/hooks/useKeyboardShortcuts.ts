@@ -118,11 +118,9 @@ export function useKeyboardShortcuts({
         e.preventDefault();
         setViewMode(viewMode === 'grid' ? 'list' : 'grid');
       }
-      // Refresh
-      else if (e.key === 'F5') {
-        e.preventDefault();
-        window.location.reload();
-      }
+      // F5 is intentionally left to the browser: hijacking it defeats the
+      // cached/service-worker reload path and surprises users. Data refresh
+      // happens via React Query invalidation instead.
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);

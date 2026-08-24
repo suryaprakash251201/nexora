@@ -9,7 +9,7 @@
   "version": "1.9.0",
   "identifier": "com.nexora.desktop",
   "app": {
-    "withGlobalTauri": true,
+    "withGlobalTauri": false,
     "windows": [
       {
         "title": "Nexora",
@@ -27,7 +27,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; img-src 'self' http: https: data: blob:; media-src 'self' http: https: blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; script-src 'self'; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' http: https: tauri:; frame-src 'self' http: https: blob:;"
+      "csp": "default-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; img-src 'self' http: https: data: blob:; media-src 'self' http: https: blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; script-src 'self'; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' http: https: tauri:; frame-src 'self' blob: https://www.openstreetmap.org;"
     }
   },
   "plugins": {

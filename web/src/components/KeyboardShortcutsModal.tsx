@@ -16,7 +16,6 @@ export default function KeyboardShortcutsModal({ isOpen, onClose }: { isOpen: bo
         { key: "/", description: "Focus Search" },
         { key: "?", description: "Show Keyboard Shortcuts" },
         { key: "Esc", description: "Clear Selection / Close Modals" },
-        { key: "F5", description: "Refresh File List" },
       ],
     },
     {

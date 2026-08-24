@@ -279,12 +279,12 @@ export default function HomePanel({
   const [greeting, setGreeting] = useState("Good morning");
   const [period, setPeriod] = useState<"morning" | "afternoon" | "evening" | "night">("morning");
 
-  // Adaptive greeting colors with time-based gradients
+  // Time-aware greeting copy + matching line icon.
   const greetingColors = useMemo(() => ({
-    morning: { from: "from-amber-500", via: "via-orange-400", to: "to-rose-400", icon: Sunrise, label: "Good morning" },
-    afternoon: { from: "from-sky-500", via: "via-blue-400", to: "to-indigo-400", icon: Sun, label: "Good afternoon" },
-    evening: { from: "from-violet-500", via: "via-purple-400", to: "to-pink-400", icon: Sunset, label: "Good evening" },
-    night: { from: "from-indigo-500", via: "via-blue-500", to: "to-cyan-400", icon: CloudMoon, label: "Late night" },
+    morning: { icon: Sunrise, label: "Good morning" },
+    afternoon: { icon: Sun, label: "Good afternoon" },
+    evening: { icon: Sunset, label: "Good evening" },
+    night: { icon: CloudMoon, label: "Late night" },
   }), []);
 
   useEffect(() => {
@@ -327,53 +327,34 @@ export default function HomePanel({
       transition={{ duration: 0.25 }}
       className="flex-1 overflow-auto custom-scrollbar bg-background"
     >
-      {/* Hero Banner */}
-      <div className="relative overflow-hidden border-b border-glass-border bg-surface/20">
-        <div className="absolute inset-0 bg-gradient-to-r from-accent/10 via-transparent to-transparent opacity-50" />
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-10 md:py-14 relative z-10">
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, ease: [0.25, 0.1, 0.25, 1] }}>
-            <div className="flex items-center gap-4 mb-2">
-              <motion.div
-                initial={{ scale: 0, rotate: -30 }}
-                animate={{ scale: 1, rotate: 0 }}
-                transition={{ type: "spring", stiffness: 200, damping: 15, delay: 0.1 }}
+      {/* Greeting — plain typographic header, no banner chrome */}
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 pt-8 sm:pt-12">
+        <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35, ease: [0.25, 0.1, 0.25, 1] }}>
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold tracking-tight flex flex-wrap items-center gap-x-2 gap-y-1">
+            <GreetingIcon className="h-6 w-6 sm:h-7 sm:w-7 text-accent shrink-0" aria-hidden />
+            {greetingWords.map((word, i) => (
+              <motion.span
+                key={i}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.1 + i * 0.05, duration: 0.3 }}
                 className={cn(
-                  "p-3 rounded-2xl bg-gradient-to-br shadow-xl text-white",
-                  greetingColors[period]?.from || "from-amber-500",
-                  greetingColors[period]?.to || "to-rose-400"
+                  word === displayName ? "text-accent" : "text-foreground"
                 )}
               >
-                <GreetingIcon className="h-6 w-6 sm:h-7 sm:w-7" />
-              </motion.div>
-              <div>
-                <h1 className="text-2xl sm:text-4xl md:text-5xl font-black tracking-tight flex flex-wrap gap-x-2">
-                  {greetingWords.map((word, i) => (
-                    <motion.span
-                      key={i}
-                      initial={{ opacity: 0, y: 12 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: 0.15 + i * 0.05, duration: 0.3 }}
-                      className={cn(
-                        word === displayName
-                          ? "bg-gradient-to-r from-accent via-accent-purple to-pink-500 bg-clip-text text-transparent"
-                          : "text-foreground"
-                      )}
-                    >
-                      {word}
-                    </motion.span>
-                  ))}
-                </h1>
-                <motion.p
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: 0.4, duration: 0.4 }}
-                  className="text-xs sm:text-sm text-text-tertiary mt-1"
-                >
-                  Welcome back to your workspace
-                </motion.p>
-              </div>
-            </div>
-          </motion.div>
+                {word}
+              </motion.span>
+            ))}
+          </h1>
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.35, duration: 0.35 }}
+            className="text-sm text-text-tertiary mt-1.5"
+          >
+            Welcome back to your workspace
+          </motion.p>
+        </motion.div>
 
           <motion.form
             initial={{ opacity: 0, y: 16 }}
@@ -388,10 +369,9 @@ export default function HomePanel({
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Search your files, folders, and documents…"
-              className="h-14 text-lg bg-surface/60 shadow-lg shadow-black/10 border-glass-border focus:border-accent/50 focus:ring-accent/20"
+              className="h-12 text-base bg-surface/60 border-glass-border focus:border-accent/50 focus:ring-accent/20"
             />
           </motion.form>
-        </div>
       </div>
 
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-10 space-y-8 sm:space-y-12 pb-28 md:pb-24">

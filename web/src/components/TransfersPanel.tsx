@@ -1,8 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
-  Upload, Download, X, CheckCircle2, AlertCircle, Clock, ChevronDown, ListX, ArrowDownToDot, Pause, Play } from "lucide-react";
+  Upload, Download, X, CheckCircle2, AlertCircle, Clock, ChevronDown, ListX, ArrowDownToDot, Pause, Play, RotateCcw } from "lucide-react";
 import { useTransfers, type Transfer } from "../store/transfers";
-import { cancelTransfer, isCancellable, pauseTransfer, resumeTransfer, speedLabel, isPausable } from "../lib/transfer";
+import { cancelTransfer, isCancellable, pauseTransfer, resumeTransfer, retryTransfer, speedLabel, isPausable } from "../lib/transfer";
 import { formatBytes } from "../lib/format";
 
 function pct(t: Transfer): number {
@@ -150,6 +150,18 @@ function Row({ t }: { t: Transfer }) {
         </button>
       )}
 
+      {/* Retry failed uploads — resumes from the last acknowledged chunk. */}
+      {t.status === "error" && t.kind === "upload" && (
+        <button
+          onClick={(e) => { e.stopPropagation(); retryTransfer(t.id); }}
+          className="shrink-0 p-1 rounded-md text-content-muted opacity-80 group-hover:opacity-100 hover:text-accent hover:bg-accent/10 transition-all"
+          title={`Retry ${t.name}`}
+          aria-label={`Retry ${t.name}`}
+        >
+          <RotateCcw className="h-3.5 w-3.5" />
+        </button>
+      )}
+
       {/* Cancel / dismiss */}
       <button
         onClick={handleX}
@@ -167,23 +179,27 @@ export default function TransfersPanel() {
   const transfers = useTransfers((s) => s.transfers);
   const clearFinished = useTransfers((s) => s.clearFinished);
   const [open, setOpen] = useState(false);
+  // Once the user closes/minimizes the panel, don't force it back open while
+  // the batch continues — the floating pill still shows progress.
+  const dismissedRef = useRef(false);
+  const hadTransfersRef = useRef(false);
 
   const active = transfers.filter((t) => t.status === "active" || t.status === "paused").length;
   const queued = transfers.filter((t) => t.status === "queued").length;
   const finished = transfers.filter((t) => t.status === "done" || t.status === "error").length;
   const allDone = active === 0;
 
-  // Auto-open when new transfers are added or start moving.
+  // Auto-open exactly once per batch: when the first transfer appears and the
+  // user hasn't dismissed the panel since the last batch drained.
   useEffect(() => {
-    if (transfers.length > 0 && transfers.some((t) => t.status === "active")) {
-      setOpen(true);
+    if (transfers.length === 0) {
+      hadTransfersRef.current = false;
+      return;
     }
+    const isNewBatch = !hadTransfersRef.current;
+    hadTransfersRef.current = true;
+    if (isNewBatch && !dismissedRef.current) setOpen(true);
   }, [transfers.length]);
-
-  // Once everything finishes, reveal the panel (in case it was minimized).
-  useEffect(() => {
-    if (allDone && transfers.length > 0) setOpen(true);
-  }, [allDone, transfers.length]);
 
   if (transfers.length === 0) return null;
 
@@ -263,7 +279,7 @@ export default function TransfersPanel() {
 
         <div className="flex items-center gap-0.5 shrink-0">
           <button
-            onClick={() => setOpen(false)}
+            onClick={() => { dismissedRef.current = true; setOpen(false); }}
             className="p-1.5 rounded-md text-content-muted hover:text-danger hover:bg-danger/10 transition-colors"
             title="Minimize to pill"
             aria-label="Minimize transfer panel to pill"

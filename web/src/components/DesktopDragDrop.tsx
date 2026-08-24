@@ -81,25 +81,36 @@ async function handleDrop(
   try {
     const { stat, readFile } = await import("@tauri-apps/plugin-fs");
     const files: File[] = [];
-    const skipped: string[] = [];
+    const skippedFolders: string[] = [];
+    let denied = 0;
 
     for (const p of paths) {
       try {
         const info = await stat(p);
         if (!info.isFile) {
-          skipped.push(p.split(/[\\/]/).pop() || p);
+          skippedFolders.push(p.split(/[\\/]/).pop() || p);
           continue;
         }
         const bytes = await readFile(p);
         const name = p.split(/[\\/]/).pop() || "file";
         files.push(new File([bytes], name, { lastModified: info.mtime?.getTime() ?? Date.now() }));
-      } catch {
-        // unreadable file — skip silently
+      } catch (e) {
+        // Permission denials are the common case here: fs reads are scoped
+        // to Downloads/temp/app dirs. Never swallow them — a dead-looking
+        // drop zone is far worse than an honest message.
+        denied++;
+        console.debug("[desktop] drop read failed:", p, e);
       }
     }
 
-    if (skipped.length) {
-      pushToast("info", `Skipped ${skipped.length} folder${skipped.length > 1 ? "s" : ""} — folder drag & drop isn't supported yet`);
+    if (skippedFolders.length) {
+      pushToast("info", `Skipped ${skippedFolders.length} folder${skippedFolders.length > 1 ? "s" : ""} — folder drag & drop isn't supported yet`);
+    }
+    if (denied) {
+      pushToast(
+        "error",
+        `${denied} file${denied > 1 ? "s" : ""} couldn't be read (access denied) — copy ${denied > 1 ? "them" : "it"} into Downloads or use the upload button.`,
+      );
     }
     if (files.length) onUpload(files);
   } catch (e) {

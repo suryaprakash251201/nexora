@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { RotateCcw, ExternalLink, LoaderCircle, PlugZap, WifiOff } from "lucide-react";
 import { discoverServerUrl } from "./api/client";
 import { authApi } from "./api/endpoints";
+import { clearMediaToken } from "./lib/nativeAudio";
 import Login from "./components/Login";
 import Setup from "./components/Setup";
 import Workspace from "./components/Workspace";
@@ -11,7 +12,6 @@ import NexoraLogo from "./components/icons/NexoraLogo";
 import UpdaterCheck from "./components/UpdaterCheck";
 import TauriShell from "./components/TauriShell";
 import { ErrorBoundary } from "./components/ErrorBoundary";
-import { Toaster } from "./components/ui/sonner";
 import { openInBrowser, isTauri } from "./lib/desktop";
 
 export default function App() {
@@ -21,7 +21,6 @@ export default function App() {
       <MouseGlow />
       {isTauri() && <TauriShell />}
       {isTauri() && <UpdaterCheck />}
-      <Toaster />
       <AppInner />
     </>
   );
@@ -170,50 +169,62 @@ function AppInner() {
   }
 
   if (needsSetup.isError || session.isError) {
+    // The server answered with an HTTP error (tagged `status` by the API
+    // client): connectivity is fine — an expired/invalid session is the
+    // usual cause. Drop any stale token and send the user to Login instead
+    // of showing a misleading "Connection Error" screen.
+    const httpErr = [session.error, needsSetup.error].find(
+      (e): e is import("./api/client").NexoraError => !!e && typeof (e as any).status === "number",
+    );
+    if (httpErr && session.isError) {
+      localStorage.removeItem("nexora-token");
+      clearMediaToken();
+      return <Login onSuccess={() => { qc.invalidateQueries(); }} />;
+    }
     return (
       <div className="min-h-screen flex items-center justify-center bg-background text-foreground">
-        <div className="max-w-md w-full px-6">
-          <div className="rounded-2xl border border-glass-border-soft bg-glass-bg-strong/80 backdrop-blur-xl shadow-glass-strong p-8 text-center space-y-4">
-            <span className="mx-auto grid place-items-center h-14 w-14 rounded-2xl bg-red-500/10 text-red-500">
-              <WifiOff className="h-7 w-7" />
-            </span>
-            <div>
-              <h2 className="text-lg font-semibold text-destructive">Connection Error</h2>
-              <p className="text-sm text-content-muted mt-2">
-                Could not reach the Nexora server{isTauriEnv && apiUrl ? ` at ${apiUrl}` : ""}. Make sure it is running and reachable.
-              </p>
-            </div>
-            <div className="flex flex-col gap-2 pt-1">
-              <button
-                className="w-full py-2.5 bg-primary text-primary-foreground font-medium rounded-xl hover:bg-primary/90 transition"
-                onClick={() => {
-                  localStorage.removeItem("nexora-api-url");
-                  setApiUrl("");
-                  setDiscoverDone(false);
-                  qc.clear();
-                }}
-              >
-                <span className="flex items-center justify-center gap-2">
-                  <PlugZap className="h-4 w-4" />
-                  Reconfigure connection
-                </span>
-              </button>
-              {isTauriEnv && (
+          <div className="max-w-md w-full px-6">
+            <div className="rounded-2xl border border-glass-border-soft bg-glass-bg-strong/80 backdrop-blur-xl shadow-glass-strong p-8 text-center space-y-4">
+              <span className="mx-auto grid place-items-center h-14 w-14 rounded-2xl bg-red-500/10 text-red-500">
+                <WifiOff className="h-7 w-7" />
+              </span>
+              <div>
+                <h2 className="text-lg font-semibold text-destructive">Connection Error</h2>
+                <p className="text-sm text-content-muted mt-2">
+                  Could not reach the Nexora server{isTauriEnv && apiUrl ? ` at ${apiUrl}` : ""}. Make sure it is running and reachable.
+                </p>
+              </div>
+              <div className="flex flex-col gap-2 pt-1">
                 <button
-                  className="w-full py-2.5 rounded-xl border border-glass-border-soft text-sm text-content-muted hover:text-foreground hover:bg-glass-bg-subtle transition"
-                  onClick={() => openInBrowser()}
+                  className="w-full py-2.5 bg-primary text-primary-foreground font-medium rounded-xl hover:bg-primary/90 transition"
+                  onClick={() => {
+                    localStorage.removeItem("nexora-api-url");
+                    setApiUrl("");
+                    setDiscoverDone(false);
+                    qc.clear();
+                  }}
                 >
                   <span className="flex items-center justify-center gap-2">
-                    <ExternalLink className="h-4 w-4" />
-                    Open server in browser
+                    <PlugZap className="h-4 w-4" />
+                    Reconfigure connection
                   </span>
                 </button>
-              )}
+                {isTauriEnv && (
+                  <button
+                    className="w-full py-2.5 rounded-xl border border-glass-border-soft text-sm text-content-muted hover:text-foreground hover:bg-glass-bg-subtle transition"
+                    onClick={() => openInBrowser()}
+                  >
+                    <span className="flex items-center justify-center gap-2">
+                      <ExternalLink className="h-4 w-4" />
+                      Open server in browser
+                    </span>
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>
-      </div>
-    );
+      );
   }
 
   if (!needsSetup.data?.configured) {
@@ -229,11 +240,4 @@ function AppInner() {
       <Workspace user={session.data.user} />
     </ErrorBoundary>
   );
-}
-
-// Re-export for potential external use.
-export async function handleLogout() {
-  await authApi.logout();
-  localStorage.removeItem("nexora-token");
-  window.location.reload();
 }

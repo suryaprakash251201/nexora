@@ -181,76 +181,79 @@ function JsonView({ src }: { src: string }) {
     return <PlainView src={pretty ?? src} />;
   }
 
-  const copy = async (text: string) => {
-    try { await navigator.clipboard.writeText(text); } catch { /* ignore */ }
-  };
-
-  const Node = ({ k, v, depth, last }: { k?: string; v: JsonValue; depth: number; last?: boolean }) => {
-    const [open, setOpen] = useState(depth < 2);
-    const isObj = v !== null && typeof v === "object";
-    const entries: [string, JsonValue][] = Array.isArray(v)
-      ? v.map((x, i) => [String(i), x])
-      : Object.entries(v as Record<string, JsonValue>);
-    const path = k ?? "";
-
-    return (
-      <div style={{ paddingLeft: depth === 0 ? 0 : 14 }}>
-        <div className="group flex items-start gap-1.5 rounded px-1.5 py-px hover:bg-accent/[0.05]">
-          {isObj ? (
-            <button
-              onClick={() => setOpen((o) => !o)}
-              aria-expanded={open}
-              className="mt-[3px] shrink-0 text-content-muted hover:text-content transition-colors"
-              aria-label={`${open ? "Collapse" : "Expand"} ${k ?? "root"}`}
-            >
-              {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-            </button>
-          ) : <span className="w-[18px] shrink-0" />}
-          {k !== undefined && (
-            <>
-              <span className="font-mono text-[13px] text-accent/90">"{k}"</span>
-              <span className="text-content-muted/60">:</span>
-            </>
-          )}
-          {!isObj && <Scalar v={v} />}
-          {isObj && !open && (
-            <button onClick={() => setOpen(true)} className="font-mono text-[13px] text-content-muted hover:text-content">
-              {Array.isArray(v) ? `[${entries.length}]` : `{${entries.length}}`}
-              <span className="ml-2 opacity-0 transition-opacity group-hover:opacity-100 text-[11px]">expand</span>
-            </button>
-          )}
-          {isObj && open && <span className="font-mono text-[13px] text-content-muted">{Array.isArray(v) ? "[" : "{"}</span>}
-          {/* copy actions */}
-          <span className="ml-auto hidden shrink-0 items-center gap-1 group-hover:flex">
-            <button onClick={() => copy(JSON.stringify(v))} title={`Copy value of ${path || "root"}`}
-              className="rounded p-0.5 text-content-muted/70 hover:text-content">copy</button>
-            {k !== undefined && (
-              <button onClick={() => copy(k)} title="Copy key" className="rounded p-0.5 text-content-muted/70 hover:text-content">key</button>
-            )}
-          </span>
-        </div>
-        {isObj && open && (
-          <div>
-            {entries.map(([ck, cv], i) => (
-              <Node key={ck + i} k={Array.isArray(v) ? undefined : ck} v={cv} depth={depth + 1} />
-            ))}
-            <div className="flex items-start gap-1.5 px-1.5">
-              <span className="w-[18px] shrink-0" />
-              <span className="font-mono text-[13px] text-content-muted">{Array.isArray(v) ? "]" : "}"}</span>
-              {!last && depth > 0 && <span className="font-mono text-[13px] text-content-muted/50">,</span>}
-            </div>
-          </div>
-        )}
-        {!isObj && !last && depth > 0 && <span className="sr-only">,</span>}
-      </div>
-    );
-  };
-
   return (
     <div className="h-full overflow-auto p-4 md:p-6">
       <div className="mx-auto max-w-[56rem] rounded-xl border border-border/40 bg-surface-muted/20 p-3">
+        {/* Node is a stable module-level component — defining it inside render
+            would remount the whole tree (and reset collapse state) on every
+            parent re-render. */}
         <Node v={data} depth={0} />
       </div>
+    </div>
+  );
+}
+
+async function copyText(text: string) {
+  try { await navigator.clipboard.writeText(text); } catch { /* ignore */ }
+}
+
+function Node({ k, v, depth, last }: { k?: string; v: JsonValue; depth: number; last?: boolean }) {
+  const [open, setOpen] = useState(depth < 2);
+  const isObj = v !== null && typeof v === "object";
+  const entries: [string, JsonValue][] = Array.isArray(v)
+    ? v.map((x, i) => [String(i), x])
+    : Object.entries(v as Record<string, JsonValue>);
+  const path = k ?? "";
+
+  return (
+    <div style={{ paddingLeft: depth === 0 ? 0 : 14 }}>
+      <div className="group flex items-start gap-1.5 rounded px-1.5 py-px hover:bg-accent/[0.05]">
+        {isObj ? (
+          <button
+            onClick={() => setOpen((o) => !o)}
+            aria-expanded={open}
+            className="mt-[3px] shrink-0 text-content-muted hover:text-content transition-colors"
+            aria-label={`${open ? "Collapse" : "Expand"} ${k ?? "root"}`}
+          >
+            {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+          </button>
+        ) : <span className="w-[18px] shrink-0" />}
+        {k !== undefined && (
+          <>
+            <span className="font-mono text-[13px] text-accent/90">"{k}"</span>
+            <span className="text-content-muted/60">:</span>
+          </>
+        )}
+        {!isObj && <Scalar v={v} />}
+        {isObj && !open && (
+          <button onClick={() => setOpen(true)} className="font-mono text-[13px] text-content-muted hover:text-content">
+            {Array.isArray(v) ? `[${entries.length}]` : `{${entries.length}}`}
+            <span className="ml-2 opacity-0 transition-opacity group-hover:opacity-100 text-[11px]">expand</span>
+          </button>
+        )}
+        {isObj && open && <span className="font-mono text-[13px] text-content-muted">{Array.isArray(v) ? "[" : "{"}</span>}
+        {/* copy actions */}
+        <span className="ml-auto hidden shrink-0 items-center gap-1 group-hover:flex">
+          <button onClick={() => copyText(JSON.stringify(v))} title={`Copy value of ${path || "root"}`}
+            className="rounded p-0.5 text-content-muted/70 hover:text-content">copy</button>
+          {k !== undefined && (
+            <button onClick={() => copyText(k)} title="Copy key" className="rounded p-0.5 text-content-muted/70 hover:text-content">key</button>
+          )}
+        </span>
+      </div>
+      {isObj && open && (
+        <div>
+          {entries.map(([ck, cv], i) => (
+            <Node key={ck + i} k={Array.isArray(v) ? undefined : ck} v={cv} depth={depth + 1} />
+          ))}
+          <div className="flex items-start gap-1.5 px-1.5">
+            <span className="w-[18px] shrink-0" />
+            <span className="font-mono text-[13px] text-content-muted">{Array.isArray(v) ? "]" : "}"}</span>
+            {!last && depth > 0 && <span className="font-mono text-[13px] text-content-muted/50">,</span>}
+          </div>
+        </div>
+      )}
+      {!isObj && !last && depth > 0 && <span className="sr-only">,</span>}
     </div>
   );
 }

@@ -25,7 +25,7 @@ import { useFocusTrap } from "../../lib/useFocusTrap";
 import { Button } from "../ui/Button";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { cn } from "@/lib/utils";
-import { formatBytes } from "../../lib/format";
+import { formatBytes, formatDate } from "../../lib/format";
 import TextEditor from "./TextEditor";
 import TextPreview, { pickFlavor } from "./TextPreview";
 
@@ -223,7 +223,7 @@ export default function TextWorkspace({
           </div>
           <p className="truncate text-[11px] leading-4 text-content-muted">
             {langLabel} · {lineCount.toLocaleString()} line{lineCount === 1 ? "" : "s"} ·{" "}
-            {formatSize(content.length)}
+            {formatBytes(content.length)}
           </p>
         </div>
 
@@ -383,7 +383,7 @@ export default function TextWorkspace({
             <span className="tabular-nums">Ln {caret.line}, Col {caret.col}</span>
           )}
           <span className="hidden sm:inline">{lineCount.toLocaleString()} ln</span>
-          <span className="hidden sm:inline">{formatSize(content.length)}</span>
+          <span className="hidden sm:inline">{formatBytes(content.length)}</span>
         </div>
       </footer>
 
@@ -534,15 +534,5 @@ function DetailsPopover({
   );
 }
 
-/* tiny local helpers (avoid importing more than needed) */
-function formatSize(n: number): string {
-  if (!Number.isFinite(n)) return "—";
-  if (n === 0) return "0 B";
-  const u = ["B", "KB", "MB", "GB"];
-  const i = Math.min(u.length - 1, Math.floor(Math.log(n) / Math.log(1024)));
-  return `${(n / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 1)} ${u[i]}`;
-}
-function formatDate(iso: string): string {
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? iso : d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
-}
+/* Local helpers removed — formatSize/formatDate now come from @nexora/core
+   (re-exported via lib/format), the single source of truth shared with mobile. */

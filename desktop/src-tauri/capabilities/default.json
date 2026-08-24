@@ -13,7 +13,18 @@
     "global-shortcut:default",
     "autostart:default",
     "window-state:default",
-    "shell:allow-open",
+    {
+      "identifier": "shell:allow-open",
+      "description": "Open links and local folders/files in their default handler. Explicitly allows web/mail links and absolute filesystem paths (needed by 'reveal in file manager'); every other target stays blocked.",
+      "allow": [
+        { "url": "^mailto:" },
+        { "url": "^tel:" },
+        { "url": "^https?://" },
+        { "url": "^file:///" },
+        { "url": "^/" },
+        { "url": "^[A-Za-z]:[\\\\/]" }
+      ]
+    },
     {
       "identifier": "fs:allow-stat",
       "allow": [
@@ -34,32 +45,6 @@
         { "path": "$TEMP/**" },
         { "path": "$DOWNLOAD/**" },
         { "path": "$HOME/Downloads/**" }
-      ]
-    },
-    {
-      "identifier": "shell:allow-execute",
-      "description": "Allow opening files in VLC as an external player (invoked via the frontend's 'Open in native player' action). Scoped to the well-known VLC install locations on each OS; all other executables remain blocked.",
-      "allow": [
-        {
-          "name": "vlc",
-          "cmd": "vlc",
-          "args": true
-        },
-        {
-          "name": "vlc-win64",
-          "cmd": "C:\\Program Files\\VideoLAN\\VLC\\vlc.exe",
-          "args": true
-        },
-        {
-          "name": "vlc-win32",
-          "cmd": "C:\\Program Files (x86)\\VideoLAN\\VLC\\vlc.exe",
-          "args": true
-        },
-        {
-          "name": "vlc-macos",
-          "cmd": "/Applications/VLC.app/Contents/MacOS/VLC",
-          "args": true
-        }
       ]
     }
   ]

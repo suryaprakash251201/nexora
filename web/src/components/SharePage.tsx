@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Download, Lock, FileWarning, Eye, AlertCircle, FileIcon, Folder, FolderOpen, Music, FileText, Film, Image as ImageIcon, Archive, Package } from "lucide-react";
 import type { SharePublicEntry, SharePublicInfo } from "../api/types";
 import { previewKind, codeLanguage } from "../lib/preview";
+import { isTauri as isTauriRuntime } from "../lib/desktop";
 import { Button } from "./ui/Button";
 import { Input } from "./ui/Input";
 import { formatBytes } from "../lib/format";
@@ -100,7 +101,7 @@ export default function SharePage({ token }: { token: string }) {
     try {
       const params = entry ? `?path=${encodeURIComponent(entry.path)}` : "";
       const url = `/api/v1/share/${encodeURIComponent(token)}/download${params}`;
-      const isTauri = "__TAURI_INTERNALS__" in window;
+      const isTauri = isTauriRuntime();
       if (isTauri) {
         const { save } = await import("@tauri-apps/plugin-dialog");
         const { download: tauriDownload } = await import("@tauri-apps/plugin-upload");
@@ -119,11 +120,16 @@ export default function SharePage({ token }: { token: string }) {
         return;
       }
       const blob = await res.blob();
+      const objUrl = URL.createObjectURL(blob);
       const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
+      a.href = objUrl;
       a.download = entry?.name || (info?.is_dir ? `${info.name}.zip` : info?.name || "download");
+      document.body.appendChild(a);
       a.click();
-      URL.revokeObjectURL(a.href);
+      a.remove();
+      // Revoke on the next macrotask — revoking synchronously can abort the
+      // download in some browsers before it has latched the URL.
+      setTimeout(() => URL.revokeObjectURL(objUrl), 1000);
     } catch (e: any) {
       setError(e?.message || "Download failed");
     } finally {
@@ -146,7 +152,11 @@ export default function SharePage({ token }: { token: string }) {
         return;
       }
       const blob = await res.blob();
-      window.open(URL.createObjectURL(blob), "_blank");
+      const blobUrl = URL.createObjectURL(blob);
+      const win = window.open(blobUrl, "_blank", "noopener,noreferrer");
+      // Reclaim the object URL once the preview window has had a chance to load it.
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+      if (!win) setError("Popup blocked — allow popups to preview downloads.");
     } catch (e: any) {
       setError(e?.message || "Preview failed");
     } finally {

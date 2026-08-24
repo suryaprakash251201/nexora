@@ -203,7 +203,10 @@ fn run_decode_thread(
     cmd_rx: mpsc::Receiver<Cmd>,
     autoplay: bool,
 ) {
-    const TARGET_BUFFERED_FRAMES: u64 = 44_100; // ≈1 s @44.1 kHz
+    // Prebuffer target in interleaved SAMPLES: ≈1 s @44.1 kHz per channel.
+    // buffered_frames() counts raw samples, so scale by channel count before
+    // comparing — otherwise stereo tracks only prebuffer half a second.
+    const TARGET_BUFFERED_FRAMES_PER_CH: u64 = 44_100;
 
     let mut appended_any = false;
 
@@ -242,10 +245,23 @@ fn run_decode_thread(
                     // Reset position anchor to the seek target: played_frames
                     // keeps its global count, so rebase it via a fresh epoch —
                     // simplest correct approach: store played-at-seek.
+                    //
+                    // played_frames() counts interleaved SAMPLES, so divide by
+                    // channels as well as sample rate — matching
+                    // Shared::position(). Omitting /channels made the reported
+                    // position jump backwards after a seek on stereo/multichannel
+                    // tracks until the counter caught up.
+                    let (sr, ch) = {
+                        let info = dec.info();
+                        (
+                            info.sample_rate.max(1) as u32,
+                            info.channels.max(1) as u32,
+                        )
+                    };
                     {
                         let out = shared.out.lock().expect("out lock");
                         *shared.base_sec.lock().expect("base lock") =
-                            t - out.played_frames() as f64 / f64::from(dec.info().sample_rate.max(1));
+                            t - out.played_frames() as f64 / f64::from(sr) / f64::from(ch);
                     }
                 }
                 Ok(Cmd::SetVolume(v)) => shared.out.lock().expect("out lock").set_volume(v),
@@ -257,10 +273,14 @@ fn run_decode_thread(
 
         // ── Keep the queue fed (not while paused — mirrors a paused device,
         // which stops draining; keeps NullSink position semantics truthful).
+        let target_buffered = {
+            let info = dec.info();
+            TARGET_BUFFERED_FRAMES_PER_CH * (info.channels.max(1) as u64)
+        };
         let need_more = {
             let out = shared.out.lock().expect("out lock");
             !out.is_paused()
-                && out.buffered_frames() < TARGET_BUFFERED_FRAMES
+                && out.buffered_frames() < target_buffered
                 && !dec.is_eos()
         };
         if need_more {
@@ -283,7 +303,7 @@ fn run_decode_thread(
                             .lock()
                             .expect("out lock")
                             .buffered_frames()
-                            > TARGET_BUFFERED_FRAMES / 4
+                            > target_buffered / 4
                     {
                         shared.set_phase(Phase::Ready);
                         shared.set_phase(if autoplay { Phase::Playing } else { Phase::Paused });

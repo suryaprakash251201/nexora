@@ -8,7 +8,7 @@ import { FileVersion } from "../api/types";
 import { formatBytes, formatDate } from "../lib/format";
 import { Button } from "./ui/Button";
 import { cn } from "@/lib/utils";
-import { toast } from "sonner";
+import { toast } from "../lib/toast";
 import { ConfirmDialog } from "./ui/ConfirmDialog";
 import { QueryError } from "./ui/QueryError";
 interface VersionHistoryProps {

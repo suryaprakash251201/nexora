@@ -3,16 +3,16 @@ import type { LucideIcon } from "lucide-react";
 import { cn } from "../../lib/utils";
 
 /**
- * ViewHeader — the unified rounded-glass top bar for workspace views
- * (Photos, Search, Favourites, Recents, Shared, Playlists, Trash,
- * Storage Analytics…).
+ * ViewHeader — unified top header for workspace views (Photos, Search,
+ * Favourites, Recents, Shared, Playlists, Trash, Storage Analytics…).
  *
- * Design language:
- * - Floating `rounded-2xl glass` card on an accent-tinted icon chip,
- *   bold truncated title, muted subtitle/stats line.
- * - `actions` slot right-aligned for buttons/menus/selects.
- * - `children` render as a second row (search rows, filter chips).
- * - `sticky` floats it above scrolling content instead of a hard border-b.
+ * Design language (plain / modern):
+ * - No card, no glass box — title sits directly on the page background.
+ * - Bare accent icon at title size, bold tracking-tight title, muted
+ *   subtitle underneath; actions right-aligned on the same line.
+ * - When sticky, a soft background veil lets content scroll beneath
+ *   without introducing a visible bar.
+ * - `children` render as a second row (search fields, filter chips).
  */
 export function ViewHeader({
   icon: Icon,
@@ -37,31 +37,35 @@ export function ViewHeader({
   className?: string;
 }) {
   return (
-    <div className={cn(sticky ? "sticky top-0 z-20" : "relative", "px-3 pt-3 sm:px-5 sm:pt-4 pb-2", className)}>
-      <div className="rounded-2xl glass border border-border/50 backdrop-blur-xl px-3 py-2.5 sm:px-4">
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 min-w-0">
-          {Icon && (
-            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-accent/12 text-accent ring-1 ring-accent/25">
-              <Icon className="h-[18px] w-[18px]" aria-hidden />
-            </span>
-          )}
-          <div className="min-w-0 flex items-center gap-2">
-            <h1 className="truncate text-base sm:text-lg font-bold tracking-tight text-content leading-tight">
-              {title}
-            </h1>
-            {badge}
-          </div>
-          {subtitle && (
-            <p className="hidden sm:block truncate text-xs text-content-muted order-3 w-full sm:order-none sm:w-auto sm:flex-1 mt-0.5 sm:mt-0">
-              {subtitle}
-            </p>
-          )}
-          <div className="ml-auto flex items-center gap-1.5 flex-wrap justify-end">
-            {actions}
-          </div>
+    <div
+      className={cn(
+        sticky ? "sticky top-0 z-20 bg-background/85 backdrop-blur-md" : "relative",
+        "px-3 pt-4 sm:px-6 sm:pt-5 pb-3",
+        className,
+      )}
+    >
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 min-w-0">
+        <div className="flex min-w-0 items-center gap-2.5">
+          {Icon && <Icon className="h-5 w-5 shrink-0 text-accent" aria-hidden />}
+          <h1 className="truncate text-lg sm:text-xl font-bold tracking-tight text-content leading-tight">
+            {title}
+          </h1>
+          {badge}
         </div>
-        {children != null && <div className="mt-2.5">{children}</div>}
+        {subtitle && (
+          <p className="hidden md:block truncate text-sm text-content-muted ml-1">
+            {subtitle}
+          </p>
+        )}
+        <div className="ml-auto flex items-center gap-1.5 flex-wrap justify-end">
+          {actions}
+        </div>
       </div>
+      {/* Subtitle moves below the title line on small screens. */}
+      {subtitle && (
+        <p className="md:hidden mt-1 truncate text-sm text-content-muted">{subtitle}</p>
+      )}
+      {children != null && <div className="mt-3">{children}</div>}
     </div>
   );
 }

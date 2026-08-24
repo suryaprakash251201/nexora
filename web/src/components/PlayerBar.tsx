@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import {
   Play,
   Pause,
@@ -39,7 +39,18 @@ function Cover({ item }: { item: FileItem | null }) {
 
 export default memo(function PlayerBar() {
   const audioRef = useRef<HTMLAudioElement>(null);
-  const bound = useRef(false);
+  // Callback ref: re-binds whenever the <audio> element is (re)mounted —
+  // e.g. after native playback ends and the html5 element returns — instead
+  // of binding only once and losing control of the replacement node.
+  const attachAudio = useCallback((el: HTMLAudioElement | null) => {
+    if (el) {
+      audioRef.current = el;
+      engine.bind(el); // idempotent per element
+    } else {
+      engine.detach(audioRef.current);
+      audioRef.current = null;
+    }
+  }, []);
   const { current, isPlaying, buffering, volume, muted, primaryOpen, currentTime, duration, queueLength, index, shuffle, repeat, audioError } = usePlayer(
     useShallow((s) => ({
       current: s.current(),
@@ -94,13 +105,6 @@ export default memo(function PlayerBar() {
     // fullscreens only the player overlay, never the whole app.
   };
 
-  useEffect(() => {
-    if (audioRef.current && !bound.current) {
-      engine.bind(audioRef.current);
-      bound.current = true;
-    }
-  }, []);
-
   // Smart format routing: native → lossless FLAC (desktop) → flac24 → AAC.
   // Browsers stay on the small AAC default and only try FLAC as a last resort
   // (Chromium/WebKit decode FLAC-in-MP4 natively, so it always plays).
@@ -152,6 +156,43 @@ export default memo(function PlayerBar() {
 
     return () => { cancelled = true; };
   }, [current?.path]);
+
+  // ── Media Session: OS-level now-playing metadata & controls (web) ──
+  // The shared <audio> element already gives the OS play/pause awareness;
+  // this adds title/artist/artwork plus hardware-key prev/next handling.
+  useEffect(() => {
+    if (!("mediaSession" in navigator)) return;
+    const ms = navigator.mediaSession;
+    try {
+      if (!current) {
+        ms.metadata = null;
+        return;
+      }
+      const artworkSrc = (() => {
+        try { return thumbUrl(current); } catch { return ""; }
+      })();
+      ms.metadata = new MediaMetadata({
+        title: cleanTrackTitle(current.name),
+        artist: "Nexora",
+        album: current.path?.split("/").slice(0, -1).pop() || "Library",
+        ...(artworkSrc ? { artwork: [{ src: artworkSrc, sizes: "512x512", type: "image/jpeg" }] } : {}),
+      });
+    } catch { /* mediaSession not fully supported — ignore */ }
+    try {
+      ms.setActionHandler("play", () => usePlayer.getState().toggle());
+      ms.setActionHandler("pause", () => usePlayer.getState().toggle());
+      ms.setActionHandler("previoustrack", () => usePlayer.getState().prev());
+      ms.setActionHandler("nexttrack", () => usePlayer.getState().next(false));
+      ms.setActionHandler("seekbackward", () => {
+        const t = usePlayer.getState().currentTime;
+        usePlayer.getState().seek(Math.max(0, t - 10));
+      });
+      ms.setActionHandler("seekforward", () => {
+        const s = usePlayer.getState();
+        s.seek(s.currentTime + 10);
+      });
+    } catch { /* setActionHandler unsupported — ignore */ }
+  }, [current]);
 
   // Native → html5 fallback signal (engine error path).
   useEffect(() => {
@@ -242,7 +283,9 @@ export default memo(function PlayerBar() {
 
   const handleError = (e: React.SyntheticEvent<HTMLAudioElement, Event>) => {
     const target = e.target as HTMLAudioElement;
-    if (target.error && target.error.code === 4 && current) {
+    if (!target.error || !current) return;
+    if (target.error.code === 4) {
+      // SRC_NOT_SUPPORTED → try the next format in the transcode ladder.
       const next = fallbackStage + 1;
       if (next < fallbackFormats.length) {
         serverSupportsTranscode().then((supp) => {
@@ -257,6 +300,11 @@ export default memo(function PlayerBar() {
       } else {
         usePlayer.getState().setAudioError(`Could not play "${current.name}" in any available format.`);
       }
+    } else if (target.error.code === 2) {
+      // NETWORK errors previously failed silently — surface them.
+      usePlayer.getState().setAudioError("Playback stopped — network error while streaming.");
+    } else if (target.error.code === 3) {
+      usePlayer.getState().setAudioError("Playback stopped — the audio could not be decoded.");
     }
   };
 
@@ -267,7 +315,7 @@ export default memo(function PlayerBar() {
   return (
     <>
       {!useNative && (
-        <audio ref={audioRef} preload="auto" playsInline webkit-playsinline="true" onError={handleError} />
+        <audio ref={attachAudio} preload="auto" playsInline webkit-playsinline="true" onError={handleError} />
       )}
 
       {hasActivePlayer && showMini && !expanded && (
@@ -312,7 +360,7 @@ export default memo(function PlayerBar() {
                 </button>
               )}
               <div className="flex items-center gap-0.5 shrink-0">
-                <button onClick={() => usePlayer.getState().prev()} className="p-1.5 rounded-full text-content-muted hover:text-content hover:bg-glass-bg transition-colors" title="Previous">
+                <button onClick={() => usePlayer.getState().prev()} className="p-1.5 rounded-full text-content-muted hover:text-content hover:bg-glass-bg transition-colors" title="Previous" aria-label="Previous track">
                   <SkipBack className="h-4 w-4" />
                 </button>
                 <button
@@ -320,15 +368,17 @@ export default memo(function PlayerBar() {
                     className={`h-9 w-9 rounded-full grid place-items-center text-white shadow-lg transition-all duration-300 hover:scale-105 active:scale-95
                     ${isPlaying ? 'bg-gradient-to-br from-accent to-accent-secondary shadow-accent/40 player-glow' : 'bg-surface-muted border border-white/20 text-content'}`}
                   title={isPlaying ? "Pause" : "Play"}
+                  aria-label={isPlaying ? "Pause" : "Play"}
                 >
                   {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4 translate-x-0.5" />}
                 </button>
-                <button onClick={() => usePlayer.getState().next(false)} className="p-1.5 rounded-full text-content-muted hover:text-content hover:bg-glass-bg transition-colors" title="Next">
+                <button onClick={() => usePlayer.getState().next(false)} className="p-1.5 rounded-full text-content-muted hover:text-content hover:bg-glass-bg transition-colors" title="Next" aria-label="Next track">
                   <SkipForward className="h-4 w-4" />
                 </button>
                 <button
                   onClick={() => usePlayer.getState().setShuffle(!shuffle)}
                   aria-pressed={shuffle}
+                  aria-label={shuffle ? "Shuffle: On" : "Shuffle: Off"}
                   title={shuffle ? "Shuffle: On" : "Shuffle: Off"}
                   className={`p-1.5 rounded-full transition-all duration-200 ${shuffle ? "text-accent bg-accent/15 shadow-sm" : "text-content-muted hover:text-content hover:bg-glass-bg"}`}
                 >
@@ -337,6 +387,7 @@ export default memo(function PlayerBar() {
                 <button
                   onClick={() => usePlayer.getState().cycleRepeat()}
                   aria-pressed={repeat !== "off"}
+                  aria-label={`Repeat: ${repeat === "one" ? "One" : repeat === "all" ? "All" : "Off"}`}
                   title={`Repeat: ${repeat === "one" ? "One" : repeat === "all" ? "All" : "Off"}`}
                   className={`relative p-1.5 rounded-full transition-all duration-200 ${repeat !== "off" ? "text-accent bg-accent/15 shadow-sm" : "text-content-muted hover:text-content hover:bg-glass-bg"}`}
                 >

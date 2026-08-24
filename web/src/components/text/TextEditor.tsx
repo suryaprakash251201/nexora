@@ -198,8 +198,7 @@ export default function TextEditor({
         const re = new RegExp(search.query, search.matchCase ? "g" : "gi");
         onChange(value.replace(re, search.replacement));
       } else {
-        const parts = (search.matchCase ? value : value.toLowerCase()).split(search.matchCase ? search.query : search.query.toLowerCase());
-        // Rebuild preserving original casing via split on original text:
+        // Rebuild preserving original casing via case-insensitive scan:
         let out = "";
         let from = 0;
         const hay = search.matchCase ? value : value.toLowerCase();
@@ -210,7 +209,6 @@ export default function TextEditor({
           i = hay.indexOf(search.query.toLowerCase(), from);
         }
         out += value.slice(from);
-        void parts;
         onChange(out);
       }
     } catch { /* invalid regex */ }

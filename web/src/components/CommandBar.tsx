@@ -49,8 +49,9 @@ interface CommandBarProps {
   onLogout: () => void;
   onAdmin: () => void;
   onCommandPalette?: () => void;
-  /** Drop selected files onto a breadcrumb to move them into that folder. */
-  onDropToFolder?: (path: string) => void;
+  /** Drop selected files onto a breadcrumb to move them there. `paths` is
+   *  the explicit drag payload when available (internal move drags). */
+  onDropToFolder?: (path: string, paths?: string[]) => void;
   /** Drop OS files onto a breadcrumb to upload them into that folder. */
   onUploadFiles?: (files: FileList, path: string) => void;
   /** Pending clipboard operation shown as a chip (Ctrl+X/C). */

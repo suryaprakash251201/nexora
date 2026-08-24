@@ -143,7 +143,7 @@ export default function CommandPalette({
 
       // Help
       { id: "shortcuts", label: "Keyboard Shortcuts", description: "Show all keyboard shortcuts", icon: <Keyboard className="h-4 w-4" />, shortcut: "⌘/", category: "help", action: () => { setShortcutsOpen(true); onClose(); }, keywords: ["shortcuts", "keys", "help", "?"] },
-      { id: "help", label: "Help & Documentation", description: "Open help documentation", icon: <HelpCircle className="h-4 w-4" />, category: "help", action: () => { window.open("https://github.com/nexora/nexora", "_blank"); onClose(); }, keywords: ["help", "docs", "documentation", "support"] },
+      { id: "help", label: "Help & Documentation", description: "Open help documentation", icon: <HelpCircle className="h-4 w-4" />, category: "help", action: () => { window.open("https://github.com/suryaprakash251201/nexora", "_blank", "noopener,noreferrer"); onClose(); }, keywords: ["help", "docs", "documentation", "support"] },
     ];
 
     return cmds;

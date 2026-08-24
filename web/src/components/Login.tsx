@@ -1,4 +1,4 @@
-import { useState, useEffect, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { motion } from "motion/react";
 import { LogIn, Eye, EyeOff, ShieldCheck } from "lucide-react";
 import { authApi } from "../api/endpoints";
@@ -12,14 +12,10 @@ export default function Login({ onSuccess }: { onSuccess: () => void }) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [tailscaleBusy, setTailscaleBusy] = useState(false);
-  const [tailscaleAvailable, setTailscaleAvailable] = useState(false);
-  // Check if Tailscale auth is available by probing the header
-  // We'll just always show the button — it fails gracefully if not available.
-  useEffect(() => {
-    // If accessed via Tailscale, the header will be present and the endpoint will work.
-    // We optimistically show the button; the error message explains if it's not available.
-    setTailscaleAvailable(true);
-  }, []);
+  // Tailscale auth availability is detected optimistically: the button is
+  // always shown and fails gracefully with an explanatory error when the
+  // header/endpoint isn't available.
+  const [tailscaleAvailable] = useState(true);
   const login = async (e: FormEvent) => {
     e.preventDefault();
     setError("");

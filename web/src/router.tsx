@@ -1,6 +1,7 @@
 import { createBrowserRouter, createHashRouter, useParams, isRouteErrorResponse, useRouteError } from "react-router";
 import App from "./App";
 import SharePage from "./components/SharePage";
+import { isTauri as isTauriFn } from "./lib/desktop";
 
 function SharePageRoute() {
   const { token } = useParams<{ token: string }>();
@@ -48,5 +49,5 @@ const routes = [
 ];
 
 // If running in Tauri Desktop, use HashRouter. Otherwise, use BrowserRouter for Web.
-const isTauri = "__TAURI_INTERNALS__" in window;
+const isTauri = isTauriFn();
 export const router = isTauri ? createHashRouter(routes) : createBrowserRouter(routes);

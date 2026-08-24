@@ -71,6 +71,21 @@ function savePersist(p: Persist) {
   try { localStorage.setItem(LS_KEY, JSON.stringify(p)); } catch { /* ignore */ }
 }
 
+// Debounced persistence: rapid actions (volume drags, rate changes) would
+// otherwise serialize the entire queue on every step. 400ms coalesces them;
+// the last state still lands because the timer flushes after activity stops.
+let persistTimer: number | null = null;
+function persist(immediate = false) {
+  if (persistTimer !== null) window.clearTimeout(persistTimer);
+  const write = () => {
+    persistTimer = null;
+    const s = usePlayer.getState();
+    savePersist({ queue: s.queue, index: s.index, volume: s.volume, shuffle: s.shuffle, repeat: s.repeat, playbackRate: s.playbackRate });
+  };
+  if (immediate) write();
+  else persistTimer = window.setTimeout(write, 400);
+}
+
 // PlayerEngine owns the single <audio> element so playback survives navigation.
 class PlayerEngine {
   audio: HTMLAudioElement | null = null;
@@ -88,6 +103,10 @@ class PlayerEngine {
   private nativeDuration = 0;
 
   bind(el: HTMLAudioElement) {
+    // Idempotent per element: the <audio> node can be recreated around native
+    // playback or StrictMode remounts, and re-binding must never stack
+    // duplicate event listeners on the same node.
+    if (this.audio === el) return;
     this.audio = el;
     el.volume = usePlayer.getState().volume;
     el.playbackRate = usePlayer.getState().playbackRate;
@@ -103,9 +122,21 @@ class PlayerEngine {
     el.addEventListener("ended", () => usePlayer.getState().next(true));
   }
 
+  /** Called when the bound <audio> element leaves the DOM. */
+  detach(el: HTMLAudioElement | null) {
+    if (el && this.audio === el) this.audio = null;
+  }
+
+  /** Monotonic token for native-handoff attempts so stale resolutions lose. */
+  private nativeSeq = 0;
+
   /**
    * Attempts to hand the track to the native engine. Returns true when it
    * took ownership; false → caller uses the html5/transcode path.
+   *
+   * Serialized by sequence token: if a newer attempt started while this one
+   * awaited, this result is discarded and any session it opened is stopped,
+   * so a slow open can never kill the newer track's playback.
    */
   async tryUseNative(item: FileItem): Promise<boolean> {
     if (!isTauriRuntime()) return false;
@@ -114,6 +145,8 @@ class PlayerEngine {
     const ext = (item.extension || "").toLowerCase();
     if (!NATIVE_EXTS.has(ext)) return false;
 
+    const seq = ++this.nativeSeq;
+
     // Stop any previous native session before deciding.
     await nativeStopTrack();
     this.stopPolling();
@@ -121,6 +154,11 @@ class PlayerEngine {
     const info = await nativeOpenTrack(rawUrl(item.root_id, item.path), {
       onEvent: (e) => this.onNativeEvent(e),
     });
+    if (seq !== this.nativeSeq) {
+      // A newer track-change attempt superseded this one mid-flight.
+      if (info) void nativeStopTrack();
+      return false;
+    }
     if (!info) return false;
 
     this.mode = "native";
@@ -275,8 +313,13 @@ export const usePlayer = create<PlayerState>((set, get) => ({
     if (queue.length === 0) return;
     if (auto && repeat === "one") { engine.seek(0); engine.play(); return; }
     let ni: number;
-    if (shuffle) ni = Math.floor(Math.random() * queue.length);
-    else ni = index + 1;
+    if (shuffle) {
+      // Pick any *other* track so shuffle can't "advance" to the same song
+      // (single-track queues just restart).
+      ni = queue.length > 1
+        ? (index + 1 + Math.floor(Math.random() * (queue.length - 1))) % queue.length
+        : 0;
+    } else ni = index + 1;
     if (ni >= queue.length) {
       if (repeat === "all" || !auto) ni = 0;
       else { set({ isPlaying: false }); return; }
@@ -289,7 +332,10 @@ export const usePlayer = create<PlayerState>((set, get) => ({
   prev: () => {
     const { queue, index, currentTime } = get();
     if (queue.length === 0) return;
-    if (engine.audio && currentTime > 3) { engine.seek(0); return; }
+    // Restart the current track when it has played past 3s — works for both
+    // backends (engine.audio is null while the native engine owns playback,
+    // so consult the synced store time there too).
+    if ((engine.mode === "native" || engine.audio) && currentTime > 3) { engine.seek(0); return; }
     let pi = index - 1;
     if (pi < 0) pi = queue.length - 1;
     engine.timeOffset = 0;
@@ -354,13 +400,3 @@ export const usePlayer = create<PlayerState>((set, get) => ({
 
   _syncTime: (c, d) => set({ currentTime: c, duration: isFinite(d) ? d : 0 }),
 }));
-
-function persist() {
-  const s = usePlayer.getState();
-  savePersist({ queue: s.queue, index: s.index, volume: s.volume, shuffle: s.shuffle, repeat: s.repeat, playbackRate: s.playbackRate });
-}
-
-export function currentAudioUrl(): string {
-  const cur = usePlayer.getState().current();
-  return cur ? rawUrl(cur.root_id, cur.path) : "";
-}

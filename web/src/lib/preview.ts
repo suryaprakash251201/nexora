@@ -1,3 +1,4 @@
+import { isTauri } from "./desktop";
 import type { FileItem } from "../api/types";
 import { getMediaUrl } from "../api/client";
 import { versionApi } from "../api/endpoints";
@@ -100,7 +101,7 @@ export function transcodeUrl(rootId: string, path: string, opts?: { start?: numb
 // isTauriRuntime reports whether the frontend is running inside the Tauri
 // desktop shell (as opposed to a plain web browser).
 export function isTauriRuntime(): boolean {
-  return typeof window !== "undefined" && (!!(window as any).__TAURI_INTERNALS__ || !!(window as any).isTauri);
+  return isTauri();
 }
 
 // needsAudioTranscode reports whether the webview cannot decode this audio

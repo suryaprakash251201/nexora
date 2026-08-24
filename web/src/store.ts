@@ -10,6 +10,8 @@ export interface Toast {
   kind: "success" | "error" | "info";
   message: string;
   action?: { label: string; onClick: () => void };
+  /** Auto-dismiss delay in ms. Defaults to 4000; use Infinity to pin. */
+  duration?: number;
 }
 
 interface UIState {
@@ -36,7 +38,7 @@ interface UIState {
   toggleSelectMode: () => void;
   openDrawer: (path: string | null) => void;
   setMobileNav: (open: boolean) => void;
-  pushToast: (kind: Toast["kind"], message: string, action?: Toast["action"]) => void;
+  pushToast: (kind: Toast["kind"], message: string, action?: Toast["action"], duration?: number) => void;
   dismissToast: (id: number) => void;
 }
 
@@ -49,10 +51,25 @@ const defaultColumns: Record<ColumnKey, boolean> = {
 
 let toastSeq = 1;
 
+/**
+ * Safely read the persisted column-visibility prefs. A corrupted value must
+ * never crash the app at module load, and missing keys are merged over the
+ * defaults so columns can't silently disappear after a version change.
+ */
+function loadVisibleColumns(): Record<ColumnKey, boolean> {
+  try {
+    const raw = localStorage.getItem("nexora.columns");
+    const parsed = raw ? JSON.parse(raw) : {};
+    return { ...defaultColumns, ...(parsed && typeof parsed === "object" ? parsed : {}) };
+  } catch {
+    return { ...defaultColumns };
+  }
+}
+
 export const useUI = create<UIState>((set, get) => ({
   viewMode: (localStorage.getItem("nexora.view") as ViewMode) || "list",
   density: (localStorage.getItem("nexora.density") as DensityMode) || "comfortable",
-  visibleColumns: JSON.parse(localStorage.getItem("nexora.columns") || "{}") || defaultColumns,
+  visibleColumns: loadVisibleColumns(),
   selection: new Set<string>(),
   selectMode: false,
   drawerPath: null,
@@ -93,10 +110,15 @@ export const useUI = create<UIState>((set, get) => ({
   },
   openDrawer: (path) => set({ drawerPath: path }),
   setMobileNav: (open) => set({ mobileNavOpen: open }),
-  pushToast: (kind, message, action) => {
+  pushToast: (kind, message, action, duration) => {
     const id = toastSeq++;
-    set({ toasts: [...get().toasts, { id, kind, message, action }] });
-    setTimeout(() => get().dismissToast(id), 4000);
+    set({ toasts: [...get().toasts, { id, kind, message, action, duration }] });
+    // Cap the stack so a burst of errors can't flood the screen.
+    const overflow = get().toasts.length - 4;
+    if (overflow > 0) {
+      for (const t of get().toasts.slice(0, overflow)) get().dismissToast(t.id);
+    }
+    setTimeout(() => get().dismissToast(id), duration ?? 4000);
   },
   dismissToast: (id) => set({ toasts: get().toasts.filter((t) => t.id !== id) }),
 }));

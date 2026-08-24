@@ -8,6 +8,8 @@
  * back to the HTML5 audio pipeline unchanged.
  */
 
+import { getBaseUrl } from "../api/client";
+
 export interface NativeTrackInfo {
   codec: string;
   sample_rate: number;
@@ -108,10 +110,22 @@ export const nativeAudio = {
 // ── Track session helpers ───────────────────────────────────────────────────
 
 const TOKEN_KEY = "nexora.media-token";
+/** Rotate the desktop media token every 30 days instead of a year-long credential. */
+const TOKEN_DAYS = 30;
+const TOKEN_LABEL = "desktop-native-audio";
+
+/**
+ * Remove the stored media bearer (called on logout / session teardown).
+ */
+export function clearMediaToken(): void {
+  try {
+    localStorage.removeItem(TOKEN_KEY);
+  } catch { /* ignore */ }
+}
 
 /**
  * Bearer credential for the Rust HTTP client (WebView cookies are not shared
- * with reqwest/ureq). Reuses a long-lived personal API token stored in
+ * with reqwest/ureq). Reuses a short-lived personal API token stored in
  * localStorage; mints one via the existing /auth/tokens endpoint on first
  * use and validates it before reuse.
  */
@@ -121,7 +135,7 @@ export async function getMediaBearer(): Promise<string | null> {
     if (existing && (await validateToken(existing))) return existing;
     if (existing) localStorage.removeItem(TOKEN_KEY);
     const { authApi } = await import("../api/endpoints");
-    const created = await authApi.tokens.create("desktop-native-audio", 365);
+    const created = await authApi.tokens.create(TOKEN_LABEL, TOKEN_DAYS);
     if (!created?.token) return null;
     localStorage.setItem(TOKEN_KEY, created.token);
     return created.token;
@@ -132,7 +146,13 @@ export async function getMediaBearer(): Promise<string | null> {
 
 async function validateToken(token: string): Promise<boolean> {
   try {
-    const res = await fetch(new URL("/api/v1/auth/tokens", window.location.origin), {
+    // Validate against the configured API base (getBaseUrl()), not
+    // window.location.origin — in desktop builds with a remote server these
+    // differ, and validating against the wrong origin would mint a fresh
+    // token on nearly every track open.
+    const base = getBaseUrl();
+    if (!base) return false;
+    const res = await fetch(new URL("/api/v1/auth/tokens", base), {
       headers: { Authorization: `Bearer ${token}` },
     });
     return res.ok;

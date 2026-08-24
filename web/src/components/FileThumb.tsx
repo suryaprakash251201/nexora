@@ -4,8 +4,9 @@ import { iconForFile, colorClasses, iconGlowClasses, type IconSize } from "./Fil
 import { thumbUrl } from "../lib/preview";
 import { Music, Video } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { IMAGE_EXTS } from "@nexora/core";
 
-export const IMAGE_EXT = ["jpg", "jpeg", "png", "gif", "webp", "bmp", "avif"];
+export const IMAGE_EXT = [...IMAGE_EXTS]; // canonical list from @nexora/core
 
 export type FolderVariant = "default" | "music" | "video" | "image" | "archive" | "documents" | "code" | "design";
 
@@ -54,7 +55,7 @@ export function FileThumb({ it, large, fill }: { it: FileItem; large?: boolean; 
   const [loaded, setLoaded] = useState(false);
   const ext = (it.extension || "").toLowerCase();
 
-  const isImage = it.mime.startsWith("image/") || IMAGE_EXT.includes(ext);
+  const isImage = it.mime.startsWith("image/") || IMAGE_EXTS.has(ext);
   const isAudio = it.mime.startsWith("audio/") || ["mp3", "flac", "wav", "ogg", "m4a"].includes(ext);
   const isVideo = it.mime.startsWith("video/") || ["mp4", "webm", "mov", "mkv", "avi"].includes(ext);
   const dim = fill ? "h-full w-full" : large ? "h-28 w-28" : "h-9 w-9";

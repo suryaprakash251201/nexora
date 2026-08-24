@@ -4,12 +4,17 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { useUI } from "../store";
 import { Play, MoreVertical, AlertTriangle, RefreshCw, Eye, FolderOpen } from "lucide-react";
 import { FileItem } from "../api/types";
+import { EmptyState } from "./ui/EmptyState";
 import { formatBytes, formatDate } from "../lib/format";
+import {
+  beginDragMove, endDragMove, isInternalMoveDrag, canDropInto,
+  currentDragPaths, payloadFromItems, useDragMove,
+} from "../lib/dragMove";
 import { FileThumb } from "./FileThumb";
 import { iconForFile, colorClasses, iconGlowClasses } from "./FileIcon";
-import { EmptyState } from "./ui/EmptyState";
 import { SkeletonGrid, SkeletonList } from "./ui/Skeleton";
 import { cn } from "@/lib/utils";
+import { AUDIO_EXTS, VIDEO_EXTS, IMAGE_EXTS } from "@nexora/core";
 import { TagChip } from "./TagManager";
 import type { DensityMode } from "../store";
 
@@ -24,7 +29,11 @@ interface FileBrowserProps {
   onOpen: (item: FileItem) => void;
   onSelect: (item: FileItem, e: React.MouseEvent | React.ChangeEvent) => void;
   onContextMenu: (e: React.MouseEvent, item: FileItem) => void;
-  onDropItem?: (targetFolder: FileItem) => void;
+  /** Called after an internal move-drag drops onto `targetFolder`.
+   *  `paths` are the dragged sources (may differ from current selection). */
+  onDropItem?: (targetFolder: FileItem, paths: string[]) => void;
+  /** When provided, dropping OS files onto a folder row uploads them there. */
+  onUploadToPath?: (files: FileList, path: string) => void;
   onUpload?: () => void;
   onUploadFolder?: () => void;
   hasMore?: boolean;
@@ -37,8 +46,9 @@ interface FileBrowserProps {
   folderPath?: string;
 }
 
-/** Media extensions that get a "Play" hover action rather than "Preview". */
-const MEDIA_EXTS = new Set(["mp3", "flac", "wav", "ogg", "m4a", "aac", "opus", "mp4", "webm", "mkv", "mov", "avi"]);
+/** Media extensions that get a "Play" hover action rather than "Preview" —
+ *  derived from the canonical core sets instead of a divergent hardcoded list. */
+const MEDIA_EXTS = new Set([...AUDIO_EXTS, ...VIDEO_EXTS]);
 
 /** Contextual primary hover action — Play for media, Preview otherwise. */
 function hoverActionFor(item: FileItem): { Icon: typeof Play; label: string; filled?: boolean } {
@@ -163,8 +173,9 @@ function neighbourIndex(currentIdx: number, key: string, perRow: number, total: 
 }
 
 const FileIconForItem = memo(function FileIconForItem({ item, large, fill, className }: { item: FileItem; large?: boolean; fill?: boolean; className?: string }) {
-  const isImage = item.mime.startsWith("image/") || ["jpg", "jpeg", "png", "gif", "webp", "bmp", "avif"].includes((item.extension || "").toLowerCase());
-  const isAudio = item.mime.startsWith("audio/") || ["mp3", "flac", "wav", "ogg", "m4a"].includes((item.extension || "").toLowerCase());
+  const ext = (item.extension || "").toLowerCase();
+  const isImage = item.mime.startsWith("image/") || IMAGE_EXTS.has(ext);
+  const isAudio = item.mime.startsWith("audio/") || AUDIO_EXTS.has(ext);
   const dim = large ? (fill ? "h-full w-full" : "h-16 w-16") : "h-9 w-9";
 
   if (isImage || item.is_dir || isAudio) {
@@ -199,6 +210,7 @@ export default function FileBrowser({
   onSelect,
   onContextMenu,
   onDropItem,
+  onUploadToPath,
   onUpload,
   onUploadFolder,
   hasMore,
@@ -235,7 +247,9 @@ export default function FileBrowser({
     }
   }, [folderPath]);
 
-  const canDrop = canWrite && selectMode && onDropItem;
+  // Internal move-drags require write access; select-mode is NOT required —
+  // dragging works any time, matching a desktop file manager.
+  const moveDragEnabled = canWrite && !!onDropItem;
   const allSelected = items.length > 0 && items.every((i) => selection.has(i.path));
 
   const toggleSelectAll = useCallback(() => {
@@ -248,19 +262,22 @@ export default function FileBrowser({
 
   useEffect(() => {
     const handleDragOver = (e: DragEvent) => {
-      if (!canDrop) return;
+      // Veil reacts to OS-file upload drags only — internal move drags
+      // highlight their own targets and must not dim every item.
+      if (!canWrite || ![...(e.dataTransfer?.types ?? [])].includes("Files")) return;
       e.preventDefault();
       e.stopPropagation();
       setDragOver(true);
     };
     const handleDragLeave = (e: DragEvent) => {
-      if (!canDrop) return;
+      if (!canWrite || ![...(e.dataTransfer?.types ?? [])].includes("Files")) return;
       e.preventDefault();
       e.stopPropagation();
       if (e.currentTarget === dropZoneRef.current) setDragOver(false);
     };
     const handleDrop = (e: DragEvent) => {
-      if (!canDrop) return;
+      // Always stop the browser from navigating on stray drops.
+      if (![...(e.dataTransfer?.types ?? [])].includes("Files")) return;
       e.preventDefault();
       e.stopPropagation();
       setDragOver(false);
@@ -278,7 +295,70 @@ export default function FileBrowser({
         zone.removeEventListener("drop", handleDrop);
       }
     };
-  }, [canDrop, onDropItem, scrollEl]);
+  }, [canWrite, scrollEl]);
+
+  // ── Internal move-drag plumbing ──────────────────────────────────────
+  const draggedPaths = useDragMove((s) => (s.active ? s.paths : null));
+  /** Which interaction the highlighted folder is offering. */
+  const [dropKind, setDropKind] = useState<"move" | "upload">("move");
+
+  /** Drag-start: drags the selection when the item is part of it, else just the item. */
+  const startMoveDrag = useCallback((e: React.DragEvent, item: FileItem) => {
+    if (!moveDragEnabled) return;
+    let chosen: FileItem[];
+    if (selection.has(item.path)) {
+      chosen = items.filter((i) => selection.has(i.path));
+      if (chosen.length === 0) chosen = [item];
+    } else {
+      chosen = [item];
+    }
+    beginDragMove(e, payloadFromItems(chosen));
+  }, [moveDragEnabled, selection, items]);
+
+  /** Handlers for folder tiles/rows acting as drop destinations —
+   *  internal move drags AND OS-file upload drags. */
+  const folderDropHandlers = (item: FileItem) =>
+    item.is_dir
+      ? {
+          onDragOver: (e: React.DragEvent) => {
+            const types = [...(e.dataTransfer?.types ?? [])];
+            if (types.includes("Files")) {
+              if (!onUploadToPath) return;
+              e.preventDefault();
+              e.dataTransfer.dropEffect = "copy";
+              setDropTarget(item.path);
+              setDropKind("upload");
+              return;
+            }
+            if (!isInternalMoveDrag(e)) return;
+            const paths = currentDragPaths();
+            // Invalid destination (self / descendant / read-only): no
+            // preventDefault → browser shows the forbidden cursor.
+            if (!canDropInto(item.path, paths)) return;
+            e.preventDefault();
+            e.dataTransfer.dropEffect = "move";
+            setDropTarget(item.path);
+            setDropKind("move");
+          },
+          onDragLeave: () => setDropTarget((t) => (t === item.path ? null : t)),
+          onDrop: (e: React.DragEvent) => {
+            const wasInternal = isInternalMoveDrag(e);
+            const isFiles = [...(e.dataTransfer?.types ?? [])].includes("Files");
+            setDropTarget(null);
+            if (!wasInternal && !isFiles) return;
+            e.preventDefault();
+            e.stopPropagation();
+            if (wasInternal) {
+              const paths = currentDragPaths();
+              endDragMove();
+              if (!paths.length || !canDropInto(item.path, paths)) return;
+              onDropItem?.(item, paths);
+            } else if (isFiles && onUploadToPath && e.dataTransfer.files.length > 0) {
+              onUploadToPath(e.dataTransfer.files, item.path);
+            }
+          },
+        }
+      : {};
 
   const handleItemClick = (item: FileItem, e: React.MouseEvent) => {
     const idx = Number((e.currentTarget as HTMLElement).dataset.idx);
@@ -422,7 +502,13 @@ export default function FileBrowser({
 
   if (items.length === 0) {
     return (
-      <div ref={dropZoneRef} className="h-full grid place-items-center p-8">
+      <div
+        ref={dropZoneRef}
+        className={cn(
+          "h-full grid place-items-center p-8 rounded-2xl transition-all duration-200",
+          dragOver && "bg-accent/[0.06] ring-2 ring-inset ring-accent/50 scale-[0.995]",
+        )}
+      >
         <EmptyState
           variant="files"
           title="This folder is empty"
@@ -485,15 +571,12 @@ export default function FileBrowser({
                     onClick={(e) => handleItemClick(item, e)}
                     onContextMenu={(e) => onContextMenu(e, item)}
                     onKeyDown={(e) => handleKeyDown(e, item)}
-                    onDragOver={(e) => { if (canDrop && item.is_dir) { e.preventDefault(); setDropTarget(item.path); } }}
-                    onDragLeave={() => { if (dropTarget === item.path) setDropTarget(null); }}
-                    onDrop={(e) => {
-                      if (canDrop && item.is_dir) {
-                        e.preventDefault();
-                        setDropTarget(null);
-                        onDropItem?.(item);
-                      }
-                    }}
+                    draggable={moveDragEnabled || undefined}
+                    // framer-motion re-types onDragStart for its gesture API;
+                    // we need the native HTML5 drag event.
+                    onDragStart={((e: React.DragEvent) => startMoveDrag(e, item)) as never}
+                    onDragEnd={endDragMove}
+                    {...folderDropHandlers(item)}
                     whileHover={{ y: -6 }}
                     whileTap={{ scale: 0.98 }}
                     className={cn(
@@ -502,8 +585,10 @@ export default function FileBrowser({
                       selected
                         ? "bg-accent/10 ring-1 ring-inset ring-accent/40"
                         : "hover:bg-glass-bg-subtle",
-                      dropTarget === item.path ? "ring-2 ring-accent scale-105 bg-accent/15" : "",
-                      dragOver ? "opacity-50" : ""
+                      dropTarget === item.path
+                        ? "relative z-10 ring-2 ring-accent/80 scale-[1.04] bg-accent/10 shadow-[0_0_0_5px_rgba(91,140,255,0.14),0_14px_36px_-10px_rgba(91,140,255,0.45)]"
+                        : "",
+                      draggedPaths?.includes(item.path) ? "opacity-40 saturate-50" : ""
                     )}
                   >
                     <div className="w-full h-36 flex items-center justify-center mb-0 transition-transform duration-300 relative">
@@ -540,7 +625,11 @@ export default function FileBrowser({
                       )}
 
                       {dropTarget === item.path && (
-                        <div className="absolute inset-0 bg-accent/20 rounded-2xl animate-pulse" />
+                        <div className="absolute inset-0 z-10 rounded-2xl bg-accent/[0.08] border border-accent/40 pointer-events-none grid place-items-center">
+                          <span className="rounded-full bg-accent px-2.5 py-1 text-[11px] font-semibold text-white shadow-lg shadow-accent/40 animate-scale-in">
+                            {dropKind === "upload" ? "Upload here" : "Move here"}
+                          </span>
+                        </div>
                       )}
                     </div>
 
@@ -655,23 +744,21 @@ export default function FileBrowser({
                     onClick={(e) => handleItemClick(item, e)}
                     onContextMenu={(e) => onContextMenu(e, item)}
                     onKeyDown={(e) => handleKeyDown(e, item)}
-                    onDragOver={(e) => { if (canDrop && item.is_dir) { e.preventDefault(); setDropTarget(item.path); } }}
-                    onDragLeave={() => { if (dropTarget === item.path) setDropTarget(null); }}
-                    onDrop={(e) => {
-                      if (canDrop && item.is_dir) {
-                        e.preventDefault();
-                        setDropTarget(null);
-                        onDropItem?.(item);
-                      }
-                    }}
+                    draggable={moveDragEnabled || undefined}
+                    onDragStart={(e) => startMoveDrag(e, item)}
+                    onDragEnd={endDragMove}
+                    {...folderDropHandlers(item)}
                     className={cn(
-                      "group grid grid-cols-[auto_1fr_auto_auto] items-center cursor-pointer transition-all duration-150 border border-transparent rounded-xl",
+                      "group relative grid grid-cols-[auto_1fr_auto_auto] items-center cursor-pointer transition-all duration-150 border border-transparent rounded-xl",
                       dc.listRow[d],
                       index % 2 === 0 ? "bg-glass-bg-subtle/30" : "",
                       selected
                         ? "bg-accent/10 border-accent/30"
                         : "hover:bg-accent/5",
-                      dropTarget === item.path ? "ring-2 ring-accent bg-accent/12" : ""
+                      dropTarget === item.path
+                        ? "ring-2 ring-accent/80 border-accent/40 bg-accent/10 shadow-[0_0_0_4px_rgba(91,140,255,0.14)]"
+                        : "",
+                      draggedPaths?.includes(item.path) ? "opacity-40 saturate-50" : ""
                     )}
                   >
                     {/* Checkbox */}

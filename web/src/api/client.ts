@@ -1,15 +1,14 @@
+import { isTauri } from "../lib/desktop";
 import type { ApiError, SavedSearch, SavedSearchInput, SearchResult, FileVersion, StorageStats, LyricsResponse } from "./types";
 
-// ── Tailscale / server discovery ──────────────────────────────────
-// Tailscale hosts are probed in order — the first to respond wins.
-// HTTPS is handled by Caddy reverse proxy (self-signed cert).
-// HTTP fallback is always available.
-const TAILSCALE_HOSTS = [
+// ── Server discovery ──────────────────────────────────────────────
+// Local candidates probed in order — the first to respond wins.
+// NOTE: no private hostnames are hardcoded here; users point the desktop
+// app at their server via Settings → "nexora-api-url" (or quick-connect),
+// which is persisted locally per install.
+const DISCOVERY_HOSTS = [
   "http://localhost:8080",
   "http://127.0.0.1:8080",
-  "https://pms2.tail58d7ea.ts.net",
-  "http://pms2.tail58d7ea.ts.net",
-  "http://100.67.251.1:80",
 ];
 
 /**
@@ -17,9 +16,8 @@ const TAILSCALE_HOSTS = [
  * In Tauri desktop environment, defaults to http://localhost:8080 if nexora-api-url is not set.
  */
 export function getBaseUrl(): string {
-  const isTauri = typeof window !== "undefined" && (!!(window as any).__TAURI_INTERNALS__ || !!(window as any).isTauri);
   const storedUrl = localStorage.getItem("nexora-api-url");
-  if (isTauri) {
+  if (isTauri()) {
     if (!storedUrl) {
       return "http://localhost:8080";
     }
@@ -40,7 +38,7 @@ export function getBaseUrl(): string {
  * Returns the first responsive URL, or null if none respond.
  */
 export async function discoverServerUrl(): Promise<string | null> {
-  for (const url of TAILSCALE_HOSTS) {
+  for (const url of DISCOVERY_HOSTS) {
     try {
       const res = await fetch(`${url}/api/v1/auth/needs-setup`, {
         signal: AbortSignal.timeout(3000),
@@ -68,9 +66,12 @@ export function getCsrfToken(): string {
 
 export class NexoraError extends Error {
   code: string;
-  constructor(code: string, message: string) {
+  /** HTTP status when the server responded; undefined for network failures. */
+  status?: number;
+  constructor(code: string, message: string, status?: number) {
     super(message);
     this.code = code;
+    this.status = status;
   }
 }
 
@@ -93,7 +94,6 @@ function buildQuery(query?: Record<string, string | number | undefined>): string
 }
 
 export function getMediaUrl(path: string, query?: Record<string, string | number | undefined | boolean>): string {
-  const isTauri = typeof window !== "undefined" && (!!(window as any).__TAURI_INTERNALS__ || !!(window as any).isTauri);
   const baseUrl = getBaseUrl();
 
   const params = new URLSearchParams();
@@ -104,7 +104,7 @@ export function getMediaUrl(path: string, query?: Record<string, string | number
   }
 
   const storedToken = localStorage.getItem("nexora-token");
-  if (storedToken && isTauri) {
+  if (storedToken && isTauri()) {
     params.set("token", storedToken);
   }
 
@@ -145,11 +145,10 @@ export async function api<T>(path: string, opts: RequestOptions = {}): Promise<T
     }
   }
 
-  const isTauri = typeof window !== "undefined" && (!!(window as any).__TAURI_INTERNALS__ || !!(window as any).isTauri);
   const baseUrl = getBaseUrl();
 
   const storedToken = localStorage.getItem("nexora-token");
-  if (storedToken && isTauri) {
+  if (storedToken && isTauri()) {
     headers["Authorization"] = "Bearer " + storedToken;
   }
 
@@ -175,7 +174,7 @@ export async function api<T>(path: string, opts: RequestOptions = {}): Promise<T
 
   if (!res.ok) {
     const err = (data ?? {}) as ApiError;
-    throw new NexoraError(err.error || "http_error", err.message || res.statusText);
+    throw new NexoraError(err.error || "http_error", err.message || res.statusText, res.status);
   }
   return data as T;
 }

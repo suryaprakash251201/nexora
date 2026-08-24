@@ -6,7 +6,6 @@ import {
   SkipForward,
   Volume2,
   VolumeX,
-  Maximize2,
   X,
   Music,
   Shuffle,
@@ -14,7 +13,6 @@ import {
   Repeat1,
   Captions,
   ListMusic,
-  Trash2,
   AlertTriangle,
   Download,
   ExternalLink,
@@ -33,16 +31,19 @@ import {
   cleanTrackTitle,
 } from "../../lib/preview";
 import type { AudioTranscodeFormat } from "../../lib/preview";
-import { AudioInfoPanel, EqualizerBars, OutputDevicePicker, useAudioContext, useAudioInfo } from "../LosslessPlayer";
+import { EqualizerBars, OutputDevicePicker, useAudioContext, useAudioInfo } from "../LosslessPlayer";
 import { startDownload } from "../../lib/transfer";
 import { engine, usePlayer } from "../../store/player";
 import { AddToPlaylistMenu } from "../PlaylistAdder";
 import LyricsPanel from "../LyricsPanel";
+import { QueuePanel } from "./QueuePanel";
+import { MiniPlayer } from "./MiniPlayer";
 import { fmtTime } from "@nexora/core";
 import { CoverArt } from "./CoverArt";
 import { useFocusTrap } from "../../lib/useFocusTrap";
+import { isTauri as isTauriFn } from "../../lib/desktop";
 
-const isTauri = "__TAURI_INTERNALS__" in window;
+const isTauri = isTauriFn();
 
 const RATES = [0.5, 0.75, 1, 1.25, 1.5, 2];
 
@@ -125,6 +126,8 @@ export function AudioPlayer({
   const offsetRef = useRef(0);
   const fallbackFormats: AudioTranscodeFormat[] = isTauri ? ["flac", "flac24", "aac"] : ["aac", "flac"];
   const sessionIdRef = useRef(generateSessionId());
+  /** Latest `step` for the uncontrolled ended-listener (see effect below). */
+  const onEndedStepRef = useRef<() => void>(() => {});
 
   useEffect(() => {
     setFallbackStage(-1);
@@ -192,6 +195,11 @@ export function AudioPlayer({
     if (controlled) return;
     const a = ref.current;
     if (!a) return;
+    // Keep a live reference to `step`: this effect only re-subscribes when
+    // the URL changes, but `step` closes over the queue index — without the
+    // ref, duplicate URLs at consecutive playlist positions would advance
+    // using a stale index.
+    onEndedStepRef.current = () => step(1);
     // Transcoded streams restart timestamps at 0 (?start=), so re-add the
     // offset to match the position the user actually seeked to.
     const onTime = () => setLCur(a.currentTime + offsetRef.current);
@@ -200,7 +208,7 @@ export function AudioPlayer({
     const onPause = () => setLPlaying(false);
     const onWaiting = () => setLBuffering(true);
     const onReady = () => setLBuffering(false);
-    const onEnded = () => step(1);
+    const onEnded = () => onEndedStepRef.current?.();
     a.addEventListener("timeupdate", onTime);
     a.addEventListener("loadedmetadata", onMeta);
     a.addEventListener("play", onPlay);
@@ -397,8 +405,18 @@ export function AudioPlayer({
   useEffect(() => {
     if (!fs) return;
     const onKey = (e: KeyboardEvent) => {
-      const tag = (e.target as HTMLElement)?.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA") return;
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || target?.isContentEditable) return;
+      // Read live values from the store / element instead of closing over
+      // render-scoped ones — otherwise this listener would have to be
+      // re-added ~4×/sec as currentTime ticks.
+      const st = usePlayer.getState();
+      const el = ref.current;
+      const t = controlled ? st.currentTime : (el?.currentTime ?? 0);
+      const d = controlled ? st.duration : (el?.duration || 0);
+      const v = controlled ? st.volume : (el?.volume ?? 1);
+      const m = controlled ? st.muted : (el?.muted ?? false);
       switch (e.key) {
         case "Escape":
           e.preventDefault();
@@ -410,25 +428,25 @@ export function AudioPlayer({
           break;
         case "ArrowLeft":
           e.preventDefault();
-          seek(Math.max(0, curTime - 5));
+          seek(Math.max(0, t - 5));
           break;
         case "ArrowRight":
           e.preventDefault();
-          seek(Math.min(duration || 0, curTime + 5));
+          seek(Math.min(d || 0, t + 5));
           break;
         case "ArrowUp":
           e.preventDefault();
-          changeVol(Math.min(1, (muted ? 0 : volume) + 0.05));
+          changeVol(Math.min(1, (m ? 0 : v) + 0.05));
           break;
         case "ArrowDown":
           e.preventDefault();
-          changeVol(Math.max(0, (muted ? 0 : volume) - 0.05));
+          changeVol(Math.max(0, (m ? 0 : v) - 0.05));
           break;
         case "m":
         case "M":
           e.preventDefault();
-          if (controlled) player.toggleMute();
-          else setLMuted(!muted);
+          if (controlled) st.toggleMute();
+          else if (el) { el.muted = !el.muted; setLMuted(el.muted); }
           break;
         case "f":
         case "F":
@@ -445,7 +463,9 @@ export function AudioPlayer({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [fs, curTime, duration, volume, muted, controlled, toggle, seek, changeVol, closeFs]);
+    // toggle/seek/changeVol depend only on stable props/refs/store actions.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fs, controlled, closeFs]);
 
   // Slightly smaller vinyl when the desktop lyrics/queue panel shares the stage.
   const discSize = panel !== "none"
@@ -898,271 +918,88 @@ export function AudioPlayer({
         <LyricsPanel item={cur} currentTime={curTime} onSeek={seek} />
       )}
       {showQueue && (
-        /* No solid queue container — the song cards themselves form the UI,
-           floating directly on the player's blurred-cover surface. */
-        <div
-          className="absolute z-40 top-16 bottom-0 right-0 flex w-full max-w-md flex-col px-3 pb-6 animate-slide-in-right sm:top-24 sm:right-2 sm:px-2"
-          onClick={(e) => e.stopPropagation()}
-        >
-          {/* Integrated header — no dark header block */}
-          <div className="flex flex-shrink-0 items-center justify-between px-2 pb-3">
-            <div className="flex items-center gap-2">
-              <ListMusic className="h-4 w-4 text-accent" />
-              <h2 className="text-sm font-semibold tracking-wide text-white">Queue</h2>
-              <span className="rounded-full bg-white/10 px-2 py-0.5 text-[11px] font-medium tabular-nums text-white/55">
-                {queue.length}
-              </span>
-            </div>
-            <button
-              onClick={() => setPanel("none")}
-              className="rounded-full p-2 text-white/60 transition-colors hover:bg-white/10 hover:text-white"
-              title="Close queue"
-              aria-label="Close queue"
-            >
-              <X className="h-4.5 w-4.5" />
-            </button>
-          </div>
-
-          {queue.length === 0 ? (
-            <div className="grid flex-1 place-items-center px-6 text-center text-sm text-white/40">
-              The queue is empty — add tracks to start listening.
-            </div>
-          ) : (
-            <div
-              ref={queueScrollRef}
-              className="no-scrollbar flex-1 space-y-2 overflow-y-auto pb-8"
-            >
-              {queue.map((qi, i) => {
-                const isCur = i === qIndex;
-                return (
-                  <div
-                    key={qi.path + i}
-                    data-queue-row={i}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => {
-                      if (controlled) player.setIndex(i);
-                      else onSelect?.(i);
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        if (controlled) player.setIndex(i);
-                        else onSelect?.(i);
-                      }
-                    }}
-                    className={`group flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 outline-none transition-all duration-200 focus-visible:ring-2 focus-visible:ring-accent/60 ${
-                      isCur
-                        ? "bg-accent/[0.13] shadow-[0_6px_22px_-8px_rgba(91,140,255,0.45)] ring-1 ring-accent/30"
-                        : "bg-white/[0.05] shadow-[0_1px_3px_rgba(0,0,0,0.15)] ring-1 ring-white/[0.04] hover:translate-x-0.5 hover:bg-white/[0.09]"
-                    }`}
-                    aria-current={isCur ? "true" : undefined}
-                  >
-                    {/* Number / playback indicator */}
-                    <div
-                      className={`grid h-7 w-7 flex-shrink-0 place-items-center rounded-lg transition-colors ${
-                        isCur ? "bg-accent/20" : "bg-white/[0.06] group-hover:bg-white/[0.12]"
-                      }`}
-                    >
-                      {isCur ? (
-                        playing ? (
-                          <span className="flex h-3.5 items-end gap-0.5" aria-label="Playing">
-                            <span className="eq-bar h-2.5 w-0.5 rounded-full bg-accent" style={{ animationDelay: "0ms" }} />
-                            <span className="eq-bar h-3.5 w-0.5 rounded-full bg-accent" style={{ animationDelay: "150ms" }} />
-                            <span className="eq-bar h-2 w-0.5 rounded-full bg-accent" style={{ animationDelay: "300ms" }} />
-                          </span>
-                        ) : (
-                          <Play className="h-3.5 w-3.5 fill-current text-accent" />
-                        )
-                      ) : (
-                        <span className="font-mono text-[10.5px] tabular-nums text-white/40 group-hover:text-white/65">
-                          {String(i + 1).padStart(2, "0")}
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Title + metadata */}
-                    <div className="min-w-0 flex-1">
-                      <p
-                        className={`truncate text-[13.5px] leading-tight ${
-                          isCur ? "font-semibold text-white" : "font-medium text-white/85"
-                        }`}
-                      >
-                        {cleanTrackTitle(qi.name)}
-                      </p>
-                      <p className={`mt-1 truncate text-[11px] leading-tight ${isCur ? "text-accent/80" : "text-white/40"}`}>
-                        {qi.extension.toUpperCase()}
-                        {qi.path ? ` · ${qi.path}` : ""}
-                      </p>
-                    </div>
-
-                    {controlled && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          player.removeFromQueue(i);
-                        }}
-                        className="rounded-full p-1.5 text-white/25 opacity-0 transition-all hover:bg-red-500/10 hover:text-red-400 focus-visible:opacity-100 group-hover:opacity-100 flex-shrink-0"
-                        title="Remove from queue"
-                        aria-label={`Remove ${qi.name} from queue`}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
+        <QueuePanel
+          queue={queue}
+          qIndex={qIndex}
+          playing={playing}
+          controlled={controlled}
+          onClose={() => setPanel("none")}
+          onSelectIndex={(i) => {
+            if (controlled) player.setIndex(i);
+            else onSelect?.(i);
+          }}
+          onRemove={controlled ? (i) => player.removeFromQueue(i) : undefined}
+          scrollRef={queueScrollRef}
+        />
       )}
     </div>
   );
 
   return (
-    <div className="w-full max-w-lg mx-auto p-4 flex flex-col items-center">
-      <div className="relative aspect-square w-full max-w-[280px] sm:max-w-[320px] rounded-3xl overflow-hidden shadow-2xl ring-1 ring-border/50 group cursor-pointer" onClick={openFs}>
-        {cur && <CoverArt item={cur} />}
-        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors duration-300 grid place-items-center">
-          <Maximize2 className="h-10 w-10 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-300 drop-shadow-lg" />
-        </div>
-      </div>
-
-      <div className="w-full mt-8 space-y-6 px-2">
-        <div className="text-center">
-          <h3 className="font-bold text-xl truncate">{cur?.name?.replace(/\.[^.]+$/, '')}</h3>
-          {cur && (
-            <div className="mt-2 flex justify-center">
-              <AudioInfoPanel item={cur} compact onDark />
-            </div>
-          )}
-          <p className="text-content-muted text-sm mt-1">{multi ? `Track ${qIndex + 1} of ${queue.length}` : "Audio playback"}</p>
-          {audioErrorMsg && (
-            <div className="mt-4 flex items-center gap-3 rounded-xl bg-danger/10 border border-danger/20 px-3.5 py-2.5 text-left">
-              <AlertTriangle className="h-4 w-4 text-danger shrink-0" />
-              <p className="text-xs font-medium text-danger leading-snug">{audioErrorMsg}</p>
-              {multi && (
-                <button
-                  onClick={() => usePlayer.getState().next(false)}
-                  className="ml-auto shrink-0 px-2.5 py-1 rounded-lg bg-danger/15 text-danger border border-danger/25 text-xs font-semibold hover:bg-danger/25 transition-colors"
-                >
-                  Skip
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-        
-        <div className="w-full space-y-2">
-          <div className="relative h-2 rounded-full bg-surface-muted overflow-hidden group">
-            <div className="absolute inset-y-0 left-0 progress-fill" style={{ width: `${pct}%` }} />
-            <input
-              type="range"
-              min={0}
-              max={duration || 0}
-              step={0.1}
-              value={curTime}
-              onChange={(e) => seek(Number(e.target.value))}
-              className="absolute inset-0 w-full opacity-0 cursor-pointer"
-              aria-label="Seek"
-            />
-          </div>
-          <div className="flex justify-between text-xs font-medium text-content-muted font-mono">
-            <span>{fmtTime(curTime)}</span>
-            <span>{fmtTime(duration)}</span>
-          </div>
-        </div>
-
-        <div className="flex justify-between items-center px-4">
-          <div className="relative">
-            <button onClick={() => setShowRates(!showRates)} className="text-xs font-mono px-2 py-1 rounded-lg glass-hover text-content-muted hover:text-content">
-              {rate}x
-            </button>
-            {showRates && (
-              <div className="absolute bottom-full left-0 mb-2 glass-strong rounded-xl p-1 z-20 flex flex-col animate-scale-in">
-                {RATES.map((r) => (
-                  <button key={r} onClick={() => changeRate(r)} className={`px-4 py-1.5 text-xs font-mono rounded-lg hover:bg-accent/15 ${r === rate ? "text-accent bg-accent/10" : ""}`}>
-                    {r}x
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-          
-          <div className="flex items-center gap-4">
-            {multi && (
-              <button onClick={() => step(-1)} className="p-2 rounded-full glass-hover" title="Previous">
-                <SkipBack className="h-6 w-6 text-content" />
-              </button>
-            )}
-            <button
-              onClick={toggle}
-              className="h-14 w-14 rounded-full bg-accent text-accent-fg grid place-items-center shadow-lg shadow-accent/30 hover:scale-105 transition-transform"
-              title={playing ? "Pause" : "Play"}
-            >
-              {playing ? <Pause className="h-6 w-6 fill-current" /> : <Play className="h-6 w-6 translate-x-0.5 fill-current" />}
-            </button>
-            {multi && (
-              <button onClick={() => step(1)} className="p-2 rounded-full glass-hover" title="Next">
-                <SkipForward className="h-6 w-6 text-content" />
-              </button>
-            )}
-          </div>
-          
-          <div className="flex items-center gap-2">
-            <button onClick={() => { const m = !muted; if (controlled) player.toggleMute(); else setLMuted(m); }} className="p-2 rounded-full glass-hover" title="Mute">
-              {muted || volume === 0 ? <VolumeX className="h-5 w-5 text-content-muted" /> : <Volume2 className="h-5 w-5 text-content-muted hover:text-content" />}
-            </button>
-            <div
-              className="relative w-20 h-8 flex items-center cursor-pointer touch-action-none"
-              onClick={(e) => {
-                const rect = e.currentTarget.getBoundingClientRect();
-                const x = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-                changeVol(x);
-              }}
-              onTouchMove={(e) => {
-                e.preventDefault();
-                const rect = e.currentTarget.getBoundingClientRect();
-                const x = Math.max(0, Math.min(1, (e.touches[0].clientX - rect.left) / rect.width));
-                changeVol(x);
-              }}
-            >
-              <div className="absolute inset-y-3 left-0 right-0 h-1.5 rounded-full bg-surface-muted overflow-hidden pointer-events-none">
-                <div className="absolute inset-y-0 left-0" style={volFillStyle(volume, muted)} />
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
+    <>
+    <MiniPlayer
+      cur={cur ?? null}
+      openFs={openFs}
+      multi={multi}
+      qIndex={qIndex}
+      queueLength={queue.length}
+      audioErrorMsg={audioErrorMsg}
+      pct={pct}
+      curTime={curTime}
+      duration={duration}
+      playing={playing}
+      rate={rate}
+      volume={volume}
+      muted={muted}
+      showRates={showRates}
+      onOpenRates={() => setShowRates(!showRates)}
+      onChangeRate={changeRate}
+      onStep={step}
+      onToggle={toggle}
+      onSeek={seek}
+      onToggleMute={() => {
+        const m = !muted;
+        if (controlled) player.toggleMute();
+        else setLMuted(m);
+      }}
+      onChangeVolume={changeVol}
+      volumeFillStyle={volFillStyle(volume, muted)}
+    />
       {fs && fullscreen}
-      {!controlled && <audio 
-        ref={ref} 
-        src={resolvedUrl} 
-        preload="metadata" 
-        playsInline 
-        webkit-playsinline="true"
-        onError={(e) => {
-          const target = e.target as HTMLAudioElement;
-          if (target.error && target.error.code === 4 && cur) {
-            const next = fallbackStage + 1;
-            if (next < fallbackFormats.length) {
-              serverSupportsTranscode().then(supp => {
-                if (supp) {
-                  console.warn(`MediaPlayer: stream failed (stage ${fallbackStage}), trying ${fallbackFormats[next]}...`);
-                  setAudioErrorLocal("");
-                  setFallbackStage(next);
-                } else {
-                  setAudioErrorLocal(`Could not play "${cur.name}" — audio transcoding is unavailable on this server.`);
-                }
-              });
-            } else {
-              setAudioErrorLocal(`Could not play "${cur.name}" in any available format.`);
+      {!controlled && (
+        <audio
+          ref={ref}
+          src={resolvedUrl}
+          preload="metadata"
+          playsInline
+          webkit-playsinline="true"
+          onError={(e) => {
+            const target = e.target as HTMLAudioElement;
+            if (!target.error) return;
+            if (target.error.code === 4 && cur) {
+              const next = fallbackStage + 1;
+              if (next < fallbackFormats.length) {
+                serverSupportsTranscode().then(supp => {
+                  if (supp) {
+                    console.warn(`MediaPlayer: stream failed (stage ${fallbackStage}), trying ${fallbackFormats[next]}...`);
+                    setAudioErrorLocal("");
+                    setFallbackStage(next);
+                  } else {
+                    setAudioErrorLocal(`Could not play "${cur.name}" — audio transcoding is unavailable on this server.`);
+                  }
+                });
+              } else {
+                setAudioErrorLocal(`Could not play "${cur.name}" in any available format.`);
+              }
+            } else if (target.error.code === 2) {
+              setAudioErrorLocal("Playback stopped — network error while streaming.");
+            } else if (target.error.code === 3) {
+              setAudioErrorLocal("Playback stopped — the audio could not be decoded.");
             }
-          }
-        }}
-      />}
-    </div>
+          }}
+        />
+      )}
+    </>
   );
 }
 

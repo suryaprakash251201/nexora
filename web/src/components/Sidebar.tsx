@@ -1,11 +1,12 @@
 import { Trash2, Plus, Share2, Clock, Star, Search, Shield, ListMusic, Home, LogOut, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import type { Root } from "../api/types";
-import { memo } from "react";
+import { memo, useState } from "react";
 import { rootIcon } from "../lib/rootIcons";
 import { versionApi, adminApi, trashApi, sharesApi, favoritesApi } from "../api/endpoints";
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
+import { canDropInto, currentDragPaths, endDragMove, isInternalMoveDrag } from "../lib/dragMove";
 import { formatBytes } from "../lib/format";
 import NexoraLogo from "./icons/NexoraLogo";
 
@@ -79,7 +80,7 @@ const SectionLabel = ({ children }: { children: React.ReactNode }) => (
 );
 
 export default memo(function Sidebar({
-  roots, activeRoot, view, isAdmin, collapsed, onToggleCollapse, onSelectRoot, onSelectView, onNewRoot, onLogout, onHoverView,
+  roots, activeRoot, view, isAdmin, collapsed, onToggleCollapse, onSelectRoot, onSelectView, onNewRoot, onLogout, onHoverView, onDropToActiveRoot, canWrite,
 }: {
   roots: Root[];
   activeRoot: string | null;
@@ -92,10 +93,16 @@ export default memo(function Sidebar({
   onNewRoot: () => void;
   onLogout: () => void;
   onHoverView?: (v: SidebarView) => void;
+  /** Internal move-drag dropped on the ACTIVE storage entry → move to its base dir. */
+  onDropToActiveRoot?: (paths: string[]) => void;
+  /** Write access in the active root — gates accepting move-drops. */
+  canWrite?: boolean;
 }) {
   const version = useQuery({ queryKey: ["version"], queryFn: () => versionApi.get() as any });
   const usage = useQuery({ queryKey: ["storage-usage"], queryFn: () => adminApi.getUsage(), enabled: isAdmin, });
   const usedPercent = usage.data && usage.data.total > 0 ? Math.round((usage.data.used / usage.data.total) * 100) : 0;
+  /** Which storage entry is currently the hovered drop target (move-drag). */
+  const [rootDropId, setRootDropId] = useState<string | null>(null);
 
   // Share queryKeys with Workspace so React Query dedupes identical /trash, /shares, /favorites requests.
   // Previously these used distinct keys (trash-count, shares-count, favs-count) causing redundant fetches.
@@ -184,16 +191,44 @@ export default memo(function Sidebar({
               const Icon = rootIcon(r.icon);
               const isActive = view === "files" && activeRoot === r.id;
               const accent = viewColors.files;
+              // Active storage entry accepts internal move-drops (moves the
+              // dragged selection into this storage's base directory).
+              // Cross-root moves aren't supported by the move API, so other
+              // roots show a forbidden cursor by simply not accepting.
+              const acceptRootDrop = !!isActive && !!canWrite && !!onDropToActiveRoot;
+              const rootDrop = rootDropId === r.id;
               return (
                 <button key={r.id} onClick={() => onSelectRoot(r.id)} title={collapsed ? r.name : undefined}
                   aria-current={isActive ? "page" : undefined}
-                  className={cn("relative w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl text-left text-[15px] font-medium transition-all duration-200 min-h-[48px] group focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:outline-none", collapsed ? "justify-center px-0" : "px-4", isActive ? "bg-glass-bg-subtle shadow-sm" : "hover:bg-glass-bg-subtle/50")}>
-                  {isActive && (
+                  onDragOver={(e) => {
+                    if (!acceptRootDrop || !isInternalMoveDrag(e)) return;
+                    if (!canDropInto("", currentDragPaths())) return;
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = "move";
+                    setRootDropId(r.id);
+                  }}
+                  onDragLeave={() => setRootDropId((cur) => (cur === r.id ? null : cur))}
+                  onDrop={(e) => {
+                    if (!acceptRootDrop || !isInternalMoveDrag(e)) return;
+                    e.preventDefault();
+                    const paths = currentDragPaths().filter((p) => p.includes("/"));
+                    setRootDropId(null);
+                    endDragMove();
+                    if (paths.length > 0) onDropToActiveRoot?.(paths);
+                  }}
+                  className={cn("relative w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl text-left text-[15px] font-medium transition-all duration-200 min-h-[48px] group focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:outline-none", collapsed ? "justify-center px-0" : "px-4", isActive ? "bg-glass-bg-subtle shadow-sm" : "hover:bg-glass-bg-subtle/50",
+                    rootDrop && "ring-2 ring-accent/80 bg-accent/10 shadow-[0_0_0_5px_rgba(91,140,255,0.14)]")}
+                >                  {isActive && (
                     <motion.div layoutId="sidebar-active-root"
                       className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-full"
                       style={{ backgroundColor: accent, boxShadow: `0 0 8px ${accent}80` }}
                       transition={{ type: "spring", stiffness: 400, damping: 30 }}
                     />
+                  )}
+                  {rootDrop && !collapsed && (
+                    <span className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-accent px-2 py-0.5 text-[10px] font-semibold text-white shadow-lg shadow-accent/40 animate-scale-in">
+                      Move here
+                    </span>
                   )}
                   <div className={cn("flex items-center gap-3 w-full rounded-lg transition-all duration-200", collapsed ? "justify-center" : "pl-2")}
                     style={isActive ? { color: accent } : undefined}>
