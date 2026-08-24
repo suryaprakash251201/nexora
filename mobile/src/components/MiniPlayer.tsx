@@ -301,8 +301,12 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
   }, [currentTrack?.path]);
 
   useEffect(() => {
-    if (!artFailed || artAttempt >= 4) return;
-    const t = setTimeout(() => setArtAttempt((n) => n + 1), 400 + artAttempt * 700);
+    // Server-side thumbnails (embedded album art) are extracted on demand by
+    // ffmpeg — the first request for a freshly-selected track can 404/hang
+    // until extraction finishes. Retry with capped backoff (~14s total window)
+    // instead of giving up after a few seconds and leaving a blank cover.
+    if (!artFailed || artAttempt >= 10) return;
+    const t = setTimeout(() => setArtAttempt((n) => n + 1), Math.min(400 + artAttempt * 500, 1500));
     return () => clearTimeout(t);
   }, [artFailed, artAttempt]);
 

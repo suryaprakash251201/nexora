@@ -23,6 +23,28 @@ interface Props {
   selected?: boolean;
   selectMode?: boolean;
   onSelect?: (item: FileItem) => void;
+  /** Query substring to highlight in the row title (search results). */
+  highlight?: string;
+}
+
+/** Splits text into matched/unmatched chunks for search-result highlighting. */
+function splitHighlight(text: string, q: string): Array<{ text: string; hit: boolean }> {
+  const needle = q.trim().toLowerCase();
+  if (!needle) return [{ text, hit: false }];
+  const out: Array<{ text: string; hit: boolean }> = [];
+  const lower = text.toLowerCase();
+  let i = 0;
+  while (i < text.length) {
+    const idx = lower.indexOf(needle, i);
+    if (idx === -1) {
+      out.push({ text: text.slice(i), hit: false });
+      break;
+    }
+    if (idx > i) out.push({ text: text.slice(i, idx), hit: false });
+    out.push({ text: text.slice(idx, idx + needle.length), hit: true });
+    i = idx + needle.length;
+  }
+  return out;
 }
 
 /**
@@ -38,6 +60,7 @@ export const FileRow = memo(function FileRow({
   selected,
   selectMode,
   onSelect,
+  highlight,
 }: Props) {
   const { colors, font, spacing } = useTheme();
   const { name, color } = fileIconFor(item, colors.accent);
@@ -103,7 +126,13 @@ export const FileRow = memo(function FileRow({
 
       <View style={styles.body}>
         <Text style={[styles.title, { color: colors.content, fontSize: font.md }]} numberOfLines={1} maxFontSizeMultiplier={1.15}>
-          {item.name}
+          {splitHighlight(item.name, highlight ?? "").map((part, i) =>
+            part.hit ? (
+              <Text key={i} style={{ color: colors.accent, fontWeight: "800" }}>{part.text}</Text>
+            ) : (
+              <Text key={i}>{part.text}</Text>
+            )
+          )}
         </Text>
         <Text style={[styles.sub, { color: colors.muted, fontSize: font.xs }]} numberOfLines={1} maxFontSizeMultiplier={1.15}>
           {sub}

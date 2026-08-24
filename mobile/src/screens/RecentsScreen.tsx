@@ -22,12 +22,14 @@ import { previewKind } from "../api/client";
 import type { FileItem } from "../api/types";
 import type { RootStackParamList, MainTabParamList } from "../navigation/types";
 import { useAudio } from "../store/AudioContext";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 type TabRoute = RouteProp<MainTabParamList, "Recents">;
 type FilterTag = "all" | "image" | "document" | "video" | "audio";
 
 const VALID_FILTERS: FilterTag[] = ["all", "image", "document", "video", "audio"];
+const RECENT_SEARCHES_KEY = "nexora.searchRecents";
 
 export default function RecentsScreen({ variant = "recents" }: { variant?: "recents" | "search" }) {
   const navigation = useNavigation<Nav>();
@@ -53,6 +55,42 @@ export default function RecentsScreen({ variant = "recents" }: { variant?: "rece
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchSeq = useRef(0);
+
+  // ── Recent searches (persisted) ──────────────────────────────────────
+  const [recentSearches, setRecentSearches] = useState<string[]>([]);
+  useEffect(() => {
+    if (variant !== "search") return;
+    AsyncStorage.getItem(RECENT_SEARCHES_KEY)
+      .then((raw) => {
+        if (!raw) return;
+        try {
+          const arr = JSON.parse(raw);
+          if (Array.isArray(arr)) setRecentSearches(arr.slice(0, 8));
+        } catch { /* corrupted — ignore */ }
+      })
+      .catch(() => {});
+  }, [variant]);
+
+  const rememberSearch = useCallback((q: string) => {
+    const term = q.trim();
+    if (!term) return;
+    setRecentSearches((prev) => {
+      const next = [term, ...prev.filter((x) => x.toLowerCase() !== term.toLowerCase())].slice(0, 8);
+      AsyncStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(next)).catch(() => {});
+      return next;
+    });
+  }, []);
+
+  const removeRecentSearch = useCallback((term: string) => {
+    setRecentSearches((prev) => {
+      const next = prev.filter((x) => x !== term);
+      AsyncStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(next)).catch(() => {});
+      return next;
+    });
+  }, []);
+
+  // Clear any pending debounce when the screen unmounts.
+  useEffect(() => () => { if (debounceRef.current) clearTimeout(debounceRef.current); }, []);
 
   const load = useCallback(async (isRefresh = false) => {
     if (!api) return;
@@ -133,6 +171,27 @@ export default function RecentsScreen({ variant = "recents" }: { variant?: "rece
     [runSearch]
   );
 
+  /** Runs a search immediately (chips, keyboard submit) — bypasses debounce. */
+  const runSearchNow = useCallback(
+    (q: string) => {
+      setQuery(q);
+      setSearchAll(false);
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      if (!q.trim()) {
+        setSearchResults([]);
+        setSearching(false);
+        setSearchError(null);
+        return;
+      }
+      rememberSearch(q);
+      runSearch(q);
+    },
+    [runSearch, rememberSearch]
+  );
+
+  // Clear any pending debounce when the screen unmounts.
+  useEffect(() => () => { if (debounceRef.current) clearTimeout(debounceRef.current); }, []);
+
   const selectFilter = useCallback(
     (tag: FilterTag) => {
       setActiveFilter(tag);
@@ -191,6 +250,7 @@ export default function RecentsScreen({ variant = "recents" }: { variant?: "rece
         <FileRow
           item={item}
           onPress={openFile}
+          highlight={variant === "search" ? query : undefined}
           subtitle={item.is_dir ? "Folder" : query.trim() ? item.path.replace(/\/[^/]+$/, "") || "/" : undefined}
           showDate={!query.trim()}
           trailing={
@@ -241,6 +301,7 @@ export default function RecentsScreen({ variant = "recents" }: { variant?: "rece
             autoCapitalize="none"
             autoCorrect={false}
             returnKeyType="search"
+            onSubmitEditing={() => runSearchNow(query)}
             selectionColor={colors.accent}
           />
           {searching && <ActivityIndicator size="small" color={colors.accent} />}
@@ -290,6 +351,25 @@ export default function RecentsScreen({ variant = "recents" }: { variant?: "rece
             </TouchableOpacity>
           ))}
         </View>
+
+        {/* Recent searches (search tab, empty query) */}
+        {variant === "search" && !query.trim() && recentSearches.length > 0 && (
+          <View style={styles.recentRow}>
+            <MaterialCommunityIcons name="history" size={14} color={colors.muted} />
+            {recentSearches.map((term) => (
+              <TouchableOpacity
+                key={term}
+                style={[styles.recentChip, { backgroundColor: colors.card, borderColor: colors.borderSoft }]}
+                onPress={() => runSearchNow(term)}
+                onLongPress={() => removeRecentSearch(term)}
+              >
+                <Text style={{ color: colors.content, fontSize: font.xs, fontWeight: "600" }} numberOfLines={1}>
+                  {term}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
 
         {(query.trim() !== "" || searchAll) && (
           <Text style={[styles.resultCount, { color: colors.muted, fontSize: font.xs }]}>
@@ -383,6 +463,22 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
     borderRadius: 14,
     borderWidth: 1,
+  },
+  recentRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 10,
+  },
+  recentChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    maxWidth: 150,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
   },
   resultCount: {
     fontWeight: "600",

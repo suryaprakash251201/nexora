@@ -2,8 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   ActivityIndicator,
   Alert,
-  GestureResponderEvent,
-  Pressable,
+  PanResponder,
   ScrollView,
   StyleSheet,
   Text,
@@ -11,6 +10,7 @@ import {
   View,
   Animated,
   Easing,
+  useWindowDimensions,
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -411,10 +411,15 @@ const VIDEO_RATES = [1, 1.25, 1.5, 2, 0.75] as const;
  */
 function VideoPlayer({ uri, transcodeUri, ext, onFallback }: { uri: string; transcodeUri: string; ext?: string; onFallback?: () => void }) {
   const { colors, font, radius } = useTheme();
+  // Adaptive layout — VLC-style: landscape turns the player into a fully
+  // immersive overlay; portrait keeps it as the screen's main surface.
+  const { width: winW, height: winH } = useWindowDimensions();
+  const landscape = winW > winH;
   const extNorm = (ext || "").toLowerCase().replace(/^\./, "");
   const needsTranscode = TRANSCODE_EXT.has(extNorm);
   const initialUri = needsTranscode && transcodeUri ? transcodeUri : uri;
 
+  const videoViewRef = useRef<VideoView>(null);
   const player = useVideoPlayer(initialUri, (p) => {
     p.loop = true;
     p.play();
@@ -487,11 +492,29 @@ function VideoPlayer({ uri, transcodeUri, ext, onFallback }: { uri: string; tran
   }, [uiVisible, playing, scheduleHide]);
   useEffect(() => clearHideTimer, []);
 
+  // ── VLC-style lock — when locked, the surface ignores every gesture except
+  // the small unlock padlock, so pocket touches can't seek/pause.
+  const [locked, setLocked] = useState(false);
+  const lockedRef = useRef(false);
+  useEffect(() => { lockedRef.current = locked; }, [locked]);
+
+  // Simulated brightness (black overlay over our surface only) + volume HUD.
+  const [dim, setDim] = useState(0);
+  const [hud, setHud] = useState<
+    | { kind: "seek"; label: string }
+    | { kind: "level"; icon: string; pct: number }
+    | null
+  >(null);
+
   const togglePlay = useCallback(() => {
     haptic("light");
     try { playing ? player.pause() : player.play(); } catch { /* ignore */ }
     if (!uiVisible) setUiVisible(true); else scheduleHide();
   }, [player, playing, uiVisible, scheduleHide]);
+
+  const seekTo = useCallback((sec: number) => {
+    try { player.currentTime = sec; setCurrentTime(sec); } catch { /* ignore */ }
+  }, [player]);
 
   const skipBy = useCallback((delta: number) => {
     haptic("light");
@@ -509,31 +532,148 @@ function VideoPlayer({ uri, transcodeUri, ext, onFallback }: { uri: string; tran
     scheduleHide();
   }, [player, currentTime, duration, scheduleHide]);
 
-  // Double-tap zones: two quick taps inside a side third seek ∓10s; a lone
-  // tap toggles the control chrome.
+  // ── Surface gestures (single PanResponder owns the whole video area):
+  //   tap            → toggle chrome / double-tap sides = ±10s
+  //   horizontal drag→ scrub with a center time bubble (commit on release)
+  //   vertical left  → brightness (simulated via dim overlay)
+  //   vertical right → volume (player.volume)
   const surfaceWidth = useRef(0);
-  const lastTapRef = useRef<{ t: number; side: "l" | "r" | "c" }>({ t: 0, side: "c" });
+  const durRef = useRef(0);
+  const curRef = useRef(0);
+  const volRef = useRef(1);
+  useEffect(() => { durRef.current = duration; }, [duration]);
+  useEffect(() => { curRef.current = currentTime; }, [currentTime]);
+  try { if (typeof player.volume === "number") volRef.current = player.volume; } catch { /* ignore */ }
+
+  const fmtTimeLong = (s: number) => {
+    if (!s || !isFinite(s)) return "0:00";
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const sec = Math.floor(s % 60);
+    return h > 0
+      ? `${h}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`
+      : `${m}:${String(sec).padStart(2, "0")}`;
+  };
+
   const singleTapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (singleTapTimer.current) clearTimeout(singleTapTimer.current); }, []);
 
-  const onSurfacePress = (e: GestureResponderEvent) => {
+  const handleSurfaceTap = useCallback((locationX: number) => {
     const w = surfaceWidth.current;
-    const x = e.nativeEvent.locationX;
-    const side: "l" | "r" | "c" = x < w / 3 ? "l" : x > (w * 2) / 3 ? "r" : "c";
+    const side: "l" | "r" | "c" = locationX < w / 3 ? "l" : locationX > (w * 2) / 3 ? "r" : "c";
     const now = Date.now();
-    const isDouble = side !== "c" && now - lastTapRef.current.t < 300 && lastTapRef.current.side === side;
-    lastTapRef.current = { t: now, side };
-    if (isDouble) {
+    if (side !== "c" && now - lastTapInfo.current.t < 300 && lastTapInfo.current.side === side) {
+      lastTapInfo.current = { t: 0, side: "c" };
       if (singleTapTimer.current) { clearTimeout(singleTapTimer.current); singleTapTimer.current = null; }
       skipBy(side === "l" ? -10 : 10);
       return;
     }
+    lastTapInfo.current = { t: now, side };
     if (singleTapTimer.current) clearTimeout(singleTapTimer.current);
     singleTapTimer.current = setTimeout(() => {
       haptic("light");
       setUiVisible((v) => !v);
     }, 260);
-  };
+  }, [skipBy]);
+  const lastTapInfo = useRef<{ t: number; side: "l" | "r" | "c" }>({ t: 0, side: "c" });
+
+  const gesture = useRef({
+    mode: "none" as "none" | "seek" | "bright" | "vol",
+    side: "c" as "l" | "r" | "c",
+    startX: 0,
+    startY: 0,
+    startTime: 0,
+    startPos: 0,
+    startVal: 1,
+    target: undefined as number | undefined,
+  });
+  const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
+
+  const surfacePan = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => !lockedRef.current,
+        onMoveShouldSetPanResponder: (_e, g) =>
+          !lockedRef.current && (Math.abs(g.dx) > 12 || Math.abs(g.dy) > 12),
+        onPanResponderGrant: (e) => {
+          const g = gesture.current;
+          g.mode = "none";
+          g.target = undefined;
+          g.startX = e.nativeEvent.pageX;
+          g.startY = e.nativeEvent.pageY;
+          g.startTime = Date.now();
+          g.startPos = curRef.current;
+          g.startVal = volRef.current;
+          const w = Math.max(surfaceWidth.current, 1);
+          const localX = typeof e.nativeEvent.locationX === "number" ? e.nativeEvent.locationX : w / 2;
+          g.side = localX < w / 2 ? "l" : "r";
+        },
+        onPanResponderMove: (e) => {
+          const g = gesture.current;
+          if (lockedRef.current) return;
+          const dx = e.nativeEvent.pageX - g.startX;
+          const dy = e.nativeEvent.pageY - g.startY;
+          if (g.mode === "none") {
+            if (Math.abs(dx) > 12 && Math.abs(dx) >= Math.abs(dy)) {
+              g.mode = "seek";
+              if (uiVisibleRef.current) setUiVisible(false);
+            } else if (Math.abs(dy) > 12 && Math.abs(dy) > Math.abs(dx)) {
+              g.mode = g.side === "l" ? "bright" : "vol";
+              g.startVal = g.mode === "bright" ? clamp01(1 - dimRef.current / 0.85) : volRef.current;
+            }
+          }
+          if (g.mode === "seek") {
+            const d = durRef.current || 0;
+            const deltaSec = (dx / Math.max(surfaceWidth.current, 1)) * Math.max(d * 0.9, 90);
+            const target = Math.min(Math.max(g.startPos + deltaSec, 0), d || Number.MAX_SAFE_INTEGER);
+            g.target = target;
+            const sign = target >= g.startPos ? "+" : "−";
+            setHud({
+              kind: "seek",
+              label: `${sign}${fmtTimeLong(Math.abs(target - g.startPos))}  ›  ${fmtTimeLong(target)}`,
+            });
+          } else if (g.mode === "bright") {
+            const v = clamp01(g.startVal + -dy / (winH * 0.6));
+            setDim((1 - v) * 0.85);
+            setHud({ kind: "level", icon: "brightness-6", pct: Math.round(v * 100) });
+          } else if (g.mode === "vol") {
+            const v = clamp01(g.startVal + -dy / (winH * 0.6));
+            try { player.volume = v; } catch { /* unsupported */ }
+            volRef.current = v;
+            setHud({ kind: "level", icon: v === 0 ? "volume-off" : "volume-high", pct: Math.round(v * 100) });
+          }
+        },
+        onPanResponderRelease: (e) => {
+          const g = gesture.current;
+          const dt = Date.now() - g.startTime;
+          if (g.mode === "seek" && typeof g.target === "number") {
+            haptic("light");
+            seekTo(g.target);
+            scheduleHide();
+          }
+          if (g.mode === "none" && dt < 280 && !lockedRef.current) {
+            handleSurfaceTap(e.nativeEvent.locationX);
+          }
+          g.mode = "none";
+          g.target = undefined;
+          setHud(null);
+        },
+        onPanResponderTerminate: () => {
+          const g = gesture.current;
+          g.mode = "none";
+          g.target = undefined;
+          setHud(null);
+        },
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [player, winW, winH, seekTo, scheduleHide, handleSurfaceTap]
+  );
+
+  // Ref mirrors read inside PanResponder callbacks (created once).
+  const uiVisibleRef = useRef(uiVisible);
+  const dimRef = useRef(dim);
+  useEffect(() => { uiVisibleRef.current = uiVisible; }, [uiVisible]);
+  useEffect(() => { dimRef.current = dim; }, [dim]);
 
   const toggleMute = useCallback(() => {
     haptic("light");
@@ -561,13 +701,6 @@ function VideoPlayer({ uri, transcodeUri, ext, onFallback }: { uri: string; tran
   const ratioFromX = (locationX: number) =>
     barWidth.current > 0 ? Math.min(1, Math.max(0, locationX / barWidth.current)) : 0;
 
-  const fmtTime = (s: number) => {
-    if (!s || !isFinite(s)) return "0:00";
-    const m = Math.floor(s / 60);
-    const sec = Math.floor(s % 60);
-    return `${m}:${String(sec).padStart(2, "0")}`;
-  };
-
   if (failed) {
     return (
       <View style={styles.videoErrorWrap}>
@@ -593,8 +726,9 @@ function VideoPlayer({ uri, transcodeUri, ext, onFallback }: { uri: string; tran
   return (
     // collapsable={false}: on Android, native views inside react-native-screens
     // can be flattened away and render black — this keeps VideoView alive.
-    <View style={styles.videoWrap} collapsable={false}>
+    <View style={[styles.videoWrap, landscape && styles.videoWrapLandscape]} collapsable={false}>
       <VideoView
+        ref={videoViewRef}
         player={player}
         style={styles.video}
         contentFit="contain"
@@ -602,18 +736,55 @@ function VideoPlayer({ uri, transcodeUri, ext, onFallback }: { uri: string; tran
         allowsFullscreen
         allowsPictureInPicture
       />
+      {/* Simulated brightness (VLC left-edge swipe) — dims our surface only. */}
+      {dim > 0 && (
+        <View
+          pointerEvents="none"
+          style={[StyleSheet.absoluteFill, { backgroundColor: `rgba(0,0,0,${dim})` }]}
+        />
+      )}
       {!ready || switching ? (
         <View style={styles.videoLoading} pointerEvents="none">
           <ActivityIndicator size="large" color={colors.accent} />
         </View>
       ) : null}
 
-      {/* Gesture surface: single tap = toggle chrome, double-tap sides = ±10s */}
-      <Pressable style={StyleSheet.absoluteFill} onPress={onSurfacePress}>
-        <View onLayout={(e) => { surfaceWidth.current = e.nativeEvent.layout.width; }} style={StyleSheet.absoluteFill} />
-      </Pressable>
+      {/* Gesture surface: tap / double-tap / VLC swipe seek · brightness · volume */}
+      <View style={StyleSheet.absoluteFill} {...surfacePan.panHandlers}>
+        <View
+          onLayout={(e) => { surfaceWidth.current = e.nativeEvent.layout.width; }}
+          style={StyleSheet.absoluteFill}
+        />
+      </View>
 
-      {uiVisible && ready && (
+      {/* Center gesture HUD (seek bubble / brightness & volume level) */}
+      {hud && (
+        <View pointerEvents="none" style={styles.vHudWrap}>
+          <View style={styles.vHudBubble}>
+            <MaterialCommunityIcons
+              name={hud.kind === "seek" ? "play-speed" : (hud.icon as any)}
+              size={16}
+              color="#fff"
+            />
+            <Text style={styles.vHudText}>
+              {hud.kind === "seek" ? hud.label : `${hud.pct}%`}
+            </Text>
+          </View>
+        </View>
+      )}
+
+      {/* Locked — tiny padlock stays available no matter what */}
+      {locked && (
+        <TouchableOpacity
+          style={[styles.vLockPill, { top: landscape ? 10 : 14 }]}
+          onPress={() => { haptic("medium"); setLocked(false); setUiVisible(true); }}
+          accessibilityLabel="Unlock video controls"
+        >
+          <MaterialCommunityIcons name="lock-open-variant" size={15} color="#fff" />
+        </TouchableOpacity>
+      )}
+
+      {uiVisible && ready && !locked && (
         <>
           {/* Top + bottom fades for legibility */}
           <LinearGradient
@@ -629,11 +800,24 @@ function VideoPlayer({ uri, transcodeUri, ext, onFallback }: { uri: string; tran
             pointerEvents="none"
           />
 
+          {/* Top bar — VLC-minimal: title left, lock right */}
+          <View style={[styles.vTopBar, { paddingHorizontal: landscape ? 14 : 12 }]}>
+            <Text style={styles.vTitle} numberOfLines={1}>Now playing</Text>
+            <TouchableOpacity
+              style={styles.vIconBtn}
+              onPress={() => { haptic("medium"); setLocked(true); }}
+              activeOpacity={0.7}
+              accessibilityLabel="Lock video controls"
+            >
+              <MaterialCommunityIcons name="lock-outline" size={18} color="#fff" />
+            </TouchableOpacity>
+          </View>
+
           {/* Center cluster */}
           <View pointerEvents="box-none" style={styles.vCenterRow}>
             <TouchableOpacity style={styles.vSkipBtn} onPress={() => skipBy(-10)} activeOpacity={0.7}
               accessibilityLabel="Back 10 seconds">
-              <MaterialCommunityIcons name="rewind-10" size={30} color="#fff" />
+              <MaterialCommunityIcons name="rewind-10" size={28} color="#fff" />
             </TouchableOpacity>
             <TouchableOpacity style={styles.vPlayBtn} onPress={togglePlay} activeOpacity={0.85}
               accessibilityLabel={playing ? "Pause" : "Play"}>
@@ -651,41 +835,49 @@ function VideoPlayer({ uri, transcodeUri, ext, onFallback }: { uri: string; tran
             </TouchableOpacity>
             <TouchableOpacity style={styles.vSkipBtn} onPress={() => skipBy(10)} activeOpacity={0.7}
               accessibilityLabel="Forward 10 seconds">
-              <MaterialCommunityIcons name="fast-forward-10" size={30} color="#fff" />
+              <MaterialCommunityIcons name="fast-forward-10" size={28} color="#fff" />
             </TouchableOpacity>
           </View>
 
-          {/* Bottom glass panel */}
-          <View style={styles.vBottomPanel} pointerEvents="box-none">
-            <View style={styles.vTimeRow} pointerEvents="none">
-              <Text style={styles.vTimeText}>{fmtTime(scrubRatio != null ? scrubRatio * duration : currentTime)}</Text>
-              <Text style={styles.vTimeText}>{fmtTime(duration)}</Text>
-            </View>
+          {/* Bottom panel — VLC transport row: play · time ── slider ── duration */}
+          <View
+            style={[styles.vBottomPanel, { paddingBottom: landscape ? 16 : 14 }]}
+            pointerEvents="box-none"
+          >
+            <View style={styles.vTransportRow} pointerEvents="box-none">
+              <TouchableOpacity style={styles.vSmallPlay} onPress={togglePlay} activeOpacity={0.7}
+                accessibilityLabel={playing ? "Pause" : "Play"}>
+                <MaterialCommunityIcons name={playing ? "pause" : "play"} size={22} color="#fff" />
+              </TouchableOpacity>
+              <Text style={styles.vTimeText}>{fmtTimeLong(scrubRatio != null ? scrubRatio * duration : currentTime)}</Text>
 
-            {/* Seek track */}
-            <View
-              style={styles.seekTrack}
-              onLayout={(e) => { barWidth.current = e.nativeEvent.layout.width; }}
-              onStartShouldSetResponder={() => true}
-              onMoveShouldSetResponder={() => true}
-              onResponderGrant={(e) => { setScrubRatio(ratioFromX(e.nativeEvent.locationX)); }}
-              onResponderMove={(e) => { setScrubRatio(ratioFromX(e.nativeEvent.locationX)); }}
-              onResponderRelease={(e) => {
-                const r = ratioFromX(e.nativeEvent.locationX);
-                setScrubRatio(null);
-                try { player.currentTime = r * (player.duration || duration || 0); } catch { /* ignore */ }
-                haptic("light");
-                scheduleHide();
-              }}
-            >
-              <View style={styles.seekBg} />
-              <View style={[styles.seekFill, { width: `${pct * 100}%` }]}>
-                <LinearGradient colors={["#8FB5FF", "#5B8CFF"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={StyleSheet.absoluteFill} />
+              {/* Seek track */}
+              <View
+                style={[styles.seekTrack, { flex: 1 }]}
+                onLayout={(e) => { barWidth.current = e.nativeEvent.layout.width; }}
+                onStartShouldSetResponder={() => true}
+                onMoveShouldSetResponder={() => true}
+                onResponderGrant={(e) => { setScrubRatio(ratioFromX(e.nativeEvent.locationX)); }}
+                onResponderMove={(e) => { setScrubRatio(ratioFromX(e.nativeEvent.locationX)); }}
+                onResponderRelease={(e) => {
+                  const r = ratioFromX(e.nativeEvent.locationX);
+                  setScrubRatio(null);
+                  try { player.currentTime = r * (player.duration || duration || 0); } catch { /* ignore */ }
+                  haptic("light");
+                  scheduleHide();
+                }}
+              >
+                <View style={styles.seekBg} />
+                <View style={[styles.seekFill, { width: `${pct * 100}%` }]}>
+                  <LinearGradient colors={["#8FB5FF", "#5B8CFF"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={StyleSheet.absoluteFill} />
+                </View>
+                <View style={[styles.seekThumbWrap, { left: `${pct * 100}%` }]}>
+                  <View style={[styles.seekThumbGlow, { backgroundColor: "#5B8CFF" }]} />
+                  <View style={styles.seekThumb} />
+                </View>
               </View>
-              <View style={[styles.seekThumbWrap, { left: `${pct * 100}%` }]}>
-                <View style={[styles.seekThumbGlow, { backgroundColor: "#5B8CFF" }]} />
-                <View style={styles.seekThumb} />
-              </View>
+
+              <Text style={styles.vTimeText}>{fmtTimeLong(duration)}</Text>
             </View>
 
             {/* Secondary row */}
@@ -699,6 +891,17 @@ function VideoPlayer({ uri, transcodeUri, ext, onFallback }: { uri: string; tran
                 <MaterialCommunityIcons name={muted ? "volume-off" : "volume-high"} size={20} color="#fff" />
               </TouchableOpacity>
               <View style={{ flex: 1 }} />
+              <TouchableOpacity
+                style={styles.vIconBtn}
+                onPress={() => {
+                  haptic("light");
+                  try { videoViewRef.current?.enterFullscreen?.(); } catch { /* unsupported */ }
+                }}
+                activeOpacity={0.7}
+                accessibilityLabel="Fullscreen"
+              >
+                <MaterialCommunityIcons name="fullscreen" size={22} color="#fff" />
+              </TouchableOpacity>
               <TouchableOpacity
                 style={styles.vIconBtn}
                 onPress={() => { haptic("light"); setSheetOpen(true); }}
@@ -1099,7 +1302,14 @@ const styles = StyleSheet.create({
   imageToolBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: "rgba(255,255,255,0.15)", alignItems: "center", justifyContent: "center", marginLeft: 12 },
 
   // Video
-  videoWrap: { flex: 1, alignItems: "center", justifyContent: "center", width: "100%" },
+  videoWrap: { flex: 1, alignItems: "center", justifyContent: "center", width: "100%", backgroundColor: "#000" },
+  // Landscape → fully immersive overlay covering the whole screen.
+  videoWrapLandscape: {
+    position: "absolute",
+    top: 0, left: 0, right: 0, bottom: 0,
+    zIndex: 50,
+    elevation: 50,
+  },
   video: { width: "100%", height: "100%", backgroundColor: "#000" },
   videoLoading: { position: "absolute", alignSelf: "center" },
   videoErrorWrap: { flex: 1, alignItems: "center", justifyContent: "center", gap: 8, padding: 32 },
@@ -1160,10 +1370,74 @@ const styles = StyleSheet.create({
     paddingBottom: 14,
     paddingTop: 8,
   },
-  vTimeRow: {
+  // VLC-style single transport row
+  vTransportRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 2,
+    alignItems: "center",
+    gap: 10,
+  },
+  vSmallPlay: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "rgba(255,255,255,0.12)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.2)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  // Slim top bar
+  vTopBar: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingTop: 10,
+    paddingBottom: 6,
+  },
+  vTitle: {
+    flex: 1,
+    color: "rgba(255,255,255,0.9)",
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  // Gesture HUD (seek bubble / brightness & volume)
+  vHudWrap: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  vHudBubble: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "rgba(0,0,0,0.72)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.18)",
+    borderRadius: 999,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+  },
+  vHudText: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "700",
+    fontVariant: ["tabular-nums"],
+  },
+  vLockPill: {
+    position: "absolute",
+    right: 14,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0,0,0,0.55)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.25)",
   },
   vTimeText: {
     color: "rgba(255,255,255,0.85)",

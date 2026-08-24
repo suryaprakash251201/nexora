@@ -1,4 +1,4 @@
-import React, { memo, useState } from "react";
+import React, { memo, useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Image } from "expo-image";
@@ -24,6 +24,13 @@ export const AudioCover = memo(function AudioCover({
   const { name, color } = fileIconFor(item);
   const [failed, setFailed] = useState(false);
   const uri = mediaThumbnailUrl(item.root_id, item.path, size);
+
+  // List cells recycle component instances across different files — without
+  // this reset a transient failure for one file would permanently blank the
+  // cover of whatever file reuses this instance next.
+  useEffect(() => {
+    setFailed(false);
+  }, [uri]);
 
   return (
     <View style={StyleSheet.absoluteFill}>
