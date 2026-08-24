@@ -2,8 +2,10 @@
 
 ############################
 # 1. Build the web frontend
+# Pinned to $BUILDPLATFORM: dist/ is arch-independent, so we build it ONCE
+# natively on the runner instead of emulating node for linux/arm64.
 ############################
-FROM node:20-alpine AS web
+FROM --platform=$BUILDPLATFORM node:20-alpine AS web
 WORKDIR /web
 COPY web/package.json web/package-lock.json* ./
 RUN npm ci && npm cache clean --force
@@ -13,13 +15,14 @@ RUN npm run build
 
 ############################
 # 2. Build the Go binary
+# Pinned to $BUILDPLATFORM + explicit GOOS/GOARCH cross-compile: running the
+# arm64 Go *compiler* under QEMU user-mode emulation segfaults on this package
+# set ("internal/storage: compile: signal: segmentation fault"). With
+# CGO_ENABLED=0 the produced binaries are identical to native builds.
 ############################
-FROM golang:1.26-alpine AS gobuild
-# Work around a QEMU user-mode emulation bug (golang/go#77572) that panics
-# the Go compiler with "runtime error: growslice" when cross-building
-# linux/arm64 on amd64 runners (the publish workflow pins QEMU 7.0.0 to fix
-# an npm SIGILL; QEMU 10.0.6+ fixes this Go bug natively).
-ENV GODEBUG=madvdontneed=0
+FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS gobuild
+ARG TARGETOS
+ARG TARGETARCH
 # apk can hit transient DNS/network errors fetching the Alpine index; retry a
 # few times before giving up so a flaky mirror doesn't kill the whole build.
 RUN set -eux; \
@@ -36,7 +39,7 @@ COPY cmd/ ./cmd/
 COPY internal/ ./internal/
 COPY migrations/ ./migrations/
 ARG VERSION=dev
-RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w -X github.com/nexora/nexora/internal/api.Version=${VERSION}" -o /out/nexora ./cmd/nexora
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} go build -trimpath -ldflags="-s -w -X github.com/nexora/nexora/internal/api.Version=${VERSION}" -o /out/nexora ./cmd/nexora
 
 ############################
 # 3. Minimal runtime image
