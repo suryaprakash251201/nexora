@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   StyleSheet,
   View,
@@ -297,6 +297,10 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
     panX.setValue(0);
     panY.setValue(0);
     swipeLock.current = null;
+    // Fresh cover-art retry cycle on every open — if retries were exhausted
+    // while the server was busy, opening the player tries again immediately.
+    setArtAttempt(0);
+    setArtFailed(false);
     setModalVisible(true);
     Animated.spring(slideAnim, {
       toValue: 0,
@@ -321,7 +325,40 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
     slideAnim.setValue(SCREEN_HEIGHT);
   };
 
-  const coverUrl = api ? api.thumbnailUrl(currentTrack.root_id, currentTrack.path, 512) : null;
+  // ── Cover art loading with bounded retry ─────────────────────────────
+  // Thumbnails are generated server-side on demand (ffmpeg). Right after a
+  // track change the first request can fail or time out under load, leaving
+  // the artwork blank until the player is reopened. We now: always render a
+  // brand-gradient placeholder BENEATH the image, detect load errors, and
+  // auto-retry with backoff using a cache-busting param.
+  const [artAttempt, setArtAttempt] = useState(0);
+  const [artFailed, setArtFailed] = useState(false);
+
+  useEffect(() => {
+    // New track → reset the retry cycle.
+    setArtAttempt(0);
+    setArtFailed(false);
+  }, [currentTrack?.path]);
+
+  useEffect(() => {
+    if (!artFailed || artAttempt >= 4) return;
+    const t = setTimeout(() => setArtAttempt((n) => n + 1), 400 + artAttempt * 700);
+    return () => clearTimeout(t);
+  }, [artFailed, artAttempt]);
+
+  const onArtError = useCallback(() => {
+    // Mark failure so the backoff effect schedules the next attempt.
+    setArtFailed(true);
+  }, []);
+
+  const onArtLoad = useCallback(() => {
+    // Success stops the retry chain.
+    setArtFailed(false);
+  }, []);
+
+  const baseCoverUrl = api ? api.thumbnailUrl(currentTrack.root_id, currentTrack.path, 512) : null;
+  const coverUrl =
+    baseCoverUrl && artAttempt > 0 ? `${baseCoverUrl}${baseCoverUrl.includes("?") ? "&" : "?"}_r=${artAttempt}` : baseCoverUrl;
   const ext = currentTrack.extension || "";
 
   // Keep the swipe actions pointing at the live handlers (defined above).
@@ -499,11 +536,23 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
         <TouchableOpacity
           style={[
             styles.miniInner,
-            { backgroundColor: colors.surfaceElevated, borderColor: colors.borderSoft },
+            { borderColor: colors.borderSoft },
           ]}
           activeOpacity={0.9}
           onPress={openModal}
         >
+          {/* Frosted glass underlay — content scrolls visibly behind the bar. */}
+          <BlurView
+            intensity={isDark ? 50 : 65}
+            tint={isDark ? "dark" : "light"}
+            experimentalBlurMethod={Platform.OS === "android" ? ("dimezisBlurView" as const) : undefined}
+            style={StyleSheet.absoluteFill}
+            pointerEvents="none"
+          />
+          <View
+            style={[StyleSheet.absoluteFill, { backgroundColor: isDark ? "rgba(13,15,22,0.52)" : "rgba(255,255,255,0.62)" }]}
+            pointerEvents="none"
+          />
           <LinearGradient
             colors={["rgba(255,255,255,0.06)", "transparent"]}
             start={{ x: 0, y: 0 }}
@@ -512,16 +561,22 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
           />
 
           <View style={[styles.miniIconWrap, { backgroundColor: colors.surfaceMuted, overflow: "hidden" }]}>
+            {/* Icon fallback sits beneath so a slow/failing thumb still shows art. */}
+            <View style={StyleSheet.absoluteFill} pointerEvents="none">
+              <MaterialCommunityIcons name="music-note" size={24} color={gradients.brand[0]} />
+            </View>
             {coverUrl ? (
               <Image
+                key={`mini-${coverUrl}`}
                 source={{ uri: coverUrl }}
                 style={{ width: "100%", height: "100%" }}
                 contentFit="cover"
                 transition={300}
+                recyclingKey={`mini-${currentTrack.path}`}
+                onLoad={onArtLoad}
+                onError={onArtError}
               />
-            ) : (
-              <MaterialCommunityIcons name="music-note" size={24} color={gradients.brand[0]} />
-            )}
+            ) : null}
           </View>
 
           <View style={styles.miniTextWrap}>
@@ -586,11 +641,13 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
             {/* ── Background: blurred artwork + dark overlay + blur ── */}
             {coverUrl ? (
               <Image
+                key={`bg-${coverUrl}`}
                 source={{ uri: coverUrl }}
                 style={StyleSheet.absoluteFill}
                 contentFit="cover"
                 blurRadius={90}
                 pointerEvents="none"
+                onError={onArtError}
               />
             ) : (
               <LinearGradient colors={[...gradients.player]} style={StyleSheet.absoluteFill} pointerEvents="none" />
@@ -678,25 +735,30 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
                       { transform: [{ scale: artworkScaleAnim }] },
                     ]}
                   >
+                    {/* Brand placeholder ALWAYS beneath — a failed/slow
+                        thumbnail can never render as an empty box. */}
+                    <LinearGradient
+                      colors={[...gradients.brand]}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={StyleSheet.absoluteFill}
+                    >
+                      <View style={styles.artworkPlaceholder}>
+                        <MaterialCommunityIcons name="music-note" size={80} color="#fff" />
+                      </View>
+                    </LinearGradient>
                     {coverUrl ? (
                       <Image
+                        key={coverUrl}
                         source={{ uri: coverUrl }}
                         style={styles.artworkImage}
                         contentFit="cover"
                         transition={300}
+                        recyclingKey={currentTrack.path}
+                        onLoad={onArtLoad}
+                        onError={onArtError}
                       />
-                    ) : (
-                      <LinearGradient
-                        colors={[...gradients.brand]}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 1 }}
-                        style={StyleSheet.absoluteFill}
-                      >
-                        <View style={styles.artworkPlaceholder}>
-                          <MaterialCommunityIcons name="music-note" size={80} color="#fff" />
-                        </View>
-                      </LinearGradient>
-                    )}
+                    ) : null}
                     {status === "loading" && (
                       <View
                         style={[
@@ -1659,7 +1721,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
-    shadowColor: "#4F46E5",
+    shadowColor: "#5B8CFF",
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.45,
     shadowRadius: 16,

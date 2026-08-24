@@ -105,6 +105,26 @@
 - [x] Fixed two ordering bugs found in self-review (store cleared before payload read in breadcrumbs + sidebar flows)
 - [x] Verified: tsc ✓ build ✓ 13/13 tests ✓
 
+### Session 7 — Mobile redesign pass (user request): **DONE**
+- [x] **Brand alignment with web** (`theme.ts`): accent #4F46E5 indigo → **#5B8CFF electric blue** family matching web tokens; added `accentSecondary` (#7A5CFF violet) / `accentTertiary` (#35D3FF cyan); refreshed `brand`/`brandDeep`/`hero`/`player` gradients for both themes; light-mode accent deepened to #3F6BE0 for AA contrast
+- [x] **PremiumTabBar v2**: real frosted glass via expo-blur (`dimezisBlurView` on Android — v54 renamed API caught per AGENTS.md), brand-tinted veil gradient inside the bar, sliding capsule now a blue→violet gradient with soft outer glow, bolder focused labels, haptic tick on tab change (respects prefs)
+- [x] **HomeScreen**: quick-category gradients re-mapped to the new palette (Photos=brand blue/violet, Audio=cyan/teal); pull-to-refresh now fires a light haptic
+- [x] **MiniPlayer** play/pause glow shadow recolored to new accent; **PreviewScreen** seek-bar fill gradient moved off old indigo
+- [x] Login/Splash inherit new palette automatically (fully token-driven)
+- [x] Verified: `tsc --noEmit` ✓ (Expo 54 API drift caught & fixed: `experimentalBlurMethod="dimezisBlurView"`)
+
+### Session 8 — Cover-art bug fix + glass pass (user request): **DONE**
+- [x] **Cover-art fix (MiniPlayer)**: thumbnails are generated server-side on demand; the first request after a track change could fail while ffmpeg was busy → blank artwork until the player was reopened. Now: brand-gradient placeholder ALWAYS renders beneath the art (never a void box), load errors trigger **bounded auto-retry with backoff** (`&_r=N` cache-buster, max 4 attempts ≈6s), success stops the chain, opening the player resets the cycle. Applied to fullscreen artwork, blurred background, and mini-bar thumb (+ `recyclingKey` for correct expo-image recycling)
+- [x] **Glass pass**: mini bar converted from opaque surface to frosted BlurView underlay + translucent veil (content scrolls visibly behind); BottomSheet surface frosted (queue/more sheets inherit); Home root-cards + stats card now translucent so the hero glow bleeds through — zero extra blur layers inside scrolling lists (perf guard)
+- [x] Verified: `tsc --noEmit` ✓
+
+### Session 9 — Video player redesign (user request): **DONE**
+- [x] **Custom Nexora control layer** replaces raw `nativeControls`: tap-to-toggle chrome with 3s auto-hide while playing, YouTube-style **double-tap left/right thirds = ∓10s** (uses expo-video `seekBy`), center glass cluster (−10s · play/pause · +10s) with gradient play button
+- [x] **Bottom glass panel**: tabular time row, brand-gradient seek bar with glowing thumb (scrub preview commits on release via `player.currentTime`), playback-speed pill (1/1.25/1.5/2/0.75 — real `playbackRate` set), mute toggle, options sheet relocated into the control row (floating orphan button removed)
+- [x] Top/bottom legibility fades; haptic ticks on all transport actions; every native call guarded so unsupported capabilities degrade silently
+- [x] Preserved: transcode-fallback chain, error state with download/open-with, Android `collapsable={false}` black-screen guard
+- [x] Verified: `tsc --noEmit` ✓ (caught & fixed against installed types: `playingChange` payload is `{isPlaying}`, not `{playing}`)
+
 ### Remaining (next sessions)
 - [ ] **P4 remainder**: AudioPlayer is now 1036 ln — the fullscreen vinyl/controls JSX could split further (NowPlaying vs transport bar), diminishing returns; nested `<Route>` conversion stays optional (URL state already correct via `navigate()` + parsing)
 - [ ] **UX remainder**: R6 full accessibility audit (labels done for player; forms/menus remain), motion polish

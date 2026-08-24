@@ -10,19 +10,21 @@ export const darkColors = {
   borderSoft: "rgba(255,255,255,0.04)",
   content: "#FFFFFF",
   muted: "#94A3B8",
-  accent: "#4F46E5", // Rich Indigo
-  accentSoft: "rgba(79, 70, 229, 0.15)",
+  accent: "#5B8CFF", // Electric blue — matches web --color-accent
+  accentSecondary: "#7A5CFF", // Violet — matches web --color-accent-secondary
+  accentTertiary: "#35D3FF", // Cyan — matches web --color-accent-tertiary
+  accentSoft: "rgba(91, 140, 255, 0.15)",
   danger: "#F43F5E", // Rose red
   warning: "#F59E0B", // Amber
   success: "#10B981", // Emerald green
   grid: "rgba(255,255,255,0.03)",
-  purple: "#8B5CF6",
+  purple: "#A78BFA",
   teal: "#14B8A6",
-  cyan: "#06B6D4",
-  orange: "#F97316",
-  amber: "#F59E0B",
+  cyan: "#35D3FF",
+  orange: "#FB923C",
+  amber: "#FBBF24",
   green: "#10B981",
-  blue: "#3B82F6",
+  blue: "#5B8CFF",
   red: "#F43F5E",
 };
 
@@ -36,8 +38,11 @@ export const lightColors = {
   borderSoft: "rgba(0,0,0,0.04)",
   content: "#0F172A",
   muted: "#64748B",
-  accent: "#4338CA",
-  accentSoft: "rgba(67, 56, 202, 0.12)",
+  // Deeper blue than the web token so small accent text/icons stay AA on white.
+  accent: "#3F6BE0",
+  accentSecondary: "#7A5CFF",
+  accentTertiary: "#0891B2",
+  accentSoft: "rgba(63, 107, 224, 0.12)",
   danger: "#E11D48",
   warning: "#D97706",
   success: "#059669",
@@ -70,17 +75,17 @@ export interface AppGradients {
 
 /** Gradient stops used across the app (brand, buttons, player). */
 export const gradients: AppGradients = {
-  brand: ["#4F46E5", "#8B5CF6", "#D946EF"],
-  brandDeep: ["#312E81", "#4338CA"],
-  hero: ["rgba(79, 70, 229, 0.15)", "rgba(139, 92, 246, 0.05)", "transparent"],
-  player: ["#0F172A", "#040508"],
+  brand: ["#5B8CFF", "#7A5CFF", "#35D3FF"],
+  brandDeep: ["#1C2650", "#3D53DB"],
+  hero: ["rgba(91, 140, 255, 0.16)", "rgba(122, 92, 255, 0.05)", "transparent"],
+  player: ["#101B33", "#040508"],
   danger: ["#E11D48", "#9F1239"],
 };
 
 export const lightGradients: AppGradients = {
-  brand: ["#4338CA", "#7C3AED", "#C026D3"],
-  brandDeep: ["#3730A3", "#4F46E5"],
-  hero: ["rgba(67, 56, 202, 0.08)", "rgba(124, 58, 237, 0.03)", "transparent"],
+  brand: ["#5B8CFF", "#7A5CFF", "#35D3FF"],
+  brandDeep: ["#283593", "#4F46E5"],
+  hero: ["rgba(63, 107, 224, 0.08)", "rgba(122, 92, 255, 0.03)", "transparent"],
   player: ["#E2E8F0", "#F8FAFC"],
   danger: ["#E11D48", "#9F1239"],
 };

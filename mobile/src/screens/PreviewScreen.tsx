@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   ActivityIndicator,
   Alert,
+  GestureResponderEvent,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -22,6 +24,7 @@ import * as Sharing from "expo-sharing";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useSession } from "../store/SessionContext";
 import { useTheme } from "../store/ThemeContext";
+import { haptic } from "../store/SettingsContext";
 import { useAudio } from "../store/AudioContext";
 import type { FileItem } from "../api/types";
 import { GlyphTile } from "../components/AppIcon";
@@ -392,6 +395,20 @@ export default function PreviewScreen({ route }: Props) {
 // (HEVC on older Android), or when native playback errors — it swaps to the
 // server's transcode endpoint, which pipes a streamable fragmented MP4
 // (H.264/AAC via ffmpeg) that both platforms can play.
+const VIDEO_RATES = [1, 1.25, 1.5, 2, 0.75] as const;
+
+/**
+ * VideoPlayer — Nexora-branded playback experience.
+ *
+ * Replaces the raw nativeControls with a custom overlay:
+ *  - Single tap toggles the chrome; it auto-hides after 3s while playing
+ *  - Double-tap left/right thirds skip ∓10s (YouTube-style)
+ *  - Center glass cluster: −10s · play/pause · +10s
+ *  - Bottom glass panel: tabular time row, brand-gradient seek bar with
+ *    glowing thumb, playback-speed pill, mute toggle, options sheet
+ * All state comes from expo-video events; every native call is guarded so
+ * unsupported capabilities degrade silently instead of crashing.
+ */
 function VideoPlayer({ uri, transcodeUri, ext, onFallback }: { uri: string; transcodeUri: string; ext?: string; onFallback?: () => void }) {
   const { colors, font, radius } = useTheme();
   const extNorm = (ext || "").toLowerCase().replace(/^\./, "");
@@ -408,12 +425,20 @@ function VideoPlayer({ uri, transcodeUri, ext, onFallback }: { uri: string; tran
   const switched = useRef(needsTranscode && !!transcodeUri);
   const [sheetOpen, setSheetOpen] = useState(false);
 
+  // ── Playback state ──
+  const [playing, setPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [muted, setMuted] = useState(false);
+  const [rateIdx, setRateIdx] = useState(0);
+
   useEffect(() => {
     const sub = player.addListener("statusChange", ({ status }) => {
       setReady(status === "readyToPlay");
       setSwitching(false);
       setFailed(status === "error");
       if (status === "readyToPlay") {
+        try { setDuration(player.duration || 0); } catch { /* ignore */ }
         // Belt & braces: ensure playback starts even if play() in the
         // setup callback fired before the player was ready.
         player.play();
@@ -434,6 +459,114 @@ function VideoPlayer({ uri, transcodeUri, ext, onFallback }: { uri: string; tran
       } catch (e) {}
     };
   }, [player, transcodeUri]);
+
+  useEffect(() => {
+    const subs = [
+      player.addListener("playingChange", ({ isPlaying: p }) => setPlaying(p)),
+      player.addListener("timeUpdate", ({ currentTime: t }) => setCurrentTime(t)),
+    ];
+    return () => subs.forEach((s) => s.remove());
+  }, [player]);
+
+  // ── Controls visibility ──
+  const [uiVisible, setUiVisible] = useState(true);
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clearHideTimer = () => {
+    if (hideTimer.current) clearTimeout(hideTimer.current);
+    hideTimer.current = null;
+  };
+  const scheduleHide = useCallback(() => {
+    clearHideTimer();
+    hideTimer.current = setTimeout(() => setUiVisible(false), 3000);
+  }, []);
+  useEffect(() => {
+    if (!uiVisible) { clearHideTimer(); return; }
+    if (playing) scheduleHide();
+    else clearHideTimer();
+    return clearHideTimer;
+  }, [uiVisible, playing, scheduleHide]);
+  useEffect(() => clearHideTimer, []);
+
+  const togglePlay = useCallback(() => {
+    haptic("light");
+    try { playing ? player.pause() : player.play(); } catch { /* ignore */ }
+    if (!uiVisible) setUiVisible(true); else scheduleHide();
+  }, [player, playing, uiVisible, scheduleHide]);
+
+  const skipBy = useCallback((delta: number) => {
+    haptic("light");
+    try {
+      const p = player as unknown as { seekBy?: (s: number) => void };
+      if (typeof p.seekBy === "function") {
+        player.seekBy(delta);
+      } else {
+        const d = player.duration || duration || 0;
+        const next = Math.min(Math.max(currentTime + delta, 0), d || Number.MAX_SAFE_INTEGER);
+        player.currentTime = next;
+        setCurrentTime(next);
+      }
+    } catch { /* ignore */ }
+    scheduleHide();
+  }, [player, currentTime, duration, scheduleHide]);
+
+  // Double-tap zones: two quick taps inside a side third seek ∓10s; a lone
+  // tap toggles the control chrome.
+  const surfaceWidth = useRef(0);
+  const lastTapRef = useRef<{ t: number; side: "l" | "r" | "c" }>({ t: 0, side: "c" });
+  const singleTapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (singleTapTimer.current) clearTimeout(singleTapTimer.current); }, []);
+
+  const onSurfacePress = (e: GestureResponderEvent) => {
+    const w = surfaceWidth.current;
+    const x = e.nativeEvent.locationX;
+    const side: "l" | "r" | "c" = x < w / 3 ? "l" : x > (w * 2) / 3 ? "r" : "c";
+    const now = Date.now();
+    const isDouble = side !== "c" && now - lastTapRef.current.t < 300 && lastTapRef.current.side === side;
+    lastTapRef.current = { t: now, side };
+    if (isDouble) {
+      if (singleTapTimer.current) { clearTimeout(singleTapTimer.current); singleTapTimer.current = null; }
+      skipBy(side === "l" ? -10 : 10);
+      return;
+    }
+    if (singleTapTimer.current) clearTimeout(singleTapTimer.current);
+    singleTapTimer.current = setTimeout(() => {
+      haptic("light");
+      setUiVisible((v) => !v);
+    }, 260);
+  };
+
+  const toggleMute = useCallback(() => {
+    haptic("light");
+    try { player.muted = !muted; setMuted(!muted); } catch { /* ignore */ }
+    scheduleHide();
+  }, [player, muted, scheduleHide]);
+
+  const cycleRate = useCallback(() => {
+    haptic("light");
+    const next = (rateIdx + 1) % VIDEO_RATES.length;
+    try {
+      (player as unknown as { playbackRate?: number }).playbackRate = VIDEO_RATES[next];
+      setRateIdx(next);
+    } catch {
+      // Capability unsupported — leave rate unchanged.
+    }
+    scheduleHide();
+  }, [player, rateIdx, scheduleHide]);
+
+  // ── Seek bar ──
+  const [scrubRatio, setScrubRatio] = useState<number | null>(null);
+  const barWidth = useRef(0);
+  const pct = scrubRatio ?? (duration > 0 ? Math.min(1, currentTime / duration) : 0);
+
+  const ratioFromX = (locationX: number) =>
+    barWidth.current > 0 ? Math.min(1, Math.max(0, locationX / barWidth.current)) : 0;
+
+  const fmtTime = (s: number) => {
+    if (!s || !isFinite(s)) return "0:00";
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    return `${m}:${String(sec).padStart(2, "0")}`;
+  };
 
   if (failed) {
     return (
@@ -461,19 +594,123 @@ function VideoPlayer({ uri, transcodeUri, ext, onFallback }: { uri: string; tran
     // collapsable={false}: on Android, native views inside react-native-screens
     // can be flattened away and render black — this keeps VideoView alive.
     <View style={styles.videoWrap} collapsable={false}>
-      <VideoView player={player} style={styles.video} contentFit="contain" nativeControls />
+      <VideoView
+        player={player}
+        style={styles.video}
+        contentFit="contain"
+        nativeControls={false}
+        allowsFullscreen
+        allowsPictureInPicture
+      />
       {!ready || switching ? (
         <View style={styles.videoLoading} pointerEvents="none">
           <ActivityIndicator size="large" color={colors.accent} />
         </View>
       ) : null}
 
-      <TouchableOpacity
-        style={styles.videoMenuBtn}
-        onPress={() => setSheetOpen(true)}
-      >
-        <MaterialCommunityIcons name="dots-vertical" size={28} color="#fff" />
-      </TouchableOpacity>
+      {/* Gesture surface: single tap = toggle chrome, double-tap sides = ±10s */}
+      <Pressable style={StyleSheet.absoluteFill} onPress={onSurfacePress}>
+        <View onLayout={(e) => { surfaceWidth.current = e.nativeEvent.layout.width; }} style={StyleSheet.absoluteFill} />
+      </Pressable>
+
+      {uiVisible && ready && (
+        <>
+          {/* Top + bottom fades for legibility */}
+          <LinearGradient
+            colors={["rgba(0,0,0,0.55)", "transparent"]}
+            start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }}
+            style={[styles.vFade, styles.vFadeTop]}
+            pointerEvents="none"
+          />
+          <LinearGradient
+            colors={["transparent", "rgba(0,0,0,0.65)"]}
+            start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }}
+            style={[styles.vFade, styles.vFadeBottom]}
+            pointerEvents="none"
+          />
+
+          {/* Center cluster */}
+          <View pointerEvents="box-none" style={styles.vCenterRow}>
+            <TouchableOpacity style={styles.vSkipBtn} onPress={() => skipBy(-10)} activeOpacity={0.7}
+              accessibilityLabel="Back 10 seconds">
+              <MaterialCommunityIcons name="rewind-10" size={30} color="#fff" />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.vPlayBtn} onPress={togglePlay} activeOpacity={0.85}
+              accessibilityLabel={playing ? "Pause" : "Play"}>
+              <LinearGradient
+                colors={["rgba(255,255,255,0.16)", "rgba(255,255,255,0.06)"]}
+                start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                style={StyleSheet.absoluteFill}
+              />
+              <MaterialCommunityIcons
+                name={playing ? "pause" : "play"}
+                size={38}
+                color="#fff"
+                style={playing ? undefined : { marginLeft: 4 }}
+              />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.vSkipBtn} onPress={() => skipBy(10)} activeOpacity={0.7}
+              accessibilityLabel="Forward 10 seconds">
+              <MaterialCommunityIcons name="fast-forward-10" size={30} color="#fff" />
+            </TouchableOpacity>
+          </View>
+
+          {/* Bottom glass panel */}
+          <View style={styles.vBottomPanel} pointerEvents="box-none">
+            <View style={styles.vTimeRow} pointerEvents="none">
+              <Text style={styles.vTimeText}>{fmtTime(scrubRatio != null ? scrubRatio * duration : currentTime)}</Text>
+              <Text style={styles.vTimeText}>{fmtTime(duration)}</Text>
+            </View>
+
+            {/* Seek track */}
+            <View
+              style={styles.seekTrack}
+              onLayout={(e) => { barWidth.current = e.nativeEvent.layout.width; }}
+              onStartShouldSetResponder={() => true}
+              onMoveShouldSetResponder={() => true}
+              onResponderGrant={(e) => { setScrubRatio(ratioFromX(e.nativeEvent.locationX)); }}
+              onResponderMove={(e) => { setScrubRatio(ratioFromX(e.nativeEvent.locationX)); }}
+              onResponderRelease={(e) => {
+                const r = ratioFromX(e.nativeEvent.locationX);
+                setScrubRatio(null);
+                try { player.currentTime = r * (player.duration || duration || 0); } catch { /* ignore */ }
+                haptic("light");
+                scheduleHide();
+              }}
+            >
+              <View style={styles.seekBg} />
+              <View style={[styles.seekFill, { width: `${pct * 100}%` }]}>
+                <LinearGradient colors={["#8FB5FF", "#5B8CFF"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={StyleSheet.absoluteFill} />
+              </View>
+              <View style={[styles.seekThumbWrap, { left: `${pct * 100}%` }]}>
+                <View style={[styles.seekThumbGlow, { backgroundColor: "#5B8CFF" }]} />
+                <View style={styles.seekThumb} />
+              </View>
+            </View>
+
+            {/* Secondary row */}
+            <View style={styles.vSecondaryRow}>
+              <TouchableOpacity style={styles.vPill} onPress={cycleRate} activeOpacity={0.7}
+                accessibilityLabel={`Playback speed ${VIDEO_RATES[rateIdx]}x`}>
+                <Text style={styles.vPillText}>{VIDEO_RATES[rateIdx]}×</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.vIconBtn} onPress={toggleMute} activeOpacity={0.7}
+                accessibilityLabel={muted ? "Unmute" : "Mute"}>
+                <MaterialCommunityIcons name={muted ? "volume-off" : "volume-high"} size={20} color="#fff" />
+              </TouchableOpacity>
+              <View style={{ flex: 1 }} />
+              <TouchableOpacity
+                style={styles.vIconBtn}
+                onPress={() => { haptic("light"); setSheetOpen(true); }}
+                activeOpacity={0.7}
+                accessibilityLabel="Video options"
+              >
+                <MaterialCommunityIcons name="dots-vertical" size={22} color="#fff" />
+              </TouchableOpacity>
+            </View>
+          </View>
+        </>
+      )}
 
       <BottomSheet
         visible={sheetOpen}
@@ -778,7 +1015,7 @@ function AudioPlayer({ name, size, ext, mime, rootId, path, onShare }: { name: s
           >
             <View style={styles.seekBg} />
             <View style={[styles.seekFill, { width: `${pct * 100}%` }]}>
-              <LinearGradient colors={["#a6c8ff", "#6366F1"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={StyleSheet.absoluteFill} />
+              <LinearGradient colors={["#8FB5FF", "#5B8CFF"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={StyleSheet.absoluteFill} />
             </View>
             <View style={[styles.seekThumbWrap, { left: `${pct * 100}%` }]}>
               <View style={[styles.seekThumbGlow, { backgroundColor: "#a6c8ff" }]} />
@@ -877,17 +1114,92 @@ const styles = StyleSheet.create({
     paddingVertical: 11,
   },
   videoErrorBtnText: { color: "#fff", fontWeight: "700" },
-  videoMenuBtn: {
-    position: "absolute",
-    top: 48,
-    right: 16,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: "rgba(0,0,0,0.5)",
+  // ── Video overlay chrome ──
+  vFade: { position: "absolute", left: 0, right: 0, height: 90 },
+  vFadeTop: { top: 0 },
+  vFadeBottom: { bottom: 0, height: 130 },
+  vCenterRow: {
+    ...StyleSheet.absoluteFillObject,
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    zIndex: 10,
+    gap: 34,
+  },
+  vPlayBtn: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.22)",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0,0,0,0.25)",
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOpacity: 0.35,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 8,
+  },
+  vSkipBtn: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "rgba(0,0,0,0.28)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.18)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  vBottomPanel: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingHorizontal: 16,
+    paddingBottom: 14,
+    paddingTop: 8,
+  },
+  vTimeRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 2,
+  },
+  vTimeText: {
+    color: "rgba(255,255,255,0.85)",
+    fontSize: 11,
+    fontWeight: "600",
+    fontVariant: ["tabular-nums"],
+  },
+  vSecondaryRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginTop: 4,
+  },
+  vPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.14)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.22)",
+  },
+  vPillText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "700",
+    fontVariant: ["tabular-nums"],
+  },
+  vIconBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "rgba(255,255,255,0.10)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.16)",
+    alignItems: "center",
+    justifyContent: "center",
   },
 
   // Text / Code / Markdown

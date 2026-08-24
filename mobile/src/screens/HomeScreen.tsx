@@ -25,6 +25,7 @@ import { previewKind } from "../api/client";
 import type { Root, FileItem, Playlist, FavoriteItem } from "../api/types";
 import type { RootStackParamList, MainTabParamList } from "../navigation/types";
 import { useAudio } from "../store/AudioContext";
+import { haptic } from "../store/SettingsContext";
 import { PressScale, FadeSlideIn } from "../components/motion";
 
 type Nav = CompositeNavigationProp<
@@ -40,11 +41,11 @@ type QuickAction =
   | { id: string; title: string; icon: string; screen: "Favorites" | "Trash"; gradient: readonly [string, string] };
 
 const QUICK_CATEGORIES: QuickAction[] = [
-  { id: "photos", title: "Photos", icon: "image-multiple", kind: "image" as const, gradient: ["#4F46E5", "#8B5CF6"] as const },
+  { id: "photos", title: "Photos", icon: "image-multiple", kind: "image" as const, gradient: ["#5B8CFF", "#7A5CFF"] as const },
   { id: "docs", title: "Documents", icon: "file-document", kind: "document" as const, gradient: ["#F59E0B", "#F97316"] as const },
-  { id: "music", title: "Audio", icon: "music-note", kind: "audio" as const, gradient: ["#14B8A6", "#10B981"] as const },
+  { id: "music", title: "Audio", icon: "music-note", kind: "audio" as const, gradient: ["#35D3FF", "#14B8A6"] as const },
   { id: "videos", title: "Videos", icon: "play-circle", kind: "video" as const, gradient: ["#F43F5E", "#E11D48"] as const },
-  { id: "favorites", title: "Favorites", icon: "heart", screen: "Favorites" as const, gradient: ["#EF4444", "#F97316"] as const },
+  { id: "favorites", title: "Favorites", icon: "heart", screen: "Favorites" as const, gradient: ["#FB7185", "#FB923C"] as const },
   { id: "trash", title: "Trash", icon: "delete-restore", screen: "Trash" as const, gradient: ["#64748B", "#475569"] as const },
 ];
 
@@ -87,7 +88,7 @@ export default function HomeScreen() {
 
   const load = useCallback(async (isRefresh = false) => {
     if (!api) return;
-    if (isRefresh) setRefreshing(true);
+    if (isRefresh) { setRefreshing(true); haptic("light"); }
     else setLoading(true);
     setError(null);
     try {
@@ -193,7 +194,9 @@ export default function HomeScreen() {
               style={[
                 styles.rootCard,
                 {
-                  backgroundColor: colors.surface,
+                  // Translucent instead of opaque: the hero glow bleeds
+                  // through for a glass feel at zero render cost.
+                  backgroundColor: isDark ? "rgba(21,24,34,0.62)" : "rgba(255,255,255,0.78)",
                   borderColor: colors.borderSoft,
                   borderRadius: radius.xl,
                   padding: spacing.lg,
@@ -305,7 +308,7 @@ export default function HomeScreen() {
             style={[
               styles.statsBar,
               {
-                backgroundColor: colors.surface,
+                backgroundColor: isDark ? "rgba(21,24,34,0.66)" : "rgba(255,255,255,0.8)",
                 borderColor: colors.borderSoft,
                 borderRadius: radius.xl,
                 marginHorizontal: spacing.lg,

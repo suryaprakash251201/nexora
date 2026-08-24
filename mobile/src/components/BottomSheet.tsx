@@ -1,6 +1,7 @@
 import React from "react";
 import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { BlurView } from "expo-blur";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "../store/ThemeContext";
 
@@ -34,7 +35,7 @@ export function BottomSheet({ visible, onClose, title, actions, children }: Prop
             style={[
               styles.sheet,
               {
-                backgroundColor: colors.surfaceElevated,
+                backgroundColor: isDark ? "rgba(21,24,34,0.72)" : "rgba(255,255,255,0.85)",
                 borderColor: colors.borderSoft,
                 paddingHorizontal: spacing.lg,
                 paddingBottom: insets.bottom + 24,
@@ -42,6 +43,14 @@ export function BottomSheet({ visible, onClose, title, actions, children }: Prop
             ]}
             onPress={() => {}}
           >
+          {/* Frosted glass surface — the dimmed app glows softly through. */}
+          <BlurView
+            intensity={isDark ? 55 : 70}
+            tint={isDark ? "dark" : "light"}
+            experimentalBlurMethod={Platform.OS === "android" ? ("dimezisBlurView" as const) : undefined}
+            style={[StyleSheet.absoluteFill, { borderTopLeftRadius: 26, borderTopRightRadius: 26 }]}
+            pointerEvents="none"
+          />
           <View style={[styles.grabber, { backgroundColor: isDark ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.15)" }]} />
           {title ? (
             <Text style={[styles.title, { color: colors.content, fontSize: font.md, marginBottom: spacing.md }]} numberOfLines={1}>
