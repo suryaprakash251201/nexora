@@ -1,19 +1,22 @@
-import { useEffect, useMemo, useState, useCallback, useRef } from "react";
-import { X, Download, Pencil, Share2, Copy, Check, ZoomIn, ZoomOut, Maximize, Minimize, ChevronLeft, ChevronRight, Info } from "lucide-react";
+import { useEffect, useMemo, useState, useCallback, useRef, lazy, Suspense } from "react";
+import { X, Download, Pencil, Share2, ZoomIn, ZoomOut, Maximize, Minimize, ChevronLeft, ChevronRight, Info } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { FileItem } from "../api/types";
-import { previewKind, isEditable, rawUrl, codeLanguage } from "../lib/preview";
+import { previewKind, isEditable, rawUrl } from "../lib/preview";
 import { startDownload } from "../lib/transfer";
-import { renderMarkdown } from "../lib/markdown";
 import { usePlayer } from "../store/player";
 import MediaPlayer from "./MediaPlayer";
-import PdfViewer from "./PdfViewer";
+import { DocumentSkeleton } from "./pdf/ViewerStatus";
 import { Button } from "./ui/Button";
 import { formatBytes, formatDate } from "../lib/format";
 import { cn } from "@/lib/utils";
 import { useFocusTrap } from "../lib/useFocusTrap";
+import TextWorkspace from "./text/TextWorkspace";
 
-const MAX_TEXT = 400000;
+
+// The Document Space (PDF) is code-split on its own — pdf.js only ever
+// downloads when a PDF is actually opened.
+const PdfWorkspace = lazy(() => import("./pdf/PdfWorkspace"));
 
 export default function PreviewModal({
   item,
@@ -34,10 +37,6 @@ export default function PreviewModal({
 }) {
   const [current, setCurrent] = useState(item);
   const kind = previewKind(current);
-  const [text, setText] = useState<string | null>(null);
-  const [textLoading, setTextLoading] = useState(false);
-  const [truncated, setTruncated] = useState(false);
-  const [copied, setCopied] = useState(false);
   const [zoom, setZoom] = useState(1);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
@@ -72,27 +71,10 @@ export default function PreviewModal({
   const queueIndex = audioQueue.findIndex((f) => f.path === current.path);
 
   useEffect(() => {
-    if (kind === "text" || kind === "markdown") {
-      setTextLoading(true);
-      setText(null);
-      fetch(url)
-        .then((r) => r.text())
-        .then((t) => {
-          if (t.length > MAX_TEXT) {
-            setTruncated(true);
-            setText(t.slice(0, MAX_TEXT));
-          } else {
-            setTruncated(false);
-            setText(t);
-          }
-        })
-        .catch(() => setText("Unable to load preview."))
-        .finally(() => setTextLoading(false));
-    }
-  }, [current.path, url, kind]);
-
-  useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // PDFs run their own Document Space keyboard layer (including the
+      // Escape cascade); the generic preview shortcuts don't apply.
+      if (kind === "pdf") return;
       if (e.key === "Escape") {
         if (isFullscreen) setIsFullscreen(false);
         else handleClose();
@@ -123,17 +105,41 @@ export default function PreviewModal({
     }
   }, [kind]);
 
-  const copyText = () => {
-    if (text) {
-      navigator.clipboard.writeText(text).then(() => {
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1500);
-      });
-    }
-  };
 
   const editable = !current.is_dir && isEditable(current);
   const focusTrapRef = useFocusTrap(true);
+
+  // ── Document Space: PDFs get the full viewport, not a modal pane ─────
+  if (kind === "pdf") {
+    return (
+      <div
+        className="fixed inset-0 z-[var(--z-modal)] animate-fade-in"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Document viewer"
+      >
+        <div ref={focusTrapRef} className="h-full w-full outline-none">
+          <Suspense fallback={<DocumentSkeleton progress={0} />}>
+            <PdfWorkspace item={current} rootId={rootId} onClose={handleClose} onShare={onShare} />
+          </Suspense>
+        </div>
+      </div>
+    );
+  }
+
+  // Text & markdown get the dedicated TextWorkspace experience.
+  if (kind === "text" || kind === "markdown") {
+    return (
+      <TextWorkspace
+        item={current}
+        rootId={rootId}
+        initialMode="preview"
+        canWrite={canWrite}
+        onClose={handleClose}
+        onShare={onShare}
+      />
+    );
+  }
 
   return (
     <div className={`fixed inset-0 z-[var(--z-modal)] flex items-center justify-center ${kind === "video" ? "p-0" : "p-2 md:p-6"} bg-black/60 backdrop-blur-sm animate-fade-in`} onMouseDown={handleClose} role="dialog" aria-modal="true" aria-label="File preview">
@@ -160,11 +166,6 @@ export default function PreviewModal({
               </div>
             )}
             
-            {(kind === "text" || kind === "markdown") && (
-              <button onClick={copyText} className="p-2 rounded-lg glass-hover text-content-muted hover:text-content" title="Copy to clipboard">
-                {copied ? <Check className="h-4 w-4 text-success" /> : <Copy className="h-4 w-4" />}
-              </button>
-            )}
             
             {onShare && (
               <button onClick={() => onShare(current)} className="p-2 rounded-lg glass-hover text-content-muted hover:text-content" title="Share">
@@ -226,38 +227,6 @@ export default function PreviewModal({
                 onSelect={(i) => { setCurrent(audioQueue[i]); usePlayer.getState().play(audioQueue, i); }}
               />
             </div>
-          )}
-          {kind === "pdf" && (
-            <div className="w-full h-full flex flex-col bg-black/20">
-              <PdfViewer url={url} name={current.name} />
-            </div>
-          )}
-          {kind === "markdown" && (
-            textLoading ? (
-              <div className="flex flex-col items-center gap-3">
-                <div className="h-8 w-8 rounded-full border-2 border-accent border-t-transparent animate-spin" />
-                <span className="text-content-muted font-medium text-sm animate-pulse">Rendering markdown...</span>
-              </div>
-            ) : (
-              <div className="w-full h-full overflow-auto bg-surface">
-                <div className="markdown-body max-w-4xl mx-auto p-6 md:p-10" dangerouslySetInnerHTML={{ __html: renderMarkdown(text || "") }} />
-                {truncated && (
-                  <div className="text-center p-6 bg-warning/10 text-warning border-t border-warning/20">
-                    <p className="font-medium text-sm">Preview truncated — download to view the full file.</p>
-                  </div>
-                )}
-              </div>
-            )
-          )}
-          {kind === "text" && (
-            textLoading ? (
-              <div className="flex flex-col items-center gap-3">
-                <div className="h-8 w-8 rounded-full border-2 border-accent border-t-transparent animate-spin" />
-                <span className="text-content-muted font-medium text-sm animate-pulse">Loading text...</span>
-              </div>
-            ) : (
-              <CodeView text={text || ""} ext={current.extension} truncated={truncated} />
-            )
           )}
           {kind === "none" && (
             <div className="text-center text-content-muted p-10 flex flex-col items-center">
@@ -406,25 +375,3 @@ function ImagePreview({
   );
 }
 
-function CodeView({ text, ext, truncated }: { text: string; ext: string; truncated: boolean }) {
-  const lines = text.split("\n");
-  return (
-    <div className="w-full h-full flex flex-col bg-[#0d1117] text-[#e6edf3]">
-      <div className="flex items-center justify-between px-4 py-2 border-b border-[#30363d] text-xs font-mono bg-[#161b22] shadow-sm z-10 shrink-0">
-        <span className="px-2 py-1 bg-[#21262d] rounded-md border border-[#30363d] text-accent/90">{codeLanguage(ext)}</span>
-        <span className="text-[#8b949e]">{lines.length} lines{truncated ? " (truncated)" : ""}</span>
-      </div>
-      <div className="flex-1 overflow-auto flex font-mono text-sm leading-relaxed custom-scrollbar">
-        <div className="select-none text-right py-4 px-3 text-[#6e7681] bg-[#161b22] border-r border-[#30363d] sticky left-0 min-w-[3.5rem] shrink-0">
-          {lines.map((_, i) => <div key={i}>{i + 1}</div>)}
-        </div>
-        <pre className="py-4 px-4 whitespace-pre overflow-x-auto min-w-max pb-10"><code>{text}</code></pre>
-      </div>
-      {truncated && (
-        <div className="text-center p-3 bg-[#D29922]/10 text-[#D29922] border-t border-[#D29922]/20 text-xs shrink-0">
-          Preview truncated — download to view the full file.
-        </div>
-      )}
-    </div>
-  );
-}

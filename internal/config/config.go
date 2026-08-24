@@ -50,6 +50,7 @@ type Config struct {
 	AllowRegistration  bool
 	BackupDir          string        // "" disables scheduled backups
 	TrashTTL           time.Duration // 0 disables auto-purge
+	UploadTTL          time.Duration // stale chunked-upload sessions (0 = 24h default applied in main)
 	BackupKeep         int
 	BackupHour         int
 	SecureCookies      bool
@@ -98,6 +99,7 @@ func Load() (*Config, error) {
 	c.BackupKeep = envInt("NEXORA_BACKUP_KEEP", 7)
 	c.BackupHour = envInt("NEXORA_BACKUP_HOUR", 3)
 	c.TrashTTL = envDuration("NEXORA_TRASH_TTL", 0)
+	c.UploadTTL = envDuration("NEXORA_UPLOAD_TTL", 24*time.Hour)
 
 	if err := os.MkdirAll(c.DataDir, 0o755); err != nil {
 		return nil, fmt.Errorf("create data dir: %w", err)

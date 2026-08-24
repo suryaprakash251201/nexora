@@ -1,9 +1,8 @@
 import { useState, useEffect } from "react";
 import {
-  Upload, Download, X, CheckCircle2, AlertCircle, Clock, ChevronDown, ListX, ArrowDownToDot,
-} from "lucide-react";
+  Upload, Download, X, CheckCircle2, AlertCircle, Clock, ChevronDown, ListX, ArrowDownToDot, Pause, Play } from "lucide-react";
 import { useTransfers, type Transfer } from "../store/transfers";
-import { cancelTransfer, isCancellable, speedLabel } from "../lib/transfer";
+import { cancelTransfer, isCancellable, pauseTransfer, resumeTransfer, speedLabel, isPausable } from "../lib/transfer";
 import { formatBytes } from "../lib/format";
 
 function pct(t: Transfer): number {
@@ -110,6 +109,12 @@ function Row({ t }: { t: Transfer }) {
           <span className="shrink-0 text-[10px] font-mono tabular-nums truncate min-w-0 flex-1 text-right">
             {isQueued ? (
               <span className="text-content-muted">Waiting…</span>
+            ) : t.status === "retrying" ? (
+              <span className="text-amber-400 truncate">Connection interrupted — retrying…</span>
+            ) : t.status === "processing" ? (
+              <span className="text-accent truncate">Finalizing on server…</span>
+            ) : t.status === "paused" ? (
+              <span className="text-content-muted truncate">Paused</span>
             ) : isDone ? (
               <span className="text-success">Completed</span>
             ) : isError ? (
@@ -122,6 +127,28 @@ function Row({ t }: { t: Transfer }) {
           </span>
         </div>
       </div>
+
+      {/* Pause / Resume (chunked uploads only) */}
+      {t.status === "active" && isPausable(t.id) && (
+        <button
+          onClick={(e) => { e.stopPropagation(); pauseTransfer(t.id); }}
+          className="shrink-0 p-1 rounded-md text-content-muted opacity-60 group-hover:opacity-100 hover:text-accent hover:bg-accent/10 transition-all"
+          title={`Pause ${t.name}`}
+          aria-label={`Pause ${t.name}`}
+        >
+          <Pause className="h-3.5 w-3.5" />
+        </button>
+      )}
+      {t.status === "paused" && (
+        <button
+          onClick={(e) => { e.stopPropagation(); resumeTransfer(t.id); }}
+          className="shrink-0 p-1 rounded-md text-content-muted opacity-80 group-hover:opacity-100 hover:text-success hover:bg-success/10 transition-all"
+          title={`Resume ${t.name}`}
+          aria-label={`Resume ${t.name}`}
+        >
+          <Play className="h-3.5 w-3.5" />
+        </button>
+      )}
 
       {/* Cancel / dismiss */}
       <button

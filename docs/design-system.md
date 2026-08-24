@@ -188,8 +188,20 @@ Every dark-styled utility must have a `.light` counterpart. Covered: `.glass*`, 
 - Selected file tiles/rows: `bg-accent/10 ring-1 ring-accent/40` (grid) or `bg-accent/10 border-accent/30` (list) — never indicate selection by lowering opacity
 - Keyboard focus: accent outline via global baseline; arrow keys rove focus between items (`data-file-item` markers in `FileBrowser.tsx`)
 
+## Document Space (PDF Viewer)
+
+The PDF viewer (`web/src/components/pdf/`) is a dedicated "Document Space", not a modal pane. It owns a **scoped token layer** under `.doc-shell` in `index.css` so the reading environment stays consistent regardless of app theme:
+
+- Dark: `--doc-bg:#0B0D10`, surface `#161A20`, secondary `#1C2128`, radial glow + 2.8% grain, inset vignette in focus mode
+- Light: `--doc-bg:#F3F4F6` warm workspace, white surfaces — the PDF page stays visually dominant in both
+
+Key utilities: `.doc-glass` (translucent floating chrome), `.doc-btn` / `.is-active` (ghost icon buttons), `.doc-kbd`, `.doc-scroll` (quiet scrollbars), `.doc-page` (realistic page float), `.doc-shimmer`, and the pdf.js v6 `.textLayer` contract (percentage-positioned spans sized via `--total-scale-factor`; search highlights are `<mark class="nx-mark">` wrappers).
+
+Interaction model: adaptive chrome (header + bottom dock fade after ~3.2s idle), continuous lazy-rendered canvas with bitmap GC, Ctrl+K command bar, Ctrl+F streaming search with on-page highlighting, slide-out page navigator (bottom sheet on mobile), focus mode (`F`), signature `PAGE 01 — 12` counter. Every dark utility above has a `.light` counterpart.
+
 ## Update History
 - **v1.4**: Initial design system
 - **v1.4.1**: Improved colorblind accessibility
 - **v1.5**: Enhanced documentation
 - **v1.6**: Phase 3 features (PostgreSQL, S3, WebDAV, webhooks, analytics, versioning, smart folders)
+- **v1.9**: Added Document Space token layer for the redesigned PDF viewer

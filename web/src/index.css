@@ -1542,6 +1542,36 @@ body {
   }
 }
 
+/* ── Text workspace syntax tokens ──────────────────────────────────────────
+   Restrained, semantic-ish palette shared by preview & editor highlight. */
+.tk-key   { color: #7dd3fc; }
+.tk-str   { color: #86efac; }
+.tk-num   { color: #fbbf24; }
+.tk-kw    { color: #c4b5fd; }
+.tk-cmt   { color: #6b7280; font-style: italic; }
+.tk-tag   { color: #93c5fd; }
+.tk-attr  { color: #f0abfc; }
+.tk-fn    { color: #fda4af; }
+.tk-h     { color: #e5e7eb; font-weight: 600; }
+.tk-quote { color: #9ca3af; }
+.tk-list  { color: #93c5fd; }
+.tk-bold  { color: #f3f4f6; font-weight: 600; }
+.tk-link  { color: #7dd3fc; text-decoration: underline; }
+
+.light .tk-key   { color: #0369a1; }
+.light .tk-str   { color: #15803d; }
+.light .tk-num   { color: #b45309; }
+.light .tk-kw    { color: #6d28d9; }
+.light .tk-cmt   { color: #64748b; }
+.light .tk-tag   { color: #1d4ed8; }
+.light .tk-attr  { color: #a21caf; }
+.light .tk-fn    { color: #be123c; }
+.light .tk-h     { color: #111827; }
+.light .tk-quote { color: #475569; }
+.light .tk-list  { color: #1d4ed8; }
+.light .tk-bold  { color: #111827; }
+.light .tk-link  { color: #0369a1; }
+
 /* Light theme users shouldn't get a dark flash while the app boots */
 .light .splash-screen {
   background: radial-gradient(1200px 800px at 50% -10%, #ffffff 0%, #f1f5f9 55%, #e2e8f0 100%);
@@ -1555,4 +1585,262 @@ body {
 
 .light .splash-bar-wrap {
   background: rgba(15, 23, 42, 0.08);
+}
+
+/* ============================================================
+   Document Space — Nexora PDF viewer
+   Own token layer scoped under .doc-shell so the reading
+   environment stays consistent regardless of app surface.
+   ============================================================ */
+
+.doc-shell {
+  --doc-bg: #0b0d10;
+  --doc-bg-glow: rgba(91, 140, 255, 0.06);
+  --doc-surface: #161a20;
+  --doc-surface-2: #1c2128;
+  --doc-border: rgba(255, 255, 255, 0.09);
+  --doc-text: #e8ecf4;
+  --doc-muted: #98a2b8;
+  --doc-faint: #66718a;
+  --doc-accent: var(--accent-solid, #5b8cff);
+
+  background-color: var(--doc-bg);
+  color: var(--doc-text);
+  isolation: isolate;
+}
+
+/* Radial illumination behind the document */
+.doc-shell::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(1100px 520px at 50% -8%, var(--doc-bg-glow), transparent 62%),
+    radial-gradient(900px 600px at 50% 115%, rgba(122, 92, 255, 0.04), transparent 60%);
+}
+
+/* Extremely subtle grain */
+.doc-shell::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.028;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* Focus mode: calm the edges down */
+.doc-shell[data-focus] {
+  box-shadow: inset 0 0 130px rgba(0, 0, 0, 0.5);
+}
+
+/* ── Light theme ── warm neutral workspace, white-dominant pages */
+.light .doc-shell {
+  --doc-bg: #f3f4f6;
+  --doc-bg-glow: rgba(91, 140, 255, 0.07);
+  --doc-surface: #ffffff;
+  --doc-surface-2: #f8f9fa;
+  --doc-border: rgba(15, 23, 42, 0.1);
+  --doc-text: #111827;
+  --doc-muted: #5b6472;
+  --doc-faint: #939bab;
+}
+
+.light .doc-shell[data-focus] {
+  box-shadow: inset 0 0 110px rgba(15, 23, 42, 0.08);
+}
+.light .doc-shell::after {
+  opacity: 0.016;
+}
+
+/* ── Floating surfaces ── */
+.doc-glass {
+  background: color-mix(in srgb, var(--doc-surface) 82%, transparent);
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
+  backdrop-filter: blur(16px) saturate(150%);
+  border: 1px solid var(--doc-border);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 10px 30px rgba(0, 0, 0, 0.28),
+    0 2px 8px rgba(0, 0, 0, 0.18);
+}
+
+.light .doc-glass {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.65),
+    0 10px 28px rgba(15, 23, 42, 0.12),
+    0 2px 6px rgba(15, 23, 42, 0.06);
+}
+
+/* ── Ghost icon button used across all chrome ── */
+.doc-btn {
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.6rem;
+  color: var(--doc-muted);
+  outline: none;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+.doc-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--doc-text);
+}
+.light .doc-btn:hover {
+  background: rgba(15, 23, 42, 0.05);
+}
+.doc-btn.is-active {
+  background: color-mix(in srgb, var(--doc-accent) 15%, transparent);
+  color: var(--doc-accent);
+}
+.doc-btn:disabled {
+  opacity: 0.35;
+  pointer-events: none;
+}
+.doc-btn:focus-visible {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--doc-accent) 50%, transparent);
+}
+
+/* ── Keyboard chip ── */
+.doc-kbd {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.25rem;
+  height: 1.25rem;
+  padding: 0 0.3rem;
+  border-radius: 0.3rem;
+  border: 1px solid var(--doc-border);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--doc-faint);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  line-height: 1;
+}
+.light .doc-kbd {
+  background: rgba(15, 23, 42, 0.03);
+}
+
+/* ── Canvas scrollbar ── quiet until hovered ── */
+.doc-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+.doc-scroll:hover,
+.doc-scroll:focus-within {
+  scrollbar-color: color-mix(in srgb, var(--doc-faint) 45%, transparent) transparent;
+}
+.doc-scroll::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+.doc-scroll::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background-clip: content-box;
+  background-color: transparent;
+}
+.doc-scroll:hover::-webkit-scrollbar-thumb {
+  background-color: color-mix(in srgb, var(--doc-faint) 40%, transparent);
+}
+
+/* ── The document page itself ── realistic float above the workspace */
+.doc-page {
+  position: relative;
+  flex-shrink: 0;
+  border-radius: 6px;
+  background: #ffffff;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.22),
+    0 6px 20px rgba(0, 0, 0, 0.2),
+    0 20px 56px rgba(0, 0, 0, 0.14),
+    0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+.light .doc-page {
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.08),
+    0 6px 18px rgba(15, 23, 42, 0.09),
+    0 18px 44px rgba(15, 23, 42, 0.08),
+    0 0 0 1px rgba(15, 23, 42, 0.04);
+}
+
+/* ── Skeleton shimmer for placeholders/thumbnails ── */
+.doc-shimmer {
+  background: linear-gradient(
+    100deg,
+    rgba(148, 163, 184, 0.08) 30%,
+    rgba(148, 163, 184, 0.22) 50%,
+    rgba(148, 163, 184, 0.08) 70%
+  );
+  background-size: 220% 100%;
+  animation: n-doc-shimmer 1.4s ease-in-out infinite;
+}
+@keyframes n-doc-shimmer {
+  0%, 100% { background-position: 120% 0; }
+  50% { background-position: -120% 0; }
+}
+
+/* ============================================================
+   Text layer (pdf.js v6 contract)
+   Spans are positioned by percentage against the unrotated page
+   box and sized via --total-scale-factor set by the component.
+   ============================================================ */
+
+.doc-shell .textLayer {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  overflow: clip;
+  line-height: 1;
+  text-align: initial;
+  letter-spacing: normal;
+  word-spacing: normal;
+  text-size-adjust: none;
+  -webkit-text-size-adjust: none;
+  forced-color-adjust: none;
+  transform-origin: 0 0;
+  caret-color: CanvasText;
+
+  --min-font-size: 1;
+  --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size));
+  --min-font-size-inv: calc(1 / var(--min-font-size));
+}
+
+.doc-shell .textLayer :is(span, br) {
+  color: transparent;
+  position: absolute;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0% 0%;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.doc-shell .textLayer > span:not(.markedContent) {
+  z-index: 1;
+  --font-height: 0;
+  font-size: calc(var(--text-scale-factor) * var(--font-height));
+  --scale-x: 1;
+  --rotate: 0deg;
+  transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv));
+}
+
+.doc-shell .textLayer .markedContent {
+  display: contents;
+}
+
+/* Search-match highlights live inside the transparent-text layer */
+.doc-shell .textLayer mark.nx-mark {
+  color: transparent;
+  padding: 0;
+  margin: 0;
+  border-radius: 2px;
+  background-color: color-mix(in srgb, var(--doc-accent) 32%, transparent);
+}
+.doc-shell .textLayer mark.nx-active {
+  background-color: color-mix(in srgb, #f59e0b 42%, transparent);
+  outline: 1.5px solid rgba(245, 158, 11, 0.85);
 }

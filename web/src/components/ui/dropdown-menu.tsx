@@ -22,14 +22,19 @@ function DropdownMenuContent({
   side = "bottom",
   sideOffset = 4,
   className,
+  container,
   ...props
 }: MenuPrimitive.Popup.Props &
   Pick<
     MenuPrimitive.Positioner.Props,
     "align" | "alignOffset" | "side" | "sideOffset"
-  >) {
+  > & {
+    /** Portal target — pass a stacking-context parent (e.g. a dialog root)
+     * when the menu must layer above that dialog instead of <body>. */
+    container?: MenuPrimitive.Portal.Props["container"];
+  }) {
   return (
-    <MenuPrimitive.Portal>
+    <MenuPrimitive.Portal container={container}>
       <MenuPrimitive.Positioner
         className="isolate z-50 outline-none"
         align={align}

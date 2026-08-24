@@ -7,7 +7,6 @@ import {
   Volume2,
   VolumeX,
   Maximize2,
-  Minimize2,
   X,
   Music,
   Shuffle,
@@ -19,7 +18,6 @@ import {
   AlertTriangle,
   Download,
   ExternalLink,
-  Info,
   Plus,
 } from "lucide-react";
 import type { FileItem } from "../../api/types";
@@ -35,7 +33,7 @@ import {
   cleanTrackTitle,
 } from "../../lib/preview";
 import type { AudioTranscodeFormat } from "../../lib/preview";
-import { AudioInfoPanel, EqualizerBars, OutputDevicePicker, useAudioContext } from "../LosslessPlayer";
+import { AudioInfoPanel, EqualizerBars, OutputDevicePicker, useAudioContext, useAudioInfo } from "../LosslessPlayer";
 import { startDownload } from "../../lib/transfer";
 import { engine, usePlayer } from "../../store/player";
 import { AddToPlaylistMenu } from "../PlaylistAdder";
@@ -97,18 +95,25 @@ export function AudioPlayer({
   const storeAudioError = usePlayer((s) => s.audioError);
   const audioErrorMsg = controlled ? storeAudioError : audioError;
   const [showRates, setShowRates] = useState(false);
-  const [showInfo, setShowInfo] = useState(false);
-  const [showQueue, setShowQueue] = useState(false);
-  const [showLyrics, setShowLyrics] = useState(false);
+  // Exclusive side panel — lyrics and queue share one slot: opening one
+  // closes the other, and the queue renders like lyrics (no right-side
+  // drawer card).
+  const [panel, setPanel] = useState<"none" | "lyrics" | "queue">("none");
+  const showLyrics = panel === "lyrics";
+  const showQueue = panel === "queue";
+  const toggleLyrics = () => setPanel((p) => (p === "lyrics" ? "none" : "lyrics"));
+  const toggleQueue = () => setPanel((p) => (p === "queue" ? "none" : "queue"));
+  // Lossless spec line ("24-BIT · 96 kHz") — hidden until the wave logo is clicked.
+  const [showSpec, setShowSpec] = useState(false);
   const [lBuffering, setLBuffering] = useState(false);
   const [bufferedEnd, setBufferedEnd] = useState(0);
-  const [browserFs, setBrowserFs] = useState(false);
   // Drag-seek preview position (transcoded streams commit on release).
   const [dragTime, setDragTime] = useState<number | null>(null);
   const dragTimeRef = useRef<number | null>(null);
   const suppressFsExitRef = useRef(false);
   const fsWrapRef = useRef<HTMLDivElement>(null);
   const focusTrapRef = useFocusTrap(fs);
+  const queueScrollRef = useRef<HTMLDivElement>(null);
 
   // Smart format routing: native → lossless FLAC (desktop) → flac24 → AAC.
   // Browsers default to AAC; FLAC is the last-resort fallback.
@@ -127,6 +132,7 @@ export function AudioPlayer({
     offsetRef.current = 0;
     setDragTime(null);
     dragTimeRef.current = null;
+    setShowSpec(false);
     if (!controlled) setAudioErrorLocal("");
     // Pre-route codecs the webview cannot decode natively (ALAC inside .m4a/
     // .m4b, WMA, …) straight to the transcode pipeline so they start playing
@@ -376,7 +382,6 @@ export function AudioPlayer({
     if (!fs) return;
     const onFs = () => {
       const isFull = !!document.fullscreenElement;
-      setBrowserFs(isFull);
       if (!isFull) {
         if (suppressFsExitRef.current) {
           suppressFsExitRef.current = false; // intentional exit — keep overlay
@@ -442,10 +447,28 @@ export function AudioPlayer({
     return () => window.removeEventListener("keydown", onKey);
   }, [fs, curTime, duration, volume, muted, controlled, toggle, seek, changeVol, closeFs]);
 
-  // Slightly smaller vinyl when the desktop lyrics card shares the stage.
-  const discSize = showLyrics
+  // Slightly smaller vinyl when the desktop lyrics/queue panel shares the stage.
+  const discSize = panel !== "none"
     ? "w-[45vw] max-w-[220px] sm:w-[260px] sm:max-w-[280px] md:w-[300px] md:max-w-[300px]"
     : "w-[45vw] max-w-[220px] sm:w-[280px] sm:max-w-[300px] md:w-[340px] md:max-w-[340px]";
+
+  // ── Lossless identity: real quality from ffprobe (so ALAC-in-m4a, WAV and
+  // FLAC all count), plus the calculated bit depth / sample rate line that
+  // sits under the cover in the fullscreen player.
+  const { info: probe } = useAudioInfo(cur?.root_id ?? "", cur?.path ?? "");
+  const quality = cur ? getAudioQuality(cur, probe) : null;
+  const losslessSpec = formatLosslessSpec(probe); // e.g. "24-BIT · 96 kHz"
+
+  // Keep the active song card in view when the queue opens or the track changes.
+  useEffect(() => {
+    if (!showQueue) return;
+    const raf = requestAnimationFrame(() => {
+      queueScrollRef.current
+        ?.querySelector<HTMLElement>(`[data-queue-row="${qIndex}"]`)
+        ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [showQueue, qIndex]);
 
   const fullscreen = (
     <div
@@ -475,24 +498,15 @@ export function AudioPlayer({
       )}
       <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-black/50 to-black/90" />
 
-      {/* Top bar */}
-      <div className="absolute top-0 inset-x-0 z-30 flex items-center justify-between p-5 sm:p-7">
-        <button
-          onClick={(e) => { e.stopPropagation(); closeFs(true); }}
-          className="p-3 rounded-full glass-hover text-white transition-transform hover:scale-110"
-          title="Close player and exit fullscreen"
-        >
-          <X className="h-6 w-6" />
-        </button>
-        <span className="text-white/55 text-sm font-medium tracking-wide uppercase">
-          {multi ? `Track ${qIndex + 1} of ${queue.length}` : "Now Playing"}
-        </span>
+      {/* Top bar — controls on the right; exit lives there only */}
+      <div className="absolute top-0 inset-x-0 z-30 flex items-center justify-end p-5 sm:p-7">
         <div className="flex items-center gap-2">
           {queue.length > 0 && (
             <button
-              onClick={(e) => { e.stopPropagation(); setShowQueue((v) => !v); }}
+              onClick={(e) => { e.stopPropagation(); toggleQueue(); }}
               className={`relative p-3 rounded-full glass-hover text-white transition-colors ${showQueue ? "bg-accent/25 text-accent" : "hover:text-white"}`}
               title="Playback queue"
+              aria-pressed={showQueue}
             >
               <ListMusic className="h-6 w-6" />
               {queue.length > 1 && !showQueue && (
@@ -503,116 +517,29 @@ export function AudioPlayer({
             </button>
           )}
           <button
-            onClick={(e) => { e.stopPropagation(); setShowLyrics((v) => !v); }}
+            onClick={(e) => { e.stopPropagation(); toggleLyrics(); }}
             className={`p-3 rounded-full glass-hover text-white transition-colors ${showLyrics ? "bg-accent/25 text-accent" : "hover:text-white"}`}
             title="Synced lyrics"
+            aria-pressed={showLyrics}
           >
             <Captions className="h-6 w-6" />
           </button>
           <button
-            onClick={(e) => {
-              e.stopPropagation();
-              if (document.fullscreenElement) {
-                suppressFsExitRef.current = true;
-                document.exitFullscreen?.();
-              } else {
-                fsWrapRef.current?.requestFullscreen?.();
-              }
-            }}
+            onClick={(e) => { e.stopPropagation(); closeFs(true); }}
             className="p-3 rounded-full glass-hover text-white transition-transform hover:scale-110"
-            title="Toggle fullscreen (F)"
+            title="Close player and exit fullscreen"
+            aria-label="Close player and exit fullscreen"
           >
-            {browserFs ? <Minimize2 className="h-6 w-6" /> : <Maximize2 className="h-6 w-6" />}
+            <X className="h-6 w-6" />
           </button>
         </div>
       </div>
 
-      {/* Playback queue drawer — layered above the lyrics panel */}
-      {showQueue && (
-        <div className="absolute inset-0 z-50 flex justify-end" onClick={(e) => e.stopPropagation()}>
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowQueue(false)} />
-          <div className="relative w-full max-w-sm h-full bg-black/85 backdrop-blur-xl border-l border-white/10 flex flex-col animate-slide-in-right shadow-2xl">
-            <div className="flex items-center justify-between px-4 py-4 border-b border-white/10 flex-shrink-0">
-              <div className="flex items-center gap-2">
-                <ListMusic className="h-5 w-5 text-accent" />
-                <h2 className="text-white font-semibold">Queue</h2>
-                <span className="text-xs font-medium text-white/45 bg-white/10 rounded-full px-2 py-0.5">{queue.length}</span>
-              </div>
-              <button
-                onClick={() => setShowQueue(false)}
-                className="p-2 rounded-full glass-hover text-white/70 hover:text-white transition-colors"
-                title="Close queue"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            {queue.length === 0 ? (
-              <div className="flex-1 grid place-items-center text-white/40 text-sm px-6 text-center">
-                The queue is empty — add tracks to start listening.
-              </div>
-            ) : (
-              <div className="flex-1 overflow-y-auto py-1.5">
-                {queue.map((qi, i) => {
-                  const isCur = i === qIndex;
-                  return (
-                    <div
-                      key={qi.path + i}
-                      className={`group flex items-center gap-3 px-4 py-2.5 cursor-pointer transition-colors ${isCur ? "bg-accent/10" : "hover:bg-white/5"}`}
-                      onClick={() => {
-                        if (controlled) player.setIndex(i);
-                        else onSelect?.(i);
-                        setShowQueue(false);
-                      }}
-                    >
-                      {/* Play state / index */}
-                      <div className="w-6 flex-shrink-0 flex justify-center">
-                        {isCur ? (
-                          playing ? (
-                            <span className="flex items-end gap-0.5 h-4" aria-label="Playing">
-                              <span className="w-0.5 h-3 rounded-full bg-accent eq-bar" style={{ animationDelay: "0ms" }} />
-                              <span className="w-0.5 h-3 rounded-full bg-accent eq-bar" style={{ animationDelay: "150ms" }} />
-                              <span className="w-0.5 h-3 rounded-full bg-accent eq-bar" style={{ animationDelay: "300ms" }} />
-                            </span>
-                          ) : (
-                            <Play className="h-4 w-4 text-accent fill-current" />
-                          )
-                        ) : (
-                          <span className="text-[11px] font-mono text-white/35">{String(i + 1).padStart(2, "0")}</span>
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className={`text-sm truncate ${isCur ? "text-white font-medium" : "text-white/75"}`}>
-                          {cleanTrackTitle(qi.name)}
-                        </p>
-                        <p className="text-[11px] text-white/35 truncate mt-0.5">{qi.extension.toUpperCase()} · {qi.path}</p>
-                      </div>
-                      {controlled && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            player.removeFromQueue(i);
-                          }}
-                          className="p-1.5 rounded-full text-white/30 hover:text-red-400 hover:bg-red-500/10 opacity-0 group-hover:opacity-100 transition-all flex-shrink-0"
-                          title="Remove from queue"
-                          aria-label={`Remove ${qi.name} from queue`}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Player row — shifts left on desktop to make room for the lyrics card */}
-      <div className={`relative z-10 flex min-h-0 w-full flex-1 items-center justify-center transition-[padding] duration-500 ease-out ${showLyrics ? "lg:pr-[43%]" : ""}`}>
+      {/* Player row — shifts left on desktop to make room for the lyrics/queue panel */}
+      <div className={`relative z-10 flex min-h-0 w-full flex-1 items-center justify-center transition-[padding] duration-500 ease-out ${panel !== "none" ? "lg:pr-[43%]" : ""}`}>
       <div className="relative flex w-full max-w-2xl flex-col items-center justify-center px-4 sm:px-6 pt-4 sm:pt-0 pb-20 sm:pb-8" style={{ paddingBottom: "max(5rem, env(safe-area-inset-bottom))" }}>
-        {/* Album Art — spinning vinyl with tonearm */}
-        <div className="relative mb-4 sm:mb-10 flex-shrink-0">
+        {/* Album Art — spinning vinyl with tonearm (nudged below center) */}
+        <div className="relative mt-2 sm:mt-8 mb-4 sm:mb-10 flex-shrink-0">
           {/* Tonearm — high-detail turntable arm, pivots from bottom-right */}
           <div
             className={`absolute -top-3 -right-3 sm:-top-5 sm:-right-5 z-20 w-24 sm:w-32 h-32 sm:h-40 origin-bottom-right transition-all duration-1000 ease-in-out ${
@@ -729,38 +656,36 @@ export function AudioPlayer({
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[3] h-10 w-10 rounded-full bg-gradient-to-br from-white/25 via-white/5 to-transparent ring-1 ring-white/10 shadow-[inset_0_2px_8px_rgba(0,0,0,0.55)]" />
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[4] h-4 w-4 rounded-full bg-[#050506] ring-1 ring-white/25 shadow-[inset_0_1px_3px_rgba(0,0,0,0.95),0_0_3px_rgba(255,255,255,0.25)]" />
           </div>
-
-          {/* Lossless wave — image only, placed at the centre of the vinyl
-              (static — sits above the spinning disc, doesn't rotate) */}
-          {cur && getAudioQuality(cur).isLossless && (
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-30 pointer-events-none">
-              <LosslessWaveGlyph className="w-28 sm:w-36 h-auto drop-shadow-[0_2px_10px_rgba(0,0,0,0.6)]" />
-            </div>
-          )}
           </div>
         </div>
 
-        {/* Track Info */}
-        <div className="w-full flex flex-col items-center text-center mb-4 sm:mb-7">
+        {/* Track Info — sits above the lossless identity */}
+        <div className={`w-full flex flex-col items-center text-center ${cur && quality?.isLossless ? "mb-2" : "mb-4 sm:mb-7"}`}>
           <h2 className="text-white font-bold text-lg sm:text-2xl md:text-3xl truncate drop-shadow-md">{cur ? cleanTrackTitle(cur.name) : ""}</h2>
-          {cur && (
-            <div className="mt-2 flex items-center justify-center gap-2">
-              <AudioInfoPanel item={cur} compact onDark />
-              <button
-                onClick={(e) => { e.stopPropagation(); setShowInfo((v) => !v); }}
-                className={`p-1.5 rounded-full glass-hover transition-colors ${showInfo ? "text-accent bg-accent/20" : "text-white/70 hover:text-white"}`}
-                title="Audio details"
-              >
-                <Info className="h-4 w-4" />
-              </button>
-            </div>
-          )}
-          {showInfo && cur && (
-            <div className="mt-3 flex justify-center animate-scale-in">
-              <AudioInfoPanel item={cur} />
-            </div>
-          )}
         </div>
+
+        {/* Lossless identity — enlarged wave logo; tap/click reveals the
+            measured bit depth / sample rate beneath it. Static (never rotates). */}
+        {cur && quality?.isLossless && (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); setShowSpec((v) => !v); }}
+            aria-expanded={showSpec}
+            aria-label={showSpec ? "Hide audio format details" : "Show audio format details"}
+            title={showSpec ? "Hide format details" : "Show format details"}
+            className="pointer-events-auto mb-4 flex cursor-pointer select-none flex-col items-center gap-1 rounded-xl px-6 py-1 outline-none transition-colors hover:bg-white/[0.04] focus-visible:ring-2 focus-visible:ring-white/40 sm:mb-7"
+          >
+            <LosslessWaveGlyph className="w-32 sm:w-36 h-auto drop-shadow-[0_2px_14px_rgba(0,0,0,0.7)]" />
+            {/* Spec line — hidden until the icon is clicked */}
+            <span
+              className={`overflow-hidden font-mono text-[10px] font-semibold uppercase tracking-[0.22em] transition-all duration-300 ease-out ${
+                showSpec ? "max-h-5 opacity-100" : "max-h-0 opacity-0"
+              } ${quality.tier === "lossless-hi-res" ? "text-amber-300/90" : "text-white/65"}`}
+            >
+              {losslessSpec ?? quality.label}
+            </span>
+          </button>
+        )}
 
         <div className="w-full space-y-2" onClick={(e) => e.stopPropagation()}>
           {/* Progress Bar — click + drag-to-seek (pointer events cover mouse/touch/pen).
@@ -968,8 +893,128 @@ export function AudioPlayer({
       </div>
 
       {/* Lyrics — Apple Music style: floats on the backdrop, no card chrome */}
+      {/* Side panel — lyrics and queue share the same presentation slot */}
       {showLyrics && cur && (
         <LyricsPanel item={cur} currentTime={curTime} onSeek={seek} />
+      )}
+      {showQueue && (
+        /* No solid queue container — the song cards themselves form the UI,
+           floating directly on the player's blurred-cover surface. */
+        <div
+          className="absolute z-40 top-16 bottom-0 right-0 flex w-full max-w-md flex-col px-3 pb-6 animate-slide-in-right sm:top-24 sm:right-2 sm:px-2"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Integrated header — no dark header block */}
+          <div className="flex flex-shrink-0 items-center justify-between px-2 pb-3">
+            <div className="flex items-center gap-2">
+              <ListMusic className="h-4 w-4 text-accent" />
+              <h2 className="text-sm font-semibold tracking-wide text-white">Queue</h2>
+              <span className="rounded-full bg-white/10 px-2 py-0.5 text-[11px] font-medium tabular-nums text-white/55">
+                {queue.length}
+              </span>
+            </div>
+            <button
+              onClick={() => setPanel("none")}
+              className="rounded-full p-2 text-white/60 transition-colors hover:bg-white/10 hover:text-white"
+              title="Close queue"
+              aria-label="Close queue"
+            >
+              <X className="h-4.5 w-4.5" />
+            </button>
+          </div>
+
+          {queue.length === 0 ? (
+            <div className="grid flex-1 place-items-center px-6 text-center text-sm text-white/40">
+              The queue is empty — add tracks to start listening.
+            </div>
+          ) : (
+            <div
+              ref={queueScrollRef}
+              className="no-scrollbar flex-1 space-y-2 overflow-y-auto pb-8"
+            >
+              {queue.map((qi, i) => {
+                const isCur = i === qIndex;
+                return (
+                  <div
+                    key={qi.path + i}
+                    data-queue-row={i}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => {
+                      if (controlled) player.setIndex(i);
+                      else onSelect?.(i);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        if (controlled) player.setIndex(i);
+                        else onSelect?.(i);
+                      }
+                    }}
+                    className={`group flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 outline-none transition-all duration-200 focus-visible:ring-2 focus-visible:ring-accent/60 ${
+                      isCur
+                        ? "bg-accent/[0.13] shadow-[0_6px_22px_-8px_rgba(91,140,255,0.45)] ring-1 ring-accent/30"
+                        : "bg-white/[0.05] shadow-[0_1px_3px_rgba(0,0,0,0.15)] ring-1 ring-white/[0.04] hover:translate-x-0.5 hover:bg-white/[0.09]"
+                    }`}
+                    aria-current={isCur ? "true" : undefined}
+                  >
+                    {/* Number / playback indicator */}
+                    <div
+                      className={`grid h-7 w-7 flex-shrink-0 place-items-center rounded-lg transition-colors ${
+                        isCur ? "bg-accent/20" : "bg-white/[0.06] group-hover:bg-white/[0.12]"
+                      }`}
+                    >
+                      {isCur ? (
+                        playing ? (
+                          <span className="flex h-3.5 items-end gap-0.5" aria-label="Playing">
+                            <span className="eq-bar h-2.5 w-0.5 rounded-full bg-accent" style={{ animationDelay: "0ms" }} />
+                            <span className="eq-bar h-3.5 w-0.5 rounded-full bg-accent" style={{ animationDelay: "150ms" }} />
+                            <span className="eq-bar h-2 w-0.5 rounded-full bg-accent" style={{ animationDelay: "300ms" }} />
+                          </span>
+                        ) : (
+                          <Play className="h-3.5 w-3.5 fill-current text-accent" />
+                        )
+                      ) : (
+                        <span className="font-mono text-[10.5px] tabular-nums text-white/40 group-hover:text-white/65">
+                          {String(i + 1).padStart(2, "0")}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Title + metadata */}
+                    <div className="min-w-0 flex-1">
+                      <p
+                        className={`truncate text-[13.5px] leading-tight ${
+                          isCur ? "font-semibold text-white" : "font-medium text-white/85"
+                        }`}
+                      >
+                        {cleanTrackTitle(qi.name)}
+                      </p>
+                      <p className={`mt-1 truncate text-[11px] leading-tight ${isCur ? "text-accent/80" : "text-white/40"}`}>
+                        {qi.extension.toUpperCase()}
+                        {qi.path ? ` · ${qi.path}` : ""}
+                      </p>
+                    </div>
+
+                    {controlled && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          player.removeFromQueue(i);
+                        }}
+                        className="rounded-full p-1.5 text-white/25 opacity-0 transition-all hover:bg-red-500/10 hover:text-red-400 focus-visible:opacity-100 group-hover:opacity-100 flex-shrink-0"
+                        title="Remove from queue"
+                        aria-label={`Remove ${qi.name} from queue`}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       )}
     </div>
   );
@@ -1131,4 +1176,24 @@ export default AudioPlayer;
  */
 function LosslessWaveGlyph({ className = "h-2.5 w-auto" }: { className?: string }) {
   return <img src="/lossless-wave-light.png" alt="" className={className} />;
+}
+
+/**
+ * formatLosslessSpec — renders the ffprobe-measured bit depth / sample rate
+ * as a compact badge line, e.g. "24-BIT · 96 kHz" or "16-BIT · 44.1 kHz".
+ * Returns null while probe data is unavailable (falls back to tier label).
+ */
+function formatLosslessSpec(info: { bit_depth?: number; sample_rate?: number } | null): string | null {
+  if (!info) return null;
+  const bits = info.bit_depth;
+  const hz = info.sample_rate;
+  if (!bits && !hz) return null;
+  const parts: string[] = [];
+  if (bits) parts.push(`${bits}-BIT`);
+  if (hz) {
+    // 44100 → "44.1 kHz", 48000 → "48 kHz", 192000 → "192 kHz".
+    const kHz = Math.round((hz / 1000) * 10) / 10;
+    parts.push(`${String(kHz).replace(/\.0$/, "")} kHz`);
+  }
+  return parts.join(" · ");
 }

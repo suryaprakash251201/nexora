@@ -21,6 +21,7 @@ const MAX_CONCURRENT = 3;
 // downloads use fetch + AbortController; Tauri downloads are not cancellable
 // through this API.
 const activeXhr = new Map<string, XMLHttpRequest>();
+const filesById = new Map<string, File>();
 const activeControllers = new Map<string, AbortController>();
 
 interface QueuedJob {
@@ -58,6 +59,15 @@ function enqueue(id: string, run: () => void) {
 }
 
 export function cancelTransfer(id: string) {
+  const ch = activeChunked.get(id);
+  if (ch) {
+    ch.cancelled = true;
+    ch.ctrl.abort();
+    activeChunked.delete(id);
+    filesById.delete(id);
+    useTransfers.getState().remove(id);
+    return;
+  }
   const idx = queue.findIndex((j) => j.id === id);
   if (idx >= 0) {
     // Still waiting — just drop it from the queue.
@@ -71,8 +81,134 @@ export function cancelTransfer(id: string) {
 }
 
 export function isCancellable(id: string): boolean {
-  return queue.some((j) => j.id === id) || activeXhr.has(id) || activeControllers.has(id);
+  return queue.some((j) => j.id === id) || activeXhr.has(id) || activeControllers.has(id) || activeChunked.has(id);
 }
+
+/** True while a resumable (chunked) upload for this id is running. */
+export function isPausable(id: string): boolean {
+  return activeChunked.has(id);
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Resumable chunked uploads (files above RESUMABLE_THRESHOLD).
+//
+// init → parallel chunk PUTs (idempotent, retry w/ backoff) → complete.
+// Session id persists in localStorage so a page refresh can resume from the
+// last acknowledged chunk via GET /uploads/{id}/status.
+// ────────────────────────────────────────────────────────────────────────────
+const RESUMABLE_THRESHOLD = 64 << 20; // 64 MB
+const CHUNK_SIZE = 16 << 20;          // 16 MiB per chunk (server clamps 4–64)
+const MAX_PARALLEL_CHUNKS = 3;
+const CHUNK_RETRIES = 4;
+const BACKOFF_MS = [1000, 2000, 4000, 8000];
+
+interface ChunkedState {
+  uploadId: string | null;
+  file: File;
+  rootId: string;
+  targetPath: string;
+  isTauri: boolean;
+  baseUrl: string;
+  csrf: string | null;
+  authHeader: [string, string] | null;
+  ctrl: AbortController;
+  paused: boolean;
+  cancelled: boolean;
+  ackedBytes: number;
+  inflight: Map<number, number>; // index → bytes sent for that chunk
+  onDone?: () => void;
+}
+
+const activeChunked = new Map<string, ChunkedState>();
+const sessionKey = (f: File, rootId: string, path: string) =>
+  `nexora.up:${rootId}|${path}|${f.name}|${f.size}|${(f as any).lastModified ?? 0}`;
+
+function authHeaders(isTauri: boolean): Record<string, string> {
+  const h: Record<string, string> = {};
+  const csrf = getCsrfToken();
+  if (csrf) h["X-CSRF-Token"] = csrf;
+  const storedToken = localStorage.getItem("nexora-token");
+  if (isTauri && storedToken) h["Authorization"] = "Bearer " + storedToken;
+  return h;
+}
+
+/** Map backend failures to human sentences — never a bare "network error". */
+function describeUploadFailure(status: number | null, code: string | null, atBytes: number, total: number): string {
+  const at = total > 0 ? ` at ${formatBytes(atBytes)} / ${formatBytes(total)}` : "";
+  if (code === "disk_full" || status === 507) return `Upload stopped${at} — server is out of storage space`;
+  if (status === 413 || code === "payload_too_large") return `Upload rejected${at} — piece too large`;
+  if (status === 401) return `Sign-in expired${at} — please sign in and retry`;
+  if (status === 403 || code === "permission_denied") return `Upload blocked${at} — no write access to this folder`;
+  if (code === "mime_not_allowed") return `File type not allowed by the server`;
+  if (code === "upload_expired" || status === 404) return `Upload session expired${at} — start again`;
+  if (code === "chunks_missing" || code === "size_mismatch") return `Resuming upload${at}…`;
+  return `Transfer failed${at} (${status ?? "network"} ${code ?? ""})`.trimEnd();
+}
+
+function sleep(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((res, rej) => {
+    const t = setTimeout(res, ms);
+    signal.addEventListener("abort", () => { clearTimeout(t); rej(new DOMException("Aborted", "AbortError")); }, { once: true });
+  });
+}
+
+async function jsonOrThrow(res: Response): Promise<any> {
+  let body: any = null;
+  try { body = await res.json(); } catch { /* non-JSON */ }
+  if (!res.ok) {
+    const err = new Error(body?.message || res.statusText) as any;
+    err.status = res.status;
+    err.code = body?.error ?? null;
+    throw err;
+  }
+  return body;
+}
+
+/** Run one chunk PUT with exponential-backoff retries on transient errors. */
+async function putChunk(st: ChunkedState, index: number, onByte: (delta: number) => void): Promise<void> {
+  const url = `${st.baseUrl}/api/v1/files/uploads/${st.uploadId}/chunk?index=${index}`;
+  const start = index * CHUNK_SIZE;
+  const end = Math.min(start + CHUNK_SIZE, st.file.size);
+  const blob = st.file.slice(start, end);
+
+  for (let attempt = 0; attempt <= CHUNK_RETRIES; attempt++) {
+    if (st.cancelled) throw new DOMException("Cancelled", "AbortError");
+    try {
+      const xhr = new XMLHttpRequest();
+      const xhrDone = new Promise<void>((resolve, reject) => {
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) resolve();
+          else reject(Object.assign(new Error(`chunk ${xhr.status}`), { status: xhr.status }));
+        };
+        xhr.onerror = () => reject(Object.assign(new Error("chunk network"), { status: 0 }));
+        xhr.onabort = () => reject(new DOMException("Aborted", "AbortError"));
+      });
+      xhr.open("PUT", url);
+      for (const [k, v] of Object.entries(authHeaders(st.isTauri))) xhr.setRequestHeader(k, v);
+      let last = 0;
+      xhr.upload.onprogress = (e) => { onByte(e.loaded - last); last = e.loaded; };
+      xhr.send(blob);
+      await xhrDone;
+      return;
+    } catch (e: any) {
+      if (e?.name === "AbortError") {
+        if (st.cancelled) throw e;
+        throw Object.assign(new Error("paused"), { paused: true });
+      }
+      const status: number = e?.status ?? 0;
+      const transient = status === 0 || status === 429 || status >= 500;
+      if (!transient || attempt === CHUNK_RETRIES) throw e;
+      useTransfers.getState().update(id_of(st), { status: "retrying" });
+      await sleep(BACKOFF_MS[Math.min(attempt, BACKOFF_MS.length - 1)], st.ctrl.signal);
+    }
+  }
+}
+// Small helper so retry logging can find its transfer id without extra plumbing.
+function id_of(st: ChunkedState): string {
+  for (const [id, v] of activeChunked) if (v === st) return id;
+  return "";
+}
+
 
 // startUpload enqueues each file individually via XHR so progress is reported
 // per file, and records each transfer in the global transfers store.
@@ -110,6 +246,7 @@ export function startUpload(
       status: "queued",
     };
     useTransfers.getState().add(transfer);
+    filesById.set(id, file);
 
     enqueue(id, () => runUpload(id, file, rootId, targetPath, isTauri, baseUrl, onDone));
   });
@@ -124,6 +261,10 @@ function runUpload(
   baseUrl: string,
   onDone?: () => void
 ) {
+  if (file.size >= RESUMABLE_THRESHOLD) {
+    void runChunkedUpload(id, file, rootId, targetPath, isTauri, baseUrl, onDone);
+    return;
+  }
   const form = new FormData();
   form.append("files", file);
 
@@ -171,11 +312,9 @@ function runUpload(
       useTransfers.getState().update(id, { loaded: file.size, total: file.size, speed: 0, status: "done" });
       onDone?.();
     } else {
-      let msg = `Upload failed (${xhr.status})`;
-      try {
-        const j = JSON.parse(xhr.responseText);
-        if (j.message) msg = j.message;
-      } catch { /* ignore */ }
+      let code: string | null = null;
+      try { code = JSON.parse(xhr.responseText)?.error ?? null; } catch { /* ignore */ }
+      const msg = describeUploadFailure(xhr.status, code, 0, file.size);
       useTransfers.getState().update(id, { status: "error", error: msg });
     }
   };
@@ -325,4 +464,160 @@ async function runDownload(id: string, name: string, fullUrl: string, isTauri: b
     activeControllers.delete(id);
     finish(id);
   }
+}
+
+
+async function runChunkedUpload(
+  id: string,
+  file: File,
+  rootId: string,
+  targetPath: string,
+  isTauri: boolean,
+  baseUrl: string,
+  onDone?: () => void,
+  existingId?: string | null,
+) {
+  const ctrl = new AbortController();
+  const st: ChunkedState = {
+    uploadId: existingId ?? null,
+    file, rootId, targetPath, isTauri, baseUrl,
+    csrf: getCsrfToken(),
+    authHeader: null,
+    ctrl,
+    paused: false,
+    cancelled: false,
+    ackedBytes: 0,
+    inflight: new Map(),
+    onDone,
+  };
+  activeChunked.set(id, st);
+
+  const setP = (patch: Partial<Transfer>) => useTransfers.getState().update(id, patch);
+  const total = file.size;
+
+  try {
+    const headers = authHeaders(isTauri);
+    const jfetch = async (url: string, init?: RequestInit) => {
+      const res = await fetch(url, { credentials: !isTauri ? "include" : "omit", signal: ctrl.signal, ...init });
+      return jsonOrThrow(res);
+    };
+
+    // ── Init or resume ──
+    if (!st.uploadId && existingId) st.uploadId = existingId;
+    if (!st.uploadId) {
+      setP({ status: "processing" });
+      const r = await jfetch(`${baseUrl}/api/v1/files/uploads/init`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...headers },
+        body: JSON.stringify({ root: rootId, path: targetPath, name: file.name, size: file.size, mime: file.type, chunk_size: CHUNK_SIZE }),
+      });
+      st.uploadId = r.uploadId as string;
+      localStorage.setItem(sessionKey(file, rootId, targetPath), st.uploadId);
+    }
+
+    // Acknowledged state from the server (covers refresh-resume too).
+    let status = await jfetch(`${baseUrl}/api/v1/files/uploads/${st.uploadId}/status`);
+    const present: Record<number, boolean> | undefined = status.present;
+    let next: number = Math.max(0, status.nextChunk ?? 0);
+    st.ackedBytes = status.uploadedBytes ?? 0;
+    const totalChunks: number = status.totalChunks;
+    setP({ loaded: st.ackedBytes, total });
+
+    // ── Bounded-parallelism chunk pump ──
+    let cursor = next;
+    const sumInflight = (s2: ChunkedState) => [...s2.inflight.values()].reduce((a, b) => a + b, 0);
+    const bump = (index: number, delta: number) => {
+      const cur = st.inflight.get(index) ?? 0;
+      st.inflight.set(index, cur + delta);
+      setP({ loaded: Math.min(total, st.ackedBytes + sumInflight(st)) });
+    };
+    const worker = async () => {
+      for (;;) {
+        if (st.cancelled) throw new DOMException("Cancelled", "AbortError");
+        if (st.paused) throw Object.assign(new Error("paused"), { paused: true });
+        if (cursor >= totalChunks) return;
+        // Skip chunks the server already acknowledged.
+        while (cursor < totalChunks && present?.[cursor]) {
+          cursor++;
+          st.ackedBytes += Math.min(CHUNK_SIZE, total - (cursor - 1) * CHUNK_SIZE);
+        }
+        if (cursor >= totalChunks) return;
+        const index = cursor++;
+        await putChunk(st, index, (delta) => bump(index, delta));
+        st.inflight.delete(index);
+        st.ackedBytes += Math.min(CHUNK_SIZE, total - index * CHUNK_SIZE);
+        setP({ loaded: Math.min(total, st.ackedBytes), status: "active" });
+      }
+    };
+
+    const workers = Math.max(1, Math.min(MAX_PARALLEL_CHUNKS, totalChunks - next));
+    await Promise.all(Array.from({ length: workers }, worker));
+
+    // ── Complete: server verifies, assembles, atomic-renames ──
+    setP({ loaded: total, status: "processing", speed: 0 });
+    try {
+      await jfetch(`${baseUrl}/api/v1/files/uploads/${st.uploadId}/complete`, { method: "POST", headers });
+    } catch (e: any) {
+      if (e?.code === "chunks_missing" || e?.code === "size_mismatch") {
+        // Server lost a chunk mid-flight — re-sync from its status and continue.
+        activeChunked.delete(id);
+        finish(id);
+        enqueue(id, () => runChunkedUpload(id, file, rootId, targetPath, isTauri, baseUrl, onDone, st.uploadId));
+        return;
+      }
+      throw e;
+    }
+
+    localStorage.removeItem(sessionKey(file, rootId, targetPath));
+    setP({ loaded: total, speed: 0, status: "done" });
+    onDone?.();
+  } catch (e: any) {
+    if (st.cancelled || e?.name === "AbortError") {
+      if (st.paused) {
+        setP({ status: "paused", speed: 0 }); // keep session id → resume later
+        return;
+      }
+      if (st.uploadId) {
+        localStorage.removeItem(sessionKey(file, rootId, targetPath));
+        void fetch(`${baseUrl}/api/v1/files/uploads/${st.uploadId}`, {
+          method: "DELETE", credentials: !isTauri ? "include" : "omit", headers: authHeaders(isTauri),
+        }).catch(() => {});
+      }
+      setP({ status: "error", error: "Upload cancelled" });
+    } else {
+      const msg = describeUploadFailure(e?.status ?? null, e?.code ?? null, st.ackedBytes, total);
+      setP({ status: "error", error: msg });
+      // Keep the session so "Retry" can resume from the last acked chunk.
+    }
+  } finally {
+    activeChunked.delete(id);
+    finish(id);
+  }
+}
+
+// ── Pause / resume controls for the transfers panel ────────────────────────
+export function pauseTransfer(id: string) {
+  const st = activeChunked.get(id);
+  if (st && !st.paused) {
+    st.paused = true;
+    st.ctrl.abort();
+    useTransfers.getState().update(id, { status: "paused", speed: 0 });
+  }
+}
+
+export function resumeTransfer(id: string) {
+  const t = useTransfers.getState().transfers.find((x) => x.id === id);
+  if (!t || t.status !== "paused") return;
+  const f = filesById.get(id);
+  if (!f) {
+    // After a page refresh the File handle is gone; resuming needs the bytes.
+    useTransfers.getState().update(id, {
+      status: "error",
+      error: "File handle lost on page reload — remove this entry and add the file again to resume.",
+    });
+    return;
+  }
+  const uploadId = localStorage.getItem(sessionKey(f, t.rootId, t.path)) ?? null;
+  useTransfers.getState().update(id, { status: "queued" });
+  enqueue(id, () => runChunkedUpload(id, f, t.rootId, t.path, "__TAURI_INTERNALS__" in window, getBaseUrl(), undefined, uploadId));
 }

@@ -27,29 +27,35 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// maxMemory is only the in-memory buffer for multipart parsing; larger
-	// files stream to temp files, so there is no single-file size limit.
-	const maxMemory = 32 << 20
-	if err := r.ParseMultipartForm(maxMemory); err != nil {
+	// Stream multipart parts directly into the storage provider. Unlike
+	// ParseMultipartForm (which spills large parts to temp files — historically
+	// a size-capped tmpfs, killing multi-GB uploads mid-flight), this keeps
+	// memory flat and never touches /tmp regardless of file size.
+	mr, err := r.MultipartReader()
+	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_multipart", "could not parse upload request", middleware.GetRequestID(r.Context()))
-		return
-	}
-	files := r.MultipartForm.File["files"]
-	if len(files) == 0 {
-		// Single-file field fallback.
-		if f, ok := r.MultipartForm.File["file"]; ok {
-			files = f
-		}
-	}
-	if len(files) == 0 {
-		writeError(w, http.StatusBadRequest, "no_files", "no files provided", middleware.GetRequestID(r.Context()))
 		return
 	}
 
 	var uploaded []string
-	for _, fh := range files {
-		name := filepath.Base(fh.Filename)
-		if name == "" || strings.ContainsAny(name, "/\\") {
+	var lastWriteErr error
+	for {
+		part, perr := mr.NextPart()
+		if perr == io.EOF {
+			break
+		}
+		if perr != nil {
+			lastWriteErr = perr
+			break
+		}
+		formName := part.FormName()
+		if formName != "files" && formName != "file" {
+			part.Close()
+			continue
+		}
+		name := filepath.Base(part.FileName())
+		if name == "" || name == "." || strings.ContainsAny(name, "/\\") {
+			part.Close()
 			writeError(w, http.StatusBadRequest, "invalid_name", "invalid file name", middleware.GetRequestID(r.Context()))
 			return
 		}
@@ -58,33 +64,55 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 			dest += "/"
 		}
 		dest += name
-		if _, err := storage.CleanRelative(dest); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_path", err.Error(), middleware.GetRequestID(r.Context()))
+		if _, cerr := storage.CleanRelative(dest); cerr != nil {
+			part.Close()
+			writeError(w, http.StatusBadRequest, "invalid_path", cerr.Error(), middleware.GetRequestID(r.Context()))
 			return
 		}
-		if err := s.checkAllowedMime(fh.Filename, fh.Header.Get("Content-Type")); err != nil {
-			writeError(w, http.StatusBadRequest, "mime_not_allowed", err.Error(), middleware.GetRequestID(r.Context()))
+		if merr := s.checkAllowedMime(name, part.Header.Get("Content-Type")); merr != nil {
+			part.Close()
+			writeError(w, http.StatusBadRequest, "mime_not_allowed", merr.Error(), middleware.GetRequestID(r.Context()))
 			return
 		}
-		src, err := fh.Open()
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "internal_error", "could not read upload", middleware.GetRequestID(r.Context()))
-			return
+		werr := acc.provider.Write(dest, part, -1)
+		part.Close()
+		if werr != nil {
+			lastWriteErr = werr
+			break
 		}
-		if err := acc.provider.Write(dest, src, fh.Size); err != nil {
-			src.Close()
-			s.writeProviderError(w, r, err)
-			return
-		}
-		src.Close()
 		uploaded = append(uploaded, dest)
 		s.indexUpsert(rootID, acc.provider, dest)
-		if s.Metrics != nil {
-			s.Metrics.AddUpload(fh.Size)
-		}
-		s.audit(r, "upload", dest, "")
 		s.recordRecent(r, rootID, dest, "add")
-		s.emit(events.EventFileCreated, r, rootID, dest, fh.Size)
+	}
+	if len(uploaded) == 0 && lastWriteErr == nil {
+		writeError(w, http.StatusBadRequest, "no_files", "no files provided", middleware.GetRequestID(r.Context()))
+		return
+	}
+	if lastWriteErr != nil {
+		status, code, msg := classifyUploadError(lastWriteErr)
+		if s.Log != nil {
+			s.Log.Warn("upload failed",
+				"code", code,
+				"error", lastWriteErr.Error(),
+				"completed_files", len(uploaded),
+				"remote_ip", clientIP(r),
+			)
+		}
+		writeError(w, status, code, msg, middleware.GetRequestID(r.Context()))
+		return
+	}
+	totalBytes := int64(0)
+	for _, u := range uploaded {
+		sz := int64(0)
+		if info, serr := acc.provider.Stat(u); serr == nil {
+			sz = info.Size
+		}
+		totalBytes += sz
+		s.audit(r, "upload", u, "")
+		s.emit(events.EventFileCreated, r, rootID, u, sz)
+	}
+	if s.Metrics != nil {
+		s.Metrics.AddUpload(totalBytes)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "uploaded": uploaded})
 }

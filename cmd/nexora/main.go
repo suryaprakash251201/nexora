@@ -132,7 +132,7 @@ func main() {
 		// and a fixed ReadTimeout would cut the connection mid-transfer — which
 		// looks like an upload that stalls and dies. ReadHeaderTimeout above still
 		// guards against slowloris on the header phase.
-		ReadTimeout: 0,
+		ReadTimeout:  0,
 		WriteTimeout: 0, // streaming (Range) needs no write timeout
 		IdleTimeout:  120 * time.Second,
 	}
@@ -204,6 +204,7 @@ func runMaintenance(ctx context.Context, db *database.DB, sessions *auth.Session
 			previewSvc.PurgeStale()
 			jobMgr.CleanupOldArchives(24 * time.Hour)
 			storage.PurgeExpiredTrash(ctx, db, roots, cfg.TrashTTL, log)
+			api.PurgeStaleUploadSessions(ctx, cfg.DataDir, cfg.UploadTTL, log)
 		case <-scanTicker.C:
 			searchSvc.ScanAll(ctx)
 		}

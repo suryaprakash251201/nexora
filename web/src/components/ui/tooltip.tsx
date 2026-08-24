@@ -32,14 +32,19 @@ function TooltipContent({
   align = "center",
   alignOffset = 0,
   children,
+  container,
   ...props
 }: TooltipPrimitive.Popup.Props &
   Pick<
     TooltipPrimitive.Positioner.Props,
     "align" | "alignOffset" | "side" | "sideOffset"
-  >) {
+  > & {
+    /** Portal target — pass a stacking-context parent (e.g. a dialog root)
+     * when the tooltip must layer above that dialog instead of <body>. */
+    container?: TooltipPrimitive.Portal.Props["container"];
+  }) {
   return (
-    <TooltipPrimitive.Portal>
+    <TooltipPrimitive.Portal container={container}>
       <TooltipPrimitive.Positioner
         align={align}
         alignOffset={alignOffset}

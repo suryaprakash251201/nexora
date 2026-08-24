@@ -10,6 +10,10 @@ export function useAudioInfo(rootId: string, path: string): { info: AudioInfo | 
 
   useEffect(() => {
     let cancelled = false;
+    if (!path) {
+      setState({ info: null, loading: false });
+      return;
+    }
     setState({ info: null, loading: true });
     fetchAudioInfo(rootId, path).then((info) => {
       if (cancelled) return;

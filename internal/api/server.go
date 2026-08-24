@@ -201,6 +201,12 @@ func (s *Server) Routes() http.Handler {
 	authed.Get("/files/stat", s.handleStatFile)
 	authed.Get("/files/duplicates", s.handleFindDuplicates)
 	authed.Get("/files/comments", s.listFileComments)
+	// Resumable chunked uploads (large files).
+	authed.Post("/files/uploads/init", s.handleUploadInit)
+	authed.Put("/files/uploads/{id}/chunk", s.handleUploadChunk)
+	authed.Get("/files/uploads/{id}/status", s.handleUploadStatus)
+	authed.Post("/files/uploads/{id}/complete", s.handleUploadComplete)
+	authed.Delete("/files/uploads/{id}", s.handleUploadCancel)
 	authed.Post("/files/comments", s.createFileComment)
 	authed.Delete("/files/comments/{id}", s.deleteFileComment)
 	authed.Get("/stats", s.handleStorageStats)
@@ -217,12 +223,12 @@ func (s *Server) Routes() http.Handler {
 	authed.Get("/files/hls/playlist.m3u8", s.handleHLSPlaylist)
 	authed.Get("/files/hls/segment.ts", s.handleHLSSegment)
 
-  // Lossless audio metadata and server capabilities.
-  authed.Get("/audio/info", s.handleAudioInfo)
-  authed.Get("/audio/formats", s.handleAudioFormats)
-  authed.Get("/audio/lyrics", s.handleAudioLyrics)
-  authed.Post("/audio/lyrics", s.handleSaveAudioLyrics)
-  authed.Delete("/audio/lyrics", s.handleDeleteAudioLyrics)
+	// Lossless audio metadata and server capabilities.
+	authed.Get("/audio/info", s.handleAudioInfo)
+	authed.Get("/audio/formats", s.handleAudioFormats)
+	authed.Get("/audio/lyrics", s.handleAudioLyrics)
+	authed.Post("/audio/lyrics", s.handleSaveAudioLyrics)
+	authed.Delete("/audio/lyrics", s.handleDeleteAudioLyrics)
 	authed.Get("/trash", s.handleListTrash)
 	authed.Post("/trash/restore", s.handleRestoreTrash)
 	authed.Delete("/trash", s.handleDeleteTrash)
