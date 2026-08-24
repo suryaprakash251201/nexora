@@ -196,6 +196,7 @@ export interface PlaylistItem {
   playlist_id: string;
   root_id: string;
   path: string;
+  position?: number;
   created_at: string;
   name: string;
   extension: string;
@@ -205,6 +206,7 @@ export interface PlaylistItem {
 export interface Playlist {
   id: string;
   name: string;
+  description?: string;
   cover_root_id: string;
   cover_path: string;
   is_public: boolean;

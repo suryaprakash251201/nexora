@@ -283,8 +283,8 @@ export const playlistsApi = {
   listPublic: () => get<{ items: Playlist[] }>("/playlists/public"),
   /** GET /playlists/cover-config */
   coverConfig: () => get<{ cover_path: string }>("/playlists/cover-config"),
-  /** POST /playlists { name, items } */
-  create: (payload: { name: string; items: { root_id: string; path: string }[] }) =>
+  /** POST /playlists { name, description?, items } — returns 201 with the created playlist */
+  create: (payload: { name: string; description?: string; items: { root_id: string; path: string }[] }) =>
     post<Playlist>("/playlists", payload),
   /** DELETE /playlists/{id} */
   delete: (id: string) => del<{ ok?: boolean }>(`/playlists/${id}`),
@@ -298,6 +298,9 @@ export const playlistsApi = {
   /** DELETE /playlists/{id}/items?item_id= */
   removeItem: (playlistId: string, itemId: string) =>
     del<{ ok?: boolean }>(`/playlists/${playlistId}/items`, { item_id: itemId }),
+  /** PUT /playlists/{id}/items/order { item_ids } — full ordering after drag-and-drop */
+  reorderItems: (id: string, itemIds: string[]) =>
+    put<{ ok?: boolean }>(`/playlists/${id}/items/order`, { item_ids: itemIds }),
   /** GET /playlists/{id}/collaborators */
   listCollaborators: (id: string) =>
     get<{ collaborators: PlaylistCollaborator[] }>(`/playlists/${id}/collaborators`),

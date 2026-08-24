@@ -171,6 +171,7 @@ export interface PlaylistItem {
 export interface Playlist {
   id: string;
   name: string;
+  description?: string;
   cover_root_id: string;
   cover_path: string;
   is_public: boolean;

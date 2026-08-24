@@ -3,6 +3,17 @@ All notable changes to Nexora are documented here. The format is based on [Keep 
 
 ## [Unreleased]
 ### Added
+- Playlists: descriptions end-to-end — new `description` column (migration `0018_playlist_structure.sql`), accepted by `POST /playlists`, editable via `PATCH /playlists/{id}`, shown on playlist cards, the detail header (inline edit on web) and the mobile detail screen.
+- Playlists: manual track ordering — `position` column backfilled from historical order, items append at the next free position, new `PUT /playlists/{id}/items/order` endpoint, and drag-and-drop reordering in the web playlist detail view (optimistic with rollback).
+- Web: redesigned playlist library — grid/list view toggle (remembered per device), artwork-dominant cards with hover-play, compact list rows, loading skeletons, richer empty states, and a redesigned Create Playlist dialog with live card preview, optional cover/description, char counters, and an inline error banner so server failures are visible instead of silently ignored.
+### Fixed
+- Web: "Add to playlist" picker closed itself on the first scroll — `useClickOutside`'s capture-phase scroll listener fired for the menu's **own** scrollable list, dismissing it before any playlist below the fold could be reached. Outside-scrolls still close it; internal scrolls no longer do.
+- Web: playlist picker list now contains its wheel input (`overscroll-contain`) so hitting the end of the list doesn't chain-scroll the file grid behind (which also used to dismiss the picker), and the "New playlist…" action is pinned below the list instead of requiring a scroll to reach.
+- Playlists: **create-with-tracks no longer fails on PostgreSQL** — runtime `INSERT OR IGNORE` statements are now converted to `ON CONFLICT DO NOTHING` by the dialect wrapper (was a guaranteed 500 that also left an orphan empty playlist behind).
+- Playlists: creation is atomic — `CreateWithItems` writes the playlist row and its initial tracks in one transaction, so a failure can never half-persist.
+- Web: "New Playlist" button surfaced errors instead of appearing dead (unhandled promise rejection); rename/delete/cover/visibility actions now toast failures too.
+- Web/mobile: crash when adding files without resolved MIME type to a playlist (`audioOnly` null-safety).
+### Added
 - Desktop: native audio engine milestone 4 — the player store now routes supported tracks (m4a/AAC/ALAC, FLAC, MP3, WAV…) through the Rust engine automatically when available, with automatic fallback to the browser/transcode pipeline on any error and a Settings → System kill-switch. Bearer auth bridges the desktop HTTP client via a self-managed `nxr_` media token.
 ### Added
 - Desktop (plan → Phase 1 started): `nexora-audio` Rust crate for native in-app audio decode/playback — M1 lands an HTTP-Range streaming source (`HttpRangeReader`: chunked LRU cache, read-ahead, bearer auth, moov-tail prefetch) with 11 mock-server tests; decode (symphonia: mp4/ALAC/AAC/FLAC/PCM/MP3) and output (rodio/WASAPI) gated behind `decode`/`output` features.

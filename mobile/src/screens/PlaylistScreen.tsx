@@ -238,6 +238,11 @@ export default function PlaylistScreen({ route, navigation }: Props) {
               <Text style={[styles.name, { color: colors.content, fontSize: font.xl }]} numberOfLines={2}>
                 {playlist.name}
               </Text>
+              {playlist.description ? (
+                <Text style={[styles.meta, { color: colors.muted, fontSize: font.sm, marginTop: 2 }]} numberOfLines={2}>
+                  {playlist.description}
+                </Text>
+              ) : null}
               <Text style={[styles.meta, { color: colors.muted, fontSize: font.sm }]}>
                 {playlist.items.length} track{playlist.items.length === 1 ? "" : "s"}
                 {playlist.is_public ? " · Public" : ""} · Synced with web

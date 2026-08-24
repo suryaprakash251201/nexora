@@ -124,40 +124,37 @@ func (s *Server) handleCreatePlaylist(w http.ResponseWriter, r *http.Request) {
 
 	// Any authenticated user may create their own playlists.
 	var req struct {
-		Name  string                   `json:"name"`
-		Items []playlists.PlaylistItem `json:"items"`
+		Name        string                   `json:"name"`
+		Description string                   `json:"description"`
+		Items       []playlists.PlaylistItem `json:"items"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_body", err.Error(), middleware.GetRequestID(r.Context()))
 		return
 	}
 
+	req.Name = strings.TrimSpace(req.Name)
 	if req.Name == "" {
 		req.Name = "New playlist"
 	}
+	if len(req.Name) > 200 {
+		writeError(w, http.StatusBadRequest, "invalid_body", "Playlist name is too long (max 200 characters)", middleware.GetRequestID(r.Context()))
+		return
+	}
+	if len(req.Description) > 2000 {
+		writeError(w, http.StatusBadRequest, "invalid_body", "Description is too long (max 2000 characters)", middleware.GetRequestID(r.Context()))
+		return
+	}
 
-	pl, err := s.Playlists.Create(user.ID, req.Name)
+	// Create the playlist and its initial items atomically so a failure can
+	// never leave an orphaned empty playlist behind.
+	pl, err := s.Playlists.CreateWithItems(user.ID, req.Name, req.Description, req.Items)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error", "Failed to create playlist", middleware.GetRequestID(r.Context()))
 		return
 	}
 
-	if len(req.Items) > 0 {
-		if _, err := s.Playlists.AddItems(user.ID, pl.ID, req.Items); err != nil {
-			writeError(w, http.StatusInternalServerError, "internal_error", "Failed to add items to playlist", middleware.GetRequestID(r.Context()))
-			return
-		}
-		// Refresh items
-		pls, _ := s.Playlists.ListForUser(user.ID)
-		for _, p := range pls {
-			if p.ID == pl.ID {
-				pl = &p
-				break
-			}
-		}
-	}
-
-	writeJSON(w, http.StatusOK, pl)
+	writeJSON(w, http.StatusCreated, pl)
 }
 
 func (s *Server) handleDeletePlaylist(w http.ResponseWriter, r *http.Request) {
@@ -240,10 +237,23 @@ func (s *Server) handleUpdatePlaylist(w http.ResponseWriter, r *http.Request) {
 		CoverRootID *string `json:"cover_root_id"`
 		CoverPath   *string `json:"cover_path"`
 		IsPublic    *bool   `json:"is_public"`
+		Description *string `json:"description"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_body", err.Error(), middleware.GetRequestID(r.Context()))
 		return
+	}
+
+	if req.Description != nil {
+		desc := strings.TrimSpace(*req.Description)
+		if len(desc) > 2000 {
+			writeError(w, http.StatusBadRequest, "invalid_body", "Description is too long (max 2000 characters)", middleware.GetRequestID(r.Context()))
+			return
+		}
+		if err := s.Playlists.SetDescription(user.ID, id, desc); err != nil {
+			writeError(w, http.StatusInternalServerError, "internal_error", "Failed to update description", middleware.GetRequestID(r.Context()))
+			return
+		}
 	}
 
 	// Cover changes are allowed for owner/editors; visibility stays owner/admin.
@@ -331,6 +341,43 @@ func (s *Server) handleRemovePlaylistItem(w http.ResponseWriter, r *http.Request
 	}
 
 	if err := s.Playlists.RemoveItem(user.ID, id, itemID); err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", err.Error(), middleware.GetRequestID(r.Context()))
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+// handleReorderPlaylistItems persists a full drag-and-drop reordering of a
+// playlist's tracks. Body: { "item_ids": ["<server item id>", ...] } — the
+// complete list in the new order.
+func (s *Server) handleReorderPlaylistItems(w http.ResponseWriter, r *http.Request) {
+	user, ok := auth.UserFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthenticated", "Authentication required", middleware.GetRequestID(r.Context()))
+		return
+	}
+
+	id := chi.URLParam(r, "id")
+
+	if user.Role != auth.RoleAdmin && !s.Playlists.CanEdit(user.ID, id) {
+		writeError(w, http.StatusForbidden, "forbidden", "You don't have permission to edit this playlist", middleware.GetRequestID(r.Context()))
+		return
+	}
+
+	var req struct {
+		ItemIDs []string `json:"item_ids"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_body", err.Error(), middleware.GetRequestID(r.Context()))
+		return
+	}
+	if len(req.ItemIDs) == 0 {
+		writeError(w, http.StatusBadRequest, "invalid_body", "item_ids is required", middleware.GetRequestID(r.Context()))
+		return
+	}
+
+	if err := s.Playlists.ReorderItems(user.ID, id, req.ItemIDs); err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error", err.Error(), middleware.GetRequestID(r.Context()))
 		return
 	}

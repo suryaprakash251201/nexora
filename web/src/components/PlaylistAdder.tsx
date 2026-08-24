@@ -5,10 +5,12 @@ import { usePlaylists, useCreatePlaylist, useAddPlaylistItems } from "../hooks/u
 import { useUI } from "../store";
 import type { FileItem } from "../api/types";
 import { thumbUrl } from "../lib/preview";
+import { isAudio } from "@nexora/core";
 import { useClickOutside } from "./hooks/useClickOutside";
 
 function audioOnly(items: FileItem[]): FileItem[] {
-  return items.filter((i) => i.mime.startsWith("audio/"));
+  // Null-safe: some items can arrive without a resolved mime string.
+  return items.filter((i) => typeof i.mime === "string" ? i.mime.startsWith("audio/") : isAudio(i));
 }
 
 function MiniCover({ playlist }: { playlist: any }) {
@@ -79,55 +81,65 @@ export function PlaylistPickerList({ items, onClose }: { items: FileItem[]; onCl
   }
 
   return (
-    <div className="py-1 text-sm max-h-80 overflow-auto">
-      <p className="px-3 py-1 text-[11px] uppercase tracking-wide text-content-muted">
+    <div className="py-1 text-sm flex flex-col max-h-80">
+      <p className="px-3 py-1 text-[11px] uppercase tracking-wide text-content-muted shrink-0">
         Add {audio.length} track{audio.length === 1 ? "" : "s"} to…
       </p>
-      {playlists.length === 0 && (
-        <p className="px-3 py-2 text-xs text-content-muted">No playlists yet — create one below.</p>
-      )}
-      {playlists.map((pl) => (
-        <button
-          key={pl.id}
-          onClick={() => add(pl.id)}
-          className="w-full flex items-center gap-2.5 px-3 py-2 text-left glass-hover"
-        >
-          <MiniCover playlist={pl} />
-          <span className="truncate flex-1 text-left text-sm">{pl.name}</span>
-          <span className="text-xs text-content-muted tabular-nums">{pl.items.length}</span>
-        </button>
-      ))}
-      {creatingNew ? (
-        <form
-          onSubmit={(e) => { e.preventDefault(); createNew(); }}
-          className="flex items-center gap-2 px-3 py-2 border-t glass-divider mt-1"
-        >
-          <input
-            autoFocus
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            placeholder={`Playlist ${playlists.length + 1}`}
-            className="flex-1 min-w-0 rounded-lg glass-input px-2.5 py-1.5 text-sm outline-none"
-            aria-label="New playlist name"
-          />
-          <Button type="submit" variant="primary" size="sm" disabled={!newName.trim()}>
-            Create
-          </Button>
-          <button type="button" onClick={() => { setCreatingNew(false); setNewName(""); }} className="p-1.5 text-content-muted hover:text-content" aria-label="Cancel">
-            <X className="h-3.5 w-3.5" />
+      {/* Scrollable playlist area. overscroll-contain keeps wheel input from
+          chaining to the page behind when the list edge is reached. */}
+      <div className="overflow-y-auto overscroll-contain min-h-0">
+        {playlists.length === 0 && (
+          <p className="px-3 py-2 text-xs text-content-muted">No playlists yet — create one below.</p>
+        )}
+        {playlists.map((pl) => (
+          <button
+            key={pl.id}
+            onClick={() => add(pl.id)}
+            className="w-full flex items-center gap-2.5 px-3 py-2 text-left glass-hover"
+          >
+            <MiniCover playlist={pl} />
+            <span className="truncate flex-1 text-left text-sm">{pl.name}</span>
+            <span className="text-xs text-content-muted tabular-nums">{pl.items.length}</span>
           </button>
-        </form>
-      ) : (
-        <button
-          onClick={() => setCreatingNew(true)}
-          className="w-full flex items-center gap-2.5 px-3 py-2 text-left glass-hover border-t glass-divider mt-1"
-        >
-          <div className="h-8 w-8 rounded-lg grid place-items-center bg-accent/10 text-accent shrink-0">
-            <Plus className="h-4 w-4" />
-          </div>
-          New playlist…
-        </button>
-      )}
+        ))}
+      </div>
+      {/* Pinned create action — always visible regardless of list length. */}
+      <div className="shrink-0 border-t glass-divider mt-1">
+        {creatingNew ? (
+          <form
+            onSubmit={(e) => { e.preventDefault(); createNew(); }}
+            className="flex items-center gap-2 px-3 py-2"
+          >
+            <input
+              autoFocus
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              placeholder={`Playlist ${playlists.length + 1}`}
+              className="flex-1 min-w-0 rounded-lg glass-input px-2.5 py-1.5 text-sm outline-none"
+              aria-label="New playlist name"
+              onKeyDown={(e) => {
+                if (e.key === "Escape") { e.stopPropagation(); setCreatingNew(false); setNewName(""); }
+              }}
+            />
+            <Button type="submit" variant="primary" size="sm" loading={createMutation.isPending} disabled={!newName.trim()}>
+              Create
+            </Button>
+            <button type="button" onClick={() => { setCreatingNew(false); setNewName(""); }} className="p-1.5 text-content-muted hover:text-content" aria-label="Cancel">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </form>
+        ) : (
+          <button
+            onClick={() => setCreatingNew(true)}
+            className="w-full flex items-center gap-2.5 px-3 py-2 text-left glass-hover rounded-b-lg"
+          >
+            <div className="h-8 w-8 rounded-lg grid place-items-center bg-accent/10 text-accent shrink-0">
+              <Plus className="h-4 w-4" />
+            </div>
+            New playlist…
+          </button>
+        )}
+      </div>
     </div>
   );
 }

@@ -125,6 +125,13 @@
 - [x] Preserved: transcode-fallback chain, error state with download/open-with, Android `collapsable={false}` black-screen guard
 - [x] Verified: `tsc --noEmit` ✓ (caught & fixed against installed types: `playingChange` payload is `{isPlaying}`, not `{playing}`)
 
+### Session 10 — "Rendered more hooks" crash investigation (user report): **DONE**
+- [x] Built a zero-dependency **AST Rules-of-Hooks checker** (`scripts/check-hooks.cjs`, TypeScript compiler API) detecting hooks-after-early-return and hooks-inside-conditionals/loops
+- [x] Ran it over **both trees**: `web/src` and `mobile/src` → **NO VIOLATIONS**; manual per-function audits of MiniPlayer / VideoPlayer / PlaylistScreen / PremiumTabBar / Sidebar confirmed correct ordering (MiniPlayer's cover-art hooks sit above its early return, guarded by an in-code comment)
+- [x] **Root cause conclusion:** current code cannot produce this error → stale Metro/transform cache or an intermediate mid-edit bundle on the device. Recovery: `npx expo start -c` (+ reinstall dev client if needed)
+- [x] **Permanent guard:** new `lint:hooks` script in web + mobile package.json, wired as CI gates ("Rules of Hooks (AST check)") in the Frontend and mobile Patches jobs so any future violation fails the build before it reaches a device
+- [x] Verified: AST checker clean ×2 · yaml valid · both tsc ✓
+
 ### Remaining (next sessions)
 - [ ] **P4 remainder**: AudioPlayer is now 1036 ln — the fullscreen vinyl/controls JSX could split further (NowPlaying vs transport bar), diminishing returns; nested `<Route>` conversion stays optional (URL state already correct via `navigate()` + parsing)
 - [ ] **UX remainder**: R6 full accessibility audit (labels done for player; forms/menus remain), motion polish

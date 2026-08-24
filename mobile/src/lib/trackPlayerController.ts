@@ -1,11 +1,13 @@
-import { NativeModules, Platform } from "react-native";
-import TrackPlayer, {
-  AppKilledPlaybackBehavior,
-  Capability,
-  Event,
-  RepeatMode,
-  State,
-} from "react-native-track-player";
+import { Platform } from "react-native";
+// Type-only import — erased at runtime. The value side of the package is
+// resolved lazily via trackPlayerModule.ts so Expo Go doesn't crash on the
+// missing native module.
+import type { State } from "react-native-track-player";
+
+import {
+  getTrackPlayer,
+  trackPlayerNativeAvailable,
+} from "./trackPlayerModule";
 
 /**
  * TrackPlayer-backed media controller.
@@ -80,11 +82,10 @@ export class TrackPlayerController {
    * react-native-track-player ships native code, so it only exists inside a
    * development/production build. Inside Expo Go the native module is absent
    * (there is no media notification there either) — degrade to no-ops instead
-   * of crashing on `setupPlayer`.
+   * of crashing on `setupPlayer`. Probed safely via trackPlayerModule.ts.
    */
   private get nativeAvailable() {
-    if (this.isWeb) return false;
-    return !!(NativeModules as any).TrackPlayerModule;
+    return trackPlayerNativeAvailable();
   }
 
   private warnedMissingNative = false;
@@ -120,10 +121,13 @@ export class TrackPlayerController {
   async ensureInit() {
     if (this.initialized) return;
     this.initialized = true;
-    if (!this.nativeAvailable) {
+    const rntp = getTrackPlayer();
+    if (!rntp) {
       this.warnMissingNative();
       return;
     }
+    const TrackPlayer = rntp.default;
+    const { Capability, AppKilledPlaybackBehavior, Event } = rntp;
 
     await TrackPlayer.setupPlayer({ autoHandleInterruptions: true });
     await TrackPlayer.updateOptions({
@@ -160,7 +164,7 @@ export class TrackPlayerController {
         this.status = status;
         this.emit("statusChange", { status });
         const isPlaying =
-          state === State.Playing || state === State.Buffering;
+          state === rntp.State.Playing || state === rntp.State.Buffering;
         if (isPlaying !== this.playing) {
           this.playing = isPlaying;
           this.emit("playingChange", { isPlaying });
@@ -207,6 +211,9 @@ export class TrackPlayerController {
   }
 
   private stateToStatus(state: State): string {
+    const rntp = getTrackPlayer();
+    if (!rntp) return EXPOV_IDLE;
+    const { State } = rntp;
     switch (state) {
       case State.Loading:
       case State.Buffering:
@@ -227,6 +234,8 @@ export class TrackPlayerController {
 
   private async poll() {
     if (this.isWeb) return;
+    const TrackPlayer = getTrackPlayer()?.default;
+    if (!TrackPlayer) return;
     try {
       const p = await TrackPlayer.getProgress();
       if (
@@ -249,17 +258,20 @@ export class TrackPlayerController {
 
   // ── Playback API (same surface the UI already uses) ────────────────
   play() {
-    if (!this.nativeAvailable) return;
+    const TrackPlayer = getTrackPlayer()?.default;
+    if (!TrackPlayer) return;
     TrackPlayer.play().catch(() => {});
   }
 
   pause() {
-    if (!this.nativeAvailable) return;
+    const TrackPlayer = getTrackPlayer()?.default;
+    if (!TrackPlayer) return;
     TrackPlayer.pause().catch(() => {});
   }
 
   seekBy(seconds: number) {
-    if (!this.nativeAvailable) return;
+    const TrackPlayer = getTrackPlayer()?.default;
+    if (!TrackPlayer) return;
     TrackPlayer.seekBy(seconds).catch(() => {});
     this.currentTime = Math.max(0, this.currentTime + seconds);
   }
@@ -270,10 +282,12 @@ export class TrackPlayerController {
 
   set loop(value: boolean) {
     this._loop = value;
-    if (!this.nativeAvailable) return;
-    TrackPlayer.setRepeatMode(value ? RepeatMode.Track : RepeatMode.Off).catch(
-      () => {}
-    );
+    const rntp = getTrackPlayer();
+    if (!rntp) return;
+    const { RepeatMode } = rntp;
+    rntp.default
+      .setRepeatMode(value ? RepeatMode.Track : RepeatMode.Off)
+      .catch(() => {});
   }
 
   get currentTime() {
@@ -284,13 +298,15 @@ export class TrackPlayerController {
   set currentTime(value: number) {
     const t = Math.max(0, value);
     this._currentTime = t;
-    if (!this.nativeAvailable) return;
+    const TrackPlayer = getTrackPlayer()?.default;
+    if (!TrackPlayer) return;
     TrackPlayer.seekTo(t).catch(() => {});
   }
 
   /** Stops playback and clears the queue + notification card. */
   reset() {
-    if (!this.nativeAvailable) return;
+    const TrackPlayer = getTrackPlayer()?.default;
+    if (!TrackPlayer) return;
     TrackPlayer.reset().catch(() => {});
     this._currentTime = 0;
     this.duration = 0;
@@ -322,11 +338,13 @@ export class TrackPlayerController {
       artwork?: string;
     }>
   ) {
-    if (!this.nativeAvailable) {
+    const rntp = getTrackPlayer();
+    if (!rntp) {
       this.warnMissingNative();
       return;
     }
     await this.ensureInit();
+    const TrackPlayer = rntp.default;
     try {
       await TrackPlayer.reset();
       await TrackPlayer.add(tracks);
@@ -349,7 +367,8 @@ export class TrackPlayerController {
    * resets the timeline mirrors so the UI immediately reflects the new track.
    */
   async skipToIndex(index: number, autoplay: boolean) {
-    if (!this.nativeAvailable) return;
+    const TrackPlayer = getTrackPlayer()?.default;
+    if (!TrackPlayer) return;
     try {
       await TrackPlayer.skip(index);
       this.currentIndex = index;

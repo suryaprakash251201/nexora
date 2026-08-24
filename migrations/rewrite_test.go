@@ -31,6 +31,28 @@ func TestToPostgres_Strftime(t *testing.T) {
   }
 }
 
+func TestToPostgres_InsertOrIgnore(t *testing.T) {
+	got := ToPostgres("INSERT OR IGNORE INTO playlist_items (id, playlist_id, root_id, path, created_at) VALUES (?, ?, ?, ?, ?)")
+	want := "INSERT INTO playlist_items (id, playlist_id, root_id, path, created_at) VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING"
+	if got != want {
+		t.Fatalf("got %q want %q", got, want)
+	}
+}
+
+func TestToPostgres_InsertOrIgnore_MultiStatement(t *testing.T) {
+	got := ToPostgres("INSERT OR IGNORE INTO playlist_items (id, path) VALUES ('a', '/music/x flac'); INSERT OR IGNORE INTO t2 (a) VALUES ('b;c')")
+	if !contains(got, "INSERT INTO playlist_items (id, path) VALUES ('a', '/music/x flac') ON CONFLICT DO NOTHING") {
+		t.Fatalf("first statement not converted: %q", got)
+	}
+	// Semicolon inside a string literal must not split the statement.
+	if !contains(got, "INSERT INTO t2 (a) VALUES ('b;c') ON CONFLICT DO NOTHING") {
+		t.Fatalf("second statement not converted: %q", got)
+	}
+	if contains(got, "OR IGNORE") {
+		t.Fatalf("INSERT OR IGNORE survived conversion: %q", got)
+	}
+}
+
 func TestToPostgres_InsertOrReplace(t *testing.T) {
   got := ToPostgres("INSERT OR REPLACE INTO search_index(id, root_id, name) VALUES (?, ?, ?)")
   if !contains(got, "ON CONFLICT (id) DO UPDATE SET") {

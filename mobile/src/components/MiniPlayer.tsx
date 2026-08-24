@@ -281,6 +281,41 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
     }).start();
   }, [playing, modalVisible, currentTrack?.path, artworkScaleAnim]);
 
+  // ── Cover art loading with bounded retry ─────────────────────────────
+  // Thumbnails are generated server-side on demand (ffmpeg). Right after a
+  // track change the first request can fail or time out under load, leaving
+  // the artwork blank until the player is reopened. We now: always render a
+  // brand-gradient placeholder BENEATH the image, detect load errors, and
+  // auto-retry with backoff using a cache-busting param.
+  //
+  // NOTE: these hooks MUST stay ABOVE the `if (!currentTrack) return null`
+  // below — React requires the same hooks in the same order on every render,
+  // and this component renders both without and with an active track.
+  const [artAttempt, setArtAttempt] = useState(0);
+  const [artFailed, setArtFailed] = useState(false);
+
+  useEffect(() => {
+    // New track → reset the retry cycle.
+    setArtAttempt(0);
+    setArtFailed(false);
+  }, [currentTrack?.path]);
+
+  useEffect(() => {
+    if (!artFailed || artAttempt >= 4) return;
+    const t = setTimeout(() => setArtAttempt((n) => n + 1), 400 + artAttempt * 700);
+    return () => clearTimeout(t);
+  }, [artFailed, artAttempt]);
+
+  const onArtError = useCallback(() => {
+    // Mark failure so the backoff effect schedules the next attempt.
+    setArtFailed(true);
+  }, []);
+
+  const onArtLoad = useCallback(() => {
+    // Success stops the retry chain.
+    setArtFailed(false);
+  }, []);
+
   if (!currentTrack) return null;
 
   // ─── Helpers ─────────────────────────────────────────────────────────
@@ -325,37 +360,7 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
     slideAnim.setValue(SCREEN_HEIGHT);
   };
 
-  // ── Cover art loading with bounded retry ─────────────────────────────
-  // Thumbnails are generated server-side on demand (ffmpeg). Right after a
-  // track change the first request can fail or time out under load, leaving
-  // the artwork blank until the player is reopened. We now: always render a
-  // brand-gradient placeholder BENEATH the image, detect load errors, and
-  // auto-retry with backoff using a cache-busting param.
-  const [artAttempt, setArtAttempt] = useState(0);
-  const [artFailed, setArtFailed] = useState(false);
-
-  useEffect(() => {
-    // New track → reset the retry cycle.
-    setArtAttempt(0);
-    setArtFailed(false);
-  }, [currentTrack?.path]);
-
-  useEffect(() => {
-    if (!artFailed || artAttempt >= 4) return;
-    const t = setTimeout(() => setArtAttempt((n) => n + 1), 400 + artAttempt * 700);
-    return () => clearTimeout(t);
-  }, [artFailed, artAttempt]);
-
-  const onArtError = useCallback(() => {
-    // Mark failure so the backoff effect schedules the next attempt.
-    setArtFailed(true);
-  }, []);
-
-  const onArtLoad = useCallback(() => {
-    // Success stops the retry chain.
-    setArtFailed(false);
-  }, []);
-
+  // ── Cover art URL (with cache-busting retry param) ──────────────────
   const baseCoverUrl = api ? api.thumbnailUrl(currentTrack.root_id, currentTrack.path, 512) : null;
   const coverUrl =
     baseCoverUrl && artAttempt > 0 ? `${baseCoverUrl}${baseCoverUrl.includes("?") ? "&" : "?"}_r=${artAttempt}` : baseCoverUrl;

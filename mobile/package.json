@@ -42,7 +42,8 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "postinstall": "patch-package"
+    "postinstall": "patch-package",
+    "lint:hooks": "node ../scripts/check-hooks.cjs src"
   },
   "private": true,
   "overrides": {

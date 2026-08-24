@@ -1,13 +1,14 @@
 import { registerRootComponent } from 'expo';
-import TrackPlayer from 'react-native-track-player';
 
 import App from './App';
-import { PlaybackService } from './src/services/playbackService';
+import { setupPlaybackService } from './src/services/playbackService';
 
 // Registers the headless playback service BEFORE the root component: this is
 // what keeps the media notification (notification center / lock screen /
 // control center) alive and responsive while the app is in the background.
-TrackPlayer.registerPlaybackService(() => PlaybackService);
+// No-op when the react-native-track-player native module is absent
+// (Expo Go / web) — see src/lib/trackPlayerModule.ts.
+setupPlaybackService();
 
 // registerRootComponent calls AppRegistry.registerComponent('main', () => App);
 // It also ensures that whether you load the app in Expo Go or in a native build,

@@ -532,8 +532,8 @@ export class Api {
     return this.get("/playlists");
   }
 
-  createPlaylist(name: string, items?: { root_id: string; path: string }[]): Promise<Playlist> {
-    return this.post("/playlists", { name, items: items || [] });
+  createPlaylist(name: string, items?: { root_id: string; path: string }[], description?: string): Promise<Playlist> {
+    return this.post("/playlists", { name, description: description || "", items: items || [] });
   }
 
   renamePlaylist(id: string, name: string): Promise<{ ok: boolean }> {

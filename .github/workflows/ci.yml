@@ -94,6 +94,9 @@ jobs:
       - name: Type check
         run: npx tsc --noEmit
 
+      - name: Rules of Hooks (AST check)
+        run: npm run lint:hooks
+
       - name: Unit tests
         run: npm test
 
@@ -125,6 +128,9 @@ jobs:
 
       - name: Verify patches apply
         run: npx patch-package --error-on-fail
+
+      - name: Rules of Hooks (AST check)
+        run: npm run lint:hooks
 
   core:
     name: Shared core (typecheck)

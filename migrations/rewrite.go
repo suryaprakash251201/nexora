@@ -18,6 +18,8 @@ func ToPostgres(sql string) string {
 	sql = strings.ReplaceAll(sql, "datetime('now')", "NOW()")
 	// strftime(...) → TO_CHAR(...) with the format code mapped to Postgres.
 	sql = replaceStrftime(sql)
+	// INSERT OR IGNORE → INSERT ... ON CONFLICT DO NOTHING
+	sql = replaceInsertOrIgnore(sql)
 	// INSERT OR REPLACE → INSERT ... ON CONFLICT (pk) DO UPDATE
 	sql = replaceInsertOrReplace(sql)
 	// ? placeholders → $N (PostgreSQL positional style)
@@ -95,6 +97,71 @@ func rewritePlaceholders(q string) string {
 var insertConflictTargets = map[string]string{
 	"search_index":           "id",
 	"playlist_collaborators": "playlist_id, user_id",
+}
+
+var insertOrIgnoreRe = regexp.MustCompile(`(?is)^INSERT\s+OR\s+IGNORE\s+INTO\s+(\w+)\s*(\([^)]*\))?\s*VALUES(.*)$`)
+
+// replaceInsertOrIgnore converts "INSERT OR IGNORE INTO t (...) VALUES (...)"
+// into "INSERT INTO t (...) VALUES (...) ON CONFLICT DO NOTHING", which is the
+// exact Postgres equivalent (skip conflicting rows instead of erroring).
+// Unlike INSERT OR REPLACE this never needs a conflict-target column list, so
+// any table is supported. Conversion is applied per statement so migration
+// files containing several statements are handled correctly.
+func replaceInsertOrIgnore(q string) string {
+	statements := splitStatements(q)
+	changed := false
+	for i, stmt := range statements {
+		sub := insertOrIgnoreRe.FindStringSubmatch(strings.TrimSpace(stmt))
+		if sub == nil {
+			continue
+		}
+		cols := strings.TrimSpace(sub[2])
+		out := "INSERT INTO " + sub[1]
+		if cols != "" {
+			out += " " + cols
+		}
+		statements[i] = out + " VALUES" + sub[3] + " ON CONFLICT DO NOTHING"
+		changed = true
+	}
+	if !changed {
+		return q
+	}
+	return strings.Join(statements, ";\n")
+}
+
+// splitStatements splits SQL into statements on top-level semicolons,
+// ignoring semicolons inside single-quoted string literals.
+func splitStatements(q string) []string {
+	var out []string
+	var b strings.Builder
+	inStr := false
+	for i := 0; i < len(q); i++ {
+		c := q[i]
+		if inStr {
+			b.WriteByte(c)
+			if c == '\'' {
+				if i+1 < len(q) && q[i+1] == '\'' {
+					b.WriteByte('\'')
+					i++
+				} else {
+					inStr = false
+				}
+			}
+			continue
+		}
+		switch c {
+		case '\'':
+			inStr = true
+			b.WriteByte(c)
+		case ';':
+			out = append(out, b.String())
+			b.Reset()
+		default:
+			b.WriteByte(c)
+		}
+	}
+	out = append(out, b.String())
+	return out
 }
 
 var insertOrReplaceRe = regexp.MustCompile(`(?is)INSERT OR REPLACE INTO (\w+)\s*\(([^)]*)\)\s*VALUES\s*\(([^)]*)\)`)

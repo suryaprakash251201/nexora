@@ -63,9 +63,9 @@ export function usePublicPlaylists() {
 export function useCreatePlaylist() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ name, items }: { name: string; items: FileItem[] }) => {
+    mutationFn: async ({ name, description = "", items }: { name: string; description?: string; items: FileItem[] }) => {
       const plItems = items.map((i) => ({ root_id: i.root_id, path: i.path } as PlaylistItem));
-      const pl = await playlistsApi.create({ name: name.trim() || "New playlist", items: plItems });
+      const pl = await playlistsApi.create({ name: name.trim() || "New playlist", description, items: plItems });
       return pl as unknown as Playlist;
     },
     onSuccess: () => {
@@ -198,6 +198,63 @@ export function useRemovePlaylistItem() {
 }
 
 // ── Additional helpers matching the Zustand store's extra actions ──
+
+/**
+ * Reorder a playlist's tracks (drag-and-drop). Optimistically applies the new
+ * ordering to the cache, rolls back on error.
+ */
+export function useReorderPlaylistItems() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, orderedItems }: { id: string; orderedItems: any[] }) => {
+      await playlistsApi.reorderItems(id, orderedItems.map((i) => i.id));
+      return { id, orderedItems };
+    },
+    onMutate: async ({ id, orderedItems }) => {
+      await qc.cancelQueries({ queryKey: PLAYLISTS_KEY });
+      const prev = qc.getQueryData<{ items: Playlist[] }>(PLAYLISTS_KEY);
+      if (prev) {
+        qc.setQueryData<{ items: Playlist[] }>(PLAYLISTS_KEY, {
+          ...prev,
+          items: prev.items.map((p) =>
+            p.id === id ? { ...p, items: orderedItems.map((it: any, pos: number) => ({ ...it, position: pos })) } : p,
+          ),
+        });
+      }
+      return { prev };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.prev) qc.setQueryData(PLAYLISTS_KEY, ctx.prev);
+    },
+  });
+}
+
+export function useSetPlaylistDescription() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, description }: { id: string; description: string }) => {
+      await playlistsApi.update(id, { description });
+      return { id, description };
+    },
+    onMutate: async ({ id, description }) => {
+      await qc.cancelQueries({ queryKey: PLAYLISTS_KEY });
+      const prev = qc.getQueryData<{ items: Playlist[] }>(PLAYLISTS_KEY);
+      if (prev) {
+        qc.setQueryData<{ items: Playlist[] }>(PLAYLISTS_KEY, {
+          ...prev,
+          items: prev.items.map((p) => (p.id === id ? { ...p, description } : p)),
+        });
+      }
+      return { prev };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.prev) qc.setQueryData(PLAYLISTS_KEY, ctx.prev);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: PLAYLISTS_KEY });
+    },
+  });
+}
 
 export function useSetPlaylistCover() {
   const qc = useQueryClient();

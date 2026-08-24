@@ -256,6 +256,7 @@ func (s *Server) Routes() http.Handler {
 	authed.Put("/playlists/{id}", s.handleRenamePlaylist)
 	authed.Post("/playlists/{id}/items", s.handleAddPlaylistItems)
 	authed.Delete("/playlists/{id}/items", s.handleRemovePlaylistItem)
+	authed.Put("/playlists/{id}/items/order", s.handleReorderPlaylistItems)
 	authed.Patch("/playlists/{id}", s.handleUpdatePlaylist)
 	authed.Get("/playlists/cover-config", s.handleCoverConfig)
 	authed.Get("/playlists/public", s.handleListPublicPlaylists)
