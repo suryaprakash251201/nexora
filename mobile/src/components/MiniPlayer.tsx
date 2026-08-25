@@ -19,8 +19,9 @@ import {
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { Image } from "expo-image";
+import * as ExpoImage from "expo-image";
 import { BlurView } from "expo-blur";
+import NowPlayingArtwork from "./NowPlayingArtwork";
 import * as Haptics from "expo-haptics";
 import { File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
@@ -448,7 +449,7 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
     const neighbors = [playlist[idx - 1], playlist[idx + 1]];
     for (const n of neighbors) {
       if (!n) continue;
-      Image.prefetch(api.thumbnailUrl(n.root_id, n.path, 512)).catch(() => {});
+      void ExpoImage.Image.prefetch(api.thumbnailUrl(n.root_id, n.path, 512)).catch(() => {});
     }
   }, [api, currentTrack, playlist]);
 
@@ -698,22 +699,14 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
           />
 
           <View style={[styles.miniIconWrap, { backgroundColor: colors.surfaceMuted, overflow: "hidden" }]}>
-            {/* Icon fallback sits beneath so a slow/failing thumb still shows art. */}
-            <View style={StyleSheet.absoluteFill} pointerEvents="none">
-              <MaterialCommunityIcons name="music-note" size={24} color={gradients.brand[0]} />
-            </View>
-            {coverUrl ? (
-              <Image
-                key={`mini-${coverUrl}`}
-                source={{ uri: coverUrl }}
-                style={{ width: "100%", height: "100%" }}
-                contentFit="cover"
-                transition={300}
-                recyclingKey={`mini-${currentTrack.path}`}
-                onLoad={onArtLoad}
-                onError={onArtError}
-              />
-            ) : null}
+            {/* Atomic artwork: previous cover stays visible until the next one
+                decodes, then crossfades — no blank frame on swipe. */}
+            <NowPlayingArtwork
+              url={coverUrl}
+              trackKey={currentTrack ? `${currentTrack.root_id}:${currentTrack.path}` : null}
+              onLoaded={onArtLoad}
+              onError={onArtError}
+            />
             {artLoading && (
               <ActivityIndicator
                 size="small"
@@ -782,15 +775,14 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
       {modalVisible && (
         <Modal transparent visible={modalVisible} animationType="none" onRequestClose={closeModal}>
           <Animated.View style={[styles.modalRoot, { transform: [{ translateY: slideAnim }] }]}>
-            {/* ── Background: blurred artwork + dark overlay + blur ── */}
+            {/* ── Background: blurred artwork + dark overlay + blur. Same atomic
+                component — the previous track's blurred backdrop stays under the
+                new one until it decodes, so the background never flashes. ── */}
             {coverUrl && !artGaveUp ? (
-              <Image
-                key={`bg-${coverUrl}`}
-                source={{ uri: coverUrl }}
-                style={StyleSheet.absoluteFill}
-                contentFit="cover"
+              <NowPlayingArtwork
+                url={coverUrl}
+                trackKey={currentTrack ? `${currentTrack.root_id}:${currentTrack.path}` : null}
                 blurRadius={90}
-                pointerEvents="none"
                 onError={onArtError}
               />
             ) : (
@@ -891,18 +883,14 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
                         <MaterialCommunityIcons name="music-note" size={80} color="#fff" />
                       </View>
                     </LinearGradient>
-                    {coverUrl ? (
-                      <Image
-                        key={coverUrl}
-                        source={{ uri: coverUrl }}
-                        style={styles.artworkImage}
-                        contentFit="cover"
-                        transition={300}
-                        recyclingKey={currentTrack.path}
-                        onLoad={onArtLoad}
-                        onError={onArtError}
-                      />
-                    ) : null}
+                    {/* Atomic crossfading artwork — old cover persists beneath
+                        until the new track's art decodes (Apple Music-style). */}
+                    <NowPlayingArtwork
+                      url={coverUrl}
+                      trackKey={currentTrack ? `${currentTrack.root_id}:${currentTrack.path}` : null}
+                      onLoaded={onArtLoad}
+                      onError={onArtError}
+ />
                     {(status === "loading" || artLoading) && (
                       <View
                         style={[
