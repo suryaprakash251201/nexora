@@ -37,7 +37,21 @@ function checkFile(file){
       })(st);
       if (returned && hooksInStmt.length)
         issues.push(`${file}:${sf.getLineAndCharacterOfPosition(st.getStart()).line+1} hook(${hooksInStmt.join(",")}) AFTER early-return`);
-      if (ts.isReturnStatement(st)) returned = true;
+      if (ts.isReturnStatement(st)) {
+        returned = true;
+      } else if (ts.isIfStatement(st) || ts.isForStatement(st) || ts.isForOfStatement(st) || ts.isWhileStatement(st)) {
+        // `if (x) return y;` / braced conditional returns ALSO change the
+        // hook count of subsequent renders — arm the flag for them too.
+        // Never descend into nested functions (their returns are their own).
+        const hasDirectReturn = (n) => {
+          if (ts.isReturnStatement(n)) return true;
+          if (ts.isFunctionDeclaration(n) || ts.isFunctionExpression(n) || ts.isArrowFunction(n) || ts.isMethodDeclaration(n)) return false;
+          let found = false;
+          ts.forEachChild(n, (c) => { if (hasDirectReturn(c)) found = true; });
+          return found;
+        };
+        if (hasDirectReturn(st.thenStatement ?? st.statement)) returned = true;
+      }
       (function rec(n){
         if ((ts.isFunctionDeclaration(n)||ts.isFunctionExpression(n)||ts.isArrowFunction(n)||ts.isMethodDeclaration(n))) { visit(n); return; }
         ts.forEachChild(n, (c)=>rec(c));

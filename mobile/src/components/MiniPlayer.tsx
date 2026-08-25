@@ -325,6 +325,28 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
     setArtFailed(false);
   }, []);
 
+  // ── Cover art URL (with cache-busting retry param) ──────────────────
+  // Derived null-safely so it can live ABOVE the early return — EVERY hook
+  // and its inputs must execute unconditionally on each render.
+  const baseCoverUrl =
+    api && currentTrack ? api.thumbnailUrl(currentTrack.root_id, currentTrack.path, 512) : null;
+  const coverUrl =
+    baseCoverUrl && artAttempt > 0 ? `${baseCoverUrl}${baseCoverUrl.includes("?") ? "&" : "?"}_r=${artAttempt}` : baseCoverUrl;
+
+  useEffect(() => {
+    if (!coverUrl) return;
+    setArtLoading(true);
+    // Watchdog: some cover requests neither load nor error for a long time
+    // (server-side extraction queue). If nothing happened after 8s, bust the
+    // cache with a new attempt — the retry URL is a different URI, so expo-
+    // image issues a genuinely fresh request instead of waiting on the old one.
+    const wd = setTimeout(() => {
+      setArtLoading(false);
+      setArtAttempt((n) => (n < 10 ? n + 1 : n));
+    }, 8000);
+    return () => clearTimeout(wd);
+  }, [coverUrl]);
+
   if (!currentTrack) return null;
 
   // ─── Helpers ─────────────────────────────────────────────────────────
@@ -369,24 +391,6 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
     slideAnim.setValue(SCREEN_HEIGHT);
   };
 
-  // ── Cover art URL (with cache-busting retry param) ──────────────────
-  const baseCoverUrl = api ? api.thumbnailUrl(currentTrack.root_id, currentTrack.path, 512) : null;
-  const coverUrl =
-    baseCoverUrl && artAttempt > 0 ? `${baseCoverUrl}${baseCoverUrl.includes("?") ? "&" : "?"}_r=${artAttempt}` : baseCoverUrl;
-
-  useEffect(() => {
-    if (!coverUrl) return;
-    setArtLoading(true);
-    // Watchdog: some cover requests neither load nor error for a long time
-    // (server-side extraction queue). If nothing happened after 8s, bust the
-    // cache with a new attempt — the retry URL is a different URI, so expo-
-    // image issues a genuinely fresh request instead of waiting on the old one.
-    const wd = setTimeout(() => {
-      setArtLoading(false);
-      setArtAttempt((n) => (n < 10 ? n + 1 : n));
-    }, 8000);
-    return () => clearTimeout(wd);
-  }, [coverUrl]);
   const ext = currentTrack.extension || "";
 
   // Keep the swipe actions pointing at the live handlers (defined above).
