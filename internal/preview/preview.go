@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/nexora/nexora/internal/storage"
+	"golang.org/x/sync/singleflight"
 )
 
 // ErrUnsupported is returned when a file cannot be thumbnailed/probed.
@@ -43,6 +44,13 @@ type Service struct {
 
 	// gate serializes thumbnail/cover generation work.
 	gate chan struct{}
+
+	// inflight deduplicates concurrent generations of the SAME cache key.
+	// A media player fires 2-3 parallel <img> requests per track (mini bar,
+	// blurred backdrop, artwork); without this, each one queued its own
+	// full-file scan through the gate — tripling IO and latency on first
+	// play, and leaving the UI staring at a blank cover box.
+	inflight singleflight.Group
 }
 
 // NewService creates a preview service.
@@ -112,30 +120,38 @@ func (s *Service) Thumbnail(provider storage.StorageProvider, rootID, rel string
 	key := cacheKey(rootID, rel, info.Size, info.Modified, maxDim)
 	cachePath := filepath.Join(s.cacheDir, key+".jpg")
 
-	if data, err := os.ReadFile(cachePath); err == nil {
-		return data, nil
-	}
+	// Single-flight: concurrent requests for the same image share ONE
+	// generation instead of each queueing its own pass through the gate.
+	v, err, _ := s.inflight.Do("thumb-"+key, func() (interface{}, error) {
+		if data, err := os.ReadFile(cachePath); err == nil {
+			return data, nil
+		}
 
-	// Cap concurrent decode+encode work so a first folder visit with dozens of
-	// images doesn't saturate the CPU (each request handler blocks on this gate).
-	s.gate <- struct{}{}
-	defer func() { <-s.gate }()
+		// Cap concurrent decode+encode work so a first folder visit with dozens of
+		// images doesn't saturate the CPU (each request handler blocks on this gate).
+		s.gate <- struct{}{}
+		defer func() { <-s.gate }()
 
-	rc, err := provider.Read(rel)
+		rc, err := provider.Read(rel)
+		if err != nil {
+			return nil, err
+		}
+		defer rc.Close()
+		img, _, err := image.Decode(rc)
+		if err != nil {
+			return nil, ErrUnsupported
+		}
+		thumb := downscale(img, maxDim)
+
+		// Encode once: serve these bytes and persist them to the cache.
+		return encodeAndCache(thumb, cachePath, 80)
+	})
 	if err != nil {
 		return nil, err
 	}
-	defer rc.Close()
-	img, _, err := image.Decode(rc)
-	if err != nil {
+	data, ok := v.([]byte)
+	if !ok {
 		return nil, ErrUnsupported
-	}
-	thumb := downscale(img, maxDim)
-
-	// Encode once: serve these bytes and persist them to the cache.
-	data, err := encodeAndCache(thumb, cachePath, 80)
-	if err != nil {
-		return nil, err
 	}
 	return data, nil
 }

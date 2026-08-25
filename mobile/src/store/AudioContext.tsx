@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from "react";
+import { Image } from "expo-image";
 import type { FileItem } from "../api/types";
 import { trackPlayerController, TrackPlayerController } from "../lib/trackPlayerController";
 import { cleanTrackTitle } from "../lib/fileMeta";
@@ -137,6 +138,25 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
           lastLoadRef.current = Date.now();
           await player.skipToIndex(idx, true);
         }
+      }
+
+      // Warm the image cache for every track in the queue. Embedded album
+      // art is extracted server-side on FIRST request (a full scan of up to
+      // 60MB per file), which is why swiping next/prev used to show a blank
+      // cover box until the extraction happened to finish. Prefetching the
+      // whole queue means each swipe serves from the on-device cache instantly.
+      if (!cancelled) {
+        const ART_CONCURRENCY = 3;
+        let cursor = 0;
+        const workers = Array.from({ length: ART_CONCURRENCY }, async () => {
+          while (!cancelled && cursor < resolved.length) {
+            const r = resolved[cursor++];
+            try {
+              await Image.prefetch(api.thumbnailUrl(r.item.root_id, r.item.path, 512));
+            } catch { /* prefetch is best-effort */ }
+          }
+        });
+        void Promise.all(workers).catch(() => {});
       }
     })();
     return () => {

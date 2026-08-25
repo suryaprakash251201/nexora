@@ -37,32 +37,46 @@ func (s *Service) Cover(provider storage.StorageProvider, rootID, rel string, ma
 
 	key := "cover-" + cacheKey(rootID, rel, info.Size, info.Modified, maxDim)
 	cachePath := filepath.Join(s.cacheDir, key+".jpg")
-	if data, err := os.ReadFile(cachePath); err == nil {
-		return data, nil
-	}
 
-	// Cap concurrent decode+encode work (same gate as Thumbnail).
-	s.gate <- struct{}{}
-	defer func() { <-s.gate }()
+	// Single-flight: a media player fires 2-3 parallel requests for the same
+	// track's artwork (mini bar + blurred backdrop + artwork). Share ONE
+	// full-file scan instead of stacking duplicate passes through the gate.
+	v, err, _ := s.inflight.Do(key, func() (interface{}, error) {
+		if data, err := os.ReadFile(cachePath); err == nil {
+			return data, nil
+		}
 
-	rc, err := provider.Read(rel)
+		// Cap concurrent decode+encode work (same gate as Thumbnail).
+		s.gate <- struct{}{}
+		defer func() { <-s.gate }()
+
+		rc, err := provider.Read(rel)
+		if err != nil {
+			return nil, err
+		}
+		defer rc.Close()
+
+		raw, err := extractCover(rc, ext)
+		if err != nil {
+			return nil, err
+		}
+		img, _, err := image.Decode(bytes.NewReader(raw))
+		if err != nil {
+			return nil, ErrUnsupported
+		}
+		thumb := downscale(img, maxDim)
+
+		// Encode once: serve these bytes and persist them to the cache.
+		return encodeAndCache(thumb, cachePath, 82)
+	})
 	if err != nil {
 		return nil, err
 	}
-	defer rc.Close()
-
-	raw, err := extractCover(rc, ext)
-	if err != nil {
-		return nil, err
-	}
-	img, _, err := image.Decode(bytes.NewReader(raw))
-	if err != nil {
+	data, ok := v.([]byte)
+	if !ok {
 		return nil, ErrUnsupported
 	}
-	thumb := downscale(img, maxDim)
-
-	// Encode once: serve these bytes and persist them to the cache.
-	return encodeAndCache(thumb, cachePath, 82)
+	return data, nil
 }
 
 // folderCoverScore maps the common album-art base names (lowercase, without
@@ -126,27 +140,38 @@ func (s *Service) FolderCover(provider storage.StorageProvider, rootID, rel stri
 	// Cache key includes the audio path so a cover swap re-generates the thumb.
 	key := "fcover-" + cacheKey(rootID, rel, info.Size, info.Modified, maxDim)
 	cachePath := filepath.Join(s.cacheDir, key+".jpg")
-	if data, err := os.ReadFile(cachePath); err == nil {
-		return data, nil
-	}
 
-	// Cap concurrent decode+encode work (same gate as Thumbnail/Cover).
-	s.gate <- struct{}{}
-	defer func() { <-s.gate }()
+	v, err, _ := s.inflight.Do(key, func() (interface{}, error) {
+		if data, err := os.ReadFile(cachePath); err == nil {
+			return data, nil
+		}
 
-	rc, err := provider.Read(best)
+		// Cap concurrent decode+encode work (same gate as Thumbnail/Cover).
+		s.gate <- struct{}{}
+		defer func() { <-s.gate }()
+
+		rc, err := provider.Read(best)
+		if err != nil {
+			return nil, ErrUnsupported
+		}
+		defer rc.Close()
+		img, _, err := image.Decode(rc)
+		if err != nil {
+			return nil, ErrUnsupported
+		}
+		thumb := downscale(img, maxDim)
+
+		// Encode once: serve these bytes and persist them to the cache.
+		return encodeAndCache(thumb, cachePath, 82)
+	})
 	if err != nil {
+		return nil, err
+	}
+	data, ok := v.([]byte)
+	if !ok {
 		return nil, ErrUnsupported
 	}
-	defer rc.Close()
-	img, _, err := image.Decode(rc)
-	if err != nil {
-		return nil, ErrUnsupported
-	}
-	thumb := downscale(img, maxDim)
-
-	// Encode once: serve these bytes and persist them to the cache.
-	return encodeAndCache(thumb, cachePath, 82)
+	return data, nil
 }
 
 // HasCover reports whether we should attempt cover extraction for a file.

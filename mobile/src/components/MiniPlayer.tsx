@@ -293,6 +293,9 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
   // and this component renders both without and with an active track.
   const [artAttempt, setArtAttempt] = useState(0);
   const [artFailed, setArtFailed] = useState(false);
+  // True while the current coverUrl is being fetched (drives the small
+  // spinner overlays and the hung-request watchdog below).
+  const [artLoading, setArtLoading] = useState(false);
 
   useEffect(() => {
     // New track → reset the retry cycle.
@@ -312,11 +315,13 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
 
   const onArtError = useCallback(() => {
     // Mark failure so the backoff effect schedules the next attempt.
+    setArtLoading(false);
     setArtFailed(true);
   }, []);
 
   const onArtLoad = useCallback(() => {
     // Success stops the retry chain.
+    setArtLoading(false);
     setArtFailed(false);
   }, []);
 
@@ -368,6 +373,20 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
   const baseCoverUrl = api ? api.thumbnailUrl(currentTrack.root_id, currentTrack.path, 512) : null;
   const coverUrl =
     baseCoverUrl && artAttempt > 0 ? `${baseCoverUrl}${baseCoverUrl.includes("?") ? "&" : "?"}_r=${artAttempt}` : baseCoverUrl;
+
+  useEffect(() => {
+    if (!coverUrl) return;
+    setArtLoading(true);
+    // Watchdog: some cover requests neither load nor error for a long time
+    // (server-side extraction queue). If nothing happened after 8s, bust the
+    // cache with a new attempt — the retry URL is a different URI, so expo-
+    // image issues a genuinely fresh request instead of waiting on the old one.
+    const wd = setTimeout(() => {
+      setArtLoading(false);
+      setArtAttempt((n) => (n < 10 ? n + 1 : n));
+    }, 8000);
+    return () => clearTimeout(wd);
+  }, [coverUrl]);
   const ext = currentTrack.extension || "";
 
   // Keep the swipe actions pointing at the live handlers (defined above).
@@ -586,6 +605,13 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
                 onError={onArtError}
               />
             ) : null}
+            {artLoading && (
+              <ActivityIndicator
+                size="small"
+                color={gradients.brand[0]}
+                style={StyleSheet.absoluteFill}
+              />
+            )}
           </View>
 
           <View style={styles.miniTextWrap}>
@@ -768,7 +794,7 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
                         onError={onArtError}
                       />
                     ) : null}
-                    {status === "loading" && (
+                    {(status === "loading" || artLoading) && (
                       <View
                         style={[
                           StyleSheet.absoluteFill,
