@@ -189,3 +189,25 @@ export interface PlaylistMutationResponse {
   added?: number;
   skipped?: number;
 }
+
+// ── Synced lyrics (.lrc sibling files, parsed server-side) ────────────────
+export interface LyricCue {
+  /** Cue position in seconds; negative = unsynced plain-text line. */
+  time: number;
+  text: string;
+}
+
+export interface LyricsResponse {
+  has_lyrics: boolean;
+  raw: string;
+  format: "lrc" | "plain";
+  source: "auto" | "user" | "";
+  synced: boolean;
+  meta: {
+    title?: string;
+    artist?: string;
+    album?: string;
+    offset?: number;
+  };
+  cues: LyricCue[];
+}

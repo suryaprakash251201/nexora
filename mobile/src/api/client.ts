@@ -15,6 +15,7 @@ import type {
   Playlist,
   PlaylistListResponse,
   PlaylistMutationResponse,
+  LyricsResponse,
 } from "./types";
 import { needsAudioTranscode, detectAudioQuality, androidBelow11 } from "../lib/audioQuality";
 import { Platform } from "react-native";
@@ -235,6 +236,14 @@ export class Api {
 
   thumbnailUrl(rootId: string, path: string, size = 256): string {
     return this.mediaUrl("/files/thumbnail", { root: rootId, path, size });
+  }
+
+  /**
+   * Synced lyrics for an audio track. The server reads a sibling .lrc file
+   * (falling back to plain text / legacy DB rows) and returns parsed cues.
+   */
+  getLyrics(rootId: string, path: string): Promise<LyricsResponse> {
+    return this.get("/audio/lyrics", { root: rootId, path });
   }
 
   async request<T>(path: string, opts: RequestOptions = {}): Promise<T> {

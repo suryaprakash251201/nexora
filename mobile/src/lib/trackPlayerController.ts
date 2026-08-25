@@ -290,6 +290,39 @@ export class TrackPlayerController {
     return this._loop;
   }
 
+  /** Mirrors the native stream volume (RNTP has no sync read). */
+  private volMirror = 1;
+
+  /** Stream volume 0..1 (mirrored; call loadVolume() once to sync). */
+  get volume(): number {
+    return this.volMirror;
+  }
+
+  set volume(value: number) {
+    const v = Math.min(1, Math.max(0, value));
+    this.volMirror = v;
+    const TrackPlayer = getTrackPlayer()?.default;
+    if (!TrackPlayer || this.isWeb) return;
+    (
+      TrackPlayer as unknown as { setVolume?: (v: number) => Promise<void> }
+    ).setVolume?.(v).catch(() => {});
+  }
+
+  /** Reads the true native volume once (call after ensureInit). */
+  async loadVolume(): Promise<number> {
+    const TrackPlayer = getTrackPlayer()?.default;
+    if (!TrackPlayer || this.isWeb) return this.volMirror;
+    try {
+      const v = await (
+        TrackPlayer as unknown as { getVolume?: () => Promise<number> }
+      ).getVolume?.();
+      if (typeof v === "number") {
+        this.volMirror = Math.min(1, Math.max(0, v));
+      }
+    } catch {}
+    return this.volMirror;
+  }
+
   set loop(value: boolean) {
     this._loop = value;
     const rntp = getTrackPlayer();
@@ -376,6 +409,45 @@ export class TrackPlayerController {
    * Jumps the native queue to `index` and optionally starts playback. Also
    * resets the timeline mirrors so the UI immediately reflects the new track.
    */
+  /**
+   * Surgical queue mutation: removes one track by native index without
+   * touching the rest (no playback restart). RNTP adjusts currentIndex
+   * itself when the active track's index shifts.
+   */
+  async removeNativeIndex(index: number) {
+    const TrackPlayer = getTrackPlayer()?.default;
+    if (!TrackPlayer) return;
+    try {
+      await (TrackPlayer as unknown as { remove: (i: number) => Promise<void> }).remove?.(index);
+    } catch (e) {
+      console.warn("[trackPlayerController] removeNativeIndex failed", e);
+    }
+  }
+
+  /**
+   * Surgical queue insertion: adds tracks before the given native index
+   * (pass the queue length to append). Used for "Play next".
+   */
+  async insertTracksAt(
+    tracks: Array<{ id: string; url: string; title?: string; artist?: string; artwork?: string }>,
+    insertBeforeIndex: number
+  ) {
+    const TrackPlayer = getTrackPlayer()?.default;
+    if (!TrackPlayer || !tracks.length) return;
+    try {
+      await (
+        TrackPlayer as unknown as {
+          add: (
+            t: typeof tracks,
+            i?: number
+          ) => Promise<unknown>;
+        }
+      ).add?.(tracks, Math.max(0, insertBeforeIndex));
+    } catch (e) {
+      console.warn("[trackPlayerController] insertTracksAt failed", e);
+    }
+  }
+
   async skipToIndex(index: number, autoplay: boolean) {
     const TrackPlayer = getTrackPlayer()?.default;
     if (!TrackPlayer) return;

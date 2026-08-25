@@ -53,7 +53,7 @@ export default function BrowserScreen({ route, navigation }: Props) {
   const { api } = useSession();
   const { colors, font, gradients, radius, spacing, shadow, shadowSm, isDark } = useTheme();
   const { prefs, setPref } = useSettings();
-  const { playTrack } = useAudio();
+  const { playTrack, playNext, currentTrack: playingNow } = useAudio();
   const insets = useSafeAreaInsets();
 
   const [path, setPath] = useState(route.params.path || "");
@@ -764,6 +764,18 @@ export default function BrowserScreen({ route, navigation }: Props) {
             ? [
                 { label: "Download & share", icon: "share-variant", onPress: () => actionItem && downloadAndShare(actionItem) },
                 { label: "Save to device", icon: "content-save-check-outline", onPress: () => actionItem && saveToDeviceAction(actionItem) },
+                {
+                  label: "Play next",
+                  icon: "playlist-play",
+                  onPress: () => {
+                    if (!actionItem || !playingNow) return;
+                    haptic();
+                    void playNext(actionItem).then((ok) => {
+                      if (ok) Alert.alert("Queued", `\"${actionItem.name}\" plays next.`);
+                      else Alert.alert("Not queued", "Nothing is playing right now — start a song first.");
+                    });
+                  },
+                },
               ]
             : []),
           ...(actionItem

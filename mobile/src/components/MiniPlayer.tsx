@@ -22,6 +22,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import * as ExpoImage from "expo-image";
 import { BlurView } from "expo-blur";
 import NowPlayingArtwork from "./NowPlayingArtwork";
+import LyricsView from "./LyricsView";
 import * as Haptics from "expo-haptics";
 import { File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
@@ -49,7 +50,7 @@ const SWIPE_X_THRESHOLD = 70;
 const SWIPE_Y_THRESHOLD = 60;
 
 export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
-  const { currentTrack, player, nextTrack, prevTrack, closePlayer, shuffle, setShuffle, playTrack, playlist, queueIndex } = useAudio();
+  const { currentTrack, player, nextTrack, prevTrack, closePlayer, shuffle, setShuffle, playTrack, playlist, queueIndex, removeFromQueue, playNext } = useAudio();
   const { colors, font, gradients, radius, shadow, isDark } = useTheme();
   const { api } = useSession();
   const insets = useSafeAreaInsets();
@@ -77,7 +78,58 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
   // track's audio details (codec · bit depth · sample rate).
   const [showQuality, setShowQuality] = useState(false);
   const [scrubbing, setScrubbing] = useState(false);
+  // Target time shown in the drag bubble while scrubbing.
+  const [scrubPreview, setScrubPreview] = useState<number | null>(null);
   const qualityAnim = useRef(new Animated.Value(0)).current;
+
+  // ── Lyrics / volume / sleep timer ──
+  const [lyricsOpen, setLyricsOpen] = useState(false);
+  const [volumePct, setVolumePct] = useState(100);
+  const [volumeWidth, setVolumeWidth] = useState(1);
+  const volumeLoadedRef = useRef(false);
+  const [sleepUntil, setSleepUntil] = useState<number | null>(null);
+  const [sleepLeftSec, setSleepLeftSec] = useState(0);
+
+  useEffect(() => {
+    if (!modalVisible || volumeLoadedRef.current) return;
+    volumeLoadedRef.current = true;
+    player.loadVolume().then((v) => setVolumePct(Math.round(v * 100)));
+  }, [modalVisible, player]);
+
+  const setVolume = (pct: number) => {
+    setVolumePct(pct);
+    try {
+      player.volume = pct / 100;
+    } catch {}
+  };
+
+  const applySleepTimer = (minutes: number | null) => {
+    haptic();
+    if (minutes == null) {
+      setSleepUntil(null);
+      setSleepLeftSec(0);
+      return;
+    }
+    setSleepUntil(Date.now() + minutes * 60_000);
+    setSleepLeftSec(minutes * 60);
+  };
+
+  useEffect(() => {
+    if (!sleepUntil) return;
+    const iv = setInterval(() => {
+      const left = Math.max(0, Math.round((sleepUntil - Date.now()) / 1000));
+      setSleepLeftSec(left);
+      if (left <= 0) {
+        clearInterval(iv);
+        setSleepUntil(null);
+        try {
+          player.pause();
+        } catch {}
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      }
+    }, 1000);
+    return () => clearInterval(iv);
+  }, [sleepUntil, player]);
 
   // Lossless / hi-res detection for the wave badge — computed early so the
   // quality-toggle effect below can read it.
@@ -98,6 +150,35 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
   const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   const artworkScaleAnim = useRef(new Animated.Value(0.92)).current;
 
+  // ── Track-change text transition + favorite heart burst ──
+  const textFade = useRef(new Animated.Value(1)).current;
+  const textSlide = useRef(new Animated.Value(0)).current;
+  const heartAnim = useRef(new Animated.Value(0)).current;
+  const heartScale = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    textFade.setValue(0);
+    textSlide.setValue(10);
+    Animated.parallel([
+      Animated.timing(textFade, { toValue: 1, duration: 260, useNativeDriver: true }),
+      Animated.spring(textSlide, { toValue: 0, useNativeDriver: true, friction: 7 }),
+    ]).start();
+  }, [currentTrack?.path, textFade, textSlide]);
+
+  const fireHeartBurst = useCallback(() => {
+    heartAnim.setValue(0);
+    heartScale.setValue(0.6);
+    Animated.parallel([
+      Animated.sequence([
+        Animated.timing(heartAnim, { toValue: 1, duration: 140, useNativeDriver: true }),
+        Animated.timing(heartAnim, { toValue: 0, delay: 220, duration: 320, useNativeDriver: true }),
+      ]),
+      Animated.sequence([
+        Animated.spring(heartScale, { toValue: 1.15, useNativeDriver: true, friction: 5 }),
+        Animated.spring(heartScale, { toValue: 1, useNativeDriver: true, friction: 6 }),
+      ]),
+    ]).start();
+  }, [heartAnim, heartScale]);
+
   // ── Fullscreen swipe gestures ───────────────────────────────────────
   // Horizontal swipe on the artwork → previous/next track (artwork slides
   // out in the drag direction). Vertical swipe up → open the Up Next
@@ -111,7 +192,15 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
     prev: () => void;
     close: () => void;
     openQueue: () => void;
-  }>({ next: () => {}, prev: () => {}, close: () => {}, openQueue: () => {} });
+    doubleTap: () => void;
+  }>({
+    next: () => {},
+    prev: () => {},
+    close: () => {},
+    openQueue: () => {},
+    doubleTap: () => {},
+  });
+  const lastArtTapRef = useRef(0);
 
   // ── Queue panel slide-in + drag-to-dismiss ──────────────────────────
   const queueAnim = useRef(new Animated.Value(0)).current;
@@ -168,6 +257,20 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
             gestureActions.current.close();
           }
           Animated.spring(panY, { toValue: 0, damping: 18, stiffness: 200, useNativeDriver: true }).start();
+        } else if (
+          !lock &&
+          Math.abs(g.dx) < 8 &&
+          Math.abs(g.dy) < 8
+        ) {
+          // Plain tap on the artwork — double-tap toggles favorite with a
+          // heart burst (Apple Music-style).
+          const now = Date.now();
+          if (now - lastArtTapRef.current < 320) {
+            lastArtTapRef.current = 0;
+            gestureActions.current.doubleTap();
+          } else {
+            lastArtTapRef.current = now;
+          }
         }
       },
       onPanResponderTerminate: () => {
@@ -492,6 +595,7 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
     setMoreSheet(false);
     setQueueOpen(false);
     setPlaylistPicker(false);
+    setLyricsOpen(false);
     // Fire-and-forget slide-down so the view doesn't snap abruptly when the
     // player is reopened during the same frame.
     slideAnim.setValue(SCREEN_HEIGHT);
@@ -514,6 +618,13 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
       haptic();
       setQueueOpen(true);
     },
+    doubleTap: () => {
+      // Silent favorite flip + burst when ADDING (no dialogs on gesture).
+      const next = !favorited;
+      void applyFavorite(next).then((ok) => {
+        if (ok && next) fireHeartBurst();
+      });
+    },
   };
 
   const formatTime = (s: number) => {
@@ -534,32 +645,39 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
   const handleScrub = (locationX: number) => {
     if (player && duration > 0 && locationX != null) {
       const pct = Math.max(0, Math.min(1, locationX / scrubberWidth));
+      setScrubPreview(pct * duration);
       player.currentTime = pct * duration;
     }
   };
 
   // ── Track actions (favorite / share / download / link) ──────────────
-  const toggleFavorite = () => {
-    if (!currentTrack || !api) return;
-    haptic();
-    if (favorited) {
-      api
-        .removeFavorite(currentTrack.root_id, currentTrack.path)
-        .then(() => {
-          setFavorited(false);
-          Alert.alert("Removed", "Removed from Liked Songs.");
-        })
-        .catch(() => Alert.alert("Could not remove", "Try again in a moment."));
-    } else {
-      api
-        .addFavorite(currentTrack.root_id, currentTrack.path)
-        .then(() => {
-          setFavorited(true);
-          haptic("medium");
-          Alert.alert("Liked", "Added to Liked Songs.");
-        })
-        .catch(() => Alert.alert("Could not like", "Try again in a moment."));
+  /** Quiet core — no dialogs. Returns whether the server call succeeded. */
+  const applyFavorite = async (next: boolean): Promise<boolean> => {
+    if (!currentTrack || !api) return false;
+    try {
+      if (next) {
+        await api.addFavorite(currentTrack.root_id, currentTrack.path);
+      } else {
+        await api.removeFavorite(currentTrack.root_id, currentTrack.path);
+      }
+      setFavorited(next);
+      return true;
+    } catch {
+      Alert.alert("Could not update", "Try again in a moment.");
+      return false;
     }
+  };
+
+  const toggleFavorite = () => {
+    haptic();
+    const next = !favorited;
+    void applyFavorite(next).then((ok) => {
+      if (!ok) return;
+      Alert.alert(
+        next ? "Liked" : "Removed",
+        next ? "Added to Liked Songs." : "Removed from Liked Songs."
+      );
+    });
   };
 
   const downloadAndShare = async (share: boolean) => {
@@ -742,6 +860,12 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
             </View>
           </View>
 
+          {playing && (
+            <View style={styles.miniEqWrap} pointerEvents="none">
+              <EqBars playing tint={colors.accent} barCount={4} />
+            </View>
+          )}
+
           <TouchableOpacity style={styles.miniBtn} onPress={() => { haptic(); togglePlay(); }}>
             {status === "loading" ? (
               <ActivityIndicator color={colors.content} size="small" />
@@ -910,9 +1034,14 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
                 </View>
               </Animated.View>
 
-              {/* ── Track Info + More Button ── */}
+              {/* ── Track Info + More Button (slide-fade on track change) ── */}
               <View style={styles.trackInfoRow}>
-                <View style={styles.trackTextCol}>
+                <Animated.View
+                  style={[
+                    styles.trackTextCol,
+                    { opacity: textFade, transform: [{ translateY: textSlide }] },
+                  ]}
+                >
                   <Text
                     style={[
                       styles.trackName,
@@ -931,7 +1060,7 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
                   >
                     {ext.toUpperCase() || "AUDIO"} · Nexora
                   </Text>
-                </View>
+                </Animated.View>
                 <TouchableOpacity
                   style={[
                     styles.trackMoreBtn,
@@ -1018,8 +1147,14 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
                     handleScrub(e.nativeEvent.locationX);
                   }}
                   onResponderMove={(e) => handleScrub(e.nativeEvent.locationX)}
-                  onResponderRelease={() => setScrubbing(false)}
-                  onResponderTerminate={() => setScrubbing(false)}
+                  onResponderRelease={() => {
+                    setScrubbing(false);
+                    setScrubPreview(null);
+                  }}
+                  onResponderTerminate={() => {
+                    setScrubbing(false);
+                    setScrubPreview(null);
+                  }}
                 >
                   <View
                     style={[
@@ -1041,9 +1176,14 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
                       ]}
                     />
                   </View>
-                  {/* Drag knob — appears while scrubbing (Apple Music style) */}
+                  {/* Drag knob + time bubble — Apple Music style scrub */}
                   {scrubbing && (
-                    <View style={[styles.scrubberThumb, { left: `${progressPct}%` }]}>
+                    <View style={[styles.scrubberThumb, { left: `${progressPct}%` }]} pointerEvents="none">
+                      <View style={styles.scrubBubbleWrap}>
+                        <Text style={styles.scrubBubbleText}>
+                          {formatTime(scrubPreview ?? currentTime)}
+                        </Text>
+                      </View>
                       <View
                         style={[
                           styles.scrubberThumbGlow,
@@ -1214,6 +1354,23 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
 
                 <PressScale scaleTo={0.88}>
                   <TouchableOpacity
+                    style={[styles.secondaryBtn, lyricsOpen && styles.secondaryBtnActive]}
+                    onPress={() => {
+                      haptic();
+                      setLyricsOpen((v) => !v);
+                    }}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
+                    <MaterialCommunityIcons
+                      name="format-quote-open"
+                      size={22}
+                      color={lyricsOpen ? colors.accent : colors.muted}
+                    />
+                  </TouchableOpacity>
+                </PressScale>
+
+                <PressScale scaleTo={0.88}>
+                  <TouchableOpacity
                     style={[styles.secondaryBtn, favorited && styles.secondaryBtnActive]}
                     onPress={toggleFavorite}
                     hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
@@ -1226,7 +1383,101 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
                   </TouchableOpacity>
                 </PressScale>
               </View>
+
+              {/* ── Volume row ── */}
+              <View style={styles.volumeRow}>
+                <MaterialCommunityIcons name="volume-low" size={16} color={colors.muted} />
+                <View
+                  style={styles.volumeTrackWrap}
+                  onLayout={(e) => setVolumeWidth(e.nativeEvent.layout.width)}
+                  onStartShouldSetResponder={() => true}
+                  onMoveShouldSetResponder={() => true}
+                  onResponderGrant={(e) => {
+                    setVolume(Math.round((e.nativeEvent.locationX / Math.max(volumeWidth, 1)) * 100));
+                  }}
+                  onResponderMove={(e) => {
+                    setVolume(Math.max(0, Math.min(100, Math.round((e.nativeEvent.locationX / Math.max(volumeWidth, 1)) * 100))));
+                  }}
+                >
+                  <View
+                    style={[
+                      styles.volumeTrack,
+                      { backgroundColor: isDark ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.10)" },
+                    ]}
+                  >
+                    <LinearGradient
+                      colors={[...gradients.brand]}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                      style={[StyleSheet.absoluteFill, { width: `${volumePct}%` }]}
+                    />
+                  </View>
+                </View>
+                <MaterialCommunityIcons
+                  name={volumePct === 0 ? "volume-off" : "volume-high"}
+                  size={16}
+                  color={colors.muted}
+                />
+              </View>
             </View>
+
+            {/* ── Lyrics overlay (full modal sheet — synced .lrc w/ tap-to-seek) ── */}
+            {lyricsOpen && currentTrack && (
+              <View style={styles.lyricsOverlay} pointerEvents="box-none">
+                <Pressable style={StyleSheet.absoluteFill} onPress={() => setLyricsOpen(false)} />
+                <View
+                  style={[
+                    styles.lyricsSheet,
+                    {
+                      backgroundColor: isDark ? "rgba(14,16,24,0.97)" : "rgba(255,255,255,0.98)",
+                      borderColor: colors.borderSoft,
+                      paddingBottom: insets.bottom + 12,
+                      paddingTop: insets.top + 10,
+                    },
+                  ]}
+                >
+                  <View style={styles.lyricsHeader}>
+                    <View style={{ width: 34 }} />
+                    <View style={styles.lyricsHeaderTextWrap}>
+                      <Text
+                        style={[styles.lyricsTitle, { color: colors.content, fontSize: font.md }]}
+                        numberOfLines={1}
+                      >
+                        Lyrics
+                      </Text>
+                      <Text
+                        style={[styles.lyricsSub, { color: colors.muted, fontSize: font.xs }]}
+                        numberOfLines={1}
+                      >
+                        {cleanTrackTitle(currentTrack.name)}
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      style={styles.lyricsClose}
+                      onPress={() => setLyricsOpen(false)}
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    >
+                      <MaterialCommunityIcons name="close" size={24} color={colors.content} />
+                    </TouchableOpacity>
+                  </View>
+                  <LyricsView
+                    api={api}
+                    rootId={currentTrack.root_id}
+                    path={currentTrack.path}
+                    currentTime={currentTime}
+                    accent={colors.accent}
+                    mutedColor={isDark ? "rgba(255,255,255,0.32)" : "rgba(0,0,0,0.30)"}
+                    textColor={isDark ? "#EDEFF5" : "#16181F"}
+                    onSeek={(s) => {
+                      try {
+                        player.currentTime = s;
+                      } catch {}
+                      haptic("light");
+                    }}
+                  />
+                </View>
+              </View>
+            )}
 
             {/* ── Queue panel (slide-up overlay — swipe down to dismiss) ── */}
             {queueOpen && (
@@ -1326,6 +1577,17 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
                             </Text>
                           </View>
                           <MaterialCommunityIcons name="play" size={16} color={isCur ? colors.accent : "transparent"} />
+                          <TouchableOpacity
+                            style={styles.queueRemoveBtn}
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                            onPress={() => {
+                              haptic("light");
+                              removeFromQueue(item);
+                            }}
+                            accessibilityLabel={`Remove ${item.name} from queue`}
+                          >
+                            <MaterialCommunityIcons name="close" size={16} color={colors.muted} />
+                          </TouchableOpacity>
                         </TouchableOpacity>
                       );
                     }}
@@ -1394,6 +1656,25 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
                       icon: "link-variant",
                       danger: false,
                       onPress: copyLink,
+                    },
+                    sleepUntil
+                      ? {
+                          label: `Cancel sleep timer · ${Math.floor(sleepLeftSec / 60)}:${String(sleepLeftSec % 60).padStart(2, "0")} left`,
+                          icon: "timer",
+                          danger: false,
+                          onPress: () => applySleepTimer(null),
+                        }
+                      : {
+                          label: "Sleep timer · 30 min",
+                          icon: "timer-outline",
+                          danger: false,
+                          onPress: () => applySleepTimer(30),
+                        },
+                    {
+                      label: "Sleep timer · 60 min",
+                      icon: "timer-outline",
+                      danger: false,
+                      onPress: () => applySleepTimer(60),
                     },
                   ].map((a, i, arr) => (
                     <TouchableOpacity
@@ -1871,6 +2152,62 @@ const styles = StyleSheet.create({
   },
 
   /* Secondary Controls */
+  // ── Volume row ──
+  volumeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginTop: 14,
+    paddingHorizontal: 8,
+  },
+  volumeTrackWrap: { flex: 1, paddingVertical: 8 },
+  volumeTrack: { height: 4, borderRadius: 2, overflow: "hidden" },
+
+  // ── Scrub time bubble ──
+  scrubBubbleWrap: {
+    position: "absolute",
+    top: -34,
+    left: "50%",
+    marginLeft: -30,
+    width: 60,
+    alignItems: "center",
+  },
+  scrubBubbleText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "800",
+    fontVariant: ["tabular-nums"],
+    backgroundColor: "rgba(0,0,0,0.78)",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    overflow: "hidden",
+  },
+
+  // ── Mini card equalizer ──
+  miniEqWrap: { paddingHorizontal: 2 },
+
+  // ── Lyrics overlay ──
+  lyricsOverlay: { ...StyleSheet.absoluteFillObject, zIndex: 40 },
+  lyricsSheet: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  lyricsHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingBottom: 10,
+  },
+  lyricsHeaderTextWrap: { flex: 1, alignItems: "center", gap: 2 },
+  lyricsTitle: { fontWeight: "800" },
+  lyricsSub: { fontWeight: "600" },
+  lyricsClose: { width: 34, alignItems: "center" },
   secondaryControlsRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -2085,4 +2422,5 @@ const styles = StyleSheet.create({
   queueText: { flex: 1 },
   queueName: { fontWeight: "600" },
   queueSub: { marginTop: 2, fontWeight: "500" },
+  queueRemoveBtn: { paddingHorizontal: 10, paddingVertical: 6, marginLeft: 2 },
 });

@@ -14,6 +14,9 @@ type AudioContextType = {
   playTrack: (item: FileItem, playlist?: FileItem[]) => void;
   nextTrack: () => void;
   prevTrack: () => void;
+  removeFromQueue: (item: FileItem) => void;
+  /** Returns false when the track couldn't be queued (no API / resolve fail). */
+  playNext: (item: FileItem) => Promise<boolean>;
   closePlayer: () => void;
   showPlayer: boolean;
   setShowPlayer: (s: boolean) => void;
@@ -62,7 +65,10 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   // and native index can differ — this map bridges the two.
   const queueMetaRef = useRef<{
     nativeIndexByKey: Map<string, number>;
-  } | null>(null);
+    /** Keys in EXACT native queue order — lets surgical mutations rebuild
+     *  the index map without gaps after remove/insert. */
+    nativeOrder: string[];
+  }>({ nativeIndexByKey: new Map(), nativeOrder: [] });
   const queueBusyRef = useRef(false);
 
   // Resolves a track's stream URL (stat fallback for metadata-less items so
@@ -116,10 +122,13 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
         return;
       }
       const nativeIndexByKey = new Map<string, number>();
+      const nativeOrder: string[] = [];
       resolved.forEach((r, idx) => {
-        nativeIndexByKey.set(`${r.item.root_id}:${r.item.path}`, idx);
+        const k = `${r.item.root_id}:${r.item.path}`;
+        nativeIndexByKey.set(k, idx);
+        nativeOrder.push(k);
       });
-      queueMetaRef.current = { nativeIndexByKey };
+      queueMetaRef.current = { nativeIndexByKey, nativeOrder };
       await player.replaceQueue(
         resolved.map((r) => ({
           id: `${r.item.root_id}:${r.item.path}`,
@@ -295,6 +304,99 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     if (prev) setCurrentTrack(prev);
   };
 
+  // ── Surgical queue mutations ────────────────────────────────────────
+  // These keep BOTH the local playlist and the native TrackPlayer queue in
+  // sync WITHOUT a full rebuild (which would restart the current song).
+
+  /** Removes `item` from the queue. If it's the playing track, playback
+   *  advances to the nearest neighbour first (or stops when it was the last). */
+  const removeFromQueue = useCallback(
+    (item: FileItem) => {
+      const key = `${item.root_id}:${item.path}`;
+      const idx = playlist.findIndex(
+        (x) => `${x.root_id}:${x.path}` === key
+      );
+      if (idx < 0) return;
+      const meta = queueMetaRef.current;
+      const natIdx = meta.nativeIndexByKey.get(key);
+
+      const isCurrent =
+        !!currentTrack && `${currentTrack.root_id}:${currentTrack.path}` === key;
+
+      // Local splice first — single source of truth for the UI.
+      const nextPlaylist = playlist.filter(
+        (x) => `${x.root_id}:${x.path}` !== key
+      );
+      meta.nativeOrder = meta.nativeOrder.filter((k) => k !== key);
+      setPlaylist(nextPlaylist);
+
+      if (isCurrent) {
+        if (nextPlaylist.length === 0) {
+          player.reset();
+          setCurrentTrack(null);
+          setShowPlayer(false);
+          return;
+        }
+        const neighbour = nextPlaylist[Math.min(idx, nextPlaylist.length - 1)];
+        setCurrentTrack(neighbour); // selection effect skips natively
+      }
+
+      // Native removal AFTER state so the skip lands before index shifts.
+      if (typeof natIdx === "number" && natIdx >= 0) {
+        void player.removeNativeIndex(natIdx);
+      }
+    },
+    [playlist, currentTrack, player]
+  );
+
+  /** "Play next": inserts `item` right after the currently playing track. */
+  const playNext = useCallback(
+    async (item: FileItem): Promise<boolean> => {
+      if (!api || !currentTrack) return false;
+      const resolved = await resolveTrackUrl(item);
+      if (!resolved) return false;
+      const curKey = `${currentTrack.root_id}:${currentTrack.path}`;
+      const meta = queueMetaRef.current;
+      let natAfter = meta.nativeIndexByKey.get(curKey);
+      natAfter = typeof natAfter === "number" ? natAfter + 1 : meta.nativeOrder.length;
+      const newKey = `${resolved.item.root_id}:${resolved.item.path}`;
+
+      // Already queued? Move instead of duplicating.
+      const existingNat = meta.nativeIndexByKey.get(newKey);
+      if (typeof existingNat === "number") {
+        // Simplest correct behaviour: leave it where it is.
+        return true;
+      }
+
+      await player.insertTracksAt(
+        [
+          {
+            id: newKey,
+            url: resolved.url,
+            title: cleanTrackTitle(resolved.item.name),
+            artist: `${(resolved.item.extension || "AUDIO").toUpperCase()} · Nexora`,
+            artwork: api.thumbnailUrl(resolved.item.root_id, resolved.item.path, 512),
+          },
+        ],
+        natAfter
+      );
+      meta.nativeOrder.splice(natAfter, 0, newKey);
+      const nativeIndexByKey = new Map<string, number>();
+      meta.nativeOrder.forEach((k, i) => nativeIndexByKey.set(k, i));
+      meta.nativeIndexByKey = nativeIndexByKey;
+
+      const plIdx = playlist.findIndex(
+        (x) => `${x.root_id}:${x.path}` === curKey
+      );
+      const at = plIdx >= 0 ? plIdx + 1 : playlist.length;
+      const nextPlaylist = [...playlist];
+      nextPlaylist.splice(at, 0, item);
+      setPlaylist(nextPlaylist);
+      return true;
+    },
+    [api, currentTrack, playlist, player, resolveTrackUrl]
+  );
+
   // Notification-center next/previous buttons (and headset media buttons)
   // route through the app's queue + shuffle logic.
   useEffect(() => {
@@ -326,6 +428,8 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
         playTrack,
         nextTrack,
         prevTrack,
+        removeFromQueue,
+        playNext,
         closePlayer,
         showPlayer,
         setShowPlayer,

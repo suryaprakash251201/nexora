@@ -141,6 +141,32 @@ export default function VideoPlayer({
   const [repeatOne, setRepeatOne] = useState(false);
   const [aspectIdx, setAspectIdx] = useState(0);
   const [ended, setEnded] = useState(false);
+
+  // Persisted playback preferences (speed + aspect) — restored once, saved
+  // on change so the next video resumes your preferred setup.
+  useEffect(() => {
+    (async () => {
+      try {
+        const [r, a] = await AsyncStorage.multiGet(["nexora.vrate", "nexora.vaspect"]);
+        const ri = Number(r[1]);
+        const ai = Number(a[1]);
+        if (isFinite(ri) && ri >= 0 && ri < VIDEO_RATES.length) {
+          setRateIdx(ri);
+          try {
+            player.playbackRate = VIDEO_RATES[ri];
+          } catch {}
+        }
+        if (isFinite(ai) && ai >= 0 && ai < ASPECT_MODES.length) setAspectIdx(ai);
+      } catch {}
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => {
+    AsyncStorage.setItem("nexora.vrate", String(rateIdx)).catch(() => {});
+  }, [rateIdx]);
+  useEffect(() => {
+    AsyncStorage.setItem("nexora.vaspect", String(aspectIdx)).catch(() => {});
+  }, [aspectIdx]);
   // Real pixel dimensions of the active video track — drives the aspect-fit
   // surface sizing so portrait playback doesn't leave huge black bands.
   const [videoSize, setVideoSize] = useState<{ width: number; height: number } | null>(
