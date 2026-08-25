@@ -254,7 +254,7 @@ fn run_decode_thread(
                     let (sr, ch) = {
                         let info = dec.info();
                         (
-                            info.sample_rate.max(1) as u32,
+                            info.sample_rate.max(1),
                             info.channels.max(1) as u32,
                         )
                     };

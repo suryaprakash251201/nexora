@@ -1,5 +1,26 @@
-const ts = require("module").createRequire("/home/suryaprakash/Docker/nexora/mobile/package.json")("typescript");
-const fs = require("fs"), path = require("path");
+// Resolves the TypeScript compiler API from whichever project invoked this
+// script (`npm run lint:hooks` runs with cwd = web/ or mobile/, both of which
+// ship typescript). Falls back to sibling projects, then plain require — so
+// this works in CI where the repo root has no node_modules.
+const { createRequire } = require("module");
+const path = require("path");
+function loadTS() {
+  const candidates = [
+    process.cwd(),
+    path.join(__dirname, "..", "web"),
+    path.join(__dirname, "..", "mobile"),
+  ];
+  for (const dir of candidates) {
+    try {
+      return createRequire(path.join(dir, "package.json"))("typescript");
+    } catch {
+      /* try next candidate */
+    }
+  }
+  return require("typescript");
+}
+const ts = loadTS();
+const fs = require("fs");
 const HOOK_RE = /^use[A-Z]/;
 function checkFile(file){
   const sf = ts.createSourceFile(file, fs.readFileSync(file,"utf8"), ts.ScriptTarget.Latest, true);
