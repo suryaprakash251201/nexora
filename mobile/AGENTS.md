@@ -2,6 +2,14 @@
 
 Read the exact versioned docs at https://docs.expo.dev/versions/v54.0.0/ before writing any code.
 
+## Dev builds only — no Expo Go
+
+The app requires a **development build** (`expo-dev-client`); Expo Go is not supported. Core
+features (react-native-track-player audio + media notifications, background playback, secure
+token storage) need native modules compiled into the binary. `npm start` runs `expo start
+--dev-client`; `npm run android` / `npm run ios` build and install the dev client; regenerate
+native projects after config changes with `npm run prebuild`.
+
 ## Patches
 
 `patch-package` runs on `postinstall` and applies `mobile/patches/`:

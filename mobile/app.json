@@ -43,11 +43,19 @@
       "infoPlist": {
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true
-        }
+        },
+        "UIBackgroundModes": ["audio"],
+        "NSLocalNetworkUsageDescription": "Nexora connects to your self-hosted server on the local network to browse and stream your files."
       }
     },
     "android": {
       "package": "dev.suryaprakash.nexora",
+      "permissions": [
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+        "android.permission.WAKE_LOCK",
+        "android.permission.POST_NOTIFICATIONS"
+      ],
       "adaptiveIcon": {
         "backgroundColor": "#8B5CF6",
         "foregroundImage": "./assets/android-icon-foreground.png",

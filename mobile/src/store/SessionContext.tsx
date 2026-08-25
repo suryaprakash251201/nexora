@@ -10,8 +10,8 @@ const KEY_TOKEN = "nexora.token";
 const KEY_USER = "nexora.user";
 
 // Token is sensitive — keep it in the platform keychain via expo-secure-store
-// on native, with AsyncStorage as a fallback for web / Expo Go where the
-// native module may be unavailable.  Other session data (server URL, cached
+// on native (Keychain on iOS, EncryptedSharedPreferences on Android), with
+// AsyncStorage as a fallback for web. Other session data (server URL, cached
 // user) stays in AsyncStorage.
 const canUseSecureStore = Platform.OS !== "web";
 
@@ -29,7 +29,7 @@ async function getToken(): Promise<string | null> {
       }
       return null;
     } catch {
-      // Fall through to AsyncStorage (Expo Go / dev without native module).
+      // Fall through to AsyncStorage.
     }
   }
   return AsyncStorage.getItem(KEY_TOKEN);

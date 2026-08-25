@@ -1,7 +1,6 @@
-import { Platform } from "react-native";
+import { PermissionsAndroid, Platform } from "react-native";
 // Type-only import — erased at runtime. The value side of the package is
-// resolved lazily via trackPlayerModule.ts so Expo Go doesn't crash on the
-// missing native module.
+// resolved lazily via trackPlayerModule.ts (web has no native module).
 import type { State } from "react-native-track-player";
 
 import {
@@ -79,10 +78,9 @@ export class TrackPlayerController {
   }
 
   /**
-   * react-native-track-player ships native code, so it only exists inside a
-   * development/production build. Inside Expo Go the native module is absent
-   * (there is no media notification there either) — degrade to no-ops instead
-   * of crashing on `setupPlayer`. Probed safely via trackPlayerModule.ts.
+   * The native module is always compiled into iOS/Android builds; it is only
+   * absent on web, where every call degrades to a no-op instead of crashing
+   * on `setupPlayer`. Probed safely via trackPlayerModule.ts.
    */
   private get nativeAvailable() {
     return trackPlayerNativeAvailable();
@@ -94,8 +92,7 @@ export class TrackPlayerController {
     this.warnedMissingNative = true;
     console.warn(
       "[trackPlayerController] react-native-track-player native module not found — " +
-        "notification-center playback requires a development build (Expo Go is not supported). " +
-        "Audio playback is disabled."
+        "audio playback requires the native app build. Playback is disabled."
     );
   }
 
@@ -128,6 +125,19 @@ export class TrackPlayerController {
     }
     const TrackPlayer = rntp.default;
     const { Capability, AppKilledPlaybackBehavior, Event } = rntp;
+
+    // Android 13+ requires a runtime grant before the media notification
+    // card will appear. Without it playback still works but the user gets no
+    // notification-center controls. Request once, right before first init.
+    if (
+      Platform.OS === "android" &&
+      typeof Platform.Version === "number" &&
+      Platform.Version >= 33
+    ) {
+      PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS as never
+      ).catch(() => {});
+    }
 
     await TrackPlayer.setupPlayer({ autoHandleInterruptions: true });
     await TrackPlayer.updateOptions({

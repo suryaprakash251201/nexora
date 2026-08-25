@@ -28,6 +28,11 @@ import { FileRow, EmptyState, ROW_HEIGHT } from "../components/FileRow";
 import { GridCard } from "../components/GridCard";
 import { BottomSheet } from "../components/BottomSheet";
 import { ListSkeleton, GridCardSkeleton } from "../components/Skeletons";
+import {
+  downloadToCache,
+  saveToDevice,
+  reportSaveResult,
+} from "../lib/saveToDevice";
 import { previewKind } from "../api/client";
 import { copyShareLink } from "../lib/shareLink";
 import type { FileItem, FileListResponse } from "../api/types";
@@ -368,6 +373,25 @@ export default function BrowserScreen({ route, navigation }: Props) {
         }
       } catch (e: any) {
         Alert.alert("Download failed", e?.message || "Something went wrong.");
+      }
+    },
+    [api, rootId]
+  );
+
+  // Downloads to the app cache, then saves into a user-picked device folder
+  // (Android SAF — no storage permission needed) or the iOS share sheet.
+  const saveToDeviceAction = useCallback(
+    async (item: FileItem) => {
+      if (!api) return;
+      try {
+        const f = await downloadToCache(
+          api.rawFileUrl(item.root_id || rootId, item.path),
+          item.name
+        );
+        const result = await saveToDevice(f, item.name, item.mime || undefined);
+        reportSaveResult(result, item.name);
+      } catch (e: any) {
+        Alert.alert("Save failed", e?.message || "Something went wrong.");
       }
     },
     [api, rootId]
@@ -737,7 +761,10 @@ export default function BrowserScreen({ route, navigation }: Props) {
         title={actionItem?.name}
         actions={[
           ...(actionItem && !actionItem.is_dir
-            ? [{ label: "Download & share", icon: "share-variant", onPress: () => actionItem && downloadAndShare(actionItem) }]
+            ? [
+                { label: "Download & share", icon: "share-variant", onPress: () => actionItem && downloadAndShare(actionItem) },
+                { label: "Save to device", icon: "content-save-check-outline", onPress: () => actionItem && saveToDeviceAction(actionItem) },
+              ]
             : []),
           ...(actionItem
             ? [

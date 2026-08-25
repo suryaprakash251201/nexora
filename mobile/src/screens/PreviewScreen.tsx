@@ -36,6 +36,11 @@ import { detectAudioQuality } from "../lib/audioQuality";
 import { cleanTrackTitle } from "../lib/fileMeta";
 import { BottomSheet } from "../components/BottomSheet";
 import PdfViewer from "../components/PdfViewer";
+import {
+  downloadToCache,
+  saveToDevice,
+  reportSaveResult,
+} from "../lib/saveToDevice";
 import type { RootStackParamList } from "../navigation/types";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Preview">;
@@ -140,15 +145,19 @@ export default function PreviewScreen({ route }: Props) {
     }
   };
 
-  // Pure download — used by the image toolbar's download button.
+  // Save to device — downloads to the app cache, then writes into a
+  // user-picked device folder (Android SAF) or opens the share sheet (iOS).
   const downloadOnly = async () => {
     if (!api) return;
     try {
-      const target = new File(Paths.cache, "nexora-" + item.name.replace(/[^\w.\-]+/g, "_"));
-      await File.downloadFileAsync(api.rawFileUrl(item.root_id || rootId, item.path), target);
-      Alert.alert("Downloaded", `"${item.name}" saved to the app cache.`);
+      const f = await downloadToCache(
+        api.rawFileUrl(item.root_id || rootId, item.path),
+        item.name
+      );
+      const result = await saveToDevice(f, item.name, item.mime || undefined);
+      reportSaveResult(result, item.name);
     } catch (e: any) {
-      Alert.alert("Download failed", e?.message || "Something went wrong.");
+      Alert.alert("Save failed", e?.message || "Something went wrong.");
     }
   };
 

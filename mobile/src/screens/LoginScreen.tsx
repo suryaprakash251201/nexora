@@ -13,6 +13,8 @@ import {
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import { Linking } from "react-native";
+import { parseServerDeepLink } from "../lib/saveToDevice";
 import { useSession } from "../store/SessionContext";
 import { useTheme } from "../store/ThemeContext";
 import { AppIcon } from "../components/AppIcon";
@@ -34,6 +36,22 @@ export default function LoginScreen({ onDone }: { onDone: () => void }) {
 
   const orbAnim = useRef(new Animated.Value(0.4)).current;
   const btnScale = useRef(new Animated.Value(1)).current;
+
+  // Deep links — `nexora://connect?url=<encoded server url>` prefills the
+  // server field (e.g. a QR code shown by the desktop/web app). Handled both
+  // for cold starts (getInitialURL) and while the app is open (addEventListener).
+  useEffect(() => {
+    if (stage !== "server" || busy) return;
+    const apply = (url: string | null) => {
+      const target = parseServerDeepLink(url);
+      if (!target) return;
+      setServerUrl(target);
+      setError(null);
+    };
+    Linking.getInitialURL().then(apply).catch(() => {});
+    const sub = Linking.addEventListener("url", ({ url }) => apply(url));
+    return () => sub.remove();
+  }, [stage, busy]);
 
   useEffect(() => {
     Animated.loop(

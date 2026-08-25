@@ -8,10 +8,10 @@ import { trackPlayerController } from "../lib/trackPlayerController";
  * react-native-track-player playback service.
  *
  * Registered once at app startup (`index.ts` → `setupPlaybackService`, which
- * skips registration entirely when the native module is absent — Expo Go /
- * web). While the app is running this runs in the same JS context; if the
- * user swipes the app away the service keeps running as a headless task so
- * the notification card keeps working.
+ * skips registration on web where the native module is absent). While the app
+ * is running this runs in the same JS context; if the user swipes the app away
+ * the service keeps running as a headless task so the notification card keeps
+ * working.
  *
  * Remote events come from the native media session — the notification center /
  * lock screen / control center / wired & bluetooth headset buttons:

@@ -13,7 +13,7 @@ self-hosted file workspace. Runs on **Android and iOS**.
 - **File operations** — create folders, rename, delete (moves to trash), long-press for quick actions
 - **Preview** — images (`expo-image`), video (`expo-video`), audio player, text/code/markdown inline; PDFs and other formats open in your system viewer after a quick download
 - **Notification-center audio player** — songs show a native media card in the iOS/Android notification center, lock screen and control center with play · pause · next/previous · seek, artwork from embedded album art, and background playback (continues when the app is backgrounded or the screen is locked)
-- **Download & share** — any file downloads to the app cache and opens in the system share sheet
+- **Save to device** — any file can be saved into a real device folder (Android Storage Access Framework, e.g. Downloads — no storage permission needed) or via the iOS share sheet ("Save to Files")
 - **Recents & search** — recent files plus full-text search across your library
 
 ## Prerequisites
@@ -23,25 +23,32 @@ self-hosted file workspace. Runs on **Android and iOS**.
 
 ## Run it
 
+This app requires a **development build** (`expo-dev-client`) — Expo Go is not supported because
+core features depend on native modules (`react-native-track-player`, `expo-secure-store`,
+background audio). Expo Go support has been removed.
+
 ```bash
 cd mobile
 npm install
-npx expo start
+npx expo run:android   # build + install on an Android device/emulator (needs Android Studio)
+npx expo run:ios       # build + install on an iOS device/simulator (needs Xcode, macOS)
 ```
 
-Then:
+After the first native build, iterate with:
+
+```bash
+npm start              # expo start --dev-client; the dev-client app connects to Metro
+```
+
+If you change native config (`app.json` plugins/permissions) regenerate the native projects with
+`npm run prebuild` (runs `expo prebuild --clean`), then `expo run:*` again.
 
 | Target | How |
 |---|---|
-| **Quick test (UI only)** | Scan the QR code with **Expo Go** (App Store / Play Store) — works for both Android and iOS, **except audio playback** (see below) |
-| **Android emulator** | `npx expo run:android` (needs Android Studio) |
-| **iOS simulator** | `npx expo run:ios` (needs Xcode, macOS only) |
-| **Device via USB** | `npx expo run:android` / `npx expo run:ios` from a connected device, or `npx expo start --tunnel` with a development build |
-
-> Audio playback runs on **react-native-track-player**, which ships native code — so it only works
-> inside a **development or production build** (`npx expo run:*`, EAS, or a prebuild). **Expo Go no
-> longer plays audio** (the app degrades gracefully and shows a warning). Everything else
-> (browsing, images, video, text previews, downloads) still works in Expo Go.
+| **Android emulator/device** | `npm run android` |
+| **iOS simulator/device** | `npm run ios` |
+| **JS-only iteration** | `npm start`, then open the installed development build |
+| **Release builds** | EAS (`npx eas build`) or `npx expo run:android --variant release` |
 
 ## Production builds
 
@@ -77,13 +84,11 @@ song you play shows up as a native media card:
   share one global player, so any song you play shows the notification card and keeps playing
   in the background. Leaving a preview no longer stops the music.
 
-### Why a development build is required
+### Native modules used
 
-`react-native-track-player` is a native module, so audio + notification-center controls only work
-in builds that include it (`npx expo run:*`, EAS builds, or a prebuild). Expo Go does not include
-it — in Expo Go the app logs a warning and audio playback is disabled; all other features still
-work. For development, `npx expo run:android` / `npx expo run:ios` is the replacement for the
-old `expo start` flow.
+`react-native-track-player` and friends are native modules compiled into the app binary. The
+development build (`expo-dev-client`) includes them all — that's why audio, background playback,
+media notifications and secure token storage work in every installed build.
 
 ## Connecting to your server
 
