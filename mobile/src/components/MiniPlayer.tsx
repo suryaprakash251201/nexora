@@ -24,6 +24,7 @@ import { BlurView } from "expo-blur";
 import * as Haptics from "expo-haptics";
 import { File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { FileItem, Playlist } from "../api/types";
 import { useAudio } from "../store/AudioContext";
@@ -300,6 +301,9 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
   // True while the current coverUrl is being fetched (drives the small
   // spinner overlays and the hung-request watchdog below).
   const [artLoading, setArtLoading] = useState(false);
+  // True when the track is known to have no extractable embedded artwork —
+  // declared early: the per-track sync reset below clears it.
+  const [noArt, setNoArt] = useState(false);
 
   // Per-track identity — resets retry state SYNCHRONOUSLY on track change.
   // The old passive-effect reset ran AFTER a render that had already built
@@ -313,7 +317,16 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
     setArtAttempt(0);
     setArtFailed(false);
     setArtLoading(false);
+    setNoArt(false);
   }
+
+  // ── "No embedded art" fast path ───────────────────────────────────────
+  // For files WITHOUT extractable artwork the server answers 415
+  // deterministically — retrying can never succeed, yet the old loop kept
+  // hammering for ~14s showing a spinner/blank box on EVERY swipe. Instead:
+  // onError fires ONE tiny probe; a 415/404 marks the track "no art"
+  // (persisted for 24h so future swipes skip straight to the branded
+  // placeholder), while anything else stays retryable.
 
   // All retries burned → stop mounting dead images; show the branded
   // placeholder and gradient background instead (one slow ambient retry
@@ -338,11 +351,60 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
     return () => clearTimeout(t);
   }, [artGaveUp]);
 
-  const onArtError = useCallback(() => {
-    // Mark failure so the backoff effect schedules the next attempt.
+  // ── "No embedded art" negative cache (device-persisted) ────────────────
+  // Consulted on every track change so tracks already known to have no
+  // artwork skip the request entirely — zero blank window on swipe.
+  const NOART_TTL = 24 * 60 * 60 * 1000;
+  const noArtKey = (k: string) => `nexora.noart.${k}`;
+  useEffect(() => {
+    if (!artTrackKey) return;
+    let cancelled = false;
+    AsyncStorage.getItem(noArtKey(artTrackKey))
+      .then((raw) => {
+        if (cancelled) return;
+        if (!raw) return;
+        const ts = Number(raw);
+        if (isFinite(ts) && Date.now() - ts < NOART_TTL) setNoArt(true);
+        else AsyncStorage.removeItem(noArtKey(artTrackKey)).catch(() => {});
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [artTrackKey]);
+
+  const markNoArt = useCallback((key: string) => {
+    setNoArt(true);
     setArtLoading(false);
-    setArtFailed(true);
+    setArtFailed(false);
+    AsyncStorage.setItem(noArtKey(key), String(Date.now())).catch(() => {});
   }, []);
+
+  // Classifies a cover failure: deterministic server answer (415 no-art /
+  // 404 missing / 400 bad path) → permanent; anything else → transient and
+  // worth retrying via the normal backoff chain.
+  const classifyAndHandleError = useCallback(async () => {
+    setArtLoading(false);
+    if (!api || !currentTrack) {
+      setArtFailed(true);
+      return;
+    }
+    try {
+      const probeUrl = api.thumbnailUrl(currentTrack.root_id, currentTrack.path, 64);
+      const res = await fetch(probeUrl, { headers: { Range: "bytes=0-1" } });
+      if (res.status === 415 || res.status === 404 || res.status === 400) {
+        markNoArt(`${currentTrack.root_id}:${currentTrack.path}`);
+        return;
+      }
+      setArtFailed(true); // transient (5xx/network) → backoff chain
+    } catch {
+      setArtFailed(true); // network hiccup → backoff chain
+    }
+  }, [api, currentTrack, markNoArt]);
+
+  const onArtError = useCallback(() => {
+    void classifyAndHandleError();
+  }, [classifyAndHandleError]);
 
   const onArtLoad = useCallback(() => {
     // Success stops the retry chain.
@@ -354,7 +416,7 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
   // Derived null-safely so it can live ABOVE the early return — EVERY hook
   // and its inputs must execute unconditionally on each render.
   const baseCoverUrl =
-    api && currentTrack && !artGaveUp
+    api && currentTrack && !artGaveUp && !noArt
       ? api.thumbnailUrl(currentTrack.root_id, currentTrack.path, 512)
       : null;
   const coverUrl =

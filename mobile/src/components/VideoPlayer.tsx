@@ -19,6 +19,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useVideoPlayer, VideoView } from "expo-video";
 import type { AudioTrack, SubtitleTrack } from "expo-video";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { haptic } from "../store/SettingsContext";
 import { useAudio } from "../store/AudioContext";
@@ -106,6 +107,10 @@ export default function VideoPlayer({
   const videoViewRef = useRef<VideoView>(null);
   const player = useVideoPlayer(initialUri, (p) => {
     p.loop = false; // repeat is user-controlled now
+    // CRITICAL: expo-video defaults timeUpdateEventInterval to 0 — the
+    // timeUpdate event is NEVER emitted — which froze the timeline. Emit
+    // every 250ms (a poll below backs this up).
+    p.timeUpdateEventInterval = 0.25;
     p.play();
   });
 
@@ -136,6 +141,11 @@ export default function VideoPlayer({
   const [repeatOne, setRepeatOne] = useState(false);
   const [aspectIdx, setAspectIdx] = useState(0);
   const [ended, setEnded] = useState(false);
+  // Real pixel dimensions of the active video track — drives the aspect-fit
+  // surface sizing so portrait playback doesn't leave huge black bands.
+  const [videoSize, setVideoSize] = useState<{ width: number; height: number } | null>(
+    null
+  );
 
   useEffect(() => {
     try {
@@ -302,6 +312,7 @@ export default function VideoPlayer({
   }, [locked]);
 
   // ── Brightness (real system brightness, dim fallback) + volume HUD ──
+  const insets = useSafeAreaInsets();
   const [dim, setDim] = useState(0); // fallback overlay opacity when real brightness unavailable
   const dimAvailable = useRef(false);
   const savedBrightness = useRef<number | null>(null);
@@ -500,6 +511,9 @@ export default function VideoPlayer({
         const vts = player.availableVideoTracks || [];
         if (vts.length && vts[0].size) {
           setQualityLabel(`${vts[0].size.width}×${vts[0].size.height}`);
+          if (vts[0].size.width > 0 && vts[0].size.height > 0) {
+            setVideoSize({ width: vts[0].size.width, height: vts[0].size.height });
+          }
         }
       } catch {}
     }, 400);
@@ -706,11 +720,43 @@ export default function VideoPlayer({
 
   // ── Seek bar ──
   const [scrubRatio, setScrubRatio] = useState<number | null>(null);
+  const scrubbing = scrubRatio != null;
   const barWidth = useRef(0);
   const pct =
     scrubRatio ?? (duration > 0 ? Math.min(1, currentTime / duration) : 0);
   const bufPct =
     duration > 0 ? Math.min(1, Math.max(buffered, currentTime) / duration) : 0;
+
+  // Poll fallback for the timeline. timeUpdateEventInterval drives the
+  // timeUpdate event, but native players can stall event delivery during
+  // buffering or rate changes — polling keeps the progress bar moving.
+  useEffect(() => {
+    if (!playing || scrubbing) return;
+    const iv = setInterval(() => {
+      try {
+        setCurrentTime(player.currentTime);
+        setBuffered(player.bufferedPosition || 0);
+      } catch {}
+    }, 250);
+    return () => clearInterval(iv);
+  }, [playing, scrubbing, player]);
+
+  // ── Aspect-fit surface sizing ───────────────────────────────────────
+  // The surface hugs the video's real aspect ratio: portrait playback gets a
+  // tight video box instead of a full-area black slab with tiny letterboxed
+  // content in the middle. Falls back to 16:9 until track metadata lands.
+  const [surfaceMax, setSurfaceMax] = useState({ w: 0, h: 0 });
+  const vidAr =
+    videoSize && videoSize.width > 0 && videoSize.height > 0
+      ? videoSize.width / videoSize.height
+      : 16 / 9;
+  let surfW = surfaceMax.w;
+  let surfH = surfW / vidAr;
+  if (surfH > surfaceMax.h) {
+    surfH = surfaceMax.h;
+    surfW = surfH * vidAr;
+  }
+  const surfaceReady = surfW > 1 && surfH > 1;
 
   const ratioFromX = (locationX: number) =>
     barWidth.current > 0
@@ -772,10 +818,28 @@ export default function VideoPlayer({
     <View
       style={[styles.root, immersive ? styles.rootFullscreen : styles.rootInline]}
       collapsable={false}
+      onLayout={(e) => {
+        const { width, height } = e.nativeEvent.layout;
+        if (
+          Math.abs(width - surfaceMax.w) > 1 ||
+          Math.abs(height - surfaceMax.h) > 1
+        ) {
+          setSurfaceMax({ w: width, h: height });
+        }
+      }}
     >
       {/* Hide the OS status bar while immersed */}
       <StatusBar hidden={fullscreen} animated />
 
+      {/* Aspect-fit surface — hugs the video; all layers live inside it so
+          controls always align with the picture instead of floating over a
+          large letterboxed area. */}
+      <View
+        style={[
+          styles.surface,
+          surfaceReady ? { width: Math.round(surfW), height: Math.round(surfH) } : null,
+        ]}
+      >
       <VideoView
         ref={videoViewRef}
         player={player}
@@ -924,9 +988,25 @@ export default function VideoPlayer({
             pointerEvents="none"
           />
 
-          {/* Top bar — title + lock + quality chip */}
-          <View style={styles.topBar}>
-            <Text style={styles.title} numberOfLines={1}>
+          {/* Top bar — close (fullscreen) · title · quality · lock. Safe-area
+              aware so the notch never overlaps the title row. */}
+          <View
+            style={[
+              styles.topBar,
+              { paddingTop: (immersive ? insets.top : 0) + 8 },
+            ]}
+          >
+            {fullscreen ? (
+              <TouchableOpacity
+                style={styles.iconBtn}
+                onPress={exitFullscreen}
+                activeOpacity={0.7}
+                accessibilityLabel="Exit fullscreen"
+              >
+                <MaterialCommunityIcons name="chevron-down" size={26} color="#fff" />
+              </TouchableOpacity>
+            ) : null}
+            <Text style={styles.title} numberOfLines={1} ellipsizeMode="middle">
               {title || "Now playing"}
             </Text>
             {qualityLabel ? (
@@ -987,7 +1067,13 @@ export default function VideoPlayer({
           </View>
 
           {/* Bottom panel */}
-          <View style={styles.bottomPanel} pointerEvents="box-none">
+          <View
+            style={[
+              styles.bottomPanel,
+              { paddingBottom: (immersive ? insets.bottom : 0) + 12 },
+            ]}
+            pointerEvents="box-none"
+          >
             <View style={styles.transportRow} pointerEvents="box-none">
               <TouchableOpacity
                 style={styles.smallPlay}
@@ -1037,9 +1123,18 @@ export default function VideoPlayer({
                   />
                 </View>
                 <View style={[styles.seekThumbWrap, { left: `${pct * 100}%` }]}>
-                  <View style={styles.seekThumbGlow} />
-                  <View style={styles.seekThumb} />
+                  <View style={[styles.seekThumbGlow, scrubbing && styles.seekThumbGlowActive]} />
+                  <View style={[styles.seekThumb, scrubbing && styles.seekThumbActive]} />
                 </View>
+
+                {/* Drag time bubble — shows the target position while scrubbing */}
+                {scrubbing ? (
+                  <View style={[styles.scrubBubbleWrap, { left: `${pct * 100}%` }]} pointerEvents="none">
+                    <Text style={styles.scrubBubbleText}>
+                      {fmtTimeLong(scrubRatio! * duration)}
+                    </Text>
+                  </View>
+                ) : null}
               </View>
 
               <Text style={styles.timeText}>{fmtTimeLong(duration)}</Text>
@@ -1142,6 +1237,8 @@ export default function VideoPlayer({
           </View>
         </>
       ) : null}
+      </View>
+      {/* /surface */}
 
       {/* ── Sheets ── */}
       <BottomSheet
@@ -1346,14 +1443,47 @@ const TRANSCODE_EXT = new Set([
 // ── Styles ────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   root: { backgroundColor: "#000" },
-  // Inline (portrait): fills the preview area, like the original player.
-  rootInline: { flexGrow: 1, alignSelf: "stretch", width: "100%" },
+  // Inline (portrait): fills the preview area and centers the aspect-fit
+  // surface — no more full-area black slab with tiny letterboxed video.
+  rootInline: {
+    flexGrow: 1,
+    alignSelf: "stretch",
+    width: "100%",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   rootFullscreen: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 50,
     elevation: 50,
   },
   video: { ...StyleSheet.absoluteFillObject },
+  // The aspect-fit box that hugs the video picture; every overlay layer is
+  // positioned inside it.
+  surface: {
+    backgroundColor: "#000",
+    overflow: "hidden",
+  },
+  scrubBubbleWrap: {
+    position: "absolute",
+    top: -34,
+    marginLeft: -32,
+    width: 64,
+    alignItems: "center",
+  },
+  scrubBubbleText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "800",
+    fontVariant: ["tabular-nums"],
+    backgroundColor: "rgba(0,0,0,0.75)",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    overflow: "hidden",
+  },
+  seekThumbGlowActive: { width: 28, height: 28, borderRadius: 14 },
+  seekThumbActive: { width: 16, height: 16, borderRadius: 8 },
   loading: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center" },
   bufferPill: {
     position: "absolute",
