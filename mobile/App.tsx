@@ -10,6 +10,10 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 
 import { SessionProvider, useSession } from "./src/store/SessionContext";
+import {
+  isVideoOverlayActive,
+  subscribeVideoOverlay,
+} from "./src/lib/uiBus";
 import { ThemeProvider, useTheme } from "./src/store/ThemeContext";
 import { AudioProvider } from "./src/store/AudioContext";
 import { SettingsProvider } from "./src/store/SettingsContext";
@@ -114,6 +118,14 @@ function RootNavigation() {
   // to sit flush above the tab bar on tab screens and at the very bottom on
   // pushed screens (Browser, Preview, Playlist, …) where there is no tab bar.
   const [tabVisible, setTabVisible] = useState(true);
+  // The fullscreen video player lives inside a stack screen (different native
+  // view subtree), so it cannot cover the MiniPlayer itself — it flips this
+  // flag via uiBus and we hide the mini player while immersed.
+  const [videoOverlay, setVideoOverlay] = useState(isVideoOverlayActive());
+  useEffect(
+    () => subscribeVideoOverlay(setVideoOverlay),
+    []
+  );
   const navRef = useRef<NavigationContainerRef<RootStackParamList> | null>(null);
 
   // CRITICAL: the NavigationContainer only mounts AFTER the user is signed in
@@ -191,7 +203,7 @@ function RootNavigation() {
         <Stack.Screen name="Favorites" component={FavoritesScreen} options={{ title: "Favorites" }} />
         <Stack.Screen name="Trash" component={TrashScreen} options={{ title: "Trash" }} />
       </Stack.Navigator>
-      <MiniPlayer tabVisible={tabVisible} />
+      <MiniPlayer tabVisible={tabVisible && !videoOverlay} />
     </NavigationContainer>
   );
 }

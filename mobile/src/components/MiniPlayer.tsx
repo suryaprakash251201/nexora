@@ -282,36 +282,61 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
   }, [playing, modalVisible, currentTrack?.path, artworkScaleAnim]);
 
   // ── Cover art loading with bounded retry ─────────────────────────────
-  // Thumbnails are generated server-side on demand (ffmpeg). Right after a
-  // track change the first request can fail or time out under load, leaving
-  // the artwork blank until the player is reopened. We now: always render a
-  // brand-gradient placeholder BENEATH the image, detect load errors, and
-  // auto-retry with backoff using a cache-busting param.
+  // Thumbnails are generated server-side on demand (embedded album art is
+  // extracted from the file on FIRST request). Right after a swipe the first
+  // request can fail or hang under load, leaving the artwork blank. Strategy:
+  // brand placeholder beneath · bounded retries with cache-busting · a
+  // watchdog for hung requests · and — critically — per-track retry state
+  // that resets SYNCHRONOUSLY during render (see artTrack below), so a new
+  // track's very first request is always clean instead of reusing the
+  // previous track's stale attempt counter.
   //
   // NOTE: these hooks MUST stay ABOVE the `if (!currentTrack) return null`
   // below — React requires the same hooks in the same order on every render,
   // and this component renders both without and with an active track.
+  const MAX_ART_ATTEMPTS = 10;
   const [artAttempt, setArtAttempt] = useState(0);
   const [artFailed, setArtFailed] = useState(false);
   // True while the current coverUrl is being fetched (drives the small
   // spinner overlays and the hung-request watchdog below).
   const [artLoading, setArtLoading] = useState(false);
 
-  useEffect(() => {
-    // New track → reset the retry cycle.
+  // Per-track identity — resets retry state SYNCHRONOUSLY on track change.
+  // The old passive-effect reset ran AFTER a render that had already built
+  // coverUrl from the previous track's attempt counter, so every swipe fired
+  // a polluted `&_r=<stale>` request before the clean one (double fetch,
+  // wasted retry budget, visible blank window).
+  const artTrackKey = currentTrack ? `${currentTrack.root_id}:${currentTrack.path}` : null;
+  const [artTrack, setArtTrack] = useState(artTrackKey);
+  if (artTrack !== artTrackKey) {
+    setArtTrack(artTrackKey);
     setArtAttempt(0);
     setArtFailed(false);
-  }, [currentTrack?.path]);
+    setArtLoading(false);
+  }
+
+  // All retries burned → stop mounting dead images; show the branded
+  // placeholder and gradient background instead (one slow ambient retry
+  // keeps trying so late-extracted covers still arrive eventually).
+  const artGaveUp = artFailed && artAttempt >= MAX_ART_ATTEMPTS;
 
   useEffect(() => {
-    // Server-side thumbnails (embedded album art) are extracted on demand by
-    // ffmpeg — the first request for a freshly-selected track can 404/hang
-    // until extraction finishes. Retry with capped backoff (~14s total window)
-    // instead of giving up after a few seconds and leaving a blank cover.
-    if (!artFailed || artAttempt >= 10) return;
+    if (!artFailed || artAttempt >= MAX_ART_ATTEMPTS) return;
     const t = setTimeout(() => setArtAttempt((n) => n + 1), Math.min(400 + artAttempt * 500, 1500));
     return () => clearTimeout(t);
   }, [artFailed, artAttempt]);
+
+  // Ambient recovery after exhaustion: one quiet attempt every 10s so a
+  // cover whose server-side extraction finished late still shows up without
+  // user interaction.
+  useEffect(() => {
+    if (!artGaveUp) return;
+    const t = setTimeout(() => {
+      setArtFailed(false);
+      setArtAttempt((n) => n + 1); // new cache-busted URL
+    }, 10000);
+    return () => clearTimeout(t);
+  }, [artGaveUp]);
 
   const onArtError = useCallback(() => {
     // Mark failure so the backoff effect schedules the next attempt.
@@ -329,23 +354,41 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
   // Derived null-safely so it can live ABOVE the early return — EVERY hook
   // and its inputs must execute unconditionally on each render.
   const baseCoverUrl =
-    api && currentTrack ? api.thumbnailUrl(currentTrack.root_id, currentTrack.path, 512) : null;
+    api && currentTrack && !artGaveUp
+      ? api.thumbnailUrl(currentTrack.root_id, currentTrack.path, 512)
+      : null;
   const coverUrl =
-    baseCoverUrl && artAttempt > 0 ? `${baseCoverUrl}${baseCoverUrl.includes("?") ? "&" : "?"}_r=${artAttempt}` : baseCoverUrl;
+    baseCoverUrl && artAttempt > 0
+      ? `${baseCoverUrl}${baseCoverUrl.includes("?") ? "&" : "?"}_r=${artAttempt}`
+      : baseCoverUrl;
 
   useEffect(() => {
     if (!coverUrl) return;
     setArtLoading(true);
     // Watchdog: some cover requests neither load nor error for a long time
-    // (server-side extraction queue). If nothing happened after 8s, bust the
+    // (server-side extraction queue). If nothing happened after 5s, bust the
     // cache with a new attempt — the retry URL is a different URI, so expo-
     // image issues a genuinely fresh request instead of waiting on the old one.
     const wd = setTimeout(() => {
       setArtLoading(false);
-      setArtAttempt((n) => (n < 10 ? n + 1 : n));
-    }, 8000);
+      setArtAttempt((n) => (n < MAX_ART_ATTEMPTS ? n + 1 : n));
+    }, 5000);
     return () => clearTimeout(wd);
   }, [coverUrl]);
+
+  // Prefetch the previous & next covers as soon as the track settles — the
+  // single highest-value warm-up: it makes the MOST LIKELY swipe target
+  // instant, even when the full-queue prefetch hasn't reached it yet.
+  useEffect(() => {
+    if (!api || !currentTrack) return;
+    const idx = playlist.findIndex((x) => x.path === currentTrack.path);
+    if (idx < 0) return;
+    const neighbors = [playlist[idx - 1], playlist[idx + 1]];
+    for (const n of neighbors) {
+      if (!n) continue;
+      Image.prefetch(api.thumbnailUrl(n.root_id, n.path, 512)).catch(() => {});
+    }
+  }, [api, currentTrack, playlist]);
 
   if (!currentTrack) return null;
 
@@ -678,7 +721,7 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
         <Modal transparent visible={modalVisible} animationType="none" onRequestClose={closeModal}>
           <Animated.View style={[styles.modalRoot, { transform: [{ translateY: slideAnim }] }]}>
             {/* ── Background: blurred artwork + dark overlay + blur ── */}
-            {coverUrl ? (
+            {coverUrl && !artGaveUp ? (
               <Image
                 key={`bg-${coverUrl}`}
                 source={{ uri: coverUrl }}
