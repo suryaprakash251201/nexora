@@ -676,104 +676,91 @@ body {
 }
 
 /* ============================================================
-   Vinyl tonearm — modern redesign (v1.9)
+   Vinyl tonearm — modern minimal redesign (v1.9)
 
-   The gesture is a three-phase motion inspired by a real cueing lever:
-     1. Anticipation — the arm lifts and pauses, like a hand hesitating
-        before lowering the needle.
-     2. Swing-in     — pivots onto the outer groove. The cubic-bezier
-        (.3,.65,.22,1) gives a soft start, accelerating tail.
-     3. Settle       — a micro-bounce as the stylus contacts the groove,
-        then dead-still tracking.
+   The gesture is a single CSS transition on transform: when
+   playback starts the arm swings onto the record; when it pauses
+   the arm swings back. The pivot is the gimbal point itself, set
+   via transform-origin in JS (and mirrored here as a fallback).
 
-   Timing is exposed as CSS variables (`--ta-swing-in`, `--ta-swing-out`,
-   `--ta-lift`) so future per-track or per-energy variations can tune
-   the gesture from JS without touching the CSS.
+   Two looping animations convey "is the deck playing?" at a
+   glance: the pivot halo breathes (calm, 2.4s) and the stylus
+   bloom pulses (slightly faster, 1.4s). Both are dimmed when the
+   arm is parked.
 
-   Reduced-motion: the gesture is replaced with a 0.01s cut to the end
-   state and all breathing/looping animations are disabled. The
-   playback cue is then carried by the album art rotation alone.
+   Reduced motion: the swing transition is cut to 0.01s and both
+   looping animations are disabled. State changes remain visible
+   via the colour shift alone.
    ============================================================ */
 .tonearm-swing {
-  transform-origin: var(--ta-pivot-x, 76.7%) var(--ta-pivot-y, 42.7%);
+  transform-origin: var(--ta-pivot-x, 80%) var(--ta-pivot-y, 18%);
   transition:
-    transform var(--ta-swing-in, 2.4s) cubic-bezier(0.3, 0.65, 0.22, 1),
-    filter 1.4s ease;
+    transform 1.8s cubic-bezier(0.34, 0.85, 0.34, 1.05),
+    filter 0.6s ease;
   will-change: transform, filter;
-  filter: drop-shadow(0 6px 8px rgba(0, 0, 0, 0.55));
+  /* Subtle drop-shadow on the wrapper so the tonearm sits on the
+     disc, not floats above it. Very low opacity so the album art
+     isn't darkened. */
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.35));
 }
 
-/* Needle down — resting on the grooves, tight shadow */
+/* Needle down — arm resting on the outer groove, parallel to
+   the disc. */
 .tonearm-playing {
   transform: rotate(0deg) translate(0, 0) scale(1);
 }
 
-/* Raised + parked off the disc: slightly enlarged and brighter, which
-   combined with a softer, larger drop-shadow reads as lifted into the air.
-   Translate runs BEFORE rotate so the nudge is in disc coordinates, not the
-   rotated arm frame. 36deg swings the stylus fully clear of the rim; less
-   than the old 38deg because the redesigned geometry places the pivot
-   higher (the arm tube now reads as shorter, so a smaller swing clears
-   the record edge). */
+/* Parked — arm swung clockwise off the record. The exact angle is
+   supplied as a CSS variable from JS (default 32deg) so the
+   geometry can be tuned without touching CSS. A small upward
+   translate gives the arm a "lifted" feel that distinguishes
+   the parked state from the playing state at a glance. */
 .tonearm-paused {
-  transform: translate(6%, -4%) rotate(36deg) scale(1.045);
-  filter: brightness(1.12) drop-shadow(0 14px 18px rgba(0, 0, 0, 0.6));
+  transform: translate(3%, -3%) rotate(var(--ta-park-angle, 32deg)) scale(1);
+  filter: brightness(1.05) drop-shadow(0 8px 10px rgba(0, 0, 0, 0.45));
 }
 
-/* While tracking, the arm rides the grooves with an almost imperceptible
-   slow sway — long period, sub-degree amplitude, purely for life. The
-   transform-origin matches the gimbal pivot so the sway is around the
-   same point as the swing (no visible "wobble in the middle"). */
-@keyframes n-arm-bob {
-  0%, 100% { transform: rotate(0deg); }
-  50% { transform: rotate(-0.45deg); }
-}
-.tonearm-idle {
-  transform-origin: var(--ta-pivot-x, 76.7%) var(--ta-pivot-y, 42.7%);
-  animation: n-arm-bob 7s ease-in-out infinite;
-}
-
-/* Status pip on the base — soft breathing that conveys playback state
-   without being distracting. 2.4s period matches a calm human
-   breath-rate so it doesn't compete with the music. */
-@keyframes n-pip-breathe {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.55; transform: scale(0.88); }
-}
-.tonearm-pip {
-  transform-origin: center;
-  transform-box: fill-box;
-  animation: n-pip-breathe 2.4s ease-in-out infinite;
-}
-
-/* The pip's halo is larger and breathes with a slightly slower period so
-   the two layers read as a single breathing light rather than two
-   independent things. */
-@keyframes n-pip-glow {
+/* Pivot halo — soft breathing that conveys "the deck is on". The
+   radius pulse is sub-pixel so the bloom looks like a single
+   soft light source. */
+@keyframes n-pivot-halo {
   0%, 100% { opacity: 0.85; transform: scale(1); }
-  50% { opacity: 0.35; transform: scale(0.78); }
+  50% { opacity: 0.55; transform: scale(0.86); }
 }
-.tonearm-pip-glow {
+.tonearm-pivot-halo {
   transform-origin: center;
   transform-box: fill-box;
-  animation: n-pip-glow 2.4s ease-in-out infinite;
+  animation: n-pivot-halo 2.4s ease-in-out infinite;
 }
 
-/* Stylus tip glows softly while it is actually in the groove. Faster
-   pulse than the pip — the "heartbeat" of the deck. */
-@keyframes n-needle-live {
-  0%, 100% { opacity: 0.95; }
-  50% { opacity: 0.35; }
+/* Pivot dot — a small additional pulse on the inner dot, slightly
+   faster than the halo so the two layers feel like one source. */
+@keyframes n-pivot-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.75; }
 }
-.tonearm-stylus-glow {
-  animation: n-needle-live 1.2s ease-in-out infinite;
+.tonearm-pivot-dot {
+  animation: n-pivot-dot 2.4s ease-in-out infinite;
 }
 
-/* Reduced motion: the swing is reduced to a near-instant transition
-   (the user can still see the state change, just without the long
-   gesture), and all looping animations are turned off. The visual
-   cue for "is the deck playing?" is then the album art's spin
-   alone, which the user can opt out of independently if needed. */
+/* Stylus bloom — only visible while playing. Faster pulse so it
+   reads as a "heartbeat" distinct from the calmer pivot halo. */
+@keyframes n-stylus-bloom {
+  0%, 100% { opacity: 0.95; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.7); }
+}
+.tonearm-stylus-bloom {
+  transform-origin: center;
+  transform-box: fill-box;
+  animation: n-stylus-bloom 1.4s ease-in-out infinite;
+}
+
+/* Reduced motion: the swing is reduced to a near-instant
+   transition (the user can still see the state change, just
+   without the long gesture), and all looping animations are
+   turned off. The visual cue for "is the deck playing?" is
+   then the album art's spin and the colour of the pivot dot
+   alone. */
 @media (prefers-reduced-motion: reduce) {
   .tonearm-swing {
     transition-duration: 0.01s;
@@ -782,26 +769,24 @@ body {
   .tonearm-playing {
     transition-duration: 0.01s;
   }
-  .tonearm-idle,
-  .tonearm-pip,
-  .tonearm-pip-glow,
-  .tonearm-stylus-glow {
+  .tonearm-pivot-halo,
+  .tonearm-pivot-dot,
+  .tonearm-stylus-bloom {
     animation: none;
   }
 }
 
-/* JS-detected reduced-motion (matches the data-attribute the React
-   component sets on mount, so we never flash a full-motion gesture
-   before the media query resolves). The two selectors are
-   equivalent functionally; we keep both for safety in case the
-   media-query stylesheet hasn't applied yet. */
+/* JS-detected reduced motion (matches the data-attribute the
+   React component sets on mount, so we never flash a full-motion
+   gesture before the media query resolves). The two selectors
+   are equivalent functionally; we keep both for safety in case
+   the media-query stylesheet hasn't applied yet. */
 .tonearm-reduced .tonearm-swing {
   transition-duration: 0.01s !important;
 }
-.tonearm-reduced .tonearm-idle,
-.tonearm-reduced .tonearm-pip,
-.tonearm-reduced .tonearm-pip-glow,
-.tonearm-reduced .tonearm-stylus-glow {
+.tonearm-reduced .tonearm-pivot-halo,
+.tonearm-reduced .tonearm-pivot-dot,
+.tonearm-reduced .tonearm-stylus-bloom {
   animation: none !important;
 }
 

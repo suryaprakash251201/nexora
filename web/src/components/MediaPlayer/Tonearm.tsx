@@ -1,94 +1,95 @@
 /**
- * Modern turntable tonearm — redesigned for v1.9.
+ * Tonearm — modern minimal redesign.
  *
- * Visual design
- * -------------
- * A precision-machined S-shaped tonearm rendered in SVG with a refined
- * dark-graphite and champagne-palette finish. The composition is
- * deliberately minimal: every line earns its place. The result reads as
- * a modern high-end deck (think Technics SL-1200G or Rega Naia) rather
- * than a stylized replica.
+ * Design philosophy
+ * -----------------
+ * The previous version was a literal, photorealistic turntable arm: a full
+ * S-shaped tube, counterweight, gimbal bearing, brand wordmark, knurling,
+ * finger lift, anti-skate dial, screws, etc. The problem with that approach
+ * is that it competes with the album art for attention and reads as vintage
+ * gear rather than a modern app surface.
  *
- * Key visual upgrades over the previous design:
- *   - Single-source-of-truth geometry: a unified <g> with named
- *     groups (base, gimbal, counterweight, arm, headshell) so the
- *     pivot, the S-curve, and the cartridge stay in lockstep.
- *   - Champagne / graphite dual-tone metal: warm highlights on
- *     machined surfaces, cool shadows in recesses. Replaces the
- *     previous all-grey "studio monitor" look.
- *   - Subtle micro-LED indicators: a single status pip on the base
- *     that breathes with playback (not three flashing LEDs).
- *   - A glowing ruby-red stylus that doubles as a visual heartbeat —
- *     the recording-studio convention.
+ * This redesign is the opposite: a single, abstract suggestion of a tonearm
+ * — a thin tapered line from a glowing pivot to a soft accent dot. That's
+ * it. The cueing motion does the storytelling; the SVG stays out of the
+ * way.
  *
- * Animation choreography
- * ----------------------
- * The cueing gesture is a three-phase motion, modeled on a real
- * cuing lever:
- *   1. Anticipation  (paused -> playing, frame 0..0.3): the arm
- *      lifts a hair and pauses, like a hand hesitating before
- *      lowering the needle.
- *   2. Swing-in      (frame 0.3..0.7): the arm pivots from the rest
- *      position onto the outer groove. The arc is slightly slower
- *      at the start (ease-out) and faster at the end (ease-in), the
- *      inverse of inertia.
- *   3. Settle         (frame 0.7..1.0): a micro-bounce as the
- *      stylus contacts the groove, then dead-still tracking.
+ * Visual primitives
+ * -----------------
+ *  - One pivot: a soft glowing circle in the upper-right corner. Glows
+ *    mint while tracking, amber when parked.
+ *  - One arm: a single tapered line. No S-curve, no counterweight, no
+ *    subcomponents. The line is the gesture.
+ *  - One cartridge: a small rounded rectangle at the arm's tip. Tilted
+ *    slightly off-axis so it reads as a cartridge and not a thumbtack.
+ *  - One stylus: a soft accent dot. The only saturated color in the
+ *    composition, so it draws the eye exactly where the music is
+ *    "happening" — on the record.
  *
- * Pausing reverses in two phases (lift + swing-out) without the
- * anticipation, so the gesture feels deliberate, not jumpy.
+ * Animation model
+ * ---------------
+ * The whole composition lives inside a single CSS-transitioned transform
+ * (`.tonearm-swing`). When `playing` flips, the arm swings onto the
+ * record. The rotation pivot is the gimbal point itself, set via
+ * `transform-origin`. No keyframes, no JS animation; transitions handle
+ * interruptions gracefully.
  *
- * All three phases are coordinated by CSS variables that JS can
- * adjust if we ever want to make the speed responsive to track
- * energy. Right now they are constants — see TONARM_TIMING below.
+ * The pivot's color and the stylus's color are state-driven props, not
+ * CSS — this keeps the SVG free of state-class soup and lets us change
+ * the palette in JS if we ever want a "limited edition" gold/red theme.
  *
  * Accessibility
  * -------------
- * The component is purely decorative. It is marked aria-hidden and
- * respects prefers-reduced-motion: under that media query the swing
- * animation is replaced with a single 0.01s jump to the end state,
- * and the breathing/sway/glow loops are removed entirely. The
- * playback-state visual cue is then carried by the album art
- * rotation alone.
+ *  - Component is purely decorative (aria-hidden).
+ *  - `prefers-reduced-motion: reduce` cuts the swing transition to
+ *    0.01s — the state change is still visible, just without the slow
+ *    swing.
  */
 
 import { useEffect, useId, useState } from "react";
 
 /* ── Geometry constants ────────────────────────────────────────────────
  *
- * The viewBox is 120x150 and these values are the *neutral* pose of
- * the arm (paused, parked off the record). Playing/paused state
- * classes rotate this neutral pose via CSS so we never need to
- * recompute paths in JS.
+ * The viewBox is 120x100, smaller than before. The arm runs from the
+ * pivot in the upper-right to the cartridge near the lower-left, where
+ * the stylus tip touches the outer groove in the playing pose. The
+ * "parked" pose swings the arm further to the right so the cartridge
+ * sits clear of the disc.
  *
- * Pivot is the gimbal bearing centre; transform-origin in CSS is
- * derived from these so a single rotate() rotates the whole arm
- * around the right point.
+ * The pivot point here is also the CSS transform-origin, so a single
+ * `rotate()` rotates the whole arm around the gimbal — the same way a
+ * real arm pivots.
  */
-const PIVOT = { x: 92, y: 64 } as const;
+const PIVOT = { x: 96, y: 18 } as const;
+const CARTRIDGE_TIP = { x: 22, y: 78 } as const;
 const VB_W = 120;
-const VB_H = 150;
+const VB_H = 100;
 
-/* Cueing timing in seconds. Tuned by eye; the existing
- * cubic-bezier(0.3, 0.65, 0.22, 1) in CSS gives the anticipation feel. */
-const TONARM_TIMING = {
-  swingIn: 2.4,
-  swingOut: 1.9,
-  lift: 0.45,
-};
+/* Swing angle for the parked state. Positive = clockwise (sweeps the
+ * arm further to the right, off the record). Tuned to clear the disc
+ * edge at the smallest disc size we render at (220px). */
+const PARK_ANGLE = 32;
 
-/* Status-pip color shifts subtly with playback state for ambient
- * feedback (green = tracking, amber = cued/paused, red = error). */
-const PIP_COLOR = {
-  playing: "#5EE6A8", // soft mint — "tracking"
-  paused: "#F5C56B",  // warm amber — "cued, ready"
-  error: "#F46E6E",   // soft red   — placeholder, unused today
+/* Palette — the only places saturated color appears are the pivot
+ * glow, the stylus dot, and (optionally) a faint stylus bloom. The
+ * rest of the geometry is white/silver/glass so the album art
+ * remains the focal point. */
+const PALETTE = {
+  pivotPlaying: "#7EE8B0", // mint — tracking
+  pivotPaused: "#F5C56B",  // amber — parked
+  pivotError: "#F46E6E",   // reserved for future error state
+  stylusPlaying: "#FF5A66", // warm red — the "hot tip"
+  stylusPaused: "#A8AEB6",  // dim silver — at rest
+  arm: "#E8EBF0",            // bright silver for the arm
+  armShadow: "#0A0C10",      // near-black for the cast shadow
+  cartridge: "#1A1D24",      // near-black cartridge body
+  cartridgeEdge: "#3A3F4A",  // bevel highlight
 } as const;
 
 export default function Tonearm({ playing }: { playing: boolean }) {
-  /* Reduced-motion preference is read once on mount and used to
-   * pick a different animation curve in CSS via a data attribute.
-   * Doing it in JS avoids a flash of full-motion on first render. */
+  /* Reduced-motion preference is read once on mount and used to set
+   * a class that overrides the swing transition. Doing it in JS
+   * avoids a flash of full-motion on first render. */
   const [reduced, setReduced] = useState(false);
   useEffect(() => {
     if (typeof window === "undefined" || !window.matchMedia) return;
@@ -99,459 +100,179 @@ export default function Tonearm({ playing }: { playing: boolean }) {
     return () => mq.removeEventListener?.("change", apply);
   }, []);
 
-  /* Generate stable IDs for the SVG defs so multiple Tonearm
-   * instances on the same page (Hypothetical future use) don't
-   * collide. */
+  /* Stable IDs for the SVG defs so multiple Tonearm instances on the
+   * same page (theoretical future use) don't collide. */
   const uid = useId();
-  const grads = {
-    metal: `ta-metal-${uid}`,
-    metalDeep: `ta-metal-deep-${uid}`,
-    champagne: `ta-champagne-${uid}`,
-    gimbal: `ta-gimbal-${uid}`,
-    weight: `ta-weight-${uid}`,
-    headshell: `ta-headshell-${uid}`,
+  const ids = {
+    pivotGlow: `ta-pivot-glow-${uid}`,
+    arm: `ta-arm-${uid}`,
     cartridge: `ta-cartridge-${uid}`,
-    pip: `ta-pip-${uid}`,
     stylus: `ta-stylus-${uid}`,
-    armTube: `ta-arm-${uid}`,
-    shadow: `ta-shadow-${uid}`,
+    blur: `ta-blur-${uid}`,
   };
 
-  const pip = playing ? PIP_COLOR.playing : PIP_COLOR.paused;
+  const pivotColor = playing ? PALETTE.pivotPlaying : PALETTE.pivotPaused;
+  const stylusColor = playing ? PALETTE.stylusPlaying : PALETTE.stylusPaused;
 
   return (
     <div
-      className={`tonearm-swing pointer-events-none absolute z-20 aspect-[120/150] w-[94%] ${playing ? "tonearm-playing" : "tonearm-paused"} ${reduced ? "tonearm-reduced" : ""}`}
+      className={`tonearm-swing pointer-events-none absolute z-20 aspect-[120/100] w-[96%] ${playing ? "tonearm-playing" : "tonearm-paused"} ${reduced ? "tonearm-reduced" : ""}`}
       style={{
-        top: "-2%",
-        left: "32%",
+        top: "2%",
+        left: "20%",
         ["--ta-pivot-x" as any]: `${(PIVOT.x / VB_W) * 100}%`,
         ["--ta-pivot-y" as any]: `${(PIVOT.y / VB_H) * 100}%`,
-        ["--ta-swing-in" as any]: `${TONARM_TIMING.swingIn}s`,
-        ["--ta-swing-out" as any]: `${TONARM_TIMING.swingOut}s`,
-        ["--ta-lift" as any]: `${TONARM_TIMING.lift}s`,
+        ["--ta-park-angle" as any]: `${PARK_ANGLE}deg`,
       }}
       aria-hidden
       data-playing={playing ? "true" : "false"}
     >
-      <div className={`h-full w-full ${playing ? "tonearm-idle" : ""}`}>
-        <svg
-          viewBox={`0 0 ${VB_W} ${VB_H}`}
-          className="tonearm-shadow h-full w-full"
-          xmlns="http://www.w3.org/2000/svg"
-          role="img"
-        >
-          <defs>
-            {/* Primary machined metal — warm graphite with a champagne
-                highlight band on top. Used for the arm tube. */}
-            <linearGradient id={grads.metal} x1="0%" y1="0%" x2="0%" y2="100%">
-              <stop offset="0%" stopColor="#E8D9B5" />
-              <stop offset="18%" stopColor="#B8A074" />
-              <stop offset="50%" stopColor="#6A5C42" />
-              <stop offset="82%" stopColor="#3A3225" />
-              <stop offset="100%" stopColor="#1A1610" />
-            </linearGradient>
+      <svg
+        viewBox={`0 0 ${VB_W} ${VB_H}`}
+        className="h-full w-full"
+        xmlns="http://www.w3.org/2000/svg"
+        role="img"
+      >
+        <defs>
+          {/* Pivot glow — soft radial bloom that sits behind the
+              pivot dot. The colour comes from the JS palette, so the
+              whole component changes palette by changing one prop. */}
+          <radialGradient id={ids.pivotGlow} cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stopColor={pivotColor} stopOpacity="0.85" />
+            <stop offset="55%" stopColor={pivotColor} stopOpacity="0.25" />
+            <stop offset="100%" stopColor={pivotColor} stopOpacity="0" />
+          </radialGradient>
 
-            {/* Deep machined base — almost-black with a single subtle
-                highlight along the top edge. */}
-            <linearGradient id={grads.metalDeep} x1="0%" y1="0%" x2="0%" y2="100%">
-              <stop offset="0%" stopColor="#3A3D44" />
-              <stop offset="8%" stopColor="#22252B" />
-              <stop offset="92%" stopColor="#0E1014" />
-              <stop offset="100%" stopColor="#06070A" />
-            </linearGradient>
+          {/* Arm — a single linear gradient. Bright on top, dim
+              underneath, so the arm reads as a polished tube even
+              though it's a 2D line. */}
+          <linearGradient id={ids.arm} x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor="#FFFFFF" />
+            <stop offset="50%" stopColor={PALETTE.arm} />
+            <stop offset="100%" stopColor="#9DA4AE" />
+          </linearGradient>
 
-            {/* Champagne — for accents: gimbal inner ring, finger
-                lift, headshell highlights. */}
-            <linearGradient id={grads.champagne} x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#F5E6C2" />
-              <stop offset="50%" stopColor="#C9A86A" />
-              <stop offset="100%" stopColor="#7A5F2E" />
-            </linearGradient>
+          {/* Cartridge body — soft vertical gradient. Reads as a
+              blocky plastic part without being a literal
+              photorealistic cartridge. */}
+          <linearGradient id={ids.cartridge} x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor="#252830" />
+            <stop offset="100%" stopColor="#0A0C10" />
+          </linearGradient>
 
-            {/* Gimbal bearing — spherical highlight at top-left,
-                dark recess at bottom-right. The classic "ball bearing"
-                look. */}
-            <radialGradient id={grads.gimbal} cx="32%" cy="28%" r="78%">
-              <stop offset="0%" stopColor="#E8D9B5" />
-              <stop offset="35%" stopColor="#A89668" />
-              <stop offset="72%" stopColor="#4A3F2A" />
-              <stop offset="100%" stopColor="#15110A" />
-            </radialGradient>
+          {/* Stylus bloom — radial fade that pulses only while
+              playing. The colour comes from the JS palette. */}
+          <radialGradient id={ids.stylus} cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stopColor={stylusColor} stopOpacity="0.9" />
+            <stop offset="40%" stopColor={stylusColor} stopOpacity="0.45" />
+            <stop offset="100%" stopColor={stylusColor} stopOpacity="0" />
+          </radialGradient>
 
-            {/* Counterweight barrel — knurled cylinder. Two stops
-                shifted to fake the curvature of a real cylindrical
-                weight rotated in 3D. */}
-            <radialGradient id={grads.weight} cx="30%" cy="35%" r="80%">
-              <stop offset="0%" stopColor="#9A8E68" />
-              <stop offset="55%" stopColor="#4A3F2A" />
-              <stop offset="100%" stopColor="#1A1610" />
-            </radialGradient>
+          {/* Soft blur for the cast shadow under the arm. */}
+          <filter id={ids.blur} x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="1.6" />
+          </filter>
+        </defs>
 
-            {/* Headshell — light aluminium body, brushed top
-                highlight. */}
-            <linearGradient id={grads.headshell} x1="0%" y1="0%" x2="0%" y2="100%">
-              <stop offset="0%" stopColor="#E5E7EA" />
-              <stop offset="50%" stopColor="#9DA2A8" />
-              <stop offset="100%" stopColor="#3A3D42" />
-            </linearGradient>
+        {/* ── Cast shadow under the arm ─────────────────────────────
+            A single line drawn 1.2 units below the arm, blurred and
+            at low opacity. Reads as the arm casting a soft shadow
+            onto the platter. */}
+        <line
+          x1={PIVOT.x}
+          y1={PIVOT.y + 1.2}
+          x2={CARTRIDGE_TIP.x}
+          y2={CARTRIDGE_TIP.y + 1.2}
+          stroke={PALETTE.armShadow}
+          strokeWidth="3.2"
+          strokeLinecap="round"
+          opacity="0.35"
+          filter={`url(#${ids.blur})`}
+        />
 
-            {/* Cartridge — black plastic with a single thin red
-                accent line (the brand stripe on a real Ortofon). */}
-            <linearGradient id={grads.cartridge} x1="0%" y1="0%" x2="0%" y2="100%">
-              <stop offset="0%" stopColor="#1F2228" />
-              <stop offset="100%" stopColor="#0A0C10" />
-            </linearGradient>
+        {/* ── ARM ────────────────────────────────────────────────────
+            One tapered line. No S-curve, no sub-tubes, no
+            counterweight. The simplification is the point. */}
+        <line
+          x1={PIVOT.x}
+          y1={PIVOT.y}
+          x2={CARTRIDGE_TIP.x}
+          y2={CARTRIDGE_TIP.y}
+          stroke={`url(#${ids.arm})`}
+          strokeWidth="3"
+          strokeLinecap="round"
+        />
 
-            {/* Status-pip glow — radial bloom that pulses softly.
-                One colour stops only; CSS animation handles the
-                breathing. */}
-            <radialGradient id={grads.pip} cx="50%" cy="50%" r="50%">
-              <stop offset="0%" stopColor={pip} stopOpacity="0.95" />
-              <stop offset="55%" stopColor={pip} stopOpacity="0.35" />
-              <stop offset="100%" stopColor={pip} stopOpacity="0" />
-            </radialGradient>
+        {/* ── PIVOT ──────────────────────────────────────────────────
+            A glowing dot at the gimbal. Outer halo (radial gradient
+            that pulses while playing) plus a small solid inner
+            dot. The colour and animation convey playback state at
+            a glance. */}
+        <circle
+          cx={PIVOT.x}
+          cy={PIVOT.y}
+          r="9"
+          fill={`url(#${ids.pivotGlow})`}
+          className="tonearm-pivot-halo"
+        />
+        <circle
+          cx={PIVOT.x}
+          cy={PIVOT.y}
+          r="3.2"
+          fill={pivotColor}
+          className="tonearm-pivot-dot"
+        />
 
-            {/* Stylus glow — the "hot tip" effect on a real cantilever. */}
-            <radialGradient id={grads.stylus} cx="50%" cy="50%" r="50%">
-              <stop offset="0%" stopColor="#FF4D5A" stopOpacity="1" />
-              <stop offset="40%" stopColor="#FF4D5A" stopOpacity="0.6" />
-              <stop offset="100%" stopColor="#FF4D5A" stopOpacity="0" />
-            </radialGradient>
-
-            {/* Arm tube — same family as the primary metal, but
-                thinner falloff so the S-curve reads as a continuous
-                polished tube. */}
-            <linearGradient id={grads.armTube} x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#F0E2BE" />
-              <stop offset="35%" stopColor="#B8A074" />
-              <stop offset="65%" stopColor="#5C4E36" />
-              <stop offset="100%" stopColor="#2A2418" />
-            </linearGradient>
-
-            {/* Cast shadow blur. */}
-            <filter id={grads.shadow} x="-50%" y="-50%" width="200%" height="200%">
-              <feGaussianBlur stdDeviation="2.4" />
-            </filter>
-          </defs>
-
-          {/* Cast shadow on the platter surface (under the base) */}
-          <ellipse
-            cx="97"
-            cy="138"
-            rx="22"
-            ry="3.4"
-            fill="#000"
-            opacity="0.45"
-            filter={`url(#${grads.shadow})`}
+        {/* ── CARTRIDGE ─────────────────────────────────────────────
+            A small rounded rectangle at the arm's tip, tilted so
+            it reads as a cartridge and not a thumbtack. The tilt
+            is the only detail; everything else is geometry. */}
+        <g transform={`translate(${CARTRIDGE_TIP.x} ${CARTRIDGE_TIP.y}) rotate(-15)`}>
+          {/* Body */}
+          <rect
+            x="-7"
+            y="-4.5"
+            width="14"
+            height="9"
+            rx="2.2"
+            fill={`url(#${ids.cartridge})`}
+            stroke={PALETTE.cartridgeEdge}
+            strokeWidth="0.5"
           />
+          {/* Top-edge highlight — a single thin line on the top
+              edge of the cartridge. Reads as light catching a
+              chamfered edge. */}
+          <rect
+            x="-6"
+            y="-3.8"
+            width="12"
+            height="0.8"
+            rx="0.4"
+            fill="#FFFFFF"
+            opacity="0.35"
+          />
+        </g>
 
-          {/* ── BASE PLINTH ──────────────────────────────────────── */}
-          <g>
-            {/* Body */}
-            <rect
-              x="74"
-              y="106"
-              width="44"
-              height="32"
-              rx="5"
-              fill={`url(#${grads.metalDeep})`}
-              stroke="#000"
-              strokeWidth="0.6"
-            />
-            {/* Top edge highlight */}
-            <rect
-              x="76"
-              y="107.5"
-              width="40"
-              height="1.2"
-              rx="0.6"
-              fill="#FFFFFF"
-              opacity="0.18"
-            />
-            {/* Bevelled bottom shadow */}
-            <rect
-              x="76"
-              y="135"
-              width="40"
-              height="2"
-              rx="1"
-              fill="#000"
-              opacity="0.5"
-            />
-            {/* Mounting screws — four, one per corner. Tiny
-                champagne rings around dark sockets. */}
-            {[
-              [80, 134],
-              [112, 134],
-              [80, 110],
-              [112, 110],
-            ].map(([cx, cy]) => (
-              <g key={`screw-${cx}-${cy}`}>
-                <circle cx={cx} cy={cy} r="1.4" fill="#F5E6C2" opacity="0.4" />
-                <circle cx={cx} cy={cy} r="1" fill="#0A0C10" />
-              </g>
-            ))}
-
-            {/* Status pip — single breathing LED that glows mint
-                while tracking, amber when parked. Carries the
-                playback-state visual cue so colour-blind users
-                still get timing feedback. */}
-            <circle
-              cx="96"
-              cy="120"
-              r="2.6"
-              fill={pip}
-              className="tonearm-pip"
-            />
-            <circle
-              cx="96"
-              cy="120"
-              r="5.2"
-              fill={`url(#${grads.pip})`}
-              className="tonearm-pip-glow"
-            />
-
-            {/* Brand wordmark — tiny, etched feel. Replaces the
-                awkward red cueing lever from the previous design
-                (the lever was a visual noise element that didn't
-                serve any user-facing purpose). */}
-            <text
-              x="78"
-              y="129"
-              fontFamily="ui-sans-serif, system-ui, sans-serif"
-              fontSize="2.6"
-              fontWeight="600"
-              letterSpacing="0.4"
-              fill="#9DA2A8"
-              opacity="0.6"
-            >
-              N·9
-            </text>
-          </g>
-
-          {/* ── COUNTERWEIGHT (behind the pivot) ─────────────────── */}
-          <g>
-            {/* Stub from pivot */}
-            <line
-              x1={PIVOT.x}
-              y1={PIVOT.y}
-              x2="106"
-              y2="125"
-              stroke={`url(#${grads.metal})`}
-              strokeWidth="3.2"
-              strokeLinecap="round"
-            />
-            {/* Barrel */}
-            <g transform="rotate(45 106 126)">
-              <rect
-                x="99"
-                y="119"
-                width="14"
-                height="14"
-                rx="3.5"
-                fill={`url(#${grads.weight})`}
-                stroke="#000"
-                strokeWidth="0.6"
-              />
-              {/* Knurling — five fine vertical lines suggest
-                  grip texture without overdoing it. */}
-              {[101, 103.5, 106, 108.5, 111].map((x) => (
-                <line
-                  key={`knurl-${x}`}
-                  x1={x}
-                  y1="120.5"
-                  x2={x}
-                  y2="131.5"
-                  stroke="#000"
-                  strokeWidth="0.4"
-                  opacity="0.55"
-                />
-              ))}
-              {/* Top edge highlight */}
-              <rect
-                x="100"
-                y="120"
-                width="12"
-                height="1.4"
-                rx="0.7"
-                fill="#E8D9B5"
-                opacity="0.45"
-              />
-            </g>
-            {/* Lock collar — a thin ring that sits between the
-                weight and the pivot. */}
-            <rect
-              x="99"
-              y="117"
-              width="6"
-              height="4"
-              rx="1.5"
-              transform="rotate(45 102 119)"
-              fill="#0A0C10"
-              stroke="#7A5F2E"
-              strokeWidth="0.4"
-            />
-          </g>
-
-          {/* ── S-SHAPED ARM TUBE ────────────────────────────────── */}
-          <g>
-            {/* Shadow under the tube */}
-            <path
-              d={`M${PIVOT.x} ${PIVOT.y} C 88 86, 76 76, 60 70 C 46 65, 32 58, 25 48`}
-              fill="none"
-              stroke="#000"
-              strokeWidth="6.2"
-              strokeLinecap="round"
-              opacity="0.5"
-              transform="translate(0.6 0.9)"
-            />
-            {/* Main tube */}
-            <path
-              d={`M${PIVOT.x} ${PIVOT.y} C 88 86, 76 76, 60 70 C 46 65, 32 58, 25 48`}
-              fill="none"
-              stroke={`url(#${grads.armTube})`}
-              strokeWidth="5.4"
-              strokeLinecap="round"
-            />
-            {/* Specular highlight along the top of the tube */}
-            <path
-              d={`M${PIVOT.x} ${PIVOT.y - 1.8} C 88 84, 76 74, 60 68 C 46 63, 32 56, 25 46`}
-              fill="none"
-              stroke="#F5E6C2"
-              strokeWidth="0.9"
-              strokeLinecap="round"
-              opacity="0.45"
-            />
-          </g>
-
-          {/* ── HEAdSHELL + CARTRIDGE (the business end) ─────────── */}
-          <g transform="translate(25 48) rotate(-130)">
-            {/* Finger lift — a tiny tab at the back of the headshell
-                that the DJ uses to cue by hand. */}
-            <path
-              d="M-3 -6 L4 -10 L5.5 -6.5 L-1.5 -3 Z"
-              fill={`url(#${grads.champagne})`}
-              stroke="#0A0C10"
-              strokeWidth="0.4"
-            />
-            {/* Shell body */}
-            <path
-              d="M-4 -5.5 L14 -5.5 Q18 0 14 5.5 L-4 5.5 Q-7 0 -4 -5.5 Z"
-              fill={`url(#${grads.headshell})`}
-              stroke="#0A0C10"
-              strokeWidth="0.5"
-            />
-            {/* Shell highlight */}
-            <rect
-              x="-2"
-              y="-4.5"
-              width="14"
-              height="1.3"
-              rx="0.6"
-              fill="#FFFFFF"
-              opacity="0.4"
-            />
-            {/* Cartridge — the black plastic block that holds the
-                stylus. */}
-            <rect
-              x="1.2"
-              y="-3.6"
-              width="10.5"
-              height="7.2"
-              rx="1.2"
-              fill={`url(#${grads.cartridge})`}
-              stroke="#000"
-              strokeWidth="0.4"
-            />
-            {/* Brand stripe on the cartridge — the single accent of
-                red. Replaces the previous two arbitrary red dots
-                with one tasteful horizontal line. */}
-            <rect
-              x="2.6"
-              y="-2"
-              width="7.4"
-              height="1"
-              rx="0.5"
-              fill="#FF4D5A"
-              opacity="0.9"
-            />
-            {/* Cantilever — the thin metal rod that carries the
-                stylus from the cartridge body to the groove. */}
-            <line
-              x1="11.8"
-              y1="0"
-              x2="15.6"
-              y2="0.4"
-              stroke="#E5E7EA"
-              strokeWidth="0.8"
-              strokeLinecap="round"
-            />
-            {/* Stylus tip — a tiny ruby-red dot. The real thing is
-                a diamond, but red reads better at this scale and
-                echoes the brand stripe. */}
-            <circle
-              cx="16.2"
-              cy="0.6"
-              r="0.7"
-              fill="#FF4D5A"
-            />
-            {/* Hot-tip glow — only visible while the needle is in
-                the groove. Pulses at ~1.2s to feel like a heartbeat. */}
-            <circle
-              cx="16.2"
-              cy="0.6"
-              r="3.2"
-              fill={`url(#${grads.stylus})`}
-              className="tonearm-stylus-glow"
-              style={{ opacity: playing ? 1 : 0 }}
-            />
-            {/* Soft warm cast on the shell from the glow */}
-            <circle
-              cx="16.2"
-              cy="0.6"
-              r="5.2"
-              fill="#FF4D5A"
-              opacity={playing ? 0.06 : 0}
-              filter={`url(#${grads.shadow})`}
-            />
-          </g>
-
-          {/* ── GIMBAL PIVOT (on top of everything) ───────────────── */}
-          <g>
-            {/* Outer collar */}
-            <circle
-              cx={PIVOT.x}
-              cy={PIVOT.y}
-              r="10.5"
-              fill={`url(#${grads.gimbal})`}
-              stroke="#0A0C10"
-              strokeWidth="0.8"
-            />
-            {/* Inner recess */}
-            <circle
-              cx={PIVOT.x}
-              cy={PIVOT.y}
-              r="6"
-              fill="#0A0C10"
-              stroke="#7A5F2E"
-              strokeWidth="0.6"
-            />
-            {/* Center pin */}
-            <circle cx={PIVOT.x} cy={PIVOT.y} r="1.4" fill="#F5E6C2" />
-            {/* Top-left specular */}
-            <ellipse
-              cx={PIVOT.x - 3.4}
-              cy={PIVOT.y - 4.2}
-              rx="2.4"
-              ry="1.4"
-              fill="#FFFFFF"
-              opacity="0.55"
-              transform={`rotate(-30 ${PIVOT.x - 3.4} ${PIVOT.y - 4.2})`}
-            />
-          </g>
-        </svg>
-      </div>
+        {/* ── STYLUS ─────────────────────────────────────────────────
+            The only saturated colour in the composition (when
+            playing). The dot is the literal "where the music is
+            happening" — on the record. A soft bloom behind it
+            pulses only while playing, mirroring the pivot halo. */}
+        <circle
+          cx={CARTRIDGE_TIP.x}
+          cy={CARTRIDGE_TIP.y}
+          r="6.5"
+          fill={`url(#${ids.stylus})`}
+          className="tonearm-stylus-bloom"
+          style={{ opacity: playing ? 1 : 0 }}
+        />
+        <circle
+          cx={CARTRIDGE_TIP.x}
+          cy={CARTRIDGE_TIP.y}
+          r="1.6"
+          fill={stylusColor}
+        />
+      </svg>
     </div>
   );
 }
