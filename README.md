@@ -11,7 +11,7 @@
 
 <p align="center">
   <a href="https://github.com/suryaprakash251201/nexora/actions/workflows/ci.yml"><img src="https://github.com/suryaprakash251201/nexora/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
-  <a href="https://github.com/suryaprakash251201/nexora/blob/main/VERSION"><img src="https://img.shields.io/badge/version-1.8.0-5B8CFF?style=flat-square" alt="version 1.8.0" /></a>
+  <a href="https://github.com/suryaprakash251201/nexora/blob/main/VERSION"><img src="https://img.shields.io/badge/version-1.9.0-5B8CFF?style=flat-square" alt="version 1.9.0" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-22C55E?style=flat-square" alt="license MIT" /></a>
   <a href="https://golang.org"><img src="https://img.shields.io/badge/go-1.26-00ADD8?style=flat-square&logo=go" alt="Go 1.26" /></a>
   <a href="https://react.dev"><img src="https://img.shields.io/badge/react-19-58C4CC?style=flat-square&logo=react" alt="React 19" /></a>
@@ -161,7 +161,7 @@ docker compose up -d --build
 docker compose ps
 
 # 3. Verify
-curl -f http://localhost/healthz          # {"service":"nexora","status":"ok","version":"1.8.0"}
+curl -f http://localhost/healthz          # {"service":"nexora","status":"ok","version":"1.9.0"}
 docker compose logs -f nexora             # tail logs
 ```
 
@@ -192,12 +192,12 @@ docker compose up -d --build     # upgrade (migrations run forward at startup)
 <summary><strong>Docker run (single container)</strong></summary>
 
 ```bash
-docker build -t nexora:1.8.0 --build-arg VERSION=1.8.0 .
+docker build -t nexora:1.9.0 --build-arg VERSION=1.9.0 .
 docker run -d --name nexora -p 8080:80 \
   -v nexora-data:/app/data \
   -v $PWD/data/files:/mnt/files \
   -e NEXORA_SESSION_SECRET=$(openssl rand -hex 32) \
-  nexora:1.8.0
+  nexora:1.9.0
 curl -f http://localhost:8080/healthz
 ```
 
@@ -289,8 +289,8 @@ Nexora can auto-provision users from `Tailscale-User-Login` headers when `NEXORA
 
 | App | Stack | Version |
 |-----|-------|---------|
-| **Web** | React 19, Vite, Tailwind 4, Zustand, React Query, Motion | `1.8.0` — `web/` |
-| **Desktop** | Tauri 2 wrapper around `web/dist` | `1.8.0` — `desktop/` |
+| **Web** | React 19, Vite, Tailwind 4, Zustand, React Query, Motion | `1.9.0` — `web/` |
+| **Desktop** | Tauri 2 wrapper around `web/dist` | `1.9.0` — `desktop/` |
 | **Mobile** | Expo 54 / RN 0.81, `expo-secure-store`, `react-native-track-player` | `1.0.0` independent — `mobile/` |
 | **Landing** | Static, Cloudflare Pages | `website/` |
 
@@ -365,7 +365,7 @@ docker-compose.yml    Recommended deploy (nexora + nexora-init chown sidecar)
 docker-compose.postgres.yml  Overlay for postgres:16-alpine
 .env.example          Documented NEXORA_* defaults
 Makefile              build / test / lint / docker targets
-VERSION               Single source of truth (1.8.0) — web/desktop/image derive from it
+VERSION               Single source of truth (1.9.0) — web/desktop/image derive from it
 ```
 
 ---
@@ -578,7 +578,7 @@ Issues and PRs welcome. Please:
 - For `mobile/`, verify `npx patch-package --error-on-fail` after dependency changes.
 - Keep migrations forward-only and convertible for Postgres.
 
-Versioning follows SemVer; current version in root [`VERSION`](VERSION) (`1.8.0`) — `web` and `desktop` are synced to it, `mobile` has an independent store version.
+Versioning follows SemVer; current version in root [`VERSION`](VERSION) (`1.9.0`) — `web` and `desktop` are synced to it, `mobile` has an independent store version.
 
 ---
 

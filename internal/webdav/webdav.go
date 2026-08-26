@@ -1,5 +1,12 @@
 // Package webdav provides a WebDAV server that maps to Nexora's storage roots.
 // This enables mounting Nexora as a network drive in Windows, macOS, and Linux.
+//
+// Deprecated: this package is currently unwired (see AGENTS.md — not
+// mounted in server.go). It is preserved for future reference and is
+// known to compile, but the public API may change without notice if
+// the WebDAV surface is ever exposed. Do not extend it without first
+// deciding whether to mount it; if you do mount it, remove this
+// deprecation notice and add an integration test in server_test.go.
 package webdav
 
 import (

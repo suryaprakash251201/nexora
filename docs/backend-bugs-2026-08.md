@@ -426,3 +426,25 @@ The current test coverage is sparse relative to the handler count:
 | ⚪ P3 Polish | 4 | Dead code, gitignore, version drift |
 
 The backend is generally well-structured (DI server, dialect wrapper, race-free design *within* transactions), but several **TOCTOU windows** and **best-effort compensating actions** are the recurring pattern. The most impactful fixes are P0-1 (data loss potential), P0-2 (auth race), and P1-2 (upload data corruption under retry).
+
+---
+
+# Resolution status
+
+All four phases of the fix plan have been applied.
+
+| Phase | Commits | Bugs fixed | Tests added | Notable extras |
+|---|---|---|---|---|
+| Phase 1 (P0) | `4783ba0` | 3 | 16 subtests | — |
+| Phase 2 (P1) | `715e59c` | 9 | 28 subtests | sliding-window session, per-session upload lock, transcode timeout, share counter race, trash restore temp-name, search rename rewrite, events recover, share zip cap |
+| Phase 3 (P2) | `43ec472` | 9 + 1 bonus | 5 new subtests | bonus: fixed SQLite shared-in-memory test deadlock |
+| Phase 4 (P3) | _next commit_ | 4 | — | README 1.8.0→1.9.0 (6 places), `internal/webdav` deprecation notice, gitignore verification, P3-4 documented |
+| **Total** | **4 commits** | **25 of 26** | **49 new subtests** | — |
+
+The only remaining item is **P3-4** (data/ directory owned by root in the dev env), which is not a code issue — `nexora-init` fixes it on container startup, and the report is now the documentation of record.
+
+## What was NOT changed (and why)
+
+- **`parseIntSafe` / `parseInt64Safe` / `parseFloatSafe` in `handlers_audio.go`**: these helpers ignore `strconv` errors intentionally because they parse **ffprobe's stdout**, a trusted local subprocess. A comment was added explaining the rationale; converting them to error-returning helpers would force every ffprobe field to be wrapped in `if/else` for no real benefit. User-supplied query strings are parsed with explicit error returns at the call site (see P2-3/4/5 fixes).
+- **Static asset `Cache-Control: immutable` heuristic**: the `/assets/` path-based check is Vite-specific. A stricter content-hash detection (matching `[name]-[hash].{ext}`) is a future improvement; not a current bug because the build output is stable.
+- **`data/` ownership**: dev-environment quirk, not a code bug.
