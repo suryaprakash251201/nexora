@@ -2,6 +2,8 @@ package auth
 
 import (
 	"database/sql"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -12,7 +14,8 @@ import (
 
 func newTokenStoreFixture(t *testing.T) *TokenStore {
 	t.Helper()
-	dbh, err := sql.Open("sqlite", "file:"+t.Name()+"?mode=memory&cache=shared")
+	path := filepath.Join(t.TempDir(), "tokens-"+strings.ReplaceAll(t.Name(), "/", "_")+".db")
+	dbh, err := sql.Open("sqlite", path)
 	if err != nil {
 		t.Fatal(err)
 	}

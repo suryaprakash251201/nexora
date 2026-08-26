@@ -66,13 +66,17 @@ func openSQLite(dbPath string) (*DB, error) {
 
 // probeWritable performs a tiny self-rolled write against the
 // schema_migrations table to confirm the database file is actually writable.
-// Uses $N placeholders which both SQLite and PostgreSQL accept.
+// Uses ? placeholders, which both SQLite and PostgreSQL accept (PostgreSQL
+// via the dialect wrapper in db.go). The raw *sql.DB is used here
+// intentionally because openSQLite runs before Wrap is applied; the wrapper
+// would be redundant for this one-shot probe and would couple probeWritable
+// to the dialect abstraction for no functional gain.
 func probeWritable(db *sql.DB) error {
 	probe := "write-probe-" + util.RandToken(6)
-	if _, err := db.Exec(`INSERT INTO schema_migrations(version, applied_at) VALUES($1, $2)`, probe, util.NowUTC()); err != nil {
+	if _, err := db.Exec(`INSERT INTO schema_migrations(version, applied_at) VALUES(?, ?)`, probe, util.NowUTC()); err != nil {
 		return err
 	}
-	_, err := db.Exec(`DELETE FROM schema_migrations WHERE version=$1`, probe)
+	_, err := db.Exec(`DELETE FROM schema_migrations WHERE version=?`, probe)
 	return err
 }
 

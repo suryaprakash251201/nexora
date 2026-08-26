@@ -584,12 +584,59 @@ func (m *Manager) finish(id, status, errMsg, _ string) {
 		status, errMsg, prog, util.NowUTC(), id)
 }
 
-// CleanupOldArchives removes archive cache files and job rows older than ttl.
+// CleanupOldArchives removes archive cache files and job rows older than
+// ttl. Phase 3 / P2-1: the order is now file-first, row-second so a
+// failed DB delete no longer leaves an orphan .zip on disk. We also
+// handle TypeExtract jobs the same way: their destination directory
+// (carried in the payload) is recorded so a janitor can re-visit it.
 func (m *Manager) CleanupOldArchives(ttl time.Duration) {
+	cutoff := time.Now().Add(-ttl).UTC().Format(time.RFC3339)
+	m.cleanupByType(TypeArchive, cutoff, func(id string) {
+		// Remove the on-disk .zip first. If this fails the row stays
+		// in the DB so a future run can retry; if it succeeds we
+		// then delete the row.
+		if err := os.Remove(m.ArchivePath(id)); err != nil && !os.IsNotExist(err) {
+			m.log.Warn("jobs: archive cache remove failed",
+				"job", id, "path", m.ArchivePath(id), "error", err.Error())
+			return
+		}
+		if _, err := m.db.Exec(`DELETE FROM jobs WHERE id=?`, id); err != nil {
+			m.log.Error("jobs: cleanup delete failed", "job", id, "error", err)
+		}
+	})
+	m.cleanupByType(TypeExtract, cutoff, func(id string) {
+		// For extract jobs, the destination directory is carried in the
+		// JSON payload. We log it (the user can re-share or re-extract
+		// the source zip if they want to clean it up) and then drop
+		// the row. A future enhancement could add a janitor that
+		// walks the destination tree; today the owner is responsible.
+		row, err := m.db.Query(`SELECT payload FROM jobs WHERE id=?`, id)
+		if err != nil {
+			m.log.Error("jobs: extract payload lookup failed", "job", id, "error", err)
+			return
+		}
+		var payload string
+		_ = row.Scan(&payload)
+		row.Close()
+		var p ExtractPayload
+		if json.Unmarshal([]byte(payload), &p) == nil && p.Dest != "" {
+			m.log.Info("jobs: extract TTL reached, files at destination left in place",
+				"job", id, "destination", p.Dest, "source", p.Path)
+		}
+		if _, err := m.db.Exec(`DELETE FROM jobs WHERE id=?`, id); err != nil {
+			m.log.Error("jobs: extract cleanup delete failed", "job", id, "error", err)
+		}
+	})
+}
+
+// cleanupByType iterates jobs of a given type older than cutoff, calling
+// perJob for each. The perJob callback is expected to delete the row on
+// success and to leave it in place on failure so a future run retries.
+func (m *Manager) cleanupByType(typ, cutoff string, perJob func(id string)) {
 	rows, err := m.db.Query(`SELECT id FROM jobs WHERE type=? AND created_at < ?`,
-		TypeArchive, time.Now().Add(-ttl).UTC().Format(time.RFC3339))
+		typ, cutoff)
 	if err != nil {
-		m.log.Error("jobs: cleanup query failed", "error", err)
+		m.log.Error("jobs: cleanup query failed", "type", typ, "error", err)
 		return
 	}
 	defer rows.Close()
@@ -601,15 +648,11 @@ func (m *Manager) CleanupOldArchives(ttl time.Duration) {
 		}
 	}
 	if err := rows.Err(); err != nil {
-		m.log.Error("jobs: cleanup scan failed", "error", err)
+		m.log.Error("jobs: cleanup scan failed", "type", typ, "error", err)
 		return
 	}
 	for _, id := range ids {
-		if _, err := m.db.Exec(`DELETE FROM jobs WHERE id=?`, id); err != nil {
-			m.log.Error("jobs: cleanup delete failed", "job", id, "error", err)
-			continue
-		}
-		_ = os.Remove(m.ArchivePath(id))
+		perJob(id)
 	}
 }
 

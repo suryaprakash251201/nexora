@@ -40,7 +40,18 @@ func (s *Server) handleStatic(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
-		// Cache static assets with content hashes forever, but always revalidate index.html
+		// Cache static assets with content hashes forever, but always revalidate index.html.
+		//
+		// Phase 3 / P2-10: the /assets/ check is path-based (Vite's
+		// default output structure). It is robust today because Vite
+		// emits hashed bundles at <base>/assets/<name>-<hash>.{js,css,...}
+		// and unhashed files elsewhere. A future build-tool change
+		// (e.g. a new chunk directory or a name that doesn't match
+		// /assets/) would silently fall through to the default
+		// no-Cache-Control response. A stricter alternative is to
+		// inspect the file name for a content-hash suffix (matching
+		// Vite's `[name]-[hash].[ext]` pattern); that's a TODO, not a
+		// current bug.
 		if strings.HasSuffix(candidate, "index.html") {
 			w.Header().Set("Cache-Control", "no-cache, must-revalidate")
 		} else if strings.Contains(candidate, "/assets/") {

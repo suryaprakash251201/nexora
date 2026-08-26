@@ -22,7 +22,12 @@ func (s *Server) handleThumbnail(w http.ResponseWriter, r *http.Request) {
 		s.writeAccessError(w, r, err)
 		return
 	}
-	size, _ := strconv.Atoi(queryParam(r, "size", "256"))
+	sizeStr := queryParam(r, "size", "256")
+	size, perr := strconv.Atoi(sizeStr)
+	if perr != nil || size <= 0 {
+		writeError(w, http.StatusBadRequest, "invalid_size", "size must be a positive integer", middleware.GetRequestID(r.Context()))
+		return
+	}
 	data, err := s.Preview.Thumbnail(acc.provider, rootID, rel, size)
 	if err != nil {
 		// Fall back to embedded album art for audio files (MP3/FLAC/M4A).

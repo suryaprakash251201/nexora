@@ -103,7 +103,7 @@ func (s *Server) handleFindDuplicates(w http.ResponseWriter, r *http.Request) {
 						"root_id":  rootID,
 					})
 				}
-				attachTags(s.DB, dupesMap, rootID, user.ID)
+				attachTags(s.DB, s.Log, dupesMap, rootID, user.ID)
 				duplicates = append(duplicates, dupesMap)
 			}
 		}
@@ -240,7 +240,7 @@ func (s *Server) handleStorageStats(w http.ResponseWriter, r *http.Request) {
 
 	// Attach tags to largest files
 	if len(stats.Largest) > 0 {
-		attachTags(s.DB, stats.Largest, rootID, user.ID)
+		attachTags(s.DB, s.Log, stats.Largest, rootID, user.ID)
 	}
 
 	writeJSON(w, http.StatusOK, stats)

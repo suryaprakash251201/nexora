@@ -19,6 +19,8 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"errors"
+	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -31,9 +33,17 @@ import (
 // newResetTokenStore builds a fresh in-memory store with the reset_tokens
 // table pre-created (we don't run migrations because the rest of the schema
 // isn't needed for this test).
+//
+// Each subtest gets its OWN database file: the in-memory shared mode
+// (`cache=shared`) would let parallel subtests collide on the same
+// underlying DB, causing spurious deadlocks under `go test ./...`.
+// We use a unique name per test invocation via t.TempDir() + a
+// uniquely-named file, which is also closer to the production
+// per-process DB layout.
 func newResetTokenStore(t *testing.T) *UserStore {
 	t.Helper()
-	dbh, err := sql.Open("sqlite", "file:"+t.Name()+"?mode=memory&cache=shared")
+	path := filepath.Join(t.TempDir(), "reset-"+strings.ReplaceAll(t.Name(), "/", "_")+".db")
+	dbh, err := sql.Open("sqlite", path)
 	if err != nil {
 		t.Fatal(err)
 	}

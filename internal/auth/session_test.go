@@ -11,6 +11,8 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -27,7 +29,8 @@ func sha256SumRaw(t *testing.T, raw string) string {
 
 func newSessionStoreFixture(t *testing.T, lifetime time.Duration) *SessionStore {
 	t.Helper()
-	dbh, err := sql.Open("sqlite", "file:"+t.Name()+"?mode=memory&cache=shared")
+	path := filepath.Join(t.TempDir(), "session-"+strings.ReplaceAll(t.Name(), "/", "_")+".db")
+	dbh, err := sql.Open("sqlite", path)
 	if err != nil {
 		t.Fatal(err)
 	}

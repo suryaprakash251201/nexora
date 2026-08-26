@@ -202,8 +202,25 @@ func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 		 VALUES(?,?,?,?,?,?,?,?,?)`,
 		util.NewID("tr_", 12), user.ID, rootID, rel, trashRel, info.Name, info.Size, boolToInt(info.IsDir), util.NowUTC())
 	if err != nil {
-		// Best-effort: try to undo the move.
-		_ = acc.provider.Move(trashRel, rel)
+		// Best-effort: try to undo the move. Phase 3 / P2-9: the undo
+		// failure is now logged and audited so an orphan file in the
+		// trash dir with no DB row is not invisible. The old code
+		// dropped the error on the floor.
+		if undoErr := acc.provider.Move(trashRel, rel); undoErr != nil {
+			if s.Log != nil {
+				s.Log.Error("delete: file moved to trash but DB row insert failed AND undo failed \u2014 orphan in trash dir",
+					"path", rel, "trash_path", trashRel,
+					"db_error", err.Error(),
+					"undo_error", undoErr.Error(),
+				)
+			}
+			_ = s.Audit.Record(user.ID, "trash_orphan", rel,
+				"file moved to trash; DB row insert failed: "+err.Error()+
+					"; undo failed: "+undoErr.Error(), clientIP(r))
+		} else if s.Log != nil {
+			s.Log.Warn("delete: file moved back to original after trash-record failure",
+				"path", rel, "db_error", err.Error())
+		}
 		writeError(w, http.StatusInternalServerError, "internal_error", "could not record trash entry", middleware.GetRequestID(r.Context()))
 		return
 	}

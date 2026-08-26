@@ -9,12 +9,14 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/nexora/nexora/internal/events"
 	"github.com/nexora/nexora/internal/middleware"
 	"github.com/nexora/nexora/internal/sharing"
 	"github.com/nexora/nexora/internal/storage"
+	"github.com/nexora/nexora/internal/util"
 )
 
 // maxShareEntries caps how many folder entries the public info endpoint lists.
@@ -55,10 +57,13 @@ func (s *Server) handleSharePublicInfo(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "not_found", "This link is invalid or has been revoked", middleware.GetRequestID(r.Context()))
 		return
 	}
-	// Report expiry/exhaustion without leaking details.
+	// Report expiry/exhaustion without leaking details. We do this
+	// with a direct expiry check on the share row (no Argon2id
+	// verify) so password-protected shares don't pay the CPU cost on
+	// every page load just to display a status badge. P2-6.
 	status := "ok"
 	if sh.ExpiresAt != nil {
-		if _, aerr := s.Shares.Access(token, ""); aerr == sharing.ErrExpired {
+		if exp := util.ParseTime(*sh.ExpiresAt); !exp.IsZero() && time.Now().After(exp) {
 			status = "expired"
 		}
 	}

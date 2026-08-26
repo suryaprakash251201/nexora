@@ -281,8 +281,19 @@ func (s *Server) handleExecuteSavedSearch(w http.ResponseWriter, r *http.Request
 	}
 
 	// Build search query
-	limit, _ := strconv.Atoi(queryParam(r, "limit", "200"))
-	offset, _ := strconv.Atoi(queryParam(r, "offset", "0"))
+	limit, perr := strconv.Atoi(queryParam(r, "limit", "200"))
+	if perr != nil || limit < 0 {
+		writeError(w, http.StatusBadRequest, "invalid_limit", "limit must be a non-negative integer", middleware.GetRequestID(r.Context()))
+		return
+	}
+	if limit > 1000 {
+		limit = 1000
+	}
+	offset, oerr := strconv.Atoi(queryParam(r, "offset", "0"))
+	if oerr != nil || offset < 0 {
+		writeError(w, http.StatusBadRequest, "invalid_offset", "offset must be a non-negative integer", middleware.GetRequestID(r.Context()))
+		return
+	}
 
 	searchReq := search.Query{
 		Name:  ss.Query,

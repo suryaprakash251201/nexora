@@ -3,11 +3,6 @@ package api
 import (
 	"errors"
 	"fmt"
-	"github.com/nexora/nexora/internal/auth"
-	"github.com/nexora/nexora/internal/database"
-	"github.com/nexora/nexora/internal/events"
-	"github.com/nexora/nexora/internal/middleware"
-	"github.com/nexora/nexora/internal/storage"
 	"io/fs"
 	"net/http"
 	"net/url"
@@ -16,6 +11,13 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+
+	"github.com/nexora/nexora/internal/auth"
+	"github.com/nexora/nexora/internal/database"
+	"github.com/nexora/nexora/internal/events"
+	"github.com/nexora/nexora/internal/logger"
+	"github.com/nexora/nexora/internal/middleware"
+	"github.com/nexora/nexora/internal/storage"
 )
 
 // access bundles a resolved root and its provider after permission checks.
@@ -124,7 +126,7 @@ func (s *Server) handleListFiles(w http.ResponseWriter, r *http.Request) {
 
 	// Attach tags
 	user, _ := auth.UserFromContext(r.Context())
-	attachTags(s.DB, out, rootID, user.ID)
+	attachTags(s.DB, s.Log, out, rootID, user.ID)
 
 	hasMore := end < total
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -138,7 +140,14 @@ func (s *Server) handleListFiles(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func attachTags(db *database.DB, files []map[string]any, rootID, userID string) {
+// attachTags hydrates a file-list response with the requesting user's
+// tags. Phase 3 / P2-2: query errors are now logged at warn level
+// (previously silent), so a missing or botched-migrated table surfaces
+// in the log stream instead of leaving the user staring at a "no tags"
+// UI.
+//
+// `log` may be nil (tests), in which case errors are silently dropped.
+func attachTags(db *database.DB, log *logger.Logger, files []map[string]any, rootID, userID string) {
 	if len(files) == 0 {
 		return
 	}
@@ -152,7 +161,11 @@ func attachTags(db *database.DB, files []map[string]any, rootID, userID string) 
 		JOIN tags t ON ft.tag_id = t.id
 		WHERE ft.root_id = ? AND t.user_id = ?
 	`, rootID, userID)
-	if err == nil {
+	if err != nil {
+		if log != nil {
+			log.Warn("attachTags: query failed", "error", err.Error(), "root", rootID)
+		}
+	} else {
 		defer rows.Close()
 		for rows.Next() {
 			var path, id, name, color string

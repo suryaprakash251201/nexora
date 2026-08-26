@@ -276,6 +276,13 @@ func (s *Server) handleAudioFormats(w http.ResponseWriter, r *http.Request) {
 }
 
 // ── small helpers ───────────────────────────────────────────────────────────
+//
+// parseIntSafe / parseInt64Safe / parseFloatSafe are intentionally
+// permissive: they parse ffprobe's stdout (a trusted local subprocess)
+// where a missing or non-numeric field just means "not applicable" and
+// should default to 0. User-supplied query strings are NOT passed to
+// these helpers — those are parsed with explicit error returns at the
+// call site (e.g. handlers_preview, handlers_saved_searches).
 
 func parseIntSafe(s string) int {
 	v, _ := strconv.Atoi(s)
