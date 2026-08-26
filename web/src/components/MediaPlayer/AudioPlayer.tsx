@@ -40,6 +40,7 @@ import { QueuePanel } from "./QueuePanel";
 import { MiniPlayer } from "./MiniPlayer";
 import { fmtTime } from "@nexora/core";
 import { CoverArt } from "./CoverArt";
+import Tonearm from "./Tonearm";
 import { useFocusTrap } from "../../lib/useFocusTrap";
 import { isTauri as isTauriFn } from "../../lib/desktop";
 
@@ -560,103 +561,9 @@ export function AudioPlayer({
       <div className="relative flex w-full max-w-2xl flex-col items-center justify-center px-4 sm:px-6 pt-4 sm:pt-0 pb-20 sm:pb-8" style={{ paddingBottom: "max(5rem, env(safe-area-inset-bottom))" }}>
         {/* Album Art — spinning vinyl with tonearm (nudged below center) */}
         <div className="relative mt-2 sm:mt-8 mb-4 sm:mb-10 flex-shrink-0">
-          {/* Tonearm — high-detail turntable arm, pivots from bottom-right */}
-          <div
-            className={`absolute -top-3 -right-3 sm:-top-5 sm:-right-5 z-20 w-24 sm:w-32 h-32 sm:h-40 origin-bottom-right transition-all duration-1000 ease-in-out ${
-              playing ? 'rotate-0 translate-x-0 translate-y-0' : 'rotate-[22deg] translate-x-3 -translate-y-3'
-            }`}
-          >
-            <svg viewBox="0 0 70 80" className="w-full h-full drop-shadow-2xl" xmlns="http://www.w3.org/2000/svg">
-              <defs>
-                <linearGradient id="tubeGrad" x1="0%" y1="0%" x2="100%" y2="80%">
-                  <stop offset="0%" stopColor="#E5E7EB"/>
-                  <stop offset="25%" stopColor="#F3F4F6"/>
-                  <stop offset="50%" stopColor="#9CA3AF"/>
-                  <stop offset="75%" stopColor="#D1D5DB"/>
-                  <stop offset="100%" stopColor="#6B7280"/>
-                </linearGradient>
-                <linearGradient id="baseGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stopColor="#6B7280"/>
-                  <stop offset="50%" stopColor="#4B5563"/>
-                  <stop offset="100%" stopColor="#374151"/>
-                </linearGradient>
-                <radialGradient id="cwGrad" cx="40%" cy="35%" r="60%">
-                  <stop offset="0%" stopColor="#9CA3AF"/>
-                  <stop offset="100%" stopColor="#4B5563"/>
-                </radialGradient>
-                <linearGradient id="headGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stopColor="#D1D5DB"/>
-                  <stop offset="50%" stopColor="#9CA3AF"/>
-                  <stop offset="100%" stopColor="#6B7280"/>
-                </linearGradient>
-                <linearGradient id="cartGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-                  <stop offset="0%" stopColor="#374151"/>
-                  <stop offset="100%" stopColor="#111827"/>
-                </linearGradient>
-                <filter id="needleGlow">
-                  <feGaussianBlur stdDeviation="1" result="blur"/>
-                  <feMerge>
-                    <feMergeNode in="blur"/>
-                    <feMergeNode in="SourceGraphic"/>
-                  </feMerge>
-                </filter>
-              </defs>
-
-              <rect x="53" y="62" width="16" height="18" rx="4" fill="url(#baseGrad)"/>
-              <rect x="55" y="60" width="12" height="4" rx="2" fill="#4B5563"/>
-
-              <ellipse cx="61" cy="78" rx="10" ry="3" fill="#1F2937" opacity="0.6"/>
-
-
-              <rect x="50" y="52" width="18" height="12" rx="6" fill="#374151"/>
-              <circle cx="59" cy="58" r="3" fill="#1F2937" stroke="#6B7280" strokeWidth="1"/>
-              <circle cx="59" cy="58" r="1" fill="#9CA3AF"/>
-
-
-              <line x1="66" y1="52" x2="68" y2="64" stroke="#9CA3AF" strokeWidth="0.8"/>
-              <circle cx="68" cy="66" r="2" fill="#6B7280"/>
-
-
-              <path d="M56 56 Q56 40 44 38 L40 38 Q30 36 24 44 Q18 52 14 48 L12 46 Q10 44 14 40 Q20 32 30 32 L36 32 Q48 34 52 42 L56 54 Z" fill="url(#tubeGrad)" stroke="#6B7280" strokeWidth="0.5"/>
-
-              <path d="M54 52 Q52 38 42 36 L38 36 Q30 34 24 42 Q20 48 16 46" fill="none" stroke="rgba(255,255,255,0.35)" strokeWidth="1.5"/>
-
-              <path d="M50 46 Q46 36 38 34 L34 34 Q28 33 22 40" fill="none" stroke="rgba(0,0,0,0.25)" strokeWidth="2"/>
-
-
-              <rect x="6" y="42" width="14" height="10" rx="3" fill="url(#headGrad)" transform="rotate(-10 13 47)"/>
-
-              <rect x="7" y="42" width="12" height="2" rx="1" fill="#1F2937" opacity="0.6" transform="rotate(-10 13 47)"/>
-
-              <rect x="10" y="38" width="6" height="5" rx="2" fill="#4B5563" transform="rotate(-10 13 47)"/>
-
-              <circle cx="9" cy="46" r="1" fill="#D1D5DB"/>
-              <circle cx="17" cy="46" r="1" fill="#D1D5DB"/>
-
-
-              <rect x="8" y="50" width="12" height="8" rx="1.5" fill="url(#cartGrad)" transform="rotate(-10 14 54)"/>
-
-              <rect x="8" y="56" width="8" height="3" rx="1" fill="#374151" opacity="0.5" transform="rotate(-10 14 54)"/>
-
-              <line x1="14" y1="57" x2="12" y2="64" stroke="#D1D5DB" strokeWidth="1.2" strokeLinecap="round" transform="rotate(-10 14 54)"/>
-
-              <line x1="12" y1="64" x2="10.5" y2="69" stroke="#F3F4F6" strokeWidth="1" strokeLinecap="round" filter="url(#needleGlow)"/>
-
-              <polygon points="10.5,69 9.5,71 11.5,71" fill="#93C5FD" filter="url(#needleGlow)"/>
-
-
-              <circle cx="57" cy="46" r="7" fill="url(#cwGrad)" stroke="#374151" strokeWidth="0.8"/>
-
-              <line x1="54" y1="44" x2="60" y2="44" stroke="#6B7280" strokeWidth="0.5"/>
-
-              <line x1="55" y1="42" x2="55" y2="43" stroke="#9CA3AF" strokeWidth="0.5"/>
-              <line x1="57" y1="41" x2="57" y2="42" stroke="#9CA3AF" strokeWidth="0.5"/>
-              <line x1="59" y1="42" x2="59" y2="43" stroke="#9CA3AF" strokeWidth="0.5"/>
-
-
-              <path d="M56 58 Q64 56 66 48 Q68 40 62 36" fill="none" stroke="#9CA3AF" strokeWidth="0.6" opacity="0.5"/>
-            </svg>
-          </div>
+          {/* Tonearm — realistic S-shaped arm; cueing gesture (lift → swing →
+              drop) is driven by CSS in index.css via the two state classes. */}
+          <Tonearm playing={playing} />
 
           {/* Vinyl disc with realistic grooves */}
           <div className="relative">
