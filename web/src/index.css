@@ -676,7 +676,7 @@ body {
 }
 
 /* ============================================================
-   Vinyl tonearm — modern minimal redesign (v1.9)
+   Vinyl tonearm — realistic minimal redesign (v1.9)
 
    The gesture is a single CSS transition on transform: when
    playback starts the arm swings onto the record; when it pauses
@@ -693,7 +693,7 @@ body {
    via the colour shift alone.
    ============================================================ */
 .tonearm-swing {
-  transform-origin: var(--ta-pivot-x, 80%) var(--ta-pivot-y, 18%);
+  transform-origin: var(--ta-pivot-x, 76.7%) var(--ta-pivot-y, 30%);
   transition:
     transform 1.8s cubic-bezier(0.34, 0.85, 0.34, 1.05),
     filter 0.6s ease;
