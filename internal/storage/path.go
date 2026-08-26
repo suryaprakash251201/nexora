@@ -90,6 +90,45 @@ func Resolve(rootPath, rel string) (string, error) {
 	return joinedAbs, nil
 }
 
+// IsAncestor reports whether ancestor is the same path as descendant or a
+// strict ancestor of it (a parent directory at any depth). Both arguments
+// must already be cleaned (use CleanRelative first). An empty string is
+// treated as the root and is therefore an ancestor of every non-empty path.
+func IsAncestor(ancestor, descendant string) bool {
+	if ancestor == "" {
+		return descendant != ""
+	}
+	if ancestor == descendant {
+		return true
+	}
+	return strings.HasPrefix(descendant, ancestor+"/")
+}
+
+// IsSameOrDescendant reports whether child is the same as parent or nested
+// inside it. It is the inverse of "would moving parent into child loop
+// forever" — see handlers_file_ops.go for the canonical use.
+func IsSameOrDescendant(parent, child string) bool {
+	return IsAncestor(parent, child)
+}
+
+// IsInside reports whether candidate (an OS-style absolute path) is the same
+// as root or a strict descendant of it. It is the path-containment check used
+// by the static-file handler to prevent a request like "/../etc/passwd" from
+// being resolved to a file outside the web root. Both arguments must be
+// absolute and already cleaned (filepath.Clean); otherwise the answer is
+// undefined. An empty candidate or root returns false.
+func IsInside(root, candidate string) bool {
+	if root == "" || candidate == "" {
+		return false
+	}
+	if candidate == root {
+		return true
+	}
+	// Boundary-aware prefix: append the separator so a sibling like
+	// "/data2" is not falsely accepted when root is "/data".
+	return strings.HasPrefix(candidate, strings.TrimRight(root, string(filepath.Separator))+string(filepath.Separator))
+}
+
 // NameFromPath returns the base name of a relative path.
 func NameFromPath(rel string) string {
 	rel = strings.TrimSuffix(rel, "/")

@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -261,7 +262,16 @@ func (s *Server) handleResetPassword(w http.ResponseWriter, r *http.Request) {
 
 	userID, err := s.Users.ConsumeResetToken(tokenHash)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_token", "Invalid or expired reset code", middleware.GetRequestID(r.Context()))
+		// Surface "expired" as a distinct error code so the web client can
+		// tell the user to request a new code (vs. a typo'd one). A
+		// non-Expiry sql.ErrNoRows falls through to the generic
+		// "invalid_token" path.
+		if errors.Is(err, auth.ErrResetExpired) {
+			_ = s.Audit.Record("", "password_reset_failed", req.Token[:min(8, len(req.Token))], "expired", clientIP(r))
+			writeError(w, http.StatusBadRequest, "token_expired", "This reset code has expired — please request a new one", middleware.GetRequestID(r.Context()))
+			return
+		}
+		writeError(w, http.StatusBadRequest, "invalid_token", "Invalid reset code", middleware.GetRequestID(r.Context()))
 		return
 	}
 

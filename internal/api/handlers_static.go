@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/nexora/nexora/internal/middleware"
+	"github.com/nexora/nexora/internal/storage"
 )
 
 // handleStatic serves the built web UI with SPA fallback, or a minimal
@@ -27,9 +28,14 @@ func (s *Server) handleStatic(w http.ResponseWriter, r *http.Request) {
 	if clean == "/" || clean == "." {
 		clean = "/index.html"
 	}
-	candidate := filepath.Join(root, filepath.FromSlash(clean))
-	// Prevent escaping the web root.
-	if !strings.HasPrefix(candidate, filepath.Clean(root)) {
+	cleanedRoot := filepath.Clean(root)
+	candidate := filepath.Join(cleanedRoot, filepath.FromSlash(clean))
+	// Boundary-aware containment check. A bare HasPrefix would falsely
+	// accept a sibling like "/app/web-archive" when root is "/app/web",
+	// or let a request like "/../etc/passwd" resolve outside the root on
+	// the rare case filepath.Clean keeps the leading separator. The
+	// trailing separator in IsInside is what catches both.
+	if !storage.IsInside(cleanedRoot, candidate) {
 		s.servePlaceholder(w, r)
 		return
 	}

@@ -2,6 +2,7 @@ package auth
 
 import (
 	"database/sql"
+	"errors"
 
 	"github.com/nexora/nexora/internal/database"
 	"fmt"
@@ -17,6 +18,12 @@ const (
 	RoleUser   Role = "user"
 	RoleViewer Role = "viewer"
 )
+
+// ErrResetExpired is returned by ConsumeResetToken when the token existed but
+// has already passed its expiry time. It is distinct from sql.ErrNoRows
+// (returned for an unknown token) so the audit log and the API can tell
+// "user typed an old code" from "user typed a wrong code".
+var ErrResetExpired = errors.New("auth: reset token expired")
 
 // User is the persisted account record (without the password hash in most
 // API responses).
@@ -192,19 +199,65 @@ func (s *UserStore) CreateResetToken(userID, tokenHash, expiresAt string) error 
 	return err
 }
 
-// ConsumeResetToken looks up a hashed token and returns the user ID if valid and not expired.
-// Deletes the token after successful lookup (one-time use).
+// ConsumeResetToken looks up a hashed token and returns the user ID if valid
+// and not expired. The lookup, expiry check, and deletion are wrapped in a
+// single transaction so two concurrent reset requests can never both succeed
+// for the same token (race) and an expired token is never silently consumed
+// (the old code deleted the row before checking expiry, masking the cause).
+//
+// The returned error distinguishes "not found" from "expired" so the audit
+// log and the user-visible error message stay accurate. Expired tokens are
+// still deleted (one-time-use contract); unknown tokens are not.
 func (s *UserStore) ConsumeResetToken(tokenHash string) (string, error) {
-	var id, userID, expiresAt string
-	err := s.db.QueryRow(`SELECT id, user_id, expires_at FROM reset_tokens WHERE token_hash=?`, tokenHash).Scan(&id, &userID, &expiresAt)
+	tx, err := s.db.Begin()
 	if err != nil {
 		return "", err
 	}
-	// Delete regardless (one-time use).
-	_, _ = s.db.Exec(`DELETE FROM reset_tokens WHERE id=?`, id)
-	if expiresAt < util.NowUTC() {
-		return "", fmt.Errorf("reset token expired")
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback()
+		}
+	}()
+
+	var id, userID, expiresAt string
+	err = tx.QueryRow(
+		`SELECT id, user_id, expires_at FROM reset_tokens WHERE token_hash=?`, tokenHash,
+	).Scan(&id, &userID, &expiresAt)
+	if err != nil {
+		return "", err
 	}
+
+	// Check expiry BEFORE deleting so the audit log can attribute the
+	// outcome. If the token is expired we still want to delete it (one-time
+	// use), but we return ErrResetExpired instead of the user ID.
+	if expiresAt < util.NowUTC() {
+		_, _ = tx.Exec(`DELETE FROM reset_tokens WHERE id=?`, id)
+		if cerr := tx.Commit(); cerr != nil {
+			return "", cerr
+		}
+		committed = true
+		return "", ErrResetExpired
+	}
+
+	// Delete-then-commit is the only safe way to make this single-use: the
+	// DELETE is the operation that grants the user the ability to reset.
+	// If the commit fails after a successful DELETE, the next attempt will
+	// find no row and return sql.ErrNoRows (which callers translate to
+	// "invalid token"). Either way the token cannot be used twice.
+	res, err := tx.Exec(`DELETE FROM reset_tokens WHERE id=?`, id)
+	if err != nil {
+		return "", err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		// Row vanished between SELECT and DELETE; treat as not found rather
+		// than silently succeeding.
+		return "", fmt.Errorf("reset token not found")
+	}
+	if err := tx.Commit(); err != nil {
+		return "", err
+	}
+	committed = true
 	return userID, nil
 }
 

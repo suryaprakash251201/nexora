@@ -50,6 +50,17 @@ func (s *Server) handleRename(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_path", err.Error(), middleware.GetRequestID(r.Context()))
 		return
 	}
+	// Folder-into-self guard: renaming a directory to its own name is a
+	// no-op, and renaming a directory to a name inside itself would create
+	// an unreachable tree (the entry is still the source until the move
+	// completes). Note: rename can only target the same parent, so the
+	// "dest is descendant of src" case is only possible when src is a
+	// directory.
+	if rel != dest && storage.IsAncestor(rel, dest) {
+		writeError(w, http.StatusBadRequest, "invalid_destination",
+			"cannot rename a directory into itself", middleware.GetRequestID(r.Context()))
+		return
+	}
 	if err := acc.provider.Move(rel, dest); err != nil {
 		s.writeProviderError(w, r, err)
 		return
@@ -86,6 +97,13 @@ func (s *Server) handleMove(w http.ResponseWriter, r *http.Request) {
 		s.writeAccessError(w, r, err)
 		return
 	}
+	// Folder-into-self guard: refuse to move a directory into itself or any
+	// of its descendants. Copy is checked below with the same predicate.
+	if src != dst && storage.IsAncestor(src, dst) {
+		writeError(w, http.StatusBadRequest, "invalid_destination",
+			"cannot move a directory into itself", middleware.GetRequestID(r.Context()))
+		return
+	}
 	if err := acc.provider.Move(src, dst); err != nil {
 		s.writeProviderError(w, r, err)
 		return
@@ -120,6 +138,14 @@ func (s *Server) handleCopy(w http.ResponseWriter, r *http.Request) {
 	acc, err := s.resolveAccess(r, req.Root, true)
 	if err != nil {
 		s.writeAccessError(w, r, err)
+		return
+	}
+	// Folder-into-self guard: copying a directory into itself would create
+	// a self-referencing tree; copying into a descendant would either
+	// double-count files (shallow copy) or recurse forever (deep copy).
+	if src != dst && storage.IsAncestor(src, dst) {
+		writeError(w, http.StatusBadRequest, "invalid_destination",
+			"cannot copy a directory into itself", middleware.GetRequestID(r.Context()))
 		return
 	}
 	if err := acc.provider.Copy(src, dst); err != nil {
