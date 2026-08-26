@@ -20,13 +20,21 @@ type Session struct {
 
 // SessionStore manages sessions backed by the database.
 type SessionStore struct {
-	db            *database.DB
-	lifetime      time.Duration
+	db       *database.DB
+	lifetime time.Duration
+	// slidingThreshold is the fraction of lifetime below which an active
+	// session has its expiry bumped back to now+lifetime. This keeps the
+	// UPDATE frequency low (O(1) per session per threshold, not per request)
+	// while giving active users a window that effectively never expires.
+	// A value of 0.5 means: refresh when less than half the lifetime
+	// remains, so the worst case is a logout half a lifetime after the
+	// user's last activity.
+	slidingThreshold float64
 }
 
 // NewSessionStore creates a session store with the given session lifetime.
 func NewSessionStore(db *database.DB, lifetime time.Duration) *SessionStore {
-	return &SessionStore{db: db, lifetime: lifetime}
+	return &SessionStore{db: db, lifetime: lifetime, slidingThreshold: 0.5}
 }
 
 // Create issues a new session for userID and returns the raw token to set as a
@@ -46,8 +54,11 @@ func (s *SessionStore) Create(userID, ip, ua string) (*Session, error) {
 	return &Session{ID: id, UserID: userID, Token: raw, ExpiresAt: expires}, nil
 }
 
-// Lookup resolves a raw token to a session and its owning user, refreshing the
-// expiry if still valid. Returns (session, userID, ok).
+// Lookup resolves a raw token to a session and its owning user. The session
+// has a sliding window: when the remaining lifetime falls below
+// `slidingThreshold * lifetime` (default 50%), the expiry is bumped back to
+// now + lifetime so an active user is never logged out while using the app.
+// The UPDATE is throttled to once per threshold to keep the write rate low.
 func (s *SessionStore) Lookup(raw string) (*Session, bool) {
 	sum := sha256.Sum256([]byte(raw))
 	tokenHash := hex.EncodeToString(sum[:])
@@ -61,6 +72,21 @@ func (s *SessionStore) Lookup(raw string) (*Session, bool) {
 	expires := util.ParseTime(expiresStr)
 	if expires.Before(time.Now()) {
 		return nil, false
+	}
+	// Sliding-window refresh: when the session is closer to expiry than
+	// the threshold, bump it. Done outside the SELECT transaction (we are
+	// already past it) and best-effort: a failed UPDATE only means the
+	// session will not be extended this request; the next request will
+	// retry.
+	remaining := time.Until(expires)
+	if threshold := time.Duration(float64(s.lifetime) * s.slidingThreshold); threshold > 0 && remaining < threshold {
+		newExpiry := time.Now().Add(s.lifetime).UTC().Format(time.RFC3339)
+		_, _ = s.db.Exec(`UPDATE sessions SET expires_at = ? WHERE id = ?`, newExpiry, id)
+		// Update the in-memory copy so the caller sees the bumped time
+		// (used by the session-list UI to display the new expiry).
+		if parsed, perr := time.Parse(time.RFC3339, newExpiry); perr == nil {
+			expires = parsed
+		}
 	}
 	return &Session{ID: id, UserID: userID, ExpiresAt: expires}, true
 }

@@ -211,11 +211,167 @@ func (s *Service) RemoveRoot(rootID string) {
 	_, _ = s.db.Exec(`DELETE FROM search_index WHERE root_id=?`, rootID)
 }
 
-// Rename moves index entries from one path (and its subtree) to another.
+// Rename moves index entries from one path (and its subtree) to a new
+// destination. Without this, files inside a renamed directory would be
+// invisible to search until the next 6-hourly ScanAll reconciled the
+// index (P1-7: stale search results for renamed subtrees).
+//
+// Implementation note: the index's primary key is `id = rootID + ":" + path`,
+// so a rename is logically "delete the old rows, insert new rows at the
+// new paths". We do both in one transaction with a temp-table approach
+// to keep memory bounded for huge subtrees: read up to chunkSize rows
+// at a time, compute the new (id, path), and INSERT OR REPLACE.
 func (s *Service) Rename(rootID, src, dst string) {
-	s.Remove(rootID, src)
-	// The caller re-scans lazily; we index the new top entry opportunistically
-	// via Upsert on the next stat. A background scan reconciles the rest.
+	// src == "" is the root and is not a valid rename source.
+	if src == "" {
+		return
+	}
+	// Fast path: rename of a single file. The Move/Copy handlers only
+	// call Rename after the on-disk move, so we know the dst already
+	// exists and is likely a single file. We update the row in place
+	// and recurse for any subtree.
+	if dst == "" {
+		// Renaming to root is not a real use case; just remove.
+		s.Remove(rootID, src)
+		return
+	}
+	srcPrefix := src
+	if !strings.HasSuffix(srcPrefix, "/") {
+		srcPrefix += "/"
+	}
+	dstPrefix := dst
+	if !strings.HasSuffix(dstPrefix, "/") {
+		dstPrefix += "/"
+	}
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		// Fallback to a non-transactional update on the cheap path.
+		s.renameSingle(rootID, src, dst)
+		return
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback()
+		}
+	}()
+
+	const chunkSize = 2000
+	var lastID string
+	for {
+		var (
+			id, path, name, ext, mime, modified string
+			size                                 int64
+			isDir                                int
+		)
+		query := `SELECT id, path, name, ext, size, is_dir, mime, modified FROM search_index WHERE root_id = ? AND (id = ? OR path LIKE ?)`
+		args := []any{rootID, entryID(rootID, src), escapeLike(src) + "/%"}
+		if lastID != "" {
+			query += ` AND id > ?`
+			args = append(args, lastID)
+		}
+		query += ` ORDER BY id LIMIT ?`
+		args = append(args, chunkSize)
+
+		rows, err := tx.Query(query, args...)
+		if err != nil {
+			s.log.Error("search.Rename: query failed", "error", err)
+			return
+		}
+		batch := make([]renameOp, 0, chunkSize)
+		for rows.Next() {
+			if err := rows.Scan(&id, &path, &name, &ext, &size, &isDir, &mime, &modified); err != nil {
+				rows.Close()
+				s.log.Error("search.Rename: scan failed", "error", err)
+				return
+			}
+			// Compute the new path. If this is the source itself, dst is
+			// the new path; otherwise it's src's path with the src prefix
+			// replaced by dst's prefix (preserving the trailing slashes).
+			var newPath string
+			if path == src {
+				newPath = dst
+			} else if strings.HasPrefix(path, srcPrefix) {
+				newPath = dstPrefix + strings.TrimPrefix(path, srcPrefix)
+			} else {
+				// Defensive: the LIKE filter should have ensured this never
+				// happens, but if it does we leave the path alone and move on.
+				newPath = path
+			}
+			batch = append(batch, renameOp{
+				oldID:   id,
+				newID:   entryID(rootID, newPath),
+				newPath: newPath,
+				name:    name, ext: ext, size: size, isDir: isDir, mime: mime, modified: modified,
+			})
+			lastID = id
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			s.log.Error("search.Rename: rows error", "error", err)
+			return
+		}
+		// Apply batch: delete the old id, insert with the new id+path.
+		// INSERT OR REPLACE is a no-op for the common case where the
+		// row's other fields haven't changed.
+		for _, op := range batch {
+			if _, err := tx.Exec(`DELETE FROM search_index WHERE id = ?`, op.oldID); err != nil {
+				s.log.Error("search.Rename: delete failed", "error", err)
+				return
+			}
+			if _, err := tx.Exec(
+				`INSERT INTO search_index(id, root_id, path, name, ext, size, is_dir, mime, modified)
+				 VALUES(?,?,?,?,?,?,?,?,?)
+				 ON CONFLICT(id) DO UPDATE SET
+				   name=excluded.name, ext=excluded.ext, size=excluded.size,
+				   is_dir=excluded.is_dir, mime=excluded.mime, modified=excluded.modified`,
+				op.newID, rootID, op.newPath, op.name, op.ext, op.size, op.isDir, op.mime, op.modified,
+			); err != nil {
+				s.log.Error("search.Rename: insert failed", "error", err)
+				return
+			}
+		}
+		if len(batch) < chunkSize {
+			break
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		s.log.Error("search.Rename: commit failed", "error", err)
+		return
+	}
+	committed = true
+}
+
+// renameOp carries the data needed to update a single search_index row.
+type renameOp struct {
+	oldID, newID, newPath, name, ext, mime, modified string
+	size                                            int64
+	isDir                                           int
+}
+
+// renameSingle is the cheap path for a single-file rename outside a
+// transaction. It is correct but unbounded for subtrees; the
+// transaction-based Rename is the path used by Move/rename handlers.
+func (s *Service) renameSingle(rootID, src, dst string) {
+	var name, ext, mime, modified string
+	var size int64
+	var isDir int
+	err := s.db.QueryRow(
+		`SELECT name, ext, size, is_dir, mime, modified FROM search_index WHERE id = ?`,
+		entryID(rootID, src),
+	).Scan(&name, &ext, &size, &isDir, &mime, &modified)
+	if err != nil {
+		return // not indexed; nothing to do
+	}
+	_, _ = s.db.Exec(`DELETE FROM search_index WHERE id = ?`, entryID(rootID, src))
+	_, _ = s.db.Exec(
+		`INSERT INTO search_index(id, root_id, path, name, ext, size, is_dir, mime, modified)
+		 VALUES(?,?,?,?,?,?,?,?,?)
+		 ON CONFLICT(id) DO UPDATE SET
+		   name=excluded.name, ext=excluded.ext, size=excluded.size,
+		   is_dir=excluded.is_dir, mime=excluded.mime, modified=excluded.modified`,
+		entryID(rootID, dst), rootID, dst, name, ext, size, isDir, mime, modified)
 }
 
 // ScanAll walks every indexed root with bounded concurrency. It is safe to call

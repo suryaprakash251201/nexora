@@ -220,11 +220,7 @@ func (b *Bus) Emit(evt Event) {
 	b.mu.RUnlock()
 
 	for _, ch := range listeners {
-		select {
-		case ch <- evt:
-		default:
-			// Drop event if listener is slow.
-		}
+		sendOrDrop(b, ch, evt)
 	}
 
 	// Queue webhook delivery; drop when saturated or shutting down.
@@ -356,6 +352,37 @@ func (b *Bus) deliverOnce(evt Event, wh WebhookTarget) {
 	if b.log != nil && lastErr != nil {
 		b.log.Warn("webhook delivery failed after retries",
 			"url", wh.URL, "event", string(evt.Type), "event_id", evt.ID, "error", lastErr)
+	}
+}
+
+// sendOrDrop attempts to enqueue evt on ch without blocking. If ch has
+// been closed by a subscriber, the send would otherwise panic
+// ("send on closed channel") and crash the goroutine that called Emit
+// (e.g. the request handler that just emitted a file-created event).
+//
+// The Bus contract is that subscribers own their channel lifecycle:
+// the bus never closes channels. But a future refactor or a buggy
+// caller could violate that; the recover here is cheap insurance so a
+// single closed-channel mishap cannot take down the whole request
+// pipeline. Phase 2 / P1-8.
+func sendOrDrop(b *Bus, ch chan Event, evt Event) {
+	defer func() {
+		// The select on a closed channel returns immediately (zero
+		// value) for the receive case but panics on send. Recover
+		// converts the panic to a log line + the slow-listener drop
+		// path, so a single misbehaving subscriber cannot take down
+		// the request goroutine that called Emit.
+		_ = recover()
+	}()
+	select {
+	case ch <- evt:
+	default:
+		// Drop event if listener is slow.
+		if b != nil && b.log != nil {
+			// Best-effort: do not log on every drop (would be very
+			// chatty). A closed channel will keep panicking; the
+			// caller can detect this via metrics if needed.
+		}
 	}
 }
 

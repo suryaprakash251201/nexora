@@ -46,6 +46,15 @@ type Config struct {
 	ThumbnailTTL       time.Duration
 	EnableFFmpegThumbs bool
 	MaxEditableSize    int64
+	// TranscodeTimeout caps how long a single ffmpeg invocation may run
+	// before it's killed and its semaphore slot released. Without this
+	// bound, a slow client (or a 50GB file) can pin one of the two
+	// transcode slots indefinitely. 0 = use the default (4h).
+	TranscodeTimeout  time.Duration
+	// TranscodeClientWriteTimeout caps how long the server waits for the
+	// client to keep reading bytes before giving up on the transcode.
+	// 0 = use the default (10m).
+	TranscodeClientWriteTimeout time.Duration
 	DefaultRoots       []RootConfig
 	AllowRegistration  bool
 	BackupDir          string        // "" disables scheduled backups
@@ -84,6 +93,8 @@ func Load() (*Config, error) {
 		ThumbnailTTL:       envDuration("NEXORA_THUMBNAIL_TTL", 24*7*time.Hour),
 		EnableFFmpegThumbs: envBool("NEXORA_ENABLE_FFMPEG_THUMBS", false),
 		MaxEditableSize:    envBytes("NEXORA_MAX_EDITABLE_SIZE", 5<<20),
+		TranscodeTimeout:   envDuration("NEXORA_TRANSCODE_TIMEOUT", 4*time.Hour),
+		TranscodeClientWriteTimeout: envDuration("NEXORA_TRANSCODE_CLIENT_WRITE_TIMEOUT", 10*time.Minute),
 		DefaultRoots:       parseRoots(env("NEXORA_DEFAULT_ROOTS", "Files:/mnt/files:false,Media:/mnt/media:true,Backups:/mnt/backups:false,Shared:/mnt/shared:false")),
 		AllowRegistration:  envBool("NEXORA_ALLOW_REGISTRATION", true),
 		SecureCookies:      envBool("NEXORA_SECURE_COOKIES", true), // secure by default; set false for plain-HTTP/LAN installs

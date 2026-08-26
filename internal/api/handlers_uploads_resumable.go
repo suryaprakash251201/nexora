@@ -29,6 +29,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -74,6 +75,26 @@ func totalChunksFor(size, chunkSize int64) int64 {
 		return 0 // empty file: no parts, complete() writes an empty file
 	}
 	return (size + chunkSize - 1) / chunkSize
+}
+
+// uploadChunkLocks serialises writes to the same upload session so two
+// concurrent PUT /files/uploads/{id}/chunk?index=N requests cannot
+// interleave bytes. The lock is per-session: a slow chunk for upload A
+// does not block chunks for upload B.
+//
+// The Map stores *sync.Mutex values; we never delete entries because
+// the memory cost is one pointer per active upload, and the janitor
+// (PurgeStaleUploadSessions) deletes the underlying session directory
+// after the TTL so the lock will fall out of the working set eventually.
+//
+// Phase 2 / P1-2 fix: without this lock, the "idempotent" .tmp → rename
+// pattern was actually racy — two clients could both O_TRUNC, both
+// copy, and the last rename wins, with possible off-by-one bytes.
+var uploadChunkLocks sync.Map // map[string]*sync.Mutex
+
+func lockForUpload(id string) *sync.Mutex {
+	v, _ := uploadChunkLocks.LoadOrStore(id, &sync.Mutex{})
+	return v.(*sync.Mutex)
 }
 
 // classifyUploadError maps storage failures to precise HTTP responses so the
@@ -233,6 +254,14 @@ func (s *Server) handleUploadChunk(w http.ResponseWriter, r *http.Request) {
 	dir := uploadSessionDir(s.Cfg.DataDir, sess.ID)
 	tmp := filepath.Join(dir, fmt.Sprintf("%06d.part.tmp", index))
 	final := filepath.Join(dir, fmt.Sprintf("%06d.part", index))
+
+	// Serialise all chunk writes for this upload session. Without this
+	// lock, two concurrent PUTs at the same index race on the open/write/
+	// rename sequence and the last writer wins, potentially with a
+	// half-written file as the result. Phase 2 / P1-2.
+	chunkLock := lockForUpload(sess.ID)
+	chunkLock.Lock()
+	defer chunkLock.Unlock()
 
 	f, err := os.OpenFile(tmp, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
 	if err != nil {

@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/nexora/nexora/internal/middleware"
 	"github.com/nexora/nexora/internal/storage"
@@ -20,6 +22,19 @@ import (
 // transcodeSem limits concurrent ffmpeg jobs so a low-spec host is not
 // overwhelmed by several transcodes at once.
 var transcodeSem = make(chan struct{}, 2)
+
+// defaultTranscodeTimeout is the wall-clock cap on a single ffmpeg
+// invocation when Config.TranscodeTimeout is zero. Chosen to be larger than
+// any reasonable feature-length movie transcoded on modest hardware, but
+// small enough that a hung ffmpeg releases the semaphore slot within a
+// bounded time. Phase 2 / P1-4.
+const defaultTranscodeTimeout = 4 * time.Hour
+
+// defaultClientWriteTimeout is how long the server waits for the client to
+// keep reading bytes from the transcode stream before giving up. A stalled
+// client (open transcoding tab in the background) would otherwise pin a
+// slot indefinitely.
+const defaultClientWriteTimeout = 10 * time.Minute
 
 var (
 	ffmpegOnce sync.Once
@@ -161,6 +176,51 @@ func (fw *flushWriter) Write(p []byte) (int, error) {
 	return n, err
 }
 
+// bailWriter is a flushWriter that cancels the transcode context as soon as
+// the underlying ResponseWriter rejects a write (i.e. the client has gone
+// away). Without this, a stalled tab would let ffmpeg run to the
+// wall-clock timeout even though no one is reading. The cancel propagates
+// to the exec.CommandContext so ffmpeg is SIGKILLed promptly. Phase 2 / P1-4.
+type bailWriter struct {
+	w      http.ResponseWriter
+	f      http.Flusher
+	cancel context.CancelFunc
+	once   sync.Once
+}
+
+func (bw *bailWriter) Write(p []byte) (int, error) {
+	n, err := bw.w.Write(p)
+	if err != nil {
+		bw.once.Do(bw.cancel)
+		return n, err
+	}
+	if bw.f != nil {
+		bw.f.Flush()
+	}
+	return n, nil
+}
+
+// timeoutWriter is used when the ResponseWriter is not an http.Flusher
+// (rare, but possible in tests or middleware chains). It cancels the
+// transcode after `timeout` of no progress, so a hung ffmpeg cannot pin a
+// semaphore slot.
+type timeoutWriter struct {
+	w       http.ResponseWriter
+	cancel  context.CancelFunc
+	timeout time.Duration
+	last    atomic.Int64 // unix-nano of last successful write
+}
+
+func (tw *timeoutWriter) Write(p []byte) (int, error) {
+	n, err := tw.w.Write(p)
+	if err != nil {
+		tw.cancel()
+		return n, err
+	}
+	tw.last.Store(time.Now().UnixNano())
+	return n, nil
+}
+
 // handleTranscode converts an unsupported video (e.g. Matroska/.mkv) into a
 // browser-playable, streamable fragmented MP4 using ffmpeg. The transcoded
 // bytes are piped straight to the client so playback can start immediately.
@@ -289,8 +349,14 @@ func (s *Server) handleTranscode(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Create a cancellable context for this session.
-	ctx, cancel := context.WithCancel(r.Context())
+	// Create a cancellable context for this session, with a wall-clock
+	// timeout so a slow or hung ffmpeg (or a stalled client) cannot pin
+	// one of the transcode semaphore slots indefinitely. Phase 2 / P1-4.
+	timeout := s.Cfg.TranscodeTimeout
+	if timeout <= 0 {
+		timeout = defaultTranscodeTimeout
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), timeout)
 	defer cancel()
 
 	// Kill any existing ffmpeg for this session before creating the new one.
@@ -356,7 +422,12 @@ func (s *Server) handleTranscode(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Register the command with the session manager so it can be killed on seek.
+	// We use `defer` to ensure the session is reaped even if anything below
+	// panics (e.g. a nil-deref in flushWriter if a non-flusher ResponseWriter
+	// is ever passed). Without the defer, a panic would leak an ffmpeg
+	// process until the 30-minute stale-cleanup. Phase 2 / P1-3.
 	tcm.startSession(sessionID, rootID, rel, cancel, cmd)
+	defer tcm.stopSession(sessionID)
 
 	if containerOut == "wav" {
 		w.Header().Set("Content-Type", "audio/wav")
@@ -370,19 +441,25 @@ func (s *Server) handleTranscode(w http.ResponseWriter, r *http.Request) {
 
 	stderr := &bytes.Buffer{}
 	cmd.Stderr = stderr
+	clientWriteTimeout := s.Cfg.TranscodeClientWriteTimeout
+	if clientWriteTimeout <= 0 {
+		clientWriteTimeout = defaultClientWriteTimeout
+	}
 	if flusher, ok := w.(http.Flusher); ok {
-		cmd.Stdout = &flushWriter{w: w, f: flusher}
+		// bailWriter is a flushWriter that cancels the transcode context
+		// the moment the client stops reading bytes (Write returns an
+		// error). Without this, a stalled client would let ffmpeg run to
+		// the wall-clock timeout even though no one is listening.
+		// Phase 2 / P1-4.
+		cmd.Stdout = &bailWriter{w: w, f: flusher, cancel: cancel}
 	} else {
-		cmd.Stdout = w
+		cmd.Stdout = &timeoutWriter{w: w, cancel: cancel, timeout: clientWriteTimeout}
 	}
 
 	runErr := cmd.Run()
 	if inputArg == "pipe:0" && rc != nil {
 		rc.Close()
 	}
-
-	// Clean up the session after ffmpeg exits (or is killed).
-	tcm.stopSession(sessionID)
 
 	if runErr != nil {
 		if ctx.Err() == context.Canceled || ctx.Err() == context.DeadlineExceeded {

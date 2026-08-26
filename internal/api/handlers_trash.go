@@ -8,6 +8,7 @@ import (
 	"github.com/nexora/nexora/internal/events"
 	"github.com/nexora/nexora/internal/middleware"
 	"github.com/nexora/nexora/internal/storage"
+	"github.com/nexora/nexora/internal/util"
 )
 
 type trashRow struct {
@@ -115,18 +116,75 @@ func (s *Server) handleRestoreTrash(w http.ResponseWriter, r *http.Request) {
 		s.writeAccessError(w, r, err)
 		return
 	}
-	// Ensure the target doesn't already exist.
+	// Ensure the target doesn't already exist. The check + restore is a
+	// TOCTOU window on the local provider, so we further defend by
+	// restoring via a unique temp name and only then moving to the
+	// original location (see below). Phase 2 / P1-6.
 	if _, statErr := acc.provider.Stat(t.OriginalPath); statErr == nil {
 		writeError(w, http.StatusConflict, "exists", "original location already exists", middleware.GetRequestID(r.Context()))
 		return
 	}
-	if err := acc.provider.Move(t.TrashPath, t.OriginalPath); err != nil {
+	// Restore to a unique temp name first, then Move onto the original
+	// path. This narrows the race window: a concurrent upload that lands
+	// in the original location between our Stat and our final Move will
+	// either be clobbered (provider.Move semantics) or rejected (provider
+	// returns ErrExists) — and if it's rejected, the restored file is
+	// still under a temp name we can clean up.
+	tempPath := t.OriginalPath + ".restore-" + util.NewID("", 8)
+	if err := acc.provider.Move(t.TrashPath, tempPath); err != nil {
+		s.writeProviderError(w, r, err)
+		return
+	}
+	if err := acc.provider.Move(tempPath, t.OriginalPath); err != nil {
+		// Best-effort: try to undo by moving the temp back into the
+		// trash path so the file is not lost. We LOG the undo result
+		// (not swallow it) so operators can find orphan files; the old
+		// code dropped the error on the floor.
+		if undoErr := acc.provider.Move(tempPath, t.TrashPath); undoErr != nil {
+			if s.Log != nil {
+				s.Log.Error("trash restore: undo failed — file is orphaned",
+					"trash_id", t.ID,
+					"trash_path", t.TrashPath,
+					"original_path", t.OriginalPath,
+					"temp_path", tempPath,
+					"undo_error", undoErr.Error(),
+				)
+			}
+			_ = s.Audit.Record(user.ID, "trash_restore_orphan", t.OriginalPath,
+				"file lost between trash and original; original_move_error="+err.Error()+
+					" undo_error="+undoErr.Error(), clientIP(r))
+		} else {
+			if s.Log != nil {
+				s.Log.Warn("trash restore: final move failed, file moved back to trash",
+					"trash_id", t.ID,
+					"original_path", t.OriginalPath,
+					"move_error", err.Error(),
+				)
+			}
+		}
 		s.writeProviderError(w, r, err)
 		return
 	}
 	if _, err := s.DB.Exec(`DELETE FROM trash WHERE id=?`, t.ID); err != nil {
-		// Undo the move on failure.
-		_ = acc.provider.Move(t.OriginalPath, t.TrashPath)
+		// Undo the move on failure. We log the undo result; the old
+		// code dropped the error on the floor (the file ended up at the
+		// original location but the trash row was gone, leaving an
+		// un-trackable orphan in the trash dir).
+		if undoErr := acc.provider.Move(t.OriginalPath, t.TrashPath); undoErr != nil {
+			if s.Log != nil {
+				s.Log.Error("trash restore: DB delete failed AND undo failed — file is at original location but trash row remains",
+					"trash_id", t.ID,
+					"original_path", t.OriginalPath,
+					"db_error", err.Error(),
+					"undo_error", undoErr.Error(),
+				)
+			}
+		} else if s.Log != nil {
+			s.Log.Warn("trash restore: DB delete failed, file moved back to trash",
+				"trash_id", t.ID,
+				"db_error", err.Error(),
+			)
+		}
 		writeError(w, http.StatusInternalServerError, "internal_error", "could not update trash", middleware.GetRequestID(r.Context()))
 		return
 	}

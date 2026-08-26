@@ -2,11 +2,13 @@ package api
 
 import (
 	"archive/zip"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/nexora/nexora/internal/events"
@@ -287,15 +289,58 @@ func (s *Server) streamShared(w http.ResponseWriter, r *http.Request, sh sharing
 	_, _ = io.Copy(w, rc)
 }
 
+// countAfterFirstByte wraps an io.Writer and invokes onFirstByte on the
+// first successful Write. Used by the share download handler so the
+// download counter increments only when the response actually starts
+// reaching the client (not when the file fails to open or the client
+// disconnects immediately). Phase 2 / P1-5.
+type countAfterFirstByte struct {
+	w           io.Writer
+	onFirstByte func()
+	once        sync.Once
+}
+
+func (c *countAfterFirstByte) Write(p []byte) (int, error) {
+	n, err := c.w.Write(p)
+	if n > 0 {
+		c.once.Do(c.onFirstByte)
+	}
+	return n, err
+}
+
 // streamFolderZip streams a folder share as a ZIP archive (no server-side
 // temp files — entries are copied straight into the response writer).
-func (s *Server) streamFolderZip(w http.ResponseWriter, r *http.Request, provider storage.StorageProvider, sh sharing.Share, rel string) {
-	_ = s.Shares.IncrementDownload(sh.ID)
-	_ = s.Audit.Record(sh.UserID, "share_download", rel, "via share link (folder zip)", clientIP(r))
+//
+// Phase 2 / P1-9: the walk now enforces hard caps on file count and
+// total uncompressed size. A 10M-file share would otherwise collect every
+// path into a []string (memory) and stream for hours, pinning server
+// resources. A symlink loop would also recurse forever on some
+// providers. The caps turn both into clean 413 responses.
+const (
+	maxShareFolderEntries = 50_000        // files in a single ZIP stream
+	maxShareFolderBytes   = int64(50 << 30) // 50 GB uncompressed total
+)
 
-	var files []string
-	var walk func(dir string) error
-	walk = func(dir string) error {
+// shareZipEntry is a file selected for inclusion in the ZIP stream. It
+// carries the path (for Read) and the size (for the cap) so we can stop
+// the walk early without re-statting.
+type shareZipEntry struct {
+	path string
+	size int64
+}
+
+// collectShareFolderFiles walks the share root and returns the list of
+// files eligible for inclusion in a ZIP stream, bounded by the
+// maxShareFolderEntries / maxShareFolderBytes caps. Exposed for testing.
+// Phase 2 / P1-9.
+func collectShareFolderFiles(provider storage.StorageProvider, rel string) ([]shareZipEntry, error) {
+	var files []shareZipEntry
+	var totalBytes int64
+	var walk func(dir string, depth int) error
+	walk = func(dir string, depth int) error {
+		if depth > 32 {
+			return nil
+		}
 		entries, err := provider.List(dir)
 		if err != nil {
 			return err
@@ -305,16 +350,49 @@ func (s *Server) streamFolderZip(w http.ResponseWriter, r *http.Request, provide
 				continue
 			}
 			if e.IsDir {
-				if err := walk(e.Path); err != nil {
-					continue
+				if err := walk(e.Path, depth+1); err != nil {
+					return err
 				}
 				continue
 			}
-			files = append(files, e.Path)
+			if len(files) >= maxShareFolderEntries {
+				return errShareFolderTooLarge
+			}
+			if totalBytes+e.Size > maxShareFolderBytes {
+				return errShareFolderTooLarge
+			}
+			files = append(files, shareZipEntry{path: e.Path, size: e.Size})
+			totalBytes += e.Size
 		}
 		return nil
 	}
-	_ = walk(rel)
+	if err := walk(rel, 0); err != nil {
+		return nil, err
+	}
+	return files, nil
+}
+
+func (s *Server) streamFolderZip(w http.ResponseWriter, r *http.Request, provider storage.StorageProvider, sh sharing.Share, rel string) {
+	// Bump the counter AFTER first successful byte (same contract as the
+	// file-share download path, see countAfterFirstByte). For a folder
+	// zip the first byte is the ZIP local file header, so we wrap zw
+	// with the counter below — not here. P1-5 / P1-9 consistency.
+	s.emitShareEvent(events.EventShareDownload, r, sh, rel)
+	_ = s.Audit.Record(sh.UserID, "share_download", rel, "via share link (folder zip)", clientIP(r))
+
+	files, err := collectShareFolderFiles(provider, rel)
+	if err != nil {
+		if errors.Is(err, errShareFolderTooLarge) {
+			writeError(w, http.StatusRequestEntityTooLarge, "folder_too_large",
+				"Folder exceeds the public-share download limit (50000 files or 50 GB). Ask the owner to share a subfolder.",
+				middleware.GetRequestID(r.Context()))
+			return
+		}
+		// Any other walk error is a provider issue; surface as 500.
+		s.Log.Error("streamFolderZip walk failed", "error", err)
+		writeError(w, http.StatusInternalServerError, "internal_error", "could not read share contents", middleware.GetRequestID(r.Context()))
+		return
+	}
 
 	if len(files) == 0 {
 		writeError(w, http.StatusBadRequest, "folder_empty", "This folder is empty — nothing to download", middleware.GetRequestID(r.Context()))
@@ -327,23 +405,34 @@ func (s *Server) streamFolderZip(w http.ResponseWriter, r *http.Request, provide
 	w.Header().Set("Content-Disposition", "attachment; filename*=UTF-8''"+urlEncode(name+".zip"))
 
 	zw := zip.NewWriter(w)
+	// Bump the download counter after the first entry is fully written.
+	// By that point the response has flushed at least the local file
+	// header + the first file's bytes, so a 404 mid-walk or a stalled
+	// client no longer consumes a MaxDownloads slot (P1-5).
+	var firstEntryDone bool
 	for _, f := range files {
-		rc, rerr := provider.Read(f)
+		rc, rerr := provider.Read(f.path)
 		if rerr != nil {
 			continue
 		}
-		entryName := f
+		entryName := f.path
 		if base != "" {
-			entryName = strings.TrimPrefix(f, base+"/")
+			entryName = strings.TrimPrefix(f.path, base+"/")
 		}
 		hdr := &zip.FileHeader{Name: entryName, Method: zip.Deflate}
 		if fw, werr := zw.CreateHeader(hdr); werr == nil {
 			_, _ = io.Copy(fw, rc)
+			if !firstEntryDone {
+				_ = s.Shares.IncrementDownload(sh.ID)
+				firstEntryDone = true
+			}
 		}
 		rc.Close()
 	}
 	_ = zw.Close()
 }
+
+var errShareFolderTooLarge = errors.New("share folder exceeds the public-share size cap")
 
 func (s *Server) writeShareError(w http.ResponseWriter, r *http.Request, err error) {
 	rid := middleware.GetRequestID(r.Context())

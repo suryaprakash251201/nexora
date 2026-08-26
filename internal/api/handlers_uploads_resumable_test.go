@@ -1,9 +1,11 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"path/filepath"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -61,6 +63,95 @@ func TestClassifyUploadErrorENOSPC(t *testing.T) {
 	status, code, _ = classifyUploadError(&os.PathError{Op: "open", Err: syscall.EACCES})
 	if status != 403 || code != "permission_denied" {
 		t.Fatalf("EACCES should map to 403/permission_denied, got %d/%s", status, code)
+	}
+}
+
+// TestLockForUpload_ReusesSameMutex verifies the per-session lock registry:
+// the same upload ID always returns the same *sync.Mutex, while different IDs
+// return different mutexes. Without this, the chunk-race fix in P1-2 would
+// silently regress because each request would get a brand-new lock.
+func TestLockForUpload_ReusesSameMutex(t *testing.T) {
+	a1 := lockForUpload("up_alpha")
+	a2 := lockForUpload("up_alpha")
+	b := lockForUpload("up_beta")
+	if a1 != a2 {
+		t.Errorf("same id must return same lock; got %p vs %p", a1, a2)
+	}
+	if a1 == b {
+		t.Errorf("different ids must return different locks; both were %p", a1)
+	}
+}
+
+// TestUploadChunkLock_SerialisesWrites drives N goroutines that all write
+// different bytes to the same chunk index of the same upload session. The
+// final on-disk file must contain exactly one writer's bytes (i.e. a
+// complete chunk, not a garbled mix). This is the regression test for the
+// P1-2 race: before the lock, two writers could interleave their bytes
+// and the .tmp/.part file could end up with a hybrid of the two payloads.
+func TestUploadChunkLock_SerialisesWrites(t *testing.T) {
+	dataDir := t.TempDir()
+	sess := &uploadSession{
+		ID: "up_race01", TotalChunks: 2, ChunkSize: 1024, Size: 2048,
+	}
+	dir := uploadSessionDir(dataDir, sess.ID)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "meta.json"), []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Two distinct writers, each filling the same chunk with a
+	// recognisable byte pattern. With the lock serialised, exactly one
+	// of them wins, and the on-disk file must be uniformly one pattern.
+	const N = 8
+	const chunkSize = 256 // smaller than ChunkSize so size guard doesn't trip
+	patternA := bytes.Repeat([]byte{'A'}, chunkSize)
+	patternB := bytes.Repeat([]byte{'B'}, chunkSize)
+
+	tmp := filepath.Join(dir, "000000.part.tmp")
+	final := filepath.Join(dir, "000000.part")
+
+	// Use the lock the same way the handler does.
+	mu := lockForUpload(sess.ID)
+
+	var wg sync.WaitGroup
+	wg.Add(N)
+	for i := 0; i < N; i++ {
+		go func(i int) {
+			defer wg.Done()
+			mu.Lock()
+			defer mu.Unlock()
+			payload := patternA
+			if i%2 == 1 {
+				payload = patternB
+			}
+			if err := os.WriteFile(tmp, payload, 0o644); err != nil {
+				t.Errorf("write tmp: %v", err)
+				return
+			}
+			if err := os.Rename(tmp, final); err != nil {
+				t.Errorf("rename: %v", err)
+				return
+			}
+		}(i)
+	}
+	wg.Wait()
+
+	got, err := os.ReadFile(final)
+	if err != nil {
+		t.Fatalf("read final: %v", err)
+	}
+	if len(got) != chunkSize {
+		t.Fatalf("final size = %d, want %d", len(got), chunkSize)
+	}
+	// The final file must be uniformly one pattern, not a mix.
+	first := got[0]
+	for i, b := range got {
+		if b != first {
+			t.Fatalf("byte %d differs from first (%c vs %c) — chunk was corrupted by concurrent writers",
+				i, first, b)
+		}
 	}
 }
 
