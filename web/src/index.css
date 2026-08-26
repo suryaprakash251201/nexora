@@ -755,6 +755,20 @@ body {
   animation: n-stylus-bloom 1.4s ease-in-out infinite;
 }
 
+/* Contact shadow — a soft elliptical darkening at the point where
+   the stylus meets the record. Visible only while playing; a
+   very subtle scale pulse (much smaller than the bloom) suggests
+   the physical pressure varying as the groove undulates. */
+@keyframes n-contact-shadow {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(0.85); opacity: 0.7; }
+}
+.tonearm-contact-shadow {
+  transform-origin: center;
+  transform-box: fill-box;
+  animation: n-contact-shadow 1.4s ease-in-out infinite;
+}
+
 /* Reduced motion: the swing is reduced to a near-instant
    transition (the user can still see the state change, just
    without the long gesture), and all looping animations are
@@ -771,7 +785,8 @@ body {
   }
   .tonearm-pivot-halo,
   .tonearm-pivot-dot,
-  .tonearm-stylus-bloom {
+  .tonearm-stylus-bloom,
+  .tonearm-contact-shadow {
     animation: none;
   }
 }
@@ -786,7 +801,8 @@ body {
 }
 .tonearm-reduced .tonearm-pivot-halo,
 .tonearm-reduced .tonearm-pivot-dot,
-.tonearm-reduced .tonearm-stylus-bloom {
+.tonearm-reduced .tonearm-stylus-bloom,
+.tonearm-reduced .tonearm-contact-shadow {
   animation: none !important;
 }
 

@@ -59,9 +59,16 @@ import { useEffect, useId, useState } from "react";
  * The pivot point here is also the CSS transform-origin, so a single
  * `rotate()` rotates the whole arm around the gimbal — the same way a
  * real arm pivots.
+ *
+ * CARTRIDGE is the position of the cartridge body's centre; STYLUS is
+ * the actual contact point with the record (offset from the
+ * cartridge's front edge by a small amount — on a real cartridge the
+ * cantilever protrudes ~1mm past the body). Keeping these as separate
+ * constants lets the cantilever line connect them precisely.
  */
 const PIVOT = { x: 96, y: 18 } as const;
-const CARTRIDGE_TIP = { x: 22, y: 78 } as const;
+const CARTRIDGE = { x: 22, y: 76 } as const;
+const STYLUS = { x: 13, y: 88 } as const;
 const VB_W = 120;
 const VB_H = 100;
 
@@ -107,7 +114,10 @@ export default function Tonearm({ playing }: { playing: boolean }) {
     pivotGlow: `ta-pivot-glow-${uid}`,
     arm: `ta-arm-${uid}`,
     cartridge: `ta-cartridge-${uid}`,
+    cantilever: `ta-cantilever-${uid}`,
     stylus: `ta-stylus-${uid}`,
+    stylusBody: `ta-stylus-body-${uid}`,
+    contactShadow: `ta-contact-${uid}`,
     blur: `ta-blur-${uid}`,
   };
 
@@ -160,12 +170,47 @@ export default function Tonearm({ playing }: { playing: boolean }) {
             <stop offset="100%" stopColor="#0A0C10" />
           </linearGradient>
 
-          {/* Stylus bloom — radial fade that pulses only while
-              playing. The colour comes from the JS palette. */}
+          {/* Cantilever — a thin metallic rod. We use a horizontal
+              gradient (light at the cartridge end, darker at the
+              tip) to fake the curvature of a real beryllium or
+              aluminium cantilever, which is brighter where it
+              exits the cartridge body and dimmer at the tip. */}
+          <linearGradient id={ids.cantilever} x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="#E5E7EA" />
+            <stop offset="60%" stopColor="#9DA4AE" />
+            <stop offset="100%" stopColor="#6A707A" />
+          </linearGradient>
+
+          {/* Stylus bloom — a three-stop radial gradient. Inner core
+              is opaque and warm (the "diamond contact"); mid stop is
+              the saturated color at half-opacity (the "hot tip"
+              halo); outer stop fades to zero (atmospheric glow).
+              Together they read as a single refined light source
+              rather than a fuzzy circle. */}
           <radialGradient id={ids.stylus} cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stopColor={stylusColor} stopOpacity="0.9" />
-            <stop offset="40%" stopColor={stylusColor} stopOpacity="0.45" />
+            <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.95" />
+            <stop offset="18%" stopColor={stylusColor} stopOpacity="0.85" />
+            <stop offset="55%" stopColor={stylusColor} stopOpacity="0.35" />
             <stop offset="100%" stopColor={stylusColor} stopOpacity="0" />
+          </radialGradient>
+
+          {/* Stylus body — a tiny solid circle of the saturated
+              color, sized to read as the physical stylus tip
+              (not the glow). Layered on top of the bloom. */}
+          <radialGradient id={ids.stylusBody} cx="35%" cy="30%" r="80%">
+            <stop offset="0%" stopColor="#FFFFFF" />
+            <stop offset="40%" stopColor={stylusColor} />
+            <stop offset="100%" stopColor={stylusColor} stopOpacity="0.7" />
+          </radialGradient>
+
+          {/* Contact shadow — a soft elliptical darkening at the
+              point where the stylus meets the record. Suggests the
+              physical pressure of the needle in the groove. Only
+              visible while playing. */}
+          <radialGradient id={ids.contactShadow} cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stopColor="#000" stopOpacity="0.55" />
+            <stop offset="60%" stopColor="#000" stopOpacity="0.18" />
+            <stop offset="100%" stopColor="#000" stopOpacity="0" />
           </radialGradient>
 
           {/* Soft blur for the cast shadow under the arm. */}
@@ -181,8 +226,8 @@ export default function Tonearm({ playing }: { playing: boolean }) {
         <line
           x1={PIVOT.x}
           y1={PIVOT.y + 1.2}
-          x2={CARTRIDGE_TIP.x}
-          y2={CARTRIDGE_TIP.y + 1.2}
+          x2={CARTRIDGE.x}
+          y2={CARTRIDGE.y + 1.2}
           stroke={PALETTE.armShadow}
           strokeWidth="3.2"
           strokeLinecap="round"
@@ -196,8 +241,8 @@ export default function Tonearm({ playing }: { playing: boolean }) {
         <line
           x1={PIVOT.x}
           y1={PIVOT.y}
-          x2={CARTRIDGE_TIP.x}
-          y2={CARTRIDGE_TIP.y}
+          x2={CARTRIDGE.x}
+          y2={CARTRIDGE.y}
           stroke={`url(#${ids.arm})`}
           strokeWidth="3"
           strokeLinecap="round"
@@ -227,14 +272,16 @@ export default function Tonearm({ playing }: { playing: boolean }) {
             A small rounded rectangle at the arm's tip, tilted so
             it reads as a cartridge and not a thumbtack. The tilt
             is the only detail; everything else is geometry. */}
-        <g transform={`translate(${CARTRIDGE_TIP.x} ${CARTRIDGE_TIP.y}) rotate(-15)`}>
-          {/* Body */}
+        <g transform={`translate(${CARTRIDGE.x} ${CARTRIDGE.y}) rotate(-15)`}>
+          {/* Body — slightly more elongated than before so it
+              reads as a real cartridge (which is taller than it
+              is wide when viewed from above). */}
           <rect
-            x="-7"
-            y="-4.5"
-            width="14"
-            height="9"
-            rx="2.2"
+            x="-6.5"
+            y="-5.5"
+            width="13"
+            height="11"
+            rx="2.4"
             fill={`url(#${ids.cartridge})`}
             stroke={PALETTE.cartridgeEdge}
             strokeWidth="0.5"
@@ -243,34 +290,126 @@ export default function Tonearm({ playing }: { playing: boolean }) {
               edge of the cartridge. Reads as light catching a
               chamfered edge. */}
           <rect
-            x="-6"
-            y="-3.8"
-            width="12"
+            x="-5.5"
+            y="-4.7"
+            width="11"
             height="0.8"
             rx="0.4"
             fill="#FFFFFF"
             opacity="0.35"
           />
+          {/* Brand accent — a thin horizontal red stripe across
+              the body. Subtle enough to read as a label, not a
+              decoration. The real Ortofon / Shure / Audio-Technica
+              cartridges all have one of these. */}
+          <rect
+            x="-4.5"
+            y="-0.6"
+            width="9"
+            height="0.7"
+            rx="0.35"
+            fill={PALETTE.stylusPlaying}
+            opacity="0.75"
+          />
+          {/* Tiny mounting screws at the four corners — two
+              small champagne dots. Just enough to read as
+              "fastened", not so much they look like a
+              schematic. */}
+          <circle cx="-5" cy="-4" r="0.45" fill="#F5E6C2" opacity="0.7" />
+          <circle cx="5" cy="-4" r="0.45" fill="#F5E6C2" opacity="0.7" />
+          <circle cx="-5" cy="4" r="0.45" fill="#F5E6C2" opacity="0.55" />
+          <circle cx="5" cy="4" r="0.45" fill="#F5E6C2" opacity="0.55" />
+          {/* Stylus reflection — a tiny bright glint on the
+              top of the cartridge, suggesting light from the
+              stylus glow bouncing off the plastic. Only visible
+              while playing (when the stylus is lit). */}
+          <ellipse
+            cx="-2.5"
+            cy="-3"
+            rx="1.6"
+            ry="0.6"
+            fill="#FFFFFF"
+            opacity={playing ? 0.45 : 0}
+            transform="rotate(-20 -2.5 -3)"
+          />
         </g>
 
-        {/* ── STYLUS ─────────────────────────────────────────────────
-            The only saturated colour in the composition (when
-            playing). The dot is the literal "where the music is
-            happening" — on the record. A soft bloom behind it
-            pulses only while playing, mirroring the pivot halo. */}
+        {/* ── CANTILEVER ─────────────────────────────────────────────
+            A thin metal rod that extends from the front edge of
+            the cartridge to the stylus tip. The cantilever is
+            what physically carries the stylus into the groove; on
+            a real cartridge it protrudes a few mm past the body
+            at a slight downward angle.
+
+            We taper it from ~0.9 at the cartridge end to ~0.4
+            at the tip, with a gradient that gives it a metallic
+            sheen. Without this, the stylus dot looks like it
+            is attached directly to the cartridge; with it, the
+            composition reads as "cartridge on a stick, touching
+            the record" which is exactly what a real tonearm is. */}
+        <line
+          x1={CARTRIDGE.x - 2.6}
+          y1={CARTRIDGE.y + 1.4}
+          x2={STYLUS.x}
+          y2={STYLUS.y}
+          stroke={`url(#${ids.cantilever})`}
+          strokeWidth="0.9"
+          strokeLinecap="round"
+        />
+
+        {/* ── STYLUS (contact point) ───────────────────────────────
+            This is the literal "where the music is happening" —
+            the point where the cantilever meets the record
+            groove. Built from four layers, back to front:
+
+              1. Contact shadow  (only while playing)  — a soft
+                 elliptical darkening under the tip, suggesting
+                 the physical pressure of the needle in the
+                 groove. Reads as a tiny dent in the record.
+
+              2. Outer bloom      (only while playing)  — a wide,
+                 three-stop radial gradient that pulses at 1.4s.
+                 The atmospheric glow that says "playing".
+
+              3. Stylus body                          — a small
+                 solid dot with its own gradient (white hot
+                 spot at top-left, saturated colour at the body).
+                 Sized so it reads as the physical diamond tip,
+                 not the glow.
+
+              4. White-hot core                        — a single
+                 pure-white pixel at the tip's centre. The
+                 "diamond catching the light" effect. */}
+        <ellipse
+          cx={STYLUS.x}
+          cy={STYLUS.y + 0.6}
+          rx="3.2"
+          ry="1.2"
+          fill={`url(#${ids.contactShadow})`}
+          className="tonearm-contact-shadow"
+          style={{ opacity: playing ? 1 : 0 }}
+        />
         <circle
-          cx={CARTRIDGE_TIP.x}
-          cy={CARTRIDGE_TIP.y}
+          cx={STYLUS.x}
+          cy={STYLUS.y}
           r="6.5"
           fill={`url(#${ids.stylus})`}
           className="tonearm-stylus-bloom"
           style={{ opacity: playing ? 1 : 0 }}
         />
         <circle
-          cx={CARTRIDGE_TIP.x}
-          cy={CARTRIDGE_TIP.y}
-          r="1.6"
-          fill={stylusColor}
+          cx={STYLUS.x}
+          cy={STYLUS.y}
+          r="1.7"
+          fill={`url(#${ids.stylusBody})`}
+          style={{ opacity: playing ? 1 : 0.55 }}
+        />
+        <circle
+          cx={STYLUS.x - 0.35}
+          cy={STYLUS.y - 0.4}
+          r="0.6"
+          fill="#FFFFFF"
+          opacity={playing ? 0.95 : 0.4}
         />
       </svg>
     </div>
