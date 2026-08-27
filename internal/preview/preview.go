@@ -59,6 +59,12 @@ func NewService(cacheDir string, maxSize int64, ttl time.Duration) *Service {
 	return &Service{cacheDir: cacheDir, maxSize: maxSize, ttl: ttl, gate: make(chan struct{}, thumbConcurrency)}
 }
 
+// UpdateConfig hot-reloads thumbnail limits from the effective config.
+func (s *Service) UpdateConfig(maxSize int64, ttl time.Duration) {
+	s.maxSize = maxSize
+	s.ttl = ttl
+}
+
 // Checksum computes the SHA-256 of a file via its provider reader. Only called
 // on explicit request (never during listing) to avoid unnecessary IO.
 func (s *Service) Checksum(provider storage.StorageProvider, rel string) (string, error) {

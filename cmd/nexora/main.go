@@ -19,6 +19,7 @@ import (
 	"github.com/nexora/nexora/internal/config"
 	"github.com/nexora/nexora/internal/database"
 	"github.com/nexora/nexora/internal/events"
+	"github.com/nexora/nexora/internal/extract"
 	"github.com/nexora/nexora/internal/jobs"
 	"github.com/nexora/nexora/internal/logger"
 	"github.com/nexora/nexora/internal/metrics"
@@ -26,9 +27,11 @@ import (
 	"github.com/nexora/nexora/internal/playlists"
 	"github.com/nexora/nexora/internal/preview"
 	"github.com/nexora/nexora/internal/search"
+	"github.com/nexora/nexora/internal/settings"
 	"github.com/nexora/nexora/internal/sharing"
 	"github.com/nexora/nexora/internal/storage"
 	"github.com/nexora/nexora/internal/util"
+	"github.com/nexora/nexora/internal/versions"
 )
 
 func main() {
@@ -54,6 +57,18 @@ func main() {
 
 	if err := ensureSessionSecret(db, cfg, log); err != nil {
 		log.Error("failed to ensure session secret", "error", err)
+	}
+
+	// Overlay persisted admin settings (DB-backed overrides for NEXORA_*).
+	settingsStore := settings.NewStore(db)
+	if m, err := settingsStore.All(); err == nil && len(m) > 0 {
+		if applied, aerr := config.ApplySettings(cfg, m); aerr != nil {
+			log.Warn("failed to apply persisted settings", "error", aerr)
+		} else if len(applied) > 0 {
+			log.Info("applied persisted settings", "count", len(applied))
+		}
+	} else if err != nil {
+		log.Warn("could not load persisted settings", "error", err)
 	}
 
 	users := auth.NewUserStore(db)
@@ -103,6 +118,7 @@ func main() {
 		Jobs:      jobMgr,
 		Metrics:   reg,
 		Events:    eventBus,
+		Settings:  settingsStore,
 		WebRoot:   webRoot(),
 	})
 
@@ -185,6 +201,13 @@ func webRoot() string {
 
 func runMaintenance(ctx context.Context, db *database.DB, sessions *auth.SessionStore, limiter *middleware.RateLimiter, searchSvc *search.Service, shares *sharing.Store, previewSvc *preview.Service, jobMgr *jobs.Manager, roots *storage.RootService, cfg *config.Config, log *logger.Logger) {
 	go searchSvc.ScanMediaMetadata(ctx)
+	if cfg.ExtractEnabled {
+		go searchSvc.ScanFileText(ctx, extract.Config{
+			MaxFileSize: cfg.ExtractMaxFileSize,
+			MaxTextLen:  cfg.ExtractMaxTextLen,
+			OCRBin:      cfg.ExtractOCRBin,
+		})
+	}
 	ticker := time.NewTicker(15 * time.Minute)
 	defer ticker.Stop()
 	scanTicker := time.NewTicker(6 * time.Hour)
@@ -205,6 +228,12 @@ func runMaintenance(ctx context.Context, db *database.DB, sessions *auth.Session
 			jobMgr.CleanupOldArchives(24 * time.Hour)
 			storage.PurgeExpiredTrash(ctx, db, roots, cfg.TrashTTL, log)
 			api.PurgeStaleUploadSessions(ctx, cfg.DataDir, cfg.UploadTTL, log)
+			versions.PurgeAllWithService(ctx, db, roots, versions.Config{
+				MaxPerFile:    cfg.VersionMaxPerFile,
+				MaxFileSize:   cfg.VersionMaxFileSize,
+				MaxTotalAge:   cfg.VersionMaxTotalAge,
+				MaxTotalBytes: cfg.VersionMaxTotalBytes,
+			}, log)
 		case <-scanTicker.C:
 			searchSvc.ScanAll(ctx)
 		}

@@ -74,6 +74,13 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "mime_not_allowed", merr.Error(), middleware.GetRequestID(r.Context()))
 			return
 		}
+		// Auto-snapshot the existing file before overwriting it, so the
+		// user always has a recovery point. Skip if the file doesn't
+		// exist yet (first upload is not a "change") or if versioning is
+		// disabled / the file exceeds the size cap.
+		if existing, serr := acc.provider.Stat(dest); serr == nil && !existing.IsDir {
+			s.snapshotIfEnabled(r, rootID, dest, existing.Size)
+		}
 		werr := acc.provider.Write(dest, part, -1)
 		part.Close()
 		if werr != nil {

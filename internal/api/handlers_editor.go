@@ -115,6 +115,11 @@ func (s *Server) handleSaveContent(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	// Auto-snapshot the previous content so the editor's save is
+	// itself undoable from the version history. TextWorkspace only
+	// edits small files (≤ MaxEditableSize), so the size cap rarely
+	// fires here.
+	s.snapshotIfEnabled(r, req.Root, rel, info.Size)
 	if err := acc.provider.Write(rel, strings.NewReader(req.Content), int64(len(req.Content))); err != nil {
 		s.writeProviderError(w, r, err)
 		return

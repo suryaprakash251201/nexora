@@ -277,6 +277,8 @@ export interface FileVersion {
   checksum: string;
   note: string;
   created_at: string;
+  auto?: boolean;
+  is_current?: boolean;
 }
 
 export interface StorageStats {
@@ -378,3 +380,24 @@ export interface PhotoMeta {
 export type Density = "compact" | "comfortable" | "spacious";
 export type ViewMode = "grid" | "timeline";
 
+
+export interface BackupEntry {
+  name: string;
+  size: number;
+  modtime: string;
+}
+
+export interface SystemSetting {
+  key: string;
+  env: string;
+  type: "string" | "bool" | "int" | "bytes" | "duration" | "list";
+  category: string;
+  label: string;
+  description: string;
+  default: string;
+  requires_restart: boolean;
+  value: string;
+  effective: string;
+  is_overridden: boolean;
+  source: string;
+}

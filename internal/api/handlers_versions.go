@@ -1,25 +1,244 @@
 package api
 
 import (
-	"crypto/sha256"
-	"database/sql"
-	"encoding/hex"
 	"fmt"
-	"io"
 	"net/http"
-	"os"
-	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/nexora/nexora/internal/auth"
 	"github.com/nexora/nexora/internal/events"
 	"github.com/nexora/nexora/internal/middleware"
-	"github.com/nexora/nexora/internal/storage"
+	"github.com/nexora/nexora/internal/versions"
 )
 
-type FileVersion struct {
+// versionsStore returns the configured versions store, building one on
+// the fly the first time it's needed. The store is stateless after
+// construction (no goroutines, no caches) so a fresh instance per call
+// is fine and avoids the package holding a long-lived reference.
+func (s *Server) versionsStore() *versions.Store {
+	return &versions.Store{
+		DB:      s.DB,
+		Config:  s.versionConfig(),
+		DataDir: s.Cfg.DataDir,
+	}
+}
+
+func (s *Server) versionConfig() versions.Config {
+	return versions.Config{
+		MaxPerFile:    s.Cfg.VersionMaxPerFile,
+		MaxFileSize:   s.Cfg.VersionMaxFileSize,
+		MaxTotalAge:   s.Cfg.VersionMaxTotalAge,
+		MaxTotalBytes: s.Cfg.VersionMaxTotalBytes,
+	}
+}
+
+// handleListVersions returns every snapshot for a file, newest first.
+// The "current" live file is synthesised as version 0 and prepended so
+// the UI can render a single, ordered list without a second roundtrip.
+func (s *Server) handleListVersions(w http.ResponseWriter, r *http.Request) {
+	user, ok := auth.UserFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthenticated", "Authentication required", middleware.GetRequestID(r.Context()))
+		return
+	}
+	rootID := r.URL.Query().Get("root")
+	rel := r.URL.Query().Get("path")
+	_, rel, info, err := s.requireFile(r, rootID, rel, false)
+	if err != nil {
+		s.writeAccessError(w, r, err)
+		return
+	}
+	_ = user // scoping is enforced via the per-file access check above
+
+	store := s.versionsStore()
+	rows := store.List(rootID, rel)
+	out := make([]versionDTO, 0, len(rows)+1)
+	// "Current" entry: the live file as it is right now.
+	out = append(out, versionDTO{
+		ID:        "current",
+		RootID:    rootID,
+		Path:      rel,
+		Version:   0,
+		Size:      info.Size,
+		Checksum:  "",
+		Note:      "Current",
+		Auto:      false,
+		CreatedAt: info.Modified.UTC().Format(time.RFC3339),
+		IsCurrent: true,
+	})
+	for _, v := range rows {
+		out = append(out, versionToDTO(v))
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"versions": out})
+}
+
+// handleCreateVersion snapshots the live file at (root, path).
+// Body: { root, path, note? }. The user can also pass auto=true to
+// mark the snapshot as automatic; the server uses this for the
+// auto-on-overwrite path so the UI can render it differently.
+func (s *Server) handleCreateVersion(w http.ResponseWriter, r *http.Request) {
+	user, ok := auth.UserFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthenticated", "Authentication required", middleware.GetRequestID(r.Context()))
+		return
+	}
+	var req struct {
+		Root string `json:"root"`
+		Path string `json:"path"`
+		Note string `json:"note"`
+		Auto bool   `json:"auto"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_body", err.Error(), middleware.GetRequestID(r.Context()))
+		return
+	}
+	acc, rel, _, err := s.requireFile(r, req.Root, req.Path, false)
+	if err != nil {
+		s.writeAccessError(w, r, err)
+		return
+	}
+
+	store := s.versionsStore()
+	v, err := store.Create(versions.CreateInput{
+		UserID: user.ID,
+		RootID: req.Root,
+		Path:   rel,
+		Note:   req.Note,
+		Auto:   req.Auto,
+	}, acc.provider)
+	if err != nil {
+		if err == versions.ErrTooLarge {
+			writeError(w, http.StatusRequestEntityTooLarge, "file_too_large",
+				"file is larger than the configured version max-file-size", middleware.GetRequestID(r.Context()))
+			return
+		}
+		s.writeProviderError(w, r, err)
+		return
+	}
+
+	s.audit(r, "version_create", rel, fmt.Sprintf("version=%d", v.Version))
+	s.emit(events.EventVersionCreated, r, req.Root, rel, v.Size)
+	writeJSON(w, http.StatusCreated, map[string]any{"version": versionToDTO(*v)})
+}
+
+// handleDownloadVersion streams a version's bytes to the client with
+// the original file name. Useful when the user wants the old version
+// outside of restoring (e.g. emailing it to someone).
+func (s *Server) handleDownloadVersion(w http.ResponseWriter, r *http.Request) {
+	versionID := chi.URLParam(r, "id")
+	store := s.versionsStore()
+	v, err := store.Get(versionID)
+	if err != nil {
+		if err == versions.ErrNotFound {
+			writeError(w, http.StatusNotFound, "not_found", "version not found", middleware.GetRequestID(r.Context()))
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "internal_error", err.Error(), middleware.GetRequestID(r.Context()))
+		return
+	}
+	acc, _, _, err := s.requireFile(r, v.RootID, v.Path, false)
+	if err != nil {
+		s.writeAccessError(w, r, err)
+		return
+	}
+	rc, err := store.Open(v, acc.provider)
+	if err != nil {
+		s.writeProviderError(w, r, err)
+		return
+	}
+	defer rc.Close()
+
+	// Use the original file's name so the browser saves it as
+	// "report.pdf" not "abcdef123456".
+	name := v.Path
+	if name == "" {
+		name = v.ID
+	}
+	// Defensive cap: name is something like "docs/report.pdf" — only
+	// the last segment is meaningful to the browser.
+	if idx := lastSlash(name); idx >= 0 {
+		name = name[idx+1:]
+	}
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Length", fmt.Sprintf("%d", v.Size))
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, sanitizeFilename(name)))
+	_, _ = copyAll(w, rc)
+}
+
+// handleRestoreVersion replaces the live file with the bytes from a
+// snapshot. The pre-restore live file is auto-snapshotted first so the
+// restore is itself undoable from the UI.
+func (s *Server) handleRestoreVersion(w http.ResponseWriter, r *http.Request) {
+	user, ok := auth.UserFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthenticated", "Authentication required", middleware.GetRequestID(r.Context()))
+		return
+	}
+	versionID := chi.URLParam(r, "id")
+	store := s.versionsStore()
+	v, err := store.Get(versionID)
+	if err != nil {
+		if err == versions.ErrNotFound {
+			writeError(w, http.StatusNotFound, "not_found", "version not found", middleware.GetRequestID(r.Context()))
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "internal_error", err.Error(), middleware.GetRequestID(r.Context()))
+		return
+	}
+	acc, _, _, err := s.requireFile(r, v.RootID, v.Path, true)
+	if err != nil {
+		s.writeAccessError(w, r, err)
+		return
+	}
+	restored, err := store.Restore(v.ID, user.ID, acc.provider)
+	if err != nil {
+		s.writeProviderError(w, r, err)
+		return
+	}
+	// Refresh the search index for the live file.
+	if info, statErr := acc.provider.Stat(v.Path); statErr == nil && s.Search != nil {
+		s.Search.Upsert(v.RootID, info)
+	}
+	s.audit(r, "version_restore", v.Path, fmt.Sprintf("restored_from=%s version=%d", versionID, v.Version))
+	s.emit(events.EventVersionRestored, r, v.RootID, v.Path, restored.Size)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":       true,
+		"restored": versionToDTO(*restored),
+	})
+}
+
+// handleDeleteVersion removes a version row and its bytes. Any user
+// who can read the file can prune its history (the cost of storage
+// is shared, not personal).
+func (s *Server) handleDeleteVersion(w http.ResponseWriter, r *http.Request) {
+	versionID := chi.URLParam(r, "id")
+	store := s.versionsStore()
+	v, err := store.Get(versionID)
+	if err != nil {
+		if err == versions.ErrNotFound {
+			writeError(w, http.StatusNotFound, "not_found", "version not found", middleware.GetRequestID(r.Context()))
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "internal_error", err.Error(), middleware.GetRequestID(r.Context()))
+		return
+	}
+	acc, _, _, err := s.requireFile(r, v.RootID, v.Path, false)
+	if err != nil {
+		s.writeAccessError(w, r, err)
+		return
+	}
+	if err := store.Delete(versionID, acc.provider); err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", err.Error(), middleware.GetRequestID(r.Context()))
+		return
+	}
+	s.audit(r, "version_delete", v.Path, fmt.Sprintf("version=%d id=%s", v.Version, versionID))
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+// versionDTO is the JSON shape returned to clients. StorageKey is
+// always stripped (it would leak the user's provider key shape).
+type versionDTO struct {
 	ID        string `json:"id"`
 	RootID    string `json:"root_id"`
 	Path      string `json:"path"`
@@ -27,253 +246,52 @@ type FileVersion struct {
 	Size      int64  `json:"size"`
 	Checksum  string `json:"checksum"`
 	Note      string `json:"note"`
+	Auto      bool   `json:"auto"`
 	CreatedAt string `json:"created_at"`
+	IsCurrent bool   `json:"is_current"`
 }
 
-// handleListVersions lists all versions for a file.
-func (s *Server) handleListVersions(w http.ResponseWriter, r *http.Request) {
+func versionToDTO(v versions.Version) versionDTO {
+	return versionDTO{
+		ID:        v.ID,
+		RootID:    v.RootID,
+		Path:      v.Path,
+		Version:   v.Version,
+		Size:      v.Size,
+		Checksum:  v.Checksum,
+		Note:      v.Note,
+		Auto:      v.Auto,
+		CreatedAt: v.CreatedAt,
+		IsCurrent: false,
+	}
+}
+
+// snapshotIfEnabled is the single hook called by write paths
+// (uploads, editor, complete). It is a no-op when versioning is
+// disabled, when the file is too big, or when there's no live file
+// to snapshot.
+func (s *Server) snapshotIfEnabled(r *http.Request, rootID, rel string, size int64) {
+	if s == nil || !s.Cfg.VersionEnabled || !s.Cfg.VersionAuto {
+		return
+	}
+	store := s.versionsStore()
+	if !store.ShouldSnapshot(size) {
+		return
+	}
 	user, ok := auth.UserFromContext(r.Context())
-	if !ok {
-		writeError(w, http.StatusUnauthorized, "unauthenticated", "Authentication required", middleware.GetRequestID(r.Context()))
-		return
+	var userID string
+	if ok {
+		userID = user.ID
 	}
-
-	rootID := r.URL.Query().Get("root")
-	path := r.URL.Query().Get("path")
-	if rootID == "" || path == "" {
-		writeError(w, http.StatusBadRequest, "invalid_params", "root and path are required", middleware.GetRequestID(r.Context()))
-		return
-	}
-
-	rel, err := storage.CleanRelative(path)
-	if err != nil || rel == "" {
-		writeError(w, http.StatusBadRequest, "invalid_path", "invalid path", middleware.GetRequestID(r.Context()))
-		return
-	}
-
-	rows, err := s.DB.Query(`
-		SELECT id, root_id, path, version, size, checksum, note, created_at
-		FROM file_versions
-		WHERE root_id = ? AND path = ? AND user_id = ?
-		ORDER BY version DESC
-		LIMIT 50
-	`, rootID, rel, user.ID)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "could not list versions", middleware.GetRequestID(r.Context()))
-		return
-	}
-	defer rows.Close()
-
-	var versions []FileVersion
-	for rows.Next() {
-		var v FileVersion
-		if err := rows.Scan(&v.ID, &v.RootID, &v.Path, &v.Version, &v.Size, &v.Checksum, &v.Note, &v.CreatedAt); err != nil {
-			writeError(w, http.StatusInternalServerError, "internal_error", "could not scan version", middleware.GetRequestID(r.Context()))
-			return
-		}
-		versions = append(versions, v)
-	}
-
-	// Add current file info as "current" version
 	acc, err := s.resolveAccess(r, rootID, false)
-	if err == nil {
-		fi, err := acc.provider.Stat(rel)
-		if err == nil {
-			currentVersion := FileVersion{
-				ID:        "current",
-				RootID:    rootID,
-				Path:      rel,
-				Version:   -1,
-				Size:      fi.Size,
-				Checksum:  "",
-				Note:      "Current",
-				CreatedAt: fi.Modified.Format(time.RFC3339),
-			}
-			versions = append([]FileVersion{currentVersion}, versions...)
-		}
-	}
-
-	writeJSON(w, http.StatusOK, map[string]any{"versions": versions})
-}
-
-// handleCreateVersion creates a snapshot of the current file state.
-func (s *Server) handleCreateVersion(w http.ResponseWriter, r *http.Request) {
-	user, ok := auth.UserFromContext(r.Context())
-	if !ok {
-		writeError(w, http.StatusUnauthorized, "unauthenticated", "Authentication required", middleware.GetRequestID(r.Context()))
-		return
-	}
-
-	var req struct {
-		Root string `json:"root"`
-		Path string `json:"path"`
-		Note string `json:"note"`
-	}
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_body", err.Error(), middleware.GetRequestID(r.Context()))
-		return
-	}
-
-	rel, err := storage.CleanRelative(req.Path)
-	if err != nil || rel == "" {
-		writeError(w, http.StatusBadRequest, "invalid_path", "invalid path", middleware.GetRequestID(r.Context()))
-		return
-	}
-
-	acc, err := s.resolveAccess(r, req.Root, false)
 	if err != nil {
-		s.writeAccessError(w, r, err)
 		return
 	}
-
-	rc, err := acc.provider.Read(rel)
-	if err != nil {
-		s.writeProviderError(w, r, err)
-		return
-	}
-	defer rc.Close()
-
-	// Get the next version number
-	var maxVersion sql.NullInt64
-	s.DB.QueryRow(`SELECT MAX(version) FROM file_versions WHERE root_id = ? AND path = ?`, req.Root, rel).Scan(&maxVersion)
-	nextVersion := 1
-	if maxVersion.Valid {
-		nextVersion = int(maxVersion.Int64) + 1
-	}
-
-	// Store version in a data directory
-	versionID := randomID()
-	storedPath := filepath.Join(s.Cfg.DataDir, "versions", versionID)
-
-	// Ensure directory exists
-	os.MkdirAll(filepath.Dir(storedPath), 0700)
-
-	// Copy file to version storage
-	dst, err := os.Create(storedPath)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "could not create version file", middleware.GetRequestID(r.Context()))
-		return
-	}
-	defer dst.Close()
-
-	// Compute checksum while copying
-	hasher := sha256.New()
-	tee := io.TeeReader(rc, hasher)
-	size, err := io.Copy(dst, tee)
-	if err != nil {
-		os.Remove(storedPath)
-		writeError(w, http.StatusInternalServerError, "internal_error", "could not copy version data", middleware.GetRequestID(r.Context()))
-		return
-	}
-
-	checksum := hex.EncodeToString(hasher.Sum(nil))
-	now := time.Now().UTC().Format(time.RFC3339)
-
-	_, err = s.DB.Exec(`
-		INSERT INTO file_versions (id, user_id, root_id, path, version, size, checksum, note, stored_path, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, versionID, user.ID, req.Root, rel, nextVersion, size, checksum, req.Note, storedPath, now)
-	if err != nil {
-		os.Remove(storedPath)
-		writeError(w, http.StatusInternalServerError, "internal_error", "could not save version record", middleware.GetRequestID(r.Context()))
-		return
-	}
-
-	version := FileVersion{
-		ID:        versionID,
-		RootID:    req.Root,
-		Path:      rel,
-		Version:   nextVersion,
-		Size:      size,
-		Checksum:  checksum,
-		Note:      req.Note,
-		CreatedAt: now,
-	}
-
-	s.audit(r, "version_create", rel, fmt.Sprintf("version=%d", nextVersion))
-	s.emit(events.EventVersionCreated, r, req.Root, rel, size)
-	writeJSON(w, http.StatusCreated, map[string]any{"version": version})
-}
-
-// handleRestoreVersion restores a file from a version snapshot.
-func (s *Server) handleRestoreVersion(w http.ResponseWriter, r *http.Request) {
-	user, ok := auth.UserFromContext(r.Context())
-	if !ok {
-		writeError(w, http.StatusUnauthorized, "unauthenticated", "Authentication required", middleware.GetRequestID(r.Context()))
-		return
-	}
-
-	versionID := chi.URLParam(r, "id")
-
-	var rootID, path, storedPath string
-	err := s.DB.QueryRow(`
-		SELECT root_id, path, stored_path FROM file_versions WHERE id = ? AND user_id = ?
-	`, versionID, user.ID).Scan(&rootID, &path, &storedPath)
-	if err == sql.ErrNoRows {
-		writeError(w, http.StatusNotFound, "not_found", "version not found", middleware.GetRequestID(r.Context()))
-		return
-	}
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "could not load version", middleware.GetRequestID(r.Context()))
-		return
-	}
-
-	// Get write access to the file's root
-	acc, err := s.resolveAccess(r, rootID, true)
-	if err != nil {
-		s.writeAccessError(w, r, err)
-		return
-	}
-
-	// Read the version file
-	src, err := os.ReadFile(storedPath)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "could not read version data", middleware.GetRequestID(r.Context()))
-		return
-	}
-
-	// Write it back to the original file path using the provider
-	rel, _ := storage.CleanRelative(path)
-	if err := acc.provider.Write(rel, strings.NewReader(string(src)), int64(len(src))); err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "could not restore file", middleware.GetRequestID(r.Context()))
-		return
-	}
-
-	s.audit(r, "version_restore", path, "restored_from="+versionID)
-	s.emit(events.EventVersionRestored, r, rootID, rel, int64(len(src)))
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
-}
-
-// handleDeleteVersion deletes a specific version.
-func (s *Server) handleDeleteVersion(w http.ResponseWriter, r *http.Request) {
-	user, ok := auth.UserFromContext(r.Context())
-	if !ok {
-		writeError(w, http.StatusUnauthorized, "unauthenticated", "Authentication required", middleware.GetRequestID(r.Context()))
-		return
-	}
-
-	versionID := chi.URLParam(r, "id")
-
-	var storedPath string
-	err := s.DB.QueryRow(`SELECT stored_path FROM file_versions WHERE id = ? AND user_id = ?`, versionID, user.ID).Scan(&storedPath)
-	if err == sql.ErrNoRows {
-		writeError(w, http.StatusNotFound, "not_found", "version not found", middleware.GetRequestID(r.Context()))
-		return
-	}
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "could not load version", middleware.GetRequestID(r.Context()))
-		return
-	}
-
-	// Delete the stored file
-	os.Remove(storedPath)
-
-	_, err = s.DB.Exec(`DELETE FROM file_versions WHERE id = ?`, versionID)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "could not delete version", middleware.GetRequestID(r.Context()))
-		return
-	}
-
-	s.audit(r, "version_delete", versionID, "")
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+	_, _ = store.Create(versions.CreateInput{
+		UserID: userID,
+		RootID: rootID,
+		Path:   rel,
+		Note:   "auto",
+		Auto:   true,
+	}, acc.provider)
 }

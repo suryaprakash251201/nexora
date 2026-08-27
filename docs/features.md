@@ -18,8 +18,11 @@ A complete reference for all Nexora features with step-by-step usage instruction
 10. [WebDAV Network Drive](#webdav-network-drive)
 11. [Webhooks & Events](#webhooks--events)
 12. [Keyboard Shortcuts](#keyboard-shortcuts)
-13. [Configuration Reference](#configuration-reference)
-14. [Troubleshooting](#troubleshooting)
+13. [Tags & Labels](#tags--labels)
+14. [S3-Compatible Endpoint](#s3-compatible-endpoint)
+15. [Administration Console](#administration-console)
+16. [Configuration Reference](#configuration-reference)
+17. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -93,8 +96,20 @@ NEXORA_DEFAULT_ROOTS=Files:/mnt/files:false,Media:/mnt/media:true,Backups:/mnt/b
 
 - **Instant search**: Type in the search bar at the top of the file browser
 - **Global search**: Click **Search** in the sidebar for full-text search across all roots
+- **Search inside files**: tick **In file contents** in the Search filters — the query is matched against the extracted content of PDFs (text layer), plain-text files (markdown, logs, code, …) and, when Tesseract is installed, OCR'd images. Every term must match (AND). Extraction runs in the background (new files are indexed within ~30s) and up to `NEXORA_EXTRACT_MAX_SIZE` (default 10 MB) per file.
 - **Filter by type**: Use the **Filter** dropdown (All, Documents, Images, Videos, Audio, Archives, Folders)
 - **Sort**: Click the **Sort** button to sort by Name, Modified, Size, or Type
+
+### Enabling OCR (optional)
+
+Image search requires the `tesseract-ocr` package on the server:
+
+```bash
+# Debian/Ubuntu host or container
+apt-get install -y tesseract-ocr
+```
+
+Restart Nexora — it auto-detects `/usr/bin/tesseract`, or set `NEXORA_OCR_BIN=/path/to/tesseract`. Without OCR the other content search (PDF + text) still works.
 
 ### Sharing
 
@@ -223,11 +238,31 @@ Track and restore previous versions of any file. Each time you save a snapshot, 
 ### Creating a Snapshot
 
 1. Locate a file in the file browser
-2. Right-click the file → **Properties** (or open the Details drawer)  
-3. Look for **Version History** (coming soon to the UI)
-4. Click **New snapshot**
-5. Optionally add a note (e.g., "Before major edit")
-6. Click **Save**
+2. Right-click the file → **Version history** (or open the Details drawer → **Versions** tab)
+3. Click **New snapshot**
+4. Optionally add a note (e.g., "Before major edit")
+5. Click **Save**
+
+### Automatic snapshots
+
+Since versioning is on by default, Nexora also captures a snapshot **automatically** whenever
+you overwrite an existing file — resumable or single-request upload, drag-and-drop, or saving
+from the built-in text editor. These auto-snapshots are marked with an **auto** tag in the
+panel so you can tell them apart from snapshots you took by hand. That means every bad
+overwrite is undoable with one click, even if you never thought to snapshot.
+
+### Retention
+
+- **Per-file cap** (`NEXORA_VERSION_MAX_PER_FILE`, default 50): when you exceed it, the oldest
+  snapshots for that file are pruned automatically as new ones are taken.
+- **Age cap** (`NEXORA_VERSION_MAX_AGE`): the maintenance sweep purges snapshots older than
+  this (e.g. `180d`).
+- **Total-size cap** (`NEXORA_VERSION_MAX_TOTAL_BYTES`): once version storage across all files
+  exceeds this, the oldest snapshots (while keeping the newest per file) are dropped.
+- **File-size cap** (`NEXORA_VERSION_MAX_FILE_SIZE`, default 256 MB): snapshots skip files
+  larger than this so a 20 GB ISO doesn't duplicate itself on every overwrite.
+- Set `NEXORA_VERSION_ENABLED=false` to turn the whole feature off, or
+  `NEXORA_VERSION_AUTO=false` to keep manual snapshots only.
 
 ### Restoring a Version
 
@@ -236,9 +271,13 @@ Track and restore previous versions of any file. Each time you save a snapshot, 
 3. Click the **rotate** icon (**Restore**)
 4. Confirm the restoration dialog
 
+Restoring is itself undoable — the current live file is snapshotted
+automatically before it's replaced, so no restore can destroy data.
+
 ### Managing Versions
 
 - **View all versions**: Lists all snapshots with version number, size, and date
+- **Download a version**: Click the **download** icon to grab a copy without restoring it
 - **Delete old versions**: Click the **trash** icon on any version
 - **Current version**: Always shown at the top, marked as "Latest"
 
@@ -254,6 +293,10 @@ curl -X POST http://localhost/api/v1/files/versions \
   -H "Content-Type: application/json" \
   -H "Cookie: session=<session_token>" \
   -d '{"root":"<root_id>","path":"<file_path>","note":"Before edit"}'
+
+# Download a specific version's bytes
+curl -OJ http://localhost/api/v1/files/versions/<version_id>/download \
+  -H "Cookie: session=<session_token>"
 
 # Restore a version
 curl -X POST http://localhost/api/v1/files/versions/<version_id>/restore \
@@ -531,6 +574,20 @@ curl -X POST http://localhost/api/v1/webhooks \
 
 ---
 
+## Administration Console
+
+The **Administration** panel (sidebar → Admin, admins only) is now a sidebar-led
+console with six sections:
+
+| Section | What you can do |
+|---------|-----------------|
+| **Overview** | Stat cards (users, roots, files indexed, bytes stored), animated storage-usage bars per root, quick actions (reindex, add root, add user, back up), recent audit feed, system info |
+| **Users** | Create/edit users, switch roles (admin/user/viewer), enable/disable, reset passwords, manage per-root permissions |
+| **Storage Roots** | Add / edit / delete roots (local paths or S3) — a dedicated section of its own |
+| **Audit Log** | Browse recent security & admin events with color-coded action badges |
+| **Backups** | One-click manual database backup (`VACUUM INTO` for SQLite; PostgreSQL deployments should use pg_dump), per-snapshot list with size/date, delete individual snapshots, and the daily schedule summary (`NEXORA_BACKUP_DIR` / `KEEP` / `HOUR`) |
+| **Settings** | Default view mode, accent theme, version/runtime info |
+
 ## Keyboard Shortcuts
 
 ### Global Shortcuts
@@ -684,6 +741,112 @@ go build -tags postgres ./cmd/nexora
 
 ---
 
+## Tags & Labels
+
+Color-coded, per-user tags you can attach to any file or folder you can read. Tags are
+personal annotations — they live in the database, never mutate your files, and work even
+on read-only roots.
+
+### Tagging a file
+
+1. Right-click any file → **Tags…**
+2. Click a tag to apply it (✓), or type a name + pick a color to **Create new tag**
+3. Tag chips appear on the file's row / tile so you can see everything at a glance
+
+Apply a tag to a whole selection (right-click with multiple files selected) in one shot.
+
+### Filtering by tag
+
+Click a tag in the **filter bar** above the file grid to show only files carrying it.
+Multiple tags combine with AND (a file must have all of them). **Clear filters** resets.
+The bar only appears once you have at least one tag.
+
+### Managing tags
+
+Right-click any file → **Manage tags…** opens the tag manager:
+
+- **Rename / recolor** — pencil icon, pick from the palette, save
+- **Delete** — removes the tag from every file that used it (files are untouched)
+- Every row shows its current usage count
+
+### API
+
+```bash
+# List tags (with per-tag usage counts)
+GET /api/v1/tags
+
+# Create a tag
+POST /api/v1/tags            { "name": "Docs", "color": "#3B82F6" }
+
+# Rename / recolor
+PATCH /api/v1/tags/{id}      { "name": "Documents" }
+
+# Delete a tag (removes it from all files, cascades)
+DELETE /api/v1/tags/{id}
+
+# Tag files
+POST /api/v1/files/tag       { "tag_id": "…", "root_id": "…", "paths": ["a.pdf"] }
+
+# Untag files
+DELETE /api/v1/files/tag?tag_id=…&root_id=…&paths=a.pdf
+```
+
+## S3-Compatible Endpoint
+
+Nexora speaks the S3 API, so any S3 client can read and write your workspace with
+zero Nexora-specific code — no custom sync daemon, no plugins.
+
+**Mapping:**
+
+| S3 concept | Nexora |
+|------------|--------|
+| Bucket | Storage root (by name: `Files`, `Media`, …) |
+| Object key | File path inside the root (`docs/report.pdf`) |
+| Credentials | Personal API token (`nxr_…`) used as **both** access key and secret |
+| ListObjectsV2 | `?prefix`, `?delimiter=/`, `?max-keys`, `?continuation-token` |
+| Multipart upload | Full lifecycle (create / part / list-parts / complete / abort) |
+| Range reads | `GET` with `Range:` header (streaming) |
+
+### rclone setup
+
+```ini
+[nexora]
+type = s3
+provider = Other
+endpoint = http://localhost:8080/s3
+access_key_id = nxr_your_token_here
+secret_access_key = nxr_your_token_here
+force_path_style = true
+```
+
+```bash
+rclone ls nexora:Media/Movies/
+rclone copy ./backup.tar.gz nexora:Backups/
+rclone sync ~/Photos nexora:Photos/ --backup-dir nexora:Photos/.trash/
+```
+
+### Creating a token
+
+Settings → Security → **API tokens** → create one (or `POST /api/v1/auth/tokens`).
+The raw token is shown once; paste it into both S3 credential fields of your client.
+
+### Notes
+
+- **Permissions follow the user**: buckets (roots) you can read are listable;
+  writes require write access to the root. Read-only roots reject PUT.
+- **Every write behaves like a UI upload**: search index updated, recents
+  populated, audit logged — and overwriting an existing file creates an
+  automatic **version snapshot** (see File Versioning), so a bad `rclone sync`
+  is undoable from the UI.
+- **mtime preservation**: rclone's `x-amz-meta-mtime` header is honoured on
+  write and reported on read/list, so sync round-trips keep timestamps.
+- **Deletes are immediate** (S3 semantics — trash is bypassed).
+- `ETag` is a stable opaque tag derived from size + mtime (Nexora does not
+  store content hashes); rclone change-detection still works via size + mtime.
+- Endpoint base: `https://your-host/s3`. Multipart parts are staged inside the
+  root's own provider under a hidden `.nexora-mpu/` namespace and cleaned up
+  on complete/abort.
+
 ## Feature Quick Reference
 
 | Feature | Where to Find | Shortcut |
@@ -696,10 +859,13 @@ go build -tags postgres ./cmd/nexora
 | Storage Analytics | Sidebar → Analytics | - |
 | Bulk Rename | Selection Bar → Rename | - |
 | File Versioning | Details Drawer → Version History | - |
+| Tags & Labels | Right-click → Tags… / Manage tags… | - |
 | PostgreSQL | Environment config | - |
 | S3 Storage | Code integration | - |
 | WebDAV | Network drive mount | - |
 | Webhooks | API / Admin Panel | - |
+| **Administration Console** | Sidebar → Admin (Overview / Users / Roots / Audit / Backups / Settings) | - |
+| S3 Endpoint | `https://host/s3` (any S3 client) | - |
 
 ---
 

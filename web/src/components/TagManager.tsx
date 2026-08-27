@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { X, Plus, Tag as TagIcon, Check } from "lucide-react";
+import { X, Plus, Tag as TagIcon, Check, Pencil, Trash2, Save } from "lucide-react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 ;
 import { tagsApi } from "../api/endpoints";
 import type { Tag } from "../api/types";
 import { cn } from "@/lib/utils";
+import { toast } from "../lib/toast";
+import { ConfirmDialog } from "./ui/ConfirmDialog";
 const TAG_COLORS = [
   { name: "Red", value: "#EF4444" },
   { name: "Orange", value: "#F97316" },
@@ -61,6 +63,171 @@ export function TagDot({ color, size = "sm" }: { color: string; size?: "sm" | "m
     />
   );
 }
+/**
+ * TagManager — full CRUD surface for the user's tags.
+ * Lists every tag with its usage count, inline rename/recolor, and delete.
+ * Persisted via PATCH/DELETE /tags/{id}; the ["tags"] query is invalidated
+ * on every mutation so chips, the picker and the filter bar stay in sync.
+ */
+export function TagManager({ onClose }: { onClose: () => void }) {
+  const qc = useQueryClient();
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editColor, setEditColor] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<Tag | null>(null);
+
+  const tags = useQuery({
+    queryKey: ["tags"],
+    queryFn: () => tagsApi.listRaw().then((d) => d.tags || []),
+  });
+
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ["tags"] });
+    qc.invalidateQueries({ queryKey: ["file-tags"] });
+  };
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, name, color }: { id: string; name?: string; color?: string }) =>
+      tagsApi.update(id, { name, color }),
+    onSuccess: () => {
+      invalidate();
+      toast.success("Tag updated");
+      setEditingId(null);
+      setEditName("");
+      setEditColor(null);
+    },
+    onError: (e: any) => toast.error(e.message || "Failed to update tag"),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => tagsApi.remove(id),
+    onSuccess: () => {
+      invalidate();
+      toast.success("Tag deleted");
+      setPendingDelete(null);
+    },
+    onError: (e: any) => toast.error(e.message || "Failed to delete tag"),
+  });
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8, scale: 0.96 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: 8, scale: 0.96 }}
+      className="w-80 glass-strong rounded-2xl shadow-2xl shadow-black/30 overflow-hidden border border-white/[0.06]"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="px-4 py-3 border-b border-white/[0.06] flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <TagIcon className="h-4 w-4 text-accent" />
+          <span className="text-sm font-semibold">Manage tags</span>
+        </div>
+        <button onClick={onClose} className="p-1 rounded-lg hover:bg-glass-bg transition-colors">
+          <X className="h-4 w-4 text-text-tertiary" />
+        </button>
+      </div>
+      <div className="p-3 max-h-[60vh] overflow-y-auto space-y-1.5">
+        {tags.isLoading && <p className="text-center text-text-tertiary text-xs py-4">Loading…</p>}
+        {tags.data?.length === 0 && !tags.isLoading && (
+          <p className="text-center text-text-tertiary text-xs py-4">No tags yet — tag a file from its right-click menu.</p>
+        )}
+        {(tags.data || []).map((tag) => {
+          const editing = editingId === tag.id;
+          const currentColor = editColor ?? tag.color;
+          return (
+            <div
+              key={tag.id}
+              className="rounded-xl border border-white/[0.05] bg-surface/40 p-2.5 space-y-2"
+            >
+              {editing ? (
+                <>
+                  <div className="flex items-center gap-2">
+                    <span className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: currentColor }} />
+                    <input
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      placeholder="Tag name…"
+                      autoFocus
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && editName.trim()) {
+                          updateMutation.mutate({ id: tag.id, name: editName.trim(), color: currentColor });
+                        }
+                      }}
+                      className="flex-1 min-w-0 rounded-lg glass-input px-2.5 py-1.5 text-sm outline-none focus:ring-1 focus:ring-accent/50"
+                    />
+                    <button
+                      onClick={() =>
+                        updateMutation.mutate({ id: tag.id, name: editName.trim() || undefined, color: currentColor })
+                      }
+                      disabled={!editName.trim()}
+                      className="p-1.5 rounded-lg hover:bg-accent/10 hover:text-accent transition-colors disabled:opacity-40"
+                      title="Save"
+                    >
+                      <Save className="h-4 w-4" />
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {TAG_COLORS.map((c) => (
+                      <button
+                        key={c.value}
+                        onClick={() => setEditColor(c.value)}
+                        className={cn(
+                          "h-5 w-5 rounded-full transition-all",
+                          currentColor === c.value ? "ring-2 ring-offset-1 scale-110" : "hover:scale-110"
+                        )}
+                        style={{ backgroundColor: c.value, boxShadow: currentColor === c.value ? `0 0 8px ${c.value}` : "none" }}
+                        title={c.name}
+                      />
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <span className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: tag.color }} />
+                  <span className="flex-1 min-w-0 truncate text-sm font-medium">{tag.name}</span>
+                  <span className="text-[10px] text-text-tertiary shrink-0">
+                    {tag.count ?? 0} file{tag.count === 1 ? "" : "s"}
+                  </span>
+                  <button
+                    onClick={() => { setEditingId(tag.id); setEditName(tag.name); setEditColor(null); }}
+                    className="p-1.5 rounded-lg hover:bg-accent/10 hover:text-accent transition-colors"
+                    title="Rename / recolor"
+                    aria-label={`Edit tag ${tag.name}`}
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    onClick={() => setPendingDelete(tag)}
+                    className="p-1.5 rounded-lg hover:bg-red-500/10 hover:text-red-400 transition-colors"
+                    title="Delete tag"
+                    aria-label={`Delete tag ${tag.name}`}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      <ConfirmDialog
+        open={!!pendingDelete}
+        title="Delete this tag?"
+        description={
+          pendingDelete
+            ? `"${pendingDelete.name}" will be removed from ${pendingDelete.count ?? 0} file(s). The files themselves are not touched.`
+            : ""
+        }
+        confirmLabel="Delete"
+        danger
+        loading={deleteMutation.isPending}
+        onConfirm={() => { if (pendingDelete) deleteMutation.mutate(pendingDelete.id); }}
+        onCancel={() => setPendingDelete(null)}
+      />
+    </motion.div>
+  );
+}
+
 export function TagPicker({
   rootId,
   paths,

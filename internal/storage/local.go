@@ -5,11 +5,33 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // SystemTrashDir is the per-root directory where deleted items are moved before
 // permanent removal. It is hidden from normal file listings.
 const SystemTrashDir = ".nexora-trash"
+
+// SystemVersionsDir is the per-root namespace where file-version snapshots
+// live. Like the trash dir, it is never surfaced in user-facing listings.
+const SystemVersionsDir = ".nexora-versions"
+
+// SystemMpuDir is the per-root namespace where S3-gateway multipart upload
+// parts are staged. Hidden from listings like the other system dirs.
+const SystemMpuDir = ".nexora-mpu"
+
+// IsSystemPath reports whether a root-relative path refers to one of the
+// hidden system namespaces (trash, versions, multipart staging). The check is
+// prefix-based so nested entries inside those directories are also excluded.
+func IsSystemPath(rel string) bool {
+	return strings.HasPrefix(rel, SystemTrashDir) || strings.HasPrefix(rel, SystemVersionsDir) || strings.HasPrefix(rel, SystemMpuDir)
+}
+
+// IsHiddenName reports whether a bare entry name is a hidden system entry
+// (exactly the trash or versions directory, at any depth).
+func IsHiddenName(name string) bool {
+	return name == SystemTrashDir || name == SystemVersionsDir || name == SystemMpuDir
+}
 
 // LocalFilesystemProvider implements StorageProvider against a host directory.
 type LocalFilesystemProvider struct {
@@ -45,7 +67,9 @@ func (p *LocalFilesystemProvider) List(rel string) ([]FileInfo, error) {
 		if err != nil {
 			continue
 		}
-		childRel := rel
+		// Join without duplicating separators: callers may pass a dir with or
+		// without a trailing slash (the S3 gateway lists with prefix dirs).
+		childRel := strings.TrimSuffix(rel, "/")
 		if childRel != "" {
 			childRel += "/"
 		}
@@ -300,6 +324,16 @@ func (p *LocalFilesystemProvider) Search(q SearchQuery) ([]FileInfo, error) {
 		return nil, walkErr
 	}
 	return out, nil
+}
+
+// Chtimes applies a modification time to a file. Used by the S3 gateway to
+// honour the x-amz-meta-mtime header that rclone sends when syncing.
+func (p *LocalFilesystemProvider) Chtimes(rel string, t time.Time) error {
+	abs, err := p.abs(rel)
+	if err != nil {
+		return err
+	}
+	return os.Chtimes(abs, t, t)
 }
 
 // GetQuota returns disk usage for the mount.

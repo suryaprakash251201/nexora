@@ -55,6 +55,7 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 		Name:    queryParam(r, "q", ""),
 		Ext:     queryParam(r, "ext", ""),
 		Kind:    queryParam(r, "kind", ""),
+		Text:    queryParam(r, "text", ""), // search inside file contents (PDF/text/OCR)
 		Sort:    queryParam(r, "sort", "relevance"),
 	}
 	if p, err := storage.CleanRelative(queryParam(r, "path", "")); err == nil {

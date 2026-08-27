@@ -17,10 +17,12 @@ export function useModals() {
   const [playlistName, setPlaylistName] = useState("");
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [tagPicker, setTagPicker] = useState<{ rootId: string; paths: string[] } | null>(null);
+  const [versionsItem, setVersionsItem] = useState<FileItem | null>(null);
+  const [tagManagerOpen, setTagManagerOpen] = useState(false);
 
   const isModalOpen = useMemo(
-    () => !!(preview || imageItem || editItem || shareItem || menu || rootModal || playlistModal || ctx || ctxPlaylist || tagPicker),
-    [preview, imageItem, editItem, shareItem, menu, rootModal, playlistModal, ctx, ctxPlaylist, tagPicker]
+    () => !!(preview || imageItem || editItem || shareItem || menu || rootModal || playlistModal || ctx || ctxPlaylist || tagPicker || versionsItem || tagManagerOpen),
+    [preview, imageItem, editItem, shareItem, menu, rootModal, playlistModal, ctx, ctxPlaylist, tagPicker, versionsItem, tagManagerOpen]
   );
 
   return {
@@ -43,6 +45,10 @@ export function useModals() {
     commandPaletteOpen, setCommandPaletteOpen,
     // Tags
     tagPicker, setTagPicker,
+    // Versions
+    versionsItem, setVersionsItem,
+    // Tag management
+    tagManagerOpen, setTagManagerOpen,
     // Derived
     isModalOpen,
   };

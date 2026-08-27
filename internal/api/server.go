@@ -19,6 +19,7 @@ import (
 	"github.com/nexora/nexora/internal/playlists"
 	"github.com/nexora/nexora/internal/preview"
 	"github.com/nexora/nexora/internal/search"
+	"github.com/nexora/nexora/internal/settings"
 	"github.com/nexora/nexora/internal/sharing"
 	"github.com/nexora/nexora/internal/storage"
 )
@@ -42,6 +43,7 @@ type Server struct {
 	Preview      *preview.Service
 	Metrics      *metrics.Registry
 	Events       *events.Bus
+	Settings     *settings.Store
 	WebRoot      string
 }
 
@@ -63,13 +65,14 @@ type Deps struct {
 	Playlists *playlists.Store
 
 	// Optional services; nil disables the feature.
-	Search  *search.Service
-	Shares  *sharing.Store
-	Preview *preview.Service
-	Jobs    *jobs.Manager
-	Metrics *metrics.Registry
-	Events  *events.Bus
-	WebRoot string
+	Search   *search.Service
+	Shares   *sharing.Store
+	Preview  *preview.Service
+	Jobs     *jobs.Manager
+	Metrics  *metrics.Registry
+	Events   *events.Bus
+	Settings *settings.Store
+	WebRoot  string
 }
 
 // NewServer constructs the API server with its dependencies.
@@ -92,6 +95,7 @@ func NewServer(d Deps) *Server {
 		Jobs:         d.Jobs,
 		Metrics:      d.Metrics,
 		Events:       d.Events,
+		Settings:     d.Settings,
 		WebRoot:      d.WebRoot,
 	}
 }
@@ -102,6 +106,7 @@ func (s *Server) Routes() http.Handler {
 
 	csrfExempt := []string{
 		"/healthz", "/readyz",
+		"/s3", // S3 gateway authenticates via AWS4 signature, not cookies
 		"/api/v1/auth/setup", "/api/v1/auth/login",
 		"/api/v1/auth/tailscale",
 		"/api/v1/auth/forgot-password", "/api/v1/auth/reset-password",
@@ -127,19 +132,26 @@ func (s *Server) Routes() http.Handler {
 	// AllowCredentials works correctly on restrictive WebKit environments.
 	allowedHeaders := []string{"Accept", "Content-Type", "X-CSRF-Token", "X-Request-ID", "Authorization", "X-Share-Password"}
 
-	allowOrigins := s.Cfg.CORSOrigins
-	allowAll := len(allowOrigins) == 0
-	allowedSet := make(map[string]struct{}, len(allowOrigins))
-	for _, o := range allowOrigins {
-		allowedSet[strings.TrimSpace(o)] = struct{}{}
-	}
+	// CORS AllowOriginFunc reads s.Cfg live so admin edits to cors_origins
+	// take effect without a process restart.
 	r.Use(cors.Handler(cors.Options{
 		AllowOriginFunc: func(_ *http.Request, origin string) bool {
-			if allowAll {
+			origins := s.Cfg.CORSOrigins
+			if len(origins) == 0 {
 				return true
 			}
-			_, ok := allowedSet[origin]
-			return ok
+			for _, o := range origins {
+				if strings.TrimSpace(o) == origin {
+					return true
+				}
+			}
+			// Also allow wildcard "*" if configured.
+			for _, o := range origins {
+				if strings.TrimSpace(o) == "*" {
+					return true
+				}
+			}
+			return false
 		},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowedHeaders:   allowedHeaders,
@@ -243,6 +255,7 @@ func (s *Server) Routes() http.Handler {
 	// File versioning.
 	authed.Get("/files/versions", s.handleListVersions)
 	authed.Post("/files/versions", s.handleCreateVersion)
+	authed.Get("/files/versions/{id}/download", s.handleDownloadVersion)
 	authed.Post("/files/versions/{id}/restore", s.handleRestoreVersion)
 	authed.Delete("/files/versions/{id}", s.handleDeleteVersion)
 
@@ -285,6 +298,8 @@ func (s *Server) Routes() http.Handler {
 	// Tags
 	authed.Get("/tags", s.handleListTags)
 	authed.Post("/tags", s.handleCreateTag)
+	authed.Patch("/tags/{id}", s.handleUpdateTag)
+	authed.Delete("/tags/{id}", s.handleDeleteTag)
 	authed.Post("/files/tag", s.handleTagFile)
 	authed.Delete("/files/tag", s.handleUntagFile)
 
@@ -323,9 +338,31 @@ func (s *Server) Routes() http.Handler {
 	admin.Get("/audit", s.handleAdminListAudit)
 	admin.Post("/search/reindex", s.handleAdminReindex)
 	admin.Get("/usage", s.handleAdminGetStorageUsage)
+	admin.Get("/overview", s.handleAdminOverview)
+	admin.Get("/backups", s.handleAdminListBackups)
+	admin.Post("/backups", s.handleAdminCreateBackup)
+	admin.Delete("/backups/{name}", s.handleAdminDeleteBackup)
+	admin.Get("/settings", s.handleAdminGetSettings)
+	admin.Put("/settings", s.handleAdminUpdateSettings)
+	admin.Delete("/settings/{key}", s.handleAdminDeleteSetting)
 	api.Mount("/admin", admin)
 
 	api.Mount("/", authed)
+
+	// S3-compatible gateway — buckets are storage roots, objects are files.
+	// Auth: personal API tokens used as AWS4 access key + secret.
+	s3Router := chi.NewRouter()
+	s3Router.Use(s.s3AuthMiddleware)
+	s3Router.Get("/", s.handleS3ListBuckets)
+	s3Router.Get("/{bucket}", s.handleS3ListObjects)
+	s3Router.Put("/{bucket}", s.handleS3PutBucket)
+	s3Router.Delete("/{bucket}", s.handleS3DeleteBucket)
+	s3Router.Get("/{bucket}/*", s.handleS3GetObject)
+	s3Router.Head("/{bucket}/*", s.handleS3HeadObject)
+	s3Router.Put("/{bucket}/*", s.handleS3PutObject)
+	s3Router.Post("/{bucket}/*", s.handleS3PostObject)
+	s3Router.Delete("/{bucket}/*", s.handleS3DeleteObject)
+	r.Mount("/s3", s3Router)
 
 	r.Mount("/api/v1", api)
 

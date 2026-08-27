@@ -427,6 +427,12 @@ func (s *Server) handleUploadComplete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	stagingName := dest + partialSuffix
+	// Auto-snapshot the existing file (if any) before we Move the
+	// staged upload onto it. We snapshot against `dest` (not
+	// `stagingName`) because the staging file is a transient artifact.
+	if existing, serr := acc.provider.Stat(dest); serr == nil && !existing.IsDir {
+		s.snapshotIfEnabled(r, sess.RootID, dest, existing.Size)
+	}
 	if werr := acc.provider.Write(stagingName, stream, sess.Size); werr != nil {
 		_ = acc.provider.Delete(stagingName)
 		s.writeUploadError(w, r, werr)

@@ -203,6 +203,8 @@ export const versionsApi = {
   create: (root: string, path: string, note?: string) => post<{ version: FileVersion }>("/files/versions", { root, path, note }),
   restore: (id: string) => post<{ ok: boolean }>(`/files/versions/${id}/restore`),
   delete: (id: string) => del<{ ok: boolean }>(`/files/versions/${id}`),
+  /** Build the URL the browser should hit to download a version's bytes. */
+  downloadUrl: (id: string) => `/api/v1/files/versions/${id}/download`,
 };
 
 // Storage Stats API.

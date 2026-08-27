@@ -97,6 +97,14 @@ func (g *LoginGuard) IsLocked(key string) (bool, time.Duration) {
 	return false, 0
 }
 
+// SetLimits updates the lockout thresholds at runtime.
+func (g *LoginGuard) SetLimits(maxTries int, window time.Duration) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.maxTries = maxTries
+	g.window = window
+}
+
 func min(a, b int) int {
 	if a < b {
 		return a

@@ -33,7 +33,8 @@ const VideoView = React.lazy(() => import("./VideoView"));
 const ImageView = React.lazy(() => import("./ImageView"));
 const StorageAnalyticsPanel = React.lazy(() => import("./StorageAnalyticsPanel").then(m => ({ default: m.default })));
 const PhotosView = React.lazy(() => import("./PhotosView/index"));
-import { TagPicker } from "./TagManager";
+import { TagPicker, TagFilterBar, TagManager } from "./TagManager";
+import { VersionHistoryPanel } from "./VersionHistoryPanel";
 import { MobileNav } from "./layout/MobileNav";
 import { PlaylistPickerPopover } from "./PlaylistAdder";
 import TransfersPanel from "./TransfersPanel";
@@ -48,7 +49,7 @@ import { Button } from "./ui/Button";
 import { isEditable, isAudio } from "../lib/preview";
 import {
   Download, Trash2, Pencil, Copy, Eye, FolderOpen, Star, Share2, Archive, FolderInput, FileEdit, ListMusic, Upload, Move, Info, Tag as TagIcon, CheckSquare,
-  Home, Search, Clock, Images, BarChart3, Shield
+  Home, Search, Clock, Images, BarChart3, Shield, History
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { WorkspaceHeader } from "./layout/WorkspaceHeader";
@@ -204,6 +205,8 @@ export default function Workspace({ user }: { user: User }) {
   const [filter, setFilter] = useState("all");
   const [sort, setSort] = useState("name");
   const [order, setOrder] = useState("asc");
+  // Active tag filters: tag IDs the current folder is filtered by (AND).
+  const [activeTagFilters, setActiveTagFilters] = useState<string[]>([]);
 
   // ---- Per-folder view memory (like Finder/Explorer) ------------------------
   // Remembers sort/order/filter/density/viewMode per root+path and restores
@@ -254,7 +257,7 @@ export default function Workspace({ user }: { user: User }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rootId, path, sort, order]);
   const modals = useModals();
-  const { preview, setPreview, imageItem, setImageItem, videoItem, setVideoItem, setPrevView, editItem, setEditItem, shareItem, setShareItem, ctx, setCtx, ctxPlaylist, setCtxPlaylist, menu, setMenu, rootModal, setRootModal, playlistModal, setPlaylistModal, playlistName, setPlaylistName, commandPaletteOpen, setCommandPaletteOpen, tagPicker, setTagPicker } = modals;
+  const { preview, setPreview, imageItem, setImageItem, videoItem, setVideoItem, setPrevView, editItem, setEditItem, shareItem, setShareItem, ctx, setCtx, ctxPlaylist, setCtxPlaylist, menu, setMenu, rootModal, setRootModal, playlistModal, setPlaylistModal, playlistName, setPlaylistName, commandPaletteOpen, setCommandPaletteOpen, tagPicker, setTagPicker, versionsItem, setVersionsItem, tagManagerOpen, setTagManagerOpen } = modals;
   const fileInput = useRef<HTMLInputElement>(null);
   const folderInput = useRef<HTMLInputElement>(null);
 
@@ -306,13 +309,20 @@ export default function Workspace({ user }: { user: User }) {
       else if (filter === "audio") f = f.filter((i) => i.mime.startsWith("audio/"));
       else if (filter === "archives") f = f.filter((i) => ["zip", "tar", "gz", "7z", "rar", "iso"].includes((i.extension || "").toLowerCase()));
     }
+
+    if (activeTagFilters.length > 0) {
+      // AND semantics: an item must carry every active tag to match.
+      f = f.filter((i) =>
+        activeTagFilters.every((tagId) => (i.tags || []).some((t) => t.id === tagId))
+      );
+    }
     
     if (search) {
       const s = search.toLowerCase();
       f = f.filter((i) => (i.name || "").toLowerCase().includes(s));
     }
     return f;
-  }, [items, filter, search]);
+  }, [items, filter, search, activeTagFilters]);
   
   const imageList = useMemo(() => filtered.filter((i) => (i.mime || "").startsWith("image/") || IMAGE_EXTS.has((i.extension || "").toLowerCase())), [filtered]);
 
@@ -512,6 +522,7 @@ export default function Workspace({ user }: { user: User }) {
     }
     if (!item.is_dir) {
       menuItems.push({ label: "Archive (ZIP)", icon: <Archive className="h-4 w-4" />, onClick: () => archivePaths([item.path], item.name) });
+      menuItems.push({ label: "Version history", icon: <History className="h-4 w-4" />, onClick: () => setVersionsItem(item) });
     } else {
       menuItems.push({ label: "Download as ZIP", icon: <Archive className="h-4 w-4" />, onClick: () => archivePaths([item.path], item.name) });
     }
@@ -533,6 +544,7 @@ export default function Workspace({ user }: { user: User }) {
     menuItems.push(
       { label: "Select", icon: <CheckSquare className="h-4 w-4" />, onClick: () => { toggleSelect(item.path); useUI.getState().setSelectMode(true); } },
       { label: "Properties", icon: <Info className="h-4 w-4" />, onClick: () => openDrawer(item.path) },
+      { label: "Manage tags…", icon: <TagIcon className="h-4 w-4" />, onClick: () => setTagManagerOpen(true) },
     );
     // Desktop-only: open the file's folder in the OS file manager.
     if (isTauri() && isLocalServer() && activeRoot?.type === "local" && activeRoot.path) {
@@ -702,6 +714,16 @@ export default function Workspace({ user }: { user: User }) {
         >
             <Suspense fallback={<ViewSkeleton />}>
             {view === "files" && (
+              <>
+              <TagFilterBar
+                activeTags={activeTagFilters}
+                onToggle={(tagId) =>
+                  setActiveTagFilters((prev) =>
+                    prev.includes(tagId) ? prev.filter((t) => t !== tagId) : [...prev, tagId]
+                  )
+                }
+                onClear={() => setActiveTagFilters([])}
+              />
               <FileBrowser
                 items={filtered}
                 loading={files.isLoading}
@@ -733,6 +755,7 @@ export default function Workspace({ user }: { user: User }) {
                 density={density}
                 folderPath={path}
               />
+              </>
             )}
             {view === "trash" && <TrashView items={trash.data?.items || []} loading={trash.isLoading} onRestore={async (id) => { await trashApi.restore(id); refresh(); }} onDelete={async (id) => { await trashApi.delete(id); refresh(); }} selection={selection} selectMode={selectMode} onSelect={(id) => toggleSelect(id)} />}
             {view === "favorites" && <FavouritesView
@@ -866,10 +889,24 @@ export default function Workspace({ user }: { user: User }) {
           onShare={() => { const it = items.find((i) => i.path === drawerPath); if (it) setShareItem(it); }}
           onFavorite={() => { const it = items.find((i) => i.path === drawerPath); if (it) toggleFavorite(it); }}
           onEdit={() => { const it = items.find((i) => i.path === drawerPath); if (it) setEditItem(it); }}
+          onShowVersions={() => { const it = items.find((i) => i.path === drawerPath); if (it) setVersionsItem(it); }}
         />
       )}
 
       {ctx && <ContextMenu x={ctx.x} y={ctx.y} items={buildMenu(ctx.item, ctx.x, ctx.y)} onClose={() => setCtx(null)} />}
+      {tagManagerOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setTagManagerOpen(false)}>
+          <TagManager onClose={() => setTagManagerOpen(false)} />
+        </div>
+      )}
+      {versionsItem && versionsItem.root_id && (
+        <VersionHistoryPanel
+          rootId={versionsItem.root_id}
+          path={versionsItem.path}
+          fileName={versionsItem.name}
+          onClose={() => { setVersionsItem(null); refresh(); }}
+        />
+      )}
       {ctxPlaylist && <PlaylistPickerPopover x={ctxPlaylist.x} y={ctxPlaylist.y} items={ctxPlaylist.items} onClose={() => setCtxPlaylist(null)} />}
       <Suspense fallback={null}>
         {videoItem && <VideoView item={videoItem} rootId={videoItem.root_id || rootId!} onClose={() => setVideoItem(null)} />}

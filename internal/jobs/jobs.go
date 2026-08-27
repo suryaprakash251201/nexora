@@ -534,7 +534,7 @@ func collectFiles(provider storage.StorageProvider, rel string) ([]string, error
 		return nil, err
 	}
 	for _, e := range entries {
-		if strings.HasPrefix(e.Path, ".nexora-trash") {
+		if storage.IsSystemPath(e.Path) {
 			continue
 		}
 		if e.IsDir {

@@ -23,7 +23,7 @@
 
 import { get, post, del, put, patch, upload } from "./client";
 import type {
-  FavoriteItem,
+	BackupEntry,  FavoriteItem,
   RecentItem,
   TrashItem,
   ShareItem,
@@ -250,6 +250,26 @@ export const adminApi = {
   deleteRoot: (id: string) => del<{ ok?: boolean }>(`/admin/roots/${id}`),
   /** POST /admin/search/reindex */
   reindex: () => post<{ ok?: boolean }>("/admin/search/reindex"),
+  /** GET /admin/overview — dashboard aggregates */
+  overview: () =>
+    get<{
+      users: number; roots: number; files: number; bytes: number;
+      usage?: { total: number; used: number; available: number };
+      rootUsage?: Array<{ id: string; name: string; total: number; available: number; used: number }>;
+    }>("/admin/overview"),
+  /** GET /admin/backups */
+  listBackups: () =>
+    get<{ enabled: boolean; dir: string; keep: number; hour: number; items: BackupEntry[] }>("/admin/backups"),
+  /** POST /admin/backups — trigger a manual backup */
+  createBackup: () => post<{ ok?: boolean }>("/admin/backups"),
+  /** DELETE /admin/backups/{name} */
+  deleteBackup: (name: string) => del<{ ok?: boolean }>(`/admin/backups/${encodeURIComponent(name)}`),
+  /** GET /admin/settings */
+  getSettings: () => get<{ settings: import("./types").SystemSetting[]; count: number }>("/admin/settings"),
+  /** PUT /admin/settings { settings: { key: value } } */
+  updateSettings: (settings: Record<string, string>) => put<{ ok: boolean; updated: string[] }>("/admin/settings", { settings }),
+  /** DELETE /admin/settings/{key} — revert to default */
+  deleteSetting: (key: string) => del<{ ok: boolean }>(`/admin/settings/${encodeURIComponent(key)}`),
 };
 
 // ── Tags ────────────────────────────────────────────────────────────────
@@ -260,6 +280,10 @@ export const tagsApi = {
   listRaw: () => get<{ tags: Tag[] }>("/tags"),
   /** POST /tags */
   create: (data: Record<string, unknown>) => post<Tag>("/tags", data),
+  /** PATCH /tags/{id} — rename/recolor */
+  update: (id: string, data: { name?: string; color?: string }) => patch<Tag>(`/tags/${id}`, data),
+  /** DELETE /tags/{id} */
+  remove: (id: string) => del<{ ok: boolean }>(`/tags/${id}`),
   /** POST /files/tag { tag_id, root_id, paths } */
   tagFile: (params: { tag_id: string; root_id: string; paths: string | string[] }) =>
     post<{ ok: boolean }>("/files/tag", params),

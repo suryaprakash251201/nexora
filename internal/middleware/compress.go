@@ -117,7 +117,10 @@ func Compress(next http.Handler) http.Handler {
 			}
 		}
 		// Range requests are served as streams — never compress those.
-		if !ok || r.Header.Get("Range") != "" {
+		// The S3 gateway is exempt outright: object bodies are opaque byte
+		// streams with Content-Length/Content-Range semantics that clients
+		// (rclone, aws cli) never expect to be gzip-encoded.
+		if !ok || r.Header.Get("Range") != "" || strings.HasPrefix(r.URL.Path, "/s3") {
 			next.ServeHTTP(w, r)
 			return
 		}

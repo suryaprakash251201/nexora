@@ -9,6 +9,7 @@ import (
 	"errors"
 
 	"github.com/nexora/nexora/internal/database"
+	"github.com/nexora/nexora/internal/extract"
 	"database/sql"
 	"os"
 	"path/filepath"
@@ -45,6 +46,7 @@ type Query struct {
 	MaxSize        int64
 	ModifiedAfter  time.Time
 	ModifiedBefore time.Time
+	Text           string // full-text match: AND of terms against indexed content
 	Sort           string // relevance|newest|largest|name
 	Limit          int
 	Offset         int
@@ -59,6 +61,7 @@ type Service struct {
 	mu            sync.Mutex
 	scanning      bool
 	mediaScanning bool
+	textScanning  bool
 	lastScan      time.Time
 	indexed       int64
 }
@@ -140,6 +143,24 @@ func (s *Service) Search(ctx context.Context, q Query) ([]Result, error) {
 		sb.WriteString("AND modified <= ? ")
 		args = append(args, q.ModifiedBefore.UTC().Format(time.RFC3339))
 	}
+	// Full-text: every term must appear in the file's extracted content.
+	// LIKE-based so the same query runs on SQLite and PostgreSQL; extracted
+	// text is capped (see extract package) which keeps scans bounded.
+	if q.Text != "" {
+		terms := extract.NormalizeTerm(q.Text, 2)
+		if len(terms) > 0 {
+			sb.WriteString(`AND EXISTS (SELECT 1 FROM file_text ft
+				WHERE ft.root_id = search_index.root_id AND ft.path = search_index.path AND (`)
+			for i, term := range terms {
+				if i > 0 {
+					sb.WriteString(" AND ")
+				}
+				sb.WriteString("lower(ft.text) LIKE ? ESCAPE '\\' ")
+				args = append(args, "%"+escapeLike(term)+"%")
+			}
+			sb.WriteString(")) ")
+		}
+	}
 
 	switch q.Sort {
 	case "newest":
@@ -187,7 +208,7 @@ func (s *Service) Search(ctx context.Context, q Query) ([]Result, error) {
 // Upsert indexes (or refreshes) a single entry. Called after Nexora file
 // operations so the index stays warm without a full rescan.
 func (s *Service) Upsert(rootID string, fi storage.FileInfo) {
-	if strings.HasPrefix(fi.Path, ".nexora-trash") {
+	if storage.IsSystemPath(fi.Path) {
 		return
 	}
 	_, _ = s.db.Exec(
@@ -204,11 +225,13 @@ func (s *Service) Upsert(rootID string, fi storage.FileInfo) {
 func (s *Service) Remove(rootID, path string) {
 	_, _ = s.db.Exec(`DELETE FROM search_index WHERE id=?`, entryID(rootID, path))
 	_, _ = s.db.Exec(`DELETE FROM search_index WHERE root_id=? AND path LIKE ?`, rootID, escapeLike(path)+"/%")
+	s.RemoveText(rootID, path)
 }
 
 // RemoveRoot purges all index entries for a root.
 func (s *Service) RemoveRoot(rootID string) {
 	_, _ = s.db.Exec(`DELETE FROM search_index WHERE root_id=?`, rootID)
+	s.RemoveRootText(rootID)
 }
 
 // Rename moves index entries from one path (and its subtree) to a new
@@ -341,6 +364,14 @@ func (s *Service) Rename(rootID, src, dst string) {
 		return
 	}
 	committed = true
+
+	// Keep the extracted-text index in sync: exact file rename + subtree.
+	// substr(path, len(src)+1) emits the part after the source prefix, so
+	// `path = dst || rest` is a pure prefix swap — portable across SQLite
+	// and PostgreSQL (both use 1-based substr).
+	_, _ = s.db.Exec(`UPDATE file_text SET path = ? WHERE root_id = ? AND path = ?`, dst, rootID, src)
+	_, _ = s.db.Exec(`UPDATE file_text SET path = ? || substr(path, ?) WHERE root_id = ? AND path LIKE ? ESCAPE '\\'`,
+		dstPrefix, len(src)+1, rootID, escapeLike(src)+"/%")
 }
 
 // renameOp carries the data needed to update a single search_index row.
@@ -372,6 +403,18 @@ func (s *Service) renameSingle(rootID, src, dst string) {
 		   name=excluded.name, ext=excluded.ext, size=excluded.size,
 		   is_dir=excluded.is_dir, mime=excluded.mime, modified=excluded.modified`,
 		entryID(rootID, dst), rootID, dst, name, ext, size, isDir, mime, modified)
+	// Sync the extracted-text index (exact file + subtree prefix swap).
+	srcPrefix := src
+	if !strings.HasSuffix(srcPrefix, "/") {
+		srcPrefix += "/"
+	}
+	dstPrefix := dst
+	if !strings.HasSuffix(dstPrefix, "/") {
+		dstPrefix += "/"
+	}
+	_, _ = s.db.Exec(`UPDATE file_text SET path = ? WHERE root_id = ? AND path = ?`, dst, rootID, src)
+	_, _ = s.db.Exec(`UPDATE file_text SET path = ? || substr(path, ?) WHERE root_id = ? AND path LIKE ? ESCAPE '\\'`,
+		dstPrefix, len(src)+1, rootID, escapeLike(src)+"/%")
 }
 
 // ScanAll walks every indexed root with bounded concurrency. It is safe to call
@@ -476,9 +519,9 @@ func (s *Service) scanRoot(ctx context.Context, root storage.Root) int64 {
 		if rel == "." {
 			return nil
 		}
-		// Skip Nexora-internal trash and any symlinked entries (symlink policy:
-		// never traverse outside configured roots).
-		if strings.HasPrefix(rel, ".nexora-trash") {
+		// Skip Nexora-internal trash/versions namespaces and any symlinked
+		// entries (symlink policy: never traverse outside configured roots).
+		if storage.IsSystemPath(rel) {
 			if d.IsDir() {
 				return filepath.SkipDir
 			}

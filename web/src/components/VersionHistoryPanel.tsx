@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion } from "motion/react";
-import { History, RotateCcw, Trash2, Plus, Clock, FileDigit, X, Loader2 } from "lucide-react";
+import { History, RotateCcw, Trash2, Plus, Clock, FileDigit, X, Loader2, Download, Sparkles } from "lucide-react";
 ;
 import { versionsApi } from "../api/endpoints";
 import { FileVersion } from "../api/types";
@@ -137,15 +137,18 @@ export function VersionHistoryPanel({ rootId, path, fileName, onClose }: Version
                   )}
                 >
                   <div className="w-8 h-8 rounded-lg bg-accent/10 grid place-items-center shrink-0">
-                    <FileDigit className="h-4 w-4 text-accent" />
+                    {version.id === "current" ? <Sparkles className="h-4 w-4 text-accent" /> : <FileDigit className="h-4 w-4 text-accent" />}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-medium text-sm">
                         {version.id === "current" ? "Current" : `Version ${version.version}`}
                       </span>
                       {version.id === "current" && (
                         <span className="px-1.5 py-0.5 text-[10px] rounded bg-accent/20 text-accent font-medium">Latest</span>
+                      )}
+                      {version.auto && version.id !== "current" && (
+                        <span className="px-1.5 py-0.5 text-[10px] rounded bg-white/[0.05] text-content-muted font-medium" title="Automatically captured before an overwrite">auto</span>
                       )}
                     </div>
                     <p className="text-xs text-content-muted flex items-center gap-2">
@@ -160,6 +163,15 @@ export function VersionHistoryPanel({ rootId, path, fileName, onClose }: Version
                   </div>
                   {version.id !== "current" && (
                     <div className="flex items-center gap-1">
+                      <a
+                        href={versionsApi.downloadUrl(version.id)}
+                        download
+                        className="p-1.5 rounded-lg hover:bg-accent/10 hover:text-accent transition-colors"
+                        title="Download this version"
+                        aria-label={`Download version ${version.version}`}
+                      >
+                        <Download className="h-4 w-4" />
+                      </a>
                       <button
                         onClick={() => setPendingRestore(version)}
                         className="p-1.5 rounded-lg hover:bg-accent/10 hover:text-accent transition-colors"

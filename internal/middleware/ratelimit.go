@@ -94,6 +94,19 @@ func (rl *RateLimiter) RateLimit(keyFn func(*http.Request) string) func(http.Han
 	}
 }
 
+// SetRate updates the limiter rate at runtime.
+func (r *RateLimiter) SetRate(perMinute int, ttl time.Duration) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	rate := float64(perMinute) / 60.0
+	if rate <= 0 {
+		rate = 1
+	}
+	r.rate = rate
+	r.burst = perMinute
+	r.ttl = ttl
+}
+
 // KeyByClientIP returns a key function based on resolved client IP.
 func KeyByClientIP() func(*http.Request) string {
 	return func(r *http.Request) string {

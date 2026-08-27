@@ -43,7 +43,14 @@ import (
 func newResetTokenStore(t *testing.T) *UserStore {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "reset-"+strings.ReplaceAll(t.Name(), "/", "_")+".db")
-	dbh, err := sql.Open("sqlite", path)
+	// Match production openSQLite pragmas: WAL + busy_timeout so concurrent
+	// transactions serialize instead of failing with SQLITE_BUSY.
+	dsn := "file:" + path + "?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)"
+	dbh, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dbh.SetMaxOpenConns(8)
 	if err != nil {
 		t.Fatal(err)
 	}

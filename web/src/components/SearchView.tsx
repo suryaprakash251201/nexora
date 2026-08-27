@@ -32,16 +32,18 @@ export default function SearchView({
   const [kind, setKind] = useState("");
   const [ext, setExt] = useState("");
   const [sort, setSort] = useState("relevance");
+  const [inContents, setInContents] = useState(false);
   const [showFilters, setShowFilters] = useState(true);
   useEffect(() => {
     const t = setTimeout(() => setDebounced(q), 300);
     return () => clearTimeout(t);
   }, [q]);
   const { data, isFetching, isLoading, isError, refetch } = useQuery({
-    queryKey: ["search", debounced, root, kind, ext, sort],
+    queryKey: ["search", debounced, root, kind, ext, sort, inContents],
     queryFn: () =>
       searchApi.search( {
         q: debounced,
+        text: inContents ? debounced : undefined,
         root: root || undefined,
         kind: kind || undefined,
         ext: ext || undefined,
@@ -84,6 +86,15 @@ export default function SearchView({
           </div>
           {showFilters && (
             <div className="flex flex-wrap gap-3">
+              <label className="flex items-center gap-2 text-sm text-content-muted cursor-pointer select-none" title="Also match the query inside file contents (PDFs, text files, OCR'd images). Extracted in the background; large files are skipped.">
+                <input
+                  type="checkbox"
+                  checked={inContents}
+                  onChange={(e) => setInContents(e.target.checked)}
+                  className="w-4 h-4 rounded border-2 border-border/80 bg-surface/80 text-accent focus:ring-accent cursor-pointer transition-all"
+                />
+                In file contents
+              </label>
               <select value={root} onChange={(e) => setRoot(e.target.value)} className="rounded-xl glass-input px-3 py-2 text-sm outline-none cursor-pointer">
                 <option value="">All storage roots</option>
                 {roots.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}

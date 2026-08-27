@@ -81,6 +81,9 @@ Named locations from one UI (`Files`, `Media`, `Backups`…) — each root is lo
 ### Search & Organization
 Indexed search (`search_index` + `media_metadata`) with filters by name, extension, kind, size, and modified date. Sorts: relevance / newest / largest / name. Tags (colored, per-user), saved searches (smart folders), and tag-a-file in one click.
 
+### S3-Compatible Endpoint
+Point any S3 client (rclone, aws cli, Cyberduck, restic) at `https://host/s3` — storage roots become buckets, files become objects, writes get versioned and indexed just like UI uploads. Auth is a personal API token (`nxr_…`) used as both access key and secret, with full SigV4 signature verification.
+
 ### Previews & Media
 Images (zoom, gallery), video (HTTP Range — RFC 9110 — theater + fullscreen + subtitles), audio (lossless engine with vinyl, queue/shuffle/repeat, synced `.lrc` lyrics), PDF (pdfjs), Markdown, and code (400 kB truncation, language detection). Thumbnails are pure-Go, cached at `data/cache/thumbnails`, TTL `168h`.
 

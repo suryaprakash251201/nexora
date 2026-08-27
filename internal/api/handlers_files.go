@@ -79,10 +79,10 @@ func (s *Server) handleListFiles(w http.ResponseWriter, r *http.Request) {
 		s.writeProviderError(w, r, err)
 		return
 	}
-	// Hide the system trash directory from user-facing listings.
+	// Hide the system trash & version-snapshot directories from listings.
 	filtered := items[:0]
 	for _, it := range items {
-		if it.Name == ".nexora-trash" {
+		if storage.IsHiddenName(it.Name) {
 			continue
 		}
 		filtered = append(filtered, it)

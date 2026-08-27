@@ -101,7 +101,7 @@ func (s *Server) handleSharePublicInfo(w http.ResponseWriter, r *http.Request) {
 		entries, _ := provider.List(sh.Path)
 		list := make([]shareEntry, 0, len(entries))
 		for _, e := range entries {
-			if strings.HasPrefix(e.Path, ".nexora-trash") {
+			if storage.IsSystemPath(e.Path) {
 				continue
 			}
 			if len(list) >= maxShareEntries {
@@ -351,7 +351,7 @@ func collectShareFolderFiles(provider storage.StorageProvider, rel string) ([]sh
 			return err
 		}
 		for _, e := range entries {
-			if strings.HasPrefix(e.Path, ".nexora-trash") {
+			if storage.IsSystemPath(e.Path) {
 				continue
 			}
 			if e.IsDir {

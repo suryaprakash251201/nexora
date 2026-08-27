@@ -37,6 +37,11 @@ func NewSessionStore(db *database.DB, lifetime time.Duration) *SessionStore {
 	return &SessionStore{db: db, lifetime: lifetime, slidingThreshold: 0.5}
 }
 
+// SetLifetime updates the session lifetime at runtime.
+func (s *SessionStore) SetLifetime(d time.Duration) {
+	s.lifetime = d
+}
+
 // Create issues a new session for userID and returns the raw token to set as a
 // cookie. The token is stored hashed; the raw value is never persisted.
 func (s *SessionStore) Create(userID, ip, ua string) (*Session, error) {
