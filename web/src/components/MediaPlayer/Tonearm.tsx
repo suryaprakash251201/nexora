@@ -25,17 +25,12 @@
  *     says 'this is the part a DJ touches' — it's why a real
  *     headshell is recognisable at a glance.
  *
- *   - Cantilever + stylus tip   — kept from the previous version.
- *     Four-layer tip (bloom + body + white core + contact shadow) so
- *     the needle reads as a diamond in the groove rather than a
- *     generic coloured dot.
- *
  * What's NOT here (deliberately):
- *   - Anti-skate dial, base plinth, mounting screws, knurling lines,
- *     brand wordmark, multiple LEDs. Those were in the very first
- *     literal version and they read as 'museum piece' rather than
- *     'modern app surface'. The S-curve + counterweight pair is
- *     enough to communicate 'real turntable'.
+ *   - Cantilever + stylus needle, anti-skate dial, base plinth,
+ *     mounting screws, knurling lines, brand wordmark, multiple
+ *     LEDs. The S-curve + counterweight + headshell trio is enough
+ *     to communicate 'real turntable' while keeping the disc surface
+ *     clean — the album art stays the hero.
  *
  * Animation
  * ---------
@@ -64,13 +59,12 @@ import { useEffect, useId, useState } from "react";
  *     (the "S" bottom hump)
  *   - ending at the headshell position
  *
- * HEADSHELL is the cartridge body's centre; STYLUS is the actual
- * contact point with the record (offset from the headshell by the
- * cantilever length, on a perpendicular axis).
+ * HEADSHELL is the cartridge body's centre; the S-curve ends there
+ * and the headshell itself is the visual terminus — no stylus or
+ * cantilever extends beyond it.
  */
 const PIVOT = { x: 92, y: 30 } as const;
 const HEADSHELL = { x: 24, y: 78 } as const;
-const STYLUS = { x: 14, y: 90 } as const;
 const COUNTERWEIGHT_END = { x: 108, y: 50 } as const; // far end of the counterweight
 const VB_W = 120;
 const VB_H = 100;
@@ -84,11 +78,7 @@ const ARM_PATH = `M ${PIVOT.x} ${PIVOT.y}
                    C 90 50, 78 56, 60 64
                    C 42 72, 30 76, ${HEADSHELL.x} ${HEADSHELL.y}`;
 
-/* Cantilever line: from the front edge of the headshell out to
- * the stylus tip. Drawn perpendicular to the headshell's long
- * axis, with a slight downward angle to read as a real cantilever
- * pressing into a groove. */
-const CANTILEVER_START = { x: HEADSHELL.x - 4.5, y: HEADSHELL.y + 1.5 };
+
 
 /* Counterweight: a cylinder sitting between the pivot and the
  * counterweight's far end. Drawn as a rotated rect so it has
@@ -103,15 +93,13 @@ const COUNTERWEIGHT_ANGLE = -38; // tilt the counterweight downward
 const PARK_ANGLE = 30;
 
 /* ── Palette ───────────────────────────────────────────────────────────
- * Saturated colours appear only at the pivot glow and the stylus
- * tip. The arm and counterweight are dark polished metal so they
+ * Saturated colour appears only at the pivot glow. The arm,
+ * counterweight, and headshell are dark polished metal so they
  * don't compete with the album art. The whole composition is
  * tuned for a dark UI surface. */
 const PALETTE = {
   pivotPlaying: "#7EE8B0", // mint
   pivotPaused: "#F5C56B",  // amber
-  stylusPlaying: "#FF5A66", // warm red
-  stylusPaused: "#A8AEB6",  // dim silver
   /* Arm / headshell / counterweight — a four-stop palette that
    * simulates polished black chrome. The highlights are warm
    * (champagne) so the arm reads as machined metal, not plastic. */
@@ -144,16 +132,11 @@ export default function Tonearm({ playing }: { playing: boolean }) {
     gimbal: `ta-gimbal-${uid}`,
     headshell: `ta-hs-${uid}`,
     fingerLift: `ta-fl-${uid}`,
-    cantilever: `ta-cl-${uid}`,
     pivotGlow: `ta-pg-${uid}`,
-    stylus: `ta-st-${uid}`,
-    stylusBody: `ta-sb-${uid}`,
-    contactShadow: `ta-cs-${uid}`,
     blur: `ta-blur-${uid}`,
   };
 
   const pivotColor = playing ? PALETTE.pivotPlaying : PALETTE.pivotPaused;
-  const stylusColor = playing ? PALETTE.stylusPlaying : PALETTE.stylusPaused;
 
   return (
     <div
@@ -220,45 +203,12 @@ export default function Tonearm({ playing }: { playing: boolean }) {
             <stop offset="100%" stopColor={PALETTE.metalEdge} />
           </linearGradient>
 
-          {/* Cantilever — a horizontal gradient, bright at the
-              headshell end and dim at the tip. */}
-          <linearGradient id={ids.cantilever} x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="#C7CEDA" />
-            <stop offset="60%" stopColor="#7A828D" />
-            <stop offset="100%" stopColor="#4A4F58" />
-          </linearGradient>
-
           {/* Pivot glow — the only saturated colour behind the
               gimbal. The colour comes from the JS palette. */}
           <radialGradient id={ids.pivotGlow} cx="50%" cy="50%" r="50%">
             <stop offset="0%" stopColor={pivotColor} stopOpacity="0.85" />
             <stop offset="55%" stopColor={pivotColor} stopOpacity="0.25" />
             <stop offset="100%" stopColor={pivotColor} stopOpacity="0" />
-          </radialGradient>
-
-          {/* Stylus bloom — three-stop radial: white-hot core,
-              saturated mid, atmospheric fade. */}
-          <radialGradient id={ids.stylus} cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.95" />
-            <stop offset="18%" stopColor={stylusColor} stopOpacity="0.85" />
-            <stop offset="55%" stopColor={stylusColor} stopOpacity="0.35" />
-            <stop offset="100%" stopColor={stylusColor} stopOpacity="0" />
-          </radialGradient>
-
-          {/* Stylus body — a small radial with its own white hot
-              spot at the top-left. */}
-          <radialGradient id={ids.stylusBody} cx="35%" cy="30%" r="80%">
-            <stop offset="0%" stopColor="#FFFFFF" />
-            <stop offset="40%" stopColor={stylusColor} />
-            <stop offset="100%" stopColor={stylusColor} stopOpacity="0.7" />
-          </radialGradient>
-
-          {/* Contact shadow — soft elliptical darkening at the
-              point where the stylus meets the record. */}
-          <radialGradient id={ids.contactShadow} cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stopColor="#000" stopOpacity="0.55" />
-            <stop offset="60%" stopColor="#000" stopOpacity="0.18" />
-            <stop offset="100%" stopColor="#000" stopOpacity="0" />
           </radialGradient>
 
           {/* Soft blur for shadows. */}
@@ -395,64 +345,6 @@ export default function Tonearm({ playing }: { playing: boolean }) {
             opacity="0.3"
           />
         </g>
-
-        {/* ── CANTILEVER ─────────────────────────────────────────────
-            A thin metal rod from the headshell's front edge to
-            the stylus tip. Without this the stylus dot looks
-            attached to the headshell; with it, the composition
-            reads as 'headshell + stick touching the record'. */}
-        <line
-          x1={CANTILEVER_START.x}
-          y1={CANTILEVER_START.y}
-          x2={STYLUS.x}
-          y2={STYLUS.y}
-          stroke={`url(#${ids.cantilever})`}
-          strokeWidth="0.9"
-          strokeLinecap="round"
-        />
-
-        {/* ── STYLUS (contact point) ───────────────────────────────
-            Four-layer tip, same as the previous version but
-            kept for the realistic feel. Built back to front:
-              1. Contact shadow  (only while playing)  — the
-                 'dent' in the record.
-              2. Outer bloom                            — the
-                 atmospheric glow.
-              3. Stylus body                            — the
-                 physical diamond tip.
-              4. White-hot core                          — the
-                 'diamond catching the light' effect. */}
-        <ellipse
-          cx={STYLUS.x}
-          cy={STYLUS.y + 0.6}
-          rx="3.2"
-          ry="1.2"
-          fill={`url(#${ids.contactShadow})`}
-          className="tonearm-contact-shadow"
-          style={{ opacity: playing ? 1 : 0 }}
-        />
-        <circle
-          cx={STYLUS.x}
-          cy={STYLUS.y}
-          r="6.5"
-          fill={`url(#${ids.stylus})`}
-          className="tonearm-stylus-bloom"
-          style={{ opacity: playing ? 1 : 0 }}
-        />
-        <circle
-          cx={STYLUS.x}
-          cy={STYLUS.y}
-          r="1.7"
-          fill={`url(#${ids.stylusBody})`}
-          style={{ opacity: playing ? 1 : 0.55 }}
-        />
-        <circle
-          cx={STYLUS.x - 0.35}
-          cy={STYLUS.y - 0.4}
-          r="0.6"
-          fill="#FFFFFF"
-          opacity={playing ? 0.95 : 0.4}
-        />
 
         {/* ── GIMBAL PIVOT (on top of everything) ───────────────── */}
         <circle
