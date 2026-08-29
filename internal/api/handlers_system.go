@@ -19,7 +19,7 @@ func (s *Server) handleHealthz(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleReadyz(w http.ResponseWriter, r *http.Request) {
-	if err := s.DB.Ping(); err != nil {
+	if err := s.DB.Raw().PingContext(r.Context()); err != nil {
 		writeError(w, http.StatusServiceUnavailable, "not_ready", "database unavailable", middleware.GetRequestID(r.Context()))
 		return
 	}

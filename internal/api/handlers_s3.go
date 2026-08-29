@@ -642,11 +642,24 @@ type s3UploadRow struct {
 	ETags  map[string]string
 }
 
-func (s *Server) loadS3Upload(uploadID string) (*s3UploadRow, bool) {
+func (s *Server) loadS3Upload(r *http.Request, uploadID string) (*s3UploadRow, bool) {
+	// Authenticated request is required; without a user we cannot enforce
+	// ownership of this upload session.
+	user, ok := auth.UserFromContext(r.Context())
+	if !ok || user.ID == "" {
+		return nil, false
+	}
 	var uid, rootID, key, etags string
 	err := s.DB.QueryRow(`SELECT user_id, root_id, key, etags FROM s3_uploads WHERE id = ?`, uploadID).
 		Scan(&uid, &rootID, &key, &etags)
 	if err != nil {
+		return nil, false
+	}
+	// IDOR defense: only the creator of the multipart upload (or an admin) may
+	// complete, abort, or upload parts against it. Without this check, any
+	// authenticated user who learned another user's `mpu_…` ID could write
+	// arbitrary bytes into the victim's root.
+	if uid != user.ID && user.Role != auth.RoleAdmin {
 		return nil, false
 	}
 	m := map[string]string{}
@@ -660,7 +673,7 @@ func (s *Server) saveS3Upload(uploadID string, row *s3UploadRow) {
 }
 
 func (s *Server) handleS3UploadPart(w http.ResponseWriter, r *http.Request, bucket, key, uploadID, partNum string) {
-	row, ok := s.loadS3Upload(uploadID)
+	row, ok := s.loadS3Upload(r, uploadID)
 	if !ok {
 		s3gw.WriteError(w, http.StatusNotFound, s3gw.ErrCodeNoSuchUpload, "no such upload: "+uploadID)
 		return
@@ -805,7 +818,7 @@ func (s *Server) handleS3PostObject(w http.ResponseWriter, r *http.Request) {
 		s3gw.WriteError(w, http.StatusBadRequest, s3gw.ErrCodeInvalidRequest, "missing uploadId")
 		return
 	}
-	row, ok := s.loadS3Upload(uploadID)
+	row, ok := s.loadS3Upload(r, uploadID)
 	if !ok {
 		s3gw.WriteError(w, http.StatusNotFound, s3gw.ErrCodeNoSuchUpload, "no such upload: "+uploadID)
 		return
@@ -818,7 +831,7 @@ func (s *Server) handleS3DeleteObject(w http.ResponseWriter, r *http.Request) {
 	key := chi.URLParam(r, "*")
 	// AbortMultipartUpload: DELETE ?uploadId=
 	if uid := r.URL.Query().Get("uploadId"); uid != "" {
-		row, ok := s.loadS3Upload(uid)
+		row, ok := s.loadS3Upload(r, uid)
 		if !ok {
 			s3gw.WriteError(w, http.StatusNotFound, s3gw.ErrCodeNoSuchUpload, "no such upload: "+uid)
 			return
@@ -862,7 +875,7 @@ func (s *Server) handleS3DeleteObject(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleS3ListParts(w http.ResponseWriter, r *http.Request, bucket, key, uploadID string) {
-	row, ok := s.loadS3Upload(uploadID)
+	row, ok := s.loadS3Upload(r, uploadID)
 	if !ok {
 		s3gw.WriteError(w, http.StatusNotFound, s3gw.ErrCodeNoSuchUpload, "no such upload: "+uploadID)
 		return

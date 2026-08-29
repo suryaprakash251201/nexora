@@ -81,11 +81,28 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 		if existing, serr := acc.provider.Stat(dest); serr == nil && !existing.IsDir {
 			s.snapshotIfEnabled(r, rootID, dest, existing.Size)
 		}
-		werr := acc.provider.Write(dest, part, -1)
+		// Cap each part at the configured MaxUploadSize. The chunked upload
+		// path is already per-chunk bounded, so this closes the loophole
+		// where a client could bypass the cap by sending one giant part.
+		maxSize := s.Cfg.MaxUploadSize
+		if maxSize <= 0 {
+			maxSize = 32 << 30 // 32 GiB default, matches the chunked route.
+		}
+		limited := io.LimitReader(part, maxSize+1)
+		werr := acc.provider.Write(dest, limited, -1)
 		part.Close()
 		if werr != nil {
 			lastWriteErr = werr
 			break
+		}
+		// If we hit the cap, the +1 byte we allowed for overflow detection
+		// never gets written, but the writer may have already buffered it
+		// from `limited`; do a quick stat to surface 413 explicitly.
+		if info, serr := acc.provider.Stat(dest); serr == nil && info.Size > maxSize {
+			_ = acc.provider.Delete(dest)
+			writeError(w, http.StatusRequestEntityTooLarge, "payload_too_large",
+				"upload exceeds the per-file size cap", middleware.GetRequestID(r.Context()))
+			return
 		}
 		uploaded = append(uploaded, dest)
 		s.indexUpsert(rootID, acc.provider, dest)

@@ -7,10 +7,10 @@ import (
 	"encoding/binary"
 	"io"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/nexora/nexora/internal/storage"
 	"github.com/rwcarlsen/goexif/exif"
 )
 
@@ -117,7 +117,15 @@ func (s *Service) ScanMediaMetadata(ctx context.Context) {
 			if !ok {
 				continue
 			}
-			absPath := filepath.Join(rootPath, p.Path)
+			// Use storage.Resolve for the same boundary + symlink defense
+			// LocalFilesystemProvider uses; without it, a stale search_index
+			// row whose path contains a ".." (or whose root was moved) would
+			// cause this scanner to open arbitrary files on the host.
+			absPath, rerr := storage.Resolve(rootPath, p.Path)
+			if rerr != nil {
+				s.log.Debug("media: skip unsafe path", "path", p.Path, "error", rerr)
+				continue
+			}
 			dateTaken, lat, lng, makeStr, modelStr := extractExif(absPath)
 			width, height := imageDimensions(absPath)
 

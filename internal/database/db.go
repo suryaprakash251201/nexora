@@ -11,8 +11,15 @@ import (
 // whole app (Server.DB, every store), so handlers never need to know which
 // engine is active. On the non-postgres build ToPostgres is a no-op, so there
 // is zero overhead for the default SQLite deployment.
+//
+// The *sql.DB is held by value (not embedded) on purpose: an embedded
+// *sql.DB would promote QueryContext/ExecContext/QueryRowContext with no
+// rewrite, and a single call site that reaches through the embedded methods
+// would silently break under -tags postgres (the driver returns
+// "syntax error at or near ?"). All DB access must go through the methods
+// defined here.
 type DB struct {
-	*sql.DB
+	db      *sql.DB
 	dialect string
 }
 
@@ -22,27 +29,51 @@ func Wrap(db *sql.DB, dialect string) *DB {
 	if dialect == "" {
 		dialect = "sqlite"
 	}
-	return &DB{DB: db, dialect: dialect}
+	return &DB{db: db, dialect: dialect}
 }
+
+// Raw returns the underlying *sql.DB. It is intentionally narrow and exists
+// for the small set of call sites that need driver-specific features (e.g.
+// pinging, pool stats, registering drivers) that are dialect-neutral. Prefer
+// the typed methods on *DB for any actual query.
+func (d *DB) Raw() *sql.DB { return d.db }
 
 // Dialect reports the active SQL dialect.
 func (d *DB) Dialect() string { return d.dialect }
 
+// Stats mirrors *sql.DB.Stats via the underlying handle.
+func (d *DB) Stats() sql.DBStats { return d.db.Stats() }
+
+// Close delegates to the underlying handle.
+func (d *DB) Close() error { return d.db.Close() }
+
 func (d *DB) Exec(query string, args ...any) (sql.Result, error) {
-	return d.DB.Exec(ToPostgres(query), args...)
+	return d.db.Exec(ToPostgres(query), args...)
 }
 
 func (d *DB) Query(query string, args ...any) (*sql.Rows, error) {
-	return d.DB.Query(ToPostgres(query), args...)
+	return d.db.Query(ToPostgres(query), args...)
 }
 
 func (d *DB) QueryRow(query string, args ...any) *sql.Row {
-	return d.DB.QueryRow(ToPostgres(query), args...)
+	return d.db.QueryRow(ToPostgres(query), args...)
+}
+
+func (d *DB) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
+	return d.db.ExecContext(ctx, ToPostgres(query), args...)
+}
+
+func (d *DB) QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
+	return d.db.QueryContext(ctx, ToPostgres(query), args...)
+}
+
+func (d *DB) QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row {
+	return d.db.QueryRowContext(ctx, ToPostgres(query), args...)
 }
 
 // Begin starts a transaction that also rewrites queries for PostgreSQL.
 func (d *DB) Begin() (*Tx, error) {
-	tx, err := d.DB.Begin()
+	tx, err := d.db.Begin()
 	if err != nil {
 		return nil, err
 	}
@@ -51,7 +82,7 @@ func (d *DB) Begin() (*Tx, error) {
 
 // BeginTx starts a transaction with options that also rewrites queries.
 func (d *DB) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) {
-	tx, err := d.DB.BeginTx(ctx, opts)
+	tx, err := d.db.BeginTx(ctx, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -77,4 +108,16 @@ func (t *Tx) Query(query string, args ...any) (*sql.Rows, error) {
 
 func (t *Tx) QueryRow(query string, args ...any) *sql.Row {
 	return t.Tx.QueryRow(ToPostgres(query), args...)
+}
+
+func (t *Tx) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
+	return t.Tx.ExecContext(ctx, ToPostgres(query), args...)
+}
+
+func (t *Tx) QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
+	return t.Tx.QueryContext(ctx, ToPostgres(query), args...)
+}
+
+func (t *Tx) QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row {
+	return t.Tx.QueryRowContext(ctx, ToPostgres(query), args...)
 }

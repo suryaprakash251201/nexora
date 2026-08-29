@@ -70,6 +70,28 @@ func (s *Server) handleHomeUsage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Build the per-root allow-list once. The breakdown is computed from the
+	// search_index, which is global; without this filter a user with access
+	// to root A would see byte counts for every other root on the server.
+	rootIDs := make([]string, 0, len(roots))
+	enabledIDs := make(map[string]struct{}, len(roots))
+	for _, root := range roots {
+		rootIDs = append(rootIDs, root.ID)
+		if root.Enabled {
+			enabledIDs[root.ID] = struct{}{}
+		}
+	}
+	if len(rootIDs) == 0 {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"total":      int64(0),
+			"available":  int64(0),
+			"used":       int64(0),
+			"file_count": int64(0),
+			"breakdown":  homeUsageBreakdown{},
+		})
+		return
+	}
+
 	var aggTotal, aggAvailable, aggUsed int64
 	for _, root := range roots {
 		if !root.Enabled {
@@ -88,9 +110,22 @@ func (s *Server) handleHomeUsage(w http.ResponseWriter, r *http.Request) {
 		aggUsed += q.Used
 	}
 
+	// Build the placeholder list dynamically so the same query works with any
+	// number of roots, including admins who see them all.
+	placeholders := make([]string, len(rootIDs))
+	args := make([]any, len(rootIDs))
+	for i, id := range rootIDs {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+	breakdownSQL := `SELECT mime, ext, COUNT(*), COALESCE(SUM(size), 0)
+		FROM search_index
+		WHERE is_dir = 0 AND root_id IN (` + strings.Join(placeholders, ",") + `)
+		GROUP BY mime, ext`
+
 	breakdown := homeUsageBreakdown{}
 	var fileCount int64
-	rows, err := s.DB.Query(`SELECT mime, ext, COUNT(*), COALESCE(SUM(size), 0) FROM search_index WHERE is_dir = 0 GROUP BY mime, ext`)
+	rows, err := s.DB.Query(breakdownSQL, args...)
 	if err == nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -109,10 +144,10 @@ func (s *Server) handleHomeUsage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"total":       aggTotal,
-		"available":   aggAvailable,
-		"used":        aggUsed,
-		"file_count":  fileCount,
-		"breakdown":   breakdown,
+		"total":      aggTotal,
+		"available":  aggAvailable,
+		"used":       aggUsed,
+		"file_count": fileCount,
+		"breakdown":  breakdown,
 	})
 }

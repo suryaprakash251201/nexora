@@ -452,6 +452,14 @@ func (s *Service) ScanAll(ctx context.Context) {
 		}
 		n := s.scanRoot(ctx, root)
 		total += n
+		// scanRoot can return instantly for an empty root (its ctx check
+		// is inside the WalkDir callback). Re-check here so a long list
+		// of small roots still aborts promptly on shutdown.
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
 	}
 	s.mu.Lock()
 	s.indexed = total
@@ -551,6 +559,12 @@ func (s *Service) scanRoot(ctx context.Context, root storage.Root) int64 {
 				s.log.Error("search: close stmt failed", "root", root.Name, "error", cerr)
 			}
 			if cerr := tx.Commit(); cerr != nil {
+				// Commit failed — close the tx (commit already failed, so
+				// Rollback is a no-op on success but releases the connection
+				// if the commit returned a connection error). Without this
+				// the tx and its prepared statement leak the connection until
+				// the *sql.DB is GC'd.
+				_ = tx.Rollback()
 				s.log.Error("search: chunk commit failed", "root", root.Name, "error", cerr)
 				return cerr // aborts the walk; earlier chunks remain committed
 			}

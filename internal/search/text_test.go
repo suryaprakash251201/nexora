@@ -86,7 +86,7 @@ func TestScanFileText_IndexesAndSkips(t *testing.T) {
 	svc, _ := newTestService(t)
 	// The unit seam here is pendingTextFiles — verify it only returns
 	// eligible, stale files.
-	db := svc.db.DB
+	db := svc.db.Raw()
 	// eligible + stale
 	_, _ = db.Exec(`INSERT INTO search_index(id, root_id, path, name, ext, size, is_dir, mime, modified)
 		VALUES('x1','r9','doc.pdf','doc.pdf','pdf',100,0,'application/pdf','2026-01-01T00:00:00Z')`)

@@ -23,7 +23,22 @@ export default function CoverPickerModal({ onClose, onConfirm }: CoverPickerModa
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadedResult, setUploadedResult] = useState<{ rootId: string; path: string } | null>(null);
+  const [uploadPreviewUrl, setUploadPreviewUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Build (and revoke) the blob URL exactly once per uploaded file, so a
+  // re-render of the preview <img> doesn't leak a fresh URL each tick. The
+  // cleanup function is the only place we revoke — the same URL is shared
+  // with the <img src> until the file changes or the modal unmounts.
+  useEffect(() => {
+    if (!uploadFile) {
+      setUploadPreviewUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(uploadFile);
+    setUploadPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [uploadFile]);
 
   const rootQuery = useQuery({
     queryKey: ["roots"],
@@ -263,9 +278,9 @@ export default function CoverPickerModal({ onClose, onConfirm }: CoverPickerModa
                   <Check className="h-4 w-4" /> Uploaded successfully
                 </div>
                 <p className="text-xs text-content-muted font-mono truncate">{uploadedResult.path}</p>
-                {uploadFile && (
+                {uploadFile && uploadPreviewUrl && (
                   <img
-                    src={URL.createObjectURL(uploadFile)}
+                    src={uploadPreviewUrl}
                     alt="Preview"
                     className="max-h-40 rounded-lg object-contain border glass-divider"
                   />

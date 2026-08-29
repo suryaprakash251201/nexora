@@ -35,6 +35,16 @@ const (
 	StatusFailed  = "failed"
 )
 
+// Zip-bomb caps used by doExtract. These mirror the per-folder caps in
+// streamFolderZip so an attacker can't bypass them by switching to a single
+// archive. The values are conservative but well above any sane legitimate
+// archive (a 50k-entry, 50 GiB, 100x-ratio zip is not a real-world workload).
+const (
+	maxExtractEntries = 50_000
+	maxExtractBytes   = 50 << 30 // 50 GiB uncompressed
+	maxExtractRatio   = 100      // uncompressed / compressed
+)
+
 // Job types.
 const (
 	TypeArchive = "archive"
@@ -451,6 +461,26 @@ func (m *Manager) doExtract(id string, p ExtractPayload) error {
 	}
 
 	total := len(zr.File)
+
+	// Zip-bomb guards. These caps mirror streamFolderZip's per-folder limits
+	// so an attacker can't bypass them by switching to a single archive.
+	var totalUncompressed uint64
+	if total > maxExtractEntries {
+		return fmt.Errorf("archive too large: %d entries (max %d)", total, maxExtractEntries)
+	}
+	for _, zf := range zr.File {
+		totalUncompressed += zf.UncompressedSize64
+	}
+	if totalUncompressed > maxExtractBytes {
+		return fmt.Errorf("archive too large: %d bytes uncompressed (max %d)", totalUncompressed, maxExtractBytes)
+	}
+	if size > 0 && uint64(size) > 0 {
+		ratio := totalUncompressed / uint64(size)
+		if ratio > maxExtractRatio {
+			return fmt.Errorf("archive ratio %dx exceeds limit %dx", ratio, maxExtractRatio)
+		}
+	}
+
 	for i, zf := range zr.File {
 		select {
 		case <-m.ctx.Done():

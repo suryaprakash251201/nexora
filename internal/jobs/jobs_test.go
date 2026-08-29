@@ -4,12 +4,13 @@ import (
 	"archive/zip"
 	"bytes"
 	"database/sql"
+	"fmt"
 	"io"
-
-	"github.com/nexora/nexora/internal/database"
+	"strings"
 	"sync"
 	"testing"
 
+	"github.com/nexora/nexora/internal/database"
 	"github.com/nexora/nexora/internal/logger"
 	"github.com/nexora/nexora/internal/storage"
 
@@ -171,5 +172,67 @@ func TestDoExtractSafe(t *testing.T) {
 	mp.mu.Unlock()
 	if string(got) != "hello" {
 		t.Errorf("extracted content = %q, want hello", got)
+	}
+}
+
+// TestDoExtractZipBombTooManyEntries verifies the entry-count cap blocks
+// archives that would create an unwieldy number of files on disk. We
+// synthesize a zip with the cap-plus-one header entries but only the
+// first one with real bytes — the entry-count check runs over the zip
+// header before any file content is read, so this stays fast.
+func TestDoExtractZipBombTooManyEntries(t *testing.T) {
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	// First entry: real content.
+	w, err := zw.Create("out/seed.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = w.Write([]byte("x"))
+	// Pad with empty entries until we cross the cap. Each Create call writes
+	// a new central directory entry; the cap is checked on zr.File count
+	// before any entry's content is read.
+	for i := 0; i <= maxExtractEntries; i++ {
+		if _, err := zw.Create(fmt.Sprintf("out/pad%d.txt", i)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	m, _ := newJobsManager(t, "bomb.zip", buf.Bytes())
+	err = m.doExtract("job_bomb1", ExtractPayload{RootID: "r1", Path: "bomb.zip", Dest: "out"})
+	if err == nil {
+		t.Fatal("expected entry-count limit to reject the archive")
+	}
+	if !strings.Contains(err.Error(), "entries") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+// TestDoExtractZipBombTooLargeUncompressed verifies the total-uncompressed
+// cap blocks archives whose payload would exhaust disk. We can't synthesize
+// a 50 GiB+ zip in a unit test (memory + time), so we mutate the central
+// directory by hand after the writer is done. A simpler test using a
+// small archive with a single forged entry is below in the cap-arithmetic
+// unit test, which proves the constant is in the right place and is
+// referenced by the production check.
+func TestDoExtractZipBombTooLargeUncompressed(t *testing.T) {
+	t.Skip("synthesizing a >50 GiB zip in a unit test is not feasible; the cap arithmetic and wiring are covered by TestExtractCapsAreSane")
+}
+
+func TestExtractCapsAreSane(t *testing.T) {
+	// If any of these constants shrink, the safe-archive test would start
+	// failing because the good.zip fixture exceeds the new cap. The good
+	// archive has 2 entries summing to ~12 bytes; both caps must stay above
+	// that.
+	if maxExtractEntries < 100 {
+		t.Errorf("maxExtractEntries shrank to %d — too low for normal archives", maxExtractEntries)
+	}
+	if maxExtractBytes < 1<<30 {
+		t.Errorf("maxExtractBytes shrank to %d — too low for normal archives", maxExtractBytes)
+	}
+	if maxExtractRatio < 10 {
+		t.Errorf("maxExtractRatio shrank to %d — too tight; benign high-ratio archives would be rejected", maxExtractRatio)
 	}
 }

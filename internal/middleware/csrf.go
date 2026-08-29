@@ -46,13 +46,20 @@ func isUnsafeMethod(m string) bool {
 }
 
 // isBearerAuth reports whether the request carries a token-based credential
-// (Authorization: Bearer ...). Cross-origin requests and desktop/Tailscale
-// clients authenticate with a bearer token instead of a cookie. Because
-// browsers never automatically attach a bearer token to cross-site requests,
-// token-authenticated requests are inherently CSRF-immune and do not need the
-// double-submit cookie check.
+// either as an Authorization: Bearer header or as a `?token=` query parameter.
+// Cross-origin requests and desktop/Tailscale clients authenticate with a
+// bearer token instead of a cookie; the query-string form is the S3 gateway
+// path. Because browsers never automatically attach a bearer token to
+// cross-site requests, token-authenticated requests are inherently CSRF-immune
+// and do not need the double-submit cookie check.
 func isBearerAuth(r *http.Request) bool {
-	return strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ")
+	if strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") {
+		return true
+	}
+	if r.URL.Query().Get("token") != "" {
+		return true
+	}
+	return false
 }
 
 func isExempt(path string, exempt []string) bool {
