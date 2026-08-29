@@ -136,6 +136,13 @@ const (
 	ErrCodeInvalidPart           = "InvalidPart"
 )
 
+// MaxS3PartSize is the per-part cap for the S3 multipart gateway. It mirrors
+// the 5 GiB S3 minimum-part-maximum spec but stays well below the per-upload
+// MaxUploadSize cap from config so a single misbehaving client cannot
+// exhaust the disk via repeated large parts.
+const MaxS3PartSize = 5 << 30 // 5 GiB
+
+
 // ETagFor builds a stable opaque object tag from the file info we have
 // (size + mtime). Nexora does not store content hashes, so the tag is
 // deterministic per file state — enough for change detection when combined

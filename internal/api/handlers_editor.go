@@ -70,6 +70,13 @@ func (s *Server) handleGetContent(w http.ResponseWriter, r *http.Request) {
 // handleSaveContent writes editor changes back, enforcing write permission, the
 // editable-size limit, and optimistic concurrency (version conflict handling).
 func (s *Server) handleSaveContent(w http.ResponseWriter, r *http.Request) {
+	// Bound the body up front. The post-decode size check below is a
+	// backstop — without this cap an attacker could OOM the handler by
+	// posting a multi-GB body that decodeJSON tries to slurp.
+	if s.Cfg.MaxEditableSize <= 0 {
+		s.Cfg.MaxEditableSize = 5 << 20
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, s.Cfg.MaxEditableSize)
 	var req struct {
 		Root    string `json:"root"`
 		Path    string `json:"path"`

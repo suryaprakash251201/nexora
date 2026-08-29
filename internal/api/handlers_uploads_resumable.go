@@ -192,6 +192,20 @@ func (s *Server) handleUploadInit(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "bad_request", "negative size", middleware.GetRequestID(r.Context()))
 		return
 	}
+	// Cap the declared total size at the per-upload limit. Without this an
+	// attacker can pin the data dir with millions of session dirs (each init
+	// = 1 dir + 1 meta.json), pinning find() during the janitor and
+	// exhausting inodes well before the 24h purge runs.
+	maxSize := s.Cfg.MaxUploadSize
+	if maxSize <= 0 {
+		maxSize = 32 << 30 // 32 GiB default, matches the chunked route.
+	}
+	if body.Size > maxSize {
+		writeError(w, http.StatusRequestEntityTooLarge, "too_large",
+			fmt.Sprintf("declared size exceeds the per-upload limit (%d bytes)", maxSize),
+			middleware.GetRequestID(r.Context()))
+		return
+	}
 	chunkSize := body.ChunkSize
 	if chunkSize == 0 {
 		chunkSize = defaultChunkSize

@@ -67,6 +67,10 @@ func (s *Server) createFileComment(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "unauthenticated", "Authentication required", middleware.GetRequestID(r.Context()))
 		return
 	}
+	// Cap the body up front. Comments are at most 2 KiB (enforced below);
+	// 64 KiB leaves comfortable headroom for JSON padding. Without this,
+	// decodeJSON would buffer a multi-GB request into memory.
+	r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
 	var body struct{ Root, Path, Body string }
 	_ = json.NewDecoder(r.Body).Decode(&body)
 	body.Root, body.Path, body.Body = strings.TrimSpace(body.Root), strings.TrimSpace(body.Path), strings.TrimSpace(body.Body)

@@ -108,6 +108,22 @@ func TestAccessExpiryAndLimit(t *testing.T) {
 	if _, err := s2.Access(sh2.Token, ""); err != ErrExhausted {
 		t.Errorf("exhausted = %v, want ErrExhausted", err)
 	}
+
+	// Second increment must fail with ErrExhausted — the atomic SQL guard
+	// refuses to bump past MaxDownloads. Without the guard, the previous
+	// implementation would happily increment to 2 and exceed the cap.
+	if err := s2.IncrementDownload(sh2.ID); err != ErrExhausted {
+		t.Errorf("second incr = %v, want ErrExhausted", err)
+	}
+	// Verify the counter did not actually move past the cap.
+	row := s2.db.QueryRow(`SELECT download_count FROM shares WHERE id=?`, sh2.ID)
+	var got int
+	if err := row.Scan(&got); err != nil {
+		t.Fatal(err)
+	}
+	if got != 1 {
+		t.Errorf("download_count = %d, want 1 (cap is 1)", got)
+	}
 }
 
 func TestRevoke(t *testing.T) {

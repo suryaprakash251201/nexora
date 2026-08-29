@@ -421,10 +421,26 @@ func (s *Server) handleTOTPVerifyLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Per-account lockout (same key as the password step) so a brute-force
+	// attack on the 6-digit TOTP code is rate-limited per account even when
+	// the attacker already has valid credentials. Without this, the
+	// IP-based limiter allows ~1000 attempts/min/account and the TOTP
+	// space (10^6) is exhausted in a few hours.
+	if s.Guard != nil {
+		if locked, _ := s.Guard.IsLocked(loginKey(req.Login)); locked {
+			writeError(w, http.StatusTooManyRequests, "too_many_attempts",
+				"too many failed attempts; try again later", middleware.GetRequestID(r.Context()))
+			return
+		}
+	}
+
 	ip := clientIP(r)
 
 	user, ok, err := s.Users.GetByLogin(req.Login)
 	if err != nil || !ok || !auth.VerifyPassword(req.Password, user.PasswordHash) {
+		if s.Guard != nil {
+			_ = s.Guard.RecordFailure(loginKey(req.Login))
+		}
 		_ = s.Audit.Record("", "login_failed", req.Login, "invalid credentials (2FA step)", ip)
 		writeError(w, http.StatusUnauthorized, "invalid_credentials", "invalid credentials", middleware.GetRequestID(r.Context()))
 		return
@@ -438,9 +454,15 @@ func (s *Server) handleTOTPVerifyLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !auth.VerifyTOTPCode(user.TOTPSecret, req.Code) {
+		if s.Guard != nil {
+			_ = s.Guard.RecordFailure(loginKey(req.Login))
+		}
 		_ = s.Audit.Record(user.ID, "login_failed", user.Username, "invalid 2FA code", ip)
 		writeError(w, http.StatusUnauthorized, "invalid_code", "Invalid authentication code", middleware.GetRequestID(r.Context()))
 		return
+	}
+	if s.Guard != nil {
+		s.Guard.RecordSuccess(loginKey(req.Login))
 	}
 
 	token := s.startSession(w, r, user.ID)

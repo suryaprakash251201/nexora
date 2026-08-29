@@ -15,6 +15,12 @@ import (
 	"github.com/nexora/nexora/internal/storage"
 )
 
+// maxArchivePaths caps the number of top-level paths a single archive job
+// can request. The downstream walk handles each path's children, so this
+// limit is on the *input* count, not the *expanded* file count — a user can
+// still archive a 100k-file folder tree if they reference the folder once.
+const maxArchivePaths = 1000
+
 func (s *Server) handleCreateArchive(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Root  string   `json:"root"`
@@ -27,6 +33,12 @@ func (s *Server) handleCreateArchive(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(req.Paths) == 0 {
 		writeError(w, http.StatusBadRequest, "no_paths", "select at least one item to archive", middleware.GetRequestID(r.Context()))
+		return
+	}
+	if len(req.Paths) > maxArchivePaths {
+		writeError(w, http.StatusBadRequest, "too_many_paths",
+			fmt.Sprintf("at most %d paths can be archived in one job", maxArchivePaths),
+			middleware.GetRequestID(r.Context()))
 		return
 	}
 	// Require read access to the root; validate every path.

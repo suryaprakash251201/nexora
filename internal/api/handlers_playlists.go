@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"mime"
 	"net/http"
 	"strings"
@@ -145,6 +146,30 @@ func (s *Server) handleCreatePlaylist(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_body", "Description is too long (max 2000 characters)", middleware.GetRequestID(r.Context()))
 		return
 	}
+	if len(req.Items) > maxPlaylistItemsPerRequest {
+		writeError(w, http.StatusBadRequest, "too_many_items",
+			fmt.Sprintf("at most %d items can be added in one request", maxPlaylistItemsPerRequest),
+			middleware.GetRequestID(r.Context()))
+		return
+	}
+	// Each item's root must be accessible to the caller. Without this check
+	// a playlist can become a fingerprint of which roots exist on the
+	// server (or even leak items from a different tenant on a multi-tenant
+	// install) since playback will silently fail per-item.
+	for _, it := range req.Items {
+		if it.RootID == "" {
+			writeError(w, http.StatusBadRequest, "missing_root", "every item must specify a root_id", middleware.GetRequestID(r.Context()))
+			return
+		}
+		if _, err := s.resolveAccess(r, it.RootID, false); err != nil {
+			s.writeAccessError(w, r, err)
+			return
+		}
+		if _, err := storage.CleanRelative(it.Path); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_path", "invalid item path", middleware.GetRequestID(r.Context()))
+			return
+		}
+	}
 
 	// Create the playlist and its initial items atomically so a failure can
 	// never leave an orphaned empty playlist behind.
@@ -286,6 +311,12 @@ func (s *Server) handleUpdatePlaylist(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
+// maxPlaylistItemsPerRequest caps how many tracks can be added to a
+// playlist in a single POST. The store-side cap is per-playlist; this is
+// the per-request cap so a single client cannot flood the SQL transaction
+// with millions of inserts in one round-trip.
+const maxPlaylistItemsPerRequest = 2000
+
 func (s *Server) handleAddPlaylistItems(w http.ResponseWriter, r *http.Request) {
 	user, ok := auth.UserFromContext(r.Context())
 	if !ok {
@@ -307,6 +338,33 @@ func (s *Server) handleAddPlaylistItems(w http.ResponseWriter, r *http.Request) 
 	if err := decodeJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_body", err.Error(), middleware.GetRequestID(r.Context()))
 		return
+	}
+	if len(req.Items) == 0 {
+		writeError(w, http.StatusBadRequest, "no_items", "no items to add", middleware.GetRequestID(r.Context()))
+		return
+	}
+	if len(req.Items) > maxPlaylistItemsPerRequest {
+		writeError(w, http.StatusBadRequest, "too_many_items",
+			fmt.Sprintf("at most %d items can be added in one request", maxPlaylistItemsPerRequest),
+			middleware.GetRequestID(r.Context()))
+		return
+	}
+	// Each item's root must be accessible to the caller — otherwise the
+	// playlist becomes a fingerprint of which roots exist on the server
+	// (and playback will fail per-item with 403).
+	for _, it := range req.Items {
+		if it.RootID == "" {
+			writeError(w, http.StatusBadRequest, "missing_root", "every item must specify a root_id", middleware.GetRequestID(r.Context()))
+			return
+		}
+		if _, err := s.resolveAccess(r, it.RootID, false); err != nil {
+			s.writeAccessError(w, r, err)
+			return
+		}
+		if _, err := storage.CleanRelative(it.Path); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_path", "invalid item path", middleware.GetRequestID(r.Context()))
+			return
+		}
 	}
 
 	added, err := s.Playlists.AddItems(user.ID, id, req.Items)

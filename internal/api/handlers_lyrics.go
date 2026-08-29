@@ -278,6 +278,11 @@ func (s *Server) handleAudioLyrics(w http.ResponseWriter, r *http.Request) {
 // write access to the root; read-only roots reject the save. Any legacy DB
 // override row is removed so the file is authoritative afterwards.
 func (s *Server) handleSaveAudioLyrics(w http.ResponseWriter, r *http.Request) {
+	// Mirror the read cap: a JSON body with multi-GB "raw" would otherwise
+	// fill the disk because the .lrc sidecar is written verbatim. The read
+	// side caps at 2 MiB; we do the same here so the round-trip is
+	// symmetric.
+	r.Body = http.MaxBytesReader(w, r.Body, 2<<20)
 	rootID := queryParam(r, "root", "")
 	rel, err := storage.CleanRelative(queryParam(r, "path", ""))
 	if err != nil || rel == "" {
@@ -301,6 +306,10 @@ func (s *Server) handleSaveAudioLyrics(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := decodeJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_body", err.Error(), middleware.GetRequestID(r.Context()))
+		return
+	}
+	if len(req.Raw) > 2<<20 {
+		writeError(w, http.StatusRequestEntityTooLarge, "too_large", "lyrics content exceeds 2 MiB", middleware.GetRequestID(r.Context()))
 		return
 	}
 	raw := strings.TrimRight(req.Raw, "\n")

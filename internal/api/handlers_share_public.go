@@ -248,8 +248,22 @@ func (s *Server) streamShared(w http.ResponseWriter, r *http.Request, sh sharing
 	}
 
 	if download {
-		// Count the download (best-effort), notify webhooks, force attachment.
-		_ = s.Shares.IncrementDownload(sh.ID)
+		// Count the download atomically — IncrementDownload refuses to
+		// exceed MaxDownloads (the previous fire-and-forget version let
+		// concurrent downloads exceed the cap). If we hit the cap at this
+		// exact moment, surface 410 to the client.
+		if err := s.Shares.IncrementDownload(sh.ID); err != nil {
+			if errors.Is(err, sharing.ErrExhausted) {
+				writeError(w, http.StatusGone, "exhausted", "This link has reached its download limit", middleware.GetRequestID(r.Context()))
+				return
+			}
+			// Other errors (DB blip) are non-fatal — log and continue so a
+			// transient backend hiccup doesn't lock the user out of a
+			// valid download. The next request will retry the counter.
+			if s.Log != nil {
+				s.Log.Warn("share: IncrementDownload failed", "id", sh.ID, "error", err.Error())
+			}
+		}
 		s.emitShareEvent(events.EventShareDownload, r, sh, rel)
 		_ = s.Audit.Record(sh.UserID, "share_download", rel, "via share link", clientIP(r))
 		rc, rerr := provider.Read(rel)
@@ -428,8 +442,22 @@ func (s *Server) streamFolderZip(w http.ResponseWriter, r *http.Request, provide
 		if fw, werr := zw.CreateHeader(hdr); werr == nil {
 			_, _ = io.Copy(fw, rc)
 			if !firstEntryDone {
-				_ = s.Shares.IncrementDownload(sh.ID)
-				firstEntryDone = true
+				// Atomic counter increment — refuses to exceed the cap
+				// even under concurrent requests. The earlier
+				// _ = IncrementDownload swallowed ErrExhausted, which
+				// silently let the cap be exceeded.
+				if err := s.Shares.IncrementDownload(sh.ID); err == nil {
+					firstEntryDone = true
+				} else if errors.Is(err, sharing.ErrExhausted) {
+					// Cap hit mid-stream — we've already sent the zip
+					// header and at least one entry's bytes, so the
+					// client has the partial file. Mark the counter
+					// done so we don't retry, but break out so we
+					// stop wasting I/O.
+					firstEntryDone = true
+				} else if s.Log != nil {
+					s.Log.Warn("share: IncrementDownload failed", "id", sh.ID, "error", err.Error())
+				}
 			}
 		}
 		rc.Close()

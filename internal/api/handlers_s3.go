@@ -689,6 +689,23 @@ func (s *Server) handleS3UploadPart(w http.ResponseWriter, r *http.Request, buck
 		return
 	}
 
+	// Per-part size cap. The chunked upload path caps per-chunk size; the S3
+	// gateway must do the same or a malicious client can fill the disk with
+	// a single multi-TiB PUT ?partNumber=1. The cap is per-part, and the
+	// total multipart size is checked in createS3Multipart below.
+	maxPart := int64(s3gw.MaxS3PartSize)
+	if v := s.Cfg.MaxUploadSize; v > 0 && v < maxPart {
+		maxPart = v
+	}
+	if r.ContentLength < 0 || r.ContentLength > maxPart {
+		s3gw.WriteError(w, http.StatusRequestEntityTooLarge, s3gw.ErrCodeEntityTooLarge,
+			fmt.Sprintf("part exceeds the maximum size of %d bytes", maxPart))
+		return
+	}
+	// Defence in depth: also cap the body itself (for chunked-encoding
+	// requests where Content-Length is unknown).
+	r.Body = http.MaxBytesReader(w, r.Body, maxPart)
+
 	partKey := mpuPartKey(uploadID, fmt.Sprintf("%06d", pn))
 	if err := prov.Write(partKey, r.Body, r.ContentLength); err != nil {
 		s3gw.WriteError(w, http.StatusInternalServerError, "InternalError", "could not store part")

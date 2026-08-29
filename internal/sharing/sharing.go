@@ -213,10 +213,31 @@ func (s *Store) Access(token, password string) (Share, error) {
 	return sh, nil
 }
 
-// IncrementDownload atomically bumps the download counter, enforcing the cap.
+// IncrementDownload atomically bumps the download counter while enforcing
+// the MaxDownloads cap. Returns ErrExhausted if the cap would be exceeded.
+// Without the WHERE guard, two concurrent downloads both pass the Access()
+// check (which reads download_count outside any lock) and both bump the
+// counter, letting the cap be exceeded by the number of concurrent
+// requests in flight.
 func (s *Store) IncrementDownload(id string) error {
-	_, err := s.db.Exec(`UPDATE shares SET download_count = download_count + 1 WHERE id=?`, id)
-	return err
+	res, err := s.db.Exec(
+		`UPDATE shares SET download_count = download_count + 1
+		   WHERE id = ?
+		     AND (max_downloads = 0 OR download_count < max_downloads)`,
+		id,
+	)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		// Either the share was revoked between Access() and now, or the
+		// cap is exhausted. Distinguish so the handler can return 404 vs
+		// 410; both are reasonable here, so we always return ErrExhausted
+		// which the handler maps to 410 Gone.
+		return ErrExhausted
+	}
+	return nil
 }
 
 // PurgeExpired removes shares past their expiry (maintenance).
