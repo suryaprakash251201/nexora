@@ -112,14 +112,33 @@ export function PremiumTabBar({ state, descriptors, navigation }: BottomTabBarPr
                   backgroundColor: colors.accent,
                   opacity: isDark ? 0.22 : 0.16,
                 },
-                Platform.OS === "ios" ? { shadowColor: colors.accent, shadowOpacity: 0.5, shadowRadius: 14, shadowOffset: { width: 0, height: 4 } } : { elevation: 6 },
+                Platform.OS === "ios"
+                  ? {
+                      shadowColor: colors.accent,
+                      shadowOpacity: 0.55,
+                      shadowRadius: 18,
+                      shadowOffset: { width: 0, height: 6 },
+                    }
+                  : { elevation: 8 },
               ]}
             />
             <LinearGradient
               colors={[gradients.brand[0], gradients.brand[1]]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
-              style={[StyleSheet.absoluteFill, { borderRadius: PILL_HEIGHT / 2, opacity: isDark ? 0.28 : 0.2 }]}
+              style={[
+                StyleSheet.absoluteFill,
+                { borderRadius: PILL_HEIGHT / 2, opacity: isDark ? 0.30 : 0.22 },
+              ]}
+            />
+            {/* Inner ring highlight for a subtle glassy edge */}
+            <View
+              style={{
+                ...StyleSheet.absoluteFillObject,
+                borderRadius: PILL_HEIGHT / 2,
+                borderWidth: StyleSheet.hairlineWidth,
+                borderColor: isDark ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.06)",
+              }}
             />
           </Animated.View>
         )}
@@ -155,16 +174,16 @@ export function PremiumTabBar({ state, descriptors, navigation }: BottomTabBarPr
               key={route.key}
               accessibilityRole="button"
               accessibilityState={isFocused ? { selected: true } : {}}
-              accessibilityLabel={options.tabBarAccessibilityLabel ?? label as string}
+              accessibilityLabel={options.tabBarAccessibilityLabel ?? (label as string)}
               testID={options.tabBarButtonTestID}
               onPress={onPress}
               style={styles.tabButton}
-              activeOpacity={0.8}
+              activeOpacity={0.7}
             >
               <MaterialCommunityIcons
                 name={iconName as any}
                 size={Platform.OS === "android" ? 20 : 22}
-                color={isFocused ? colors.accent : (isDark ? "rgba(255,255,255,0.82)" : "rgba(0,0,0,0.6)")}
+                color={isFocused ? colors.accent : isDark ? "rgba(255,255,255,0.78)" : "rgba(0,0,0,0.55)"}
                 style={[
                   styles.icon,
                   isFocused && { transform: [{ scale: 1.12 }] },
@@ -175,7 +194,10 @@ export function PremiumTabBar({ state, descriptors, navigation }: BottomTabBarPr
                   styles.label,
                   isFocused
                     ? { color: colors.accent, opacity: 1, fontWeight: "700" }
-                    : { color: isDark ? "rgba(255,255,255,0.75)" : "rgba(0,0,0,0.6)", fontWeight: "500" },
+                    : {
+                        color: isDark ? "rgba(255,255,255,0.72)" : "rgba(0,0,0,0.55)",
+                        fontWeight: "500",
+                      },
                 ]}
               >
                 {label as string}
@@ -204,10 +226,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     overflow: "hidden",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.22,
-    shadowRadius: 22,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.28,
+    shadowRadius: 28,
+    elevation: 12,
     alignItems: "center",
     paddingHorizontal: 8,
   },
@@ -230,5 +252,6 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: Platform.OS === "android" ? 11 : 12,
+    letterSpacing: 0.1,
   },
 });

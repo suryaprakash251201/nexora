@@ -162,6 +162,19 @@ export default function LoginScreen({ onDone }: { onDone: () => void }) {
     {
       backgroundColor: focused === key ? colors.surface : colors.surfaceMuted,
       borderColor: focused === key ? colors.accent : colors.border,
+      // Subtle ring when focused — fakes a 3-4px focus shadow.
+      ...(focused === key
+        ? Platform.select({
+            ios: {
+              shadowColor: colors.accent,
+              shadowOpacity: 0.25,
+              shadowRadius: 8,
+              shadowOffset: { width: 0, height: 0 },
+            },
+            android: { elevation: 2 },
+            default: {},
+          })
+        : {}),
       color: colors.content,
       fontSize: font.md,
       borderRadius: radius.md,
@@ -423,9 +436,10 @@ const styles = StyleSheet.create({
   input: {
     borderWidth: 1,
     paddingHorizontal: 14,
-    paddingVertical: 13,
+    paddingVertical: 14,
+    letterSpacing: 0.1,
   },
-  codeInput: { fontSize: 20, letterSpacing: 8, textAlign: "center" },
+  codeInput: { fontSize: 22, letterSpacing: 8, textAlign: "center", fontWeight: "600" },
   hint: { lineHeight: 16 },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   chipWrapper: {
@@ -439,10 +453,17 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
   },
   chipText: {},
-  errorRow: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
-  error: { flex: 1, lineHeight: 18 },
+  errorRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    backgroundColor: "rgba(244, 63, 94, 0.10)",
+    borderRadius: 12,
+    padding: 12,
+  },
+  error: { flex: 1, lineHeight: 18, fontWeight: "500" },
   button: {
-    paddingVertical: 15,
+    paddingVertical: 16,
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",

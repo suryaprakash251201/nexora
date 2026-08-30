@@ -836,7 +836,7 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
 
           <View style={styles.miniTextWrap}>
             <Text
-              style={[styles.miniTitle, { color: colors.content, fontSize: font.sm }]}
+              style={[styles.miniTitle, { color: colors.content, fontSize: font.sm, letterSpacing: -0.1 }]}
               numberOfLines={1}
             >
               {cleanTrackTitle(currentTrack.name)}
@@ -852,7 +852,7 @@ export function MiniPlayer({ tabVisible = true }: { tabVisible?: boolean }) {
                 />
               )}
               <Text
-                style={[styles.miniSub, { color: colors.muted, fontSize: font.xs }]}
+                style={[styles.miniSub, { color: colors.muted, fontSize: font.xs, letterSpacing: 0.2 }]}
                 numberOfLines={1}
               >
                 {currentTrack.extension?.toUpperCase() || "AUDIO"} · Nexora
@@ -2003,26 +2003,28 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginTop: 24,
-    marginBottom: 4,
+    marginTop: 28,
+    marginBottom: 6,
   },
   trackTextCol: {
     flex: 1,
     paddingRight: 12,
   },
   trackMoreBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     alignItems: "center",
     justifyContent: "center",
   },
   trackName: {
     fontWeight: "800",
-    marginBottom: 3,
+    marginBottom: 4,
+    letterSpacing: -0.4,
   },
   trackArtist: {
     fontWeight: "500",
+    letterSpacing: 0.1,
   },
   /* Lossless wave under the title */
   titleWaveWrap: {
@@ -2128,17 +2130,17 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   playPauseCircle: {
-    width: 74,
-    height: 74,
-    borderRadius: 37,
+    width: 76,
+    height: 76,
+    borderRadius: 38,
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
     shadowColor: "#5B8CFF",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.45,
-    shadowRadius: 16,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.55,
+    shadowRadius: 22,
+    elevation: 10,
   },
   playPauseRing: {
     position: "absolute",
@@ -2146,9 +2148,9 @@ const styles = StyleSheet.create({
     left: 3,
     right: 3,
     bottom: 3,
-    borderRadius: 34,
+    borderRadius: 35,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.25)",
+    borderColor: "rgba(255,255,255,0.30)",
   },
 
   /* Secondary Controls */
@@ -2215,14 +2217,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   secondaryBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: "center",
     justifyContent: "center",
   },
   secondaryBtnActive: {
-    backgroundColor: "rgba(79,70,229,0.14)",
+    backgroundColor: "rgba(91, 140, 255, 0.16)",
   },
 
   /* Queue Panel */

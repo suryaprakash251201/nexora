@@ -546,27 +546,31 @@ export default function BrowserScreen({ route, navigation }: Props) {
 
       {/* Top Actions Bar (Moved from bottom) */}
       {!selectMode && (
-        <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 20, paddingBottom: 16, gap: 10 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: spacing.lg, paddingBottom: spacing.md, gap: spacing.sm }}>
           {/* View Mode Toggle */}
           <TouchableOpacity
-            style={[styles.actionCircleBtn, { backgroundColor: colors.surfaceElevated }, shadowSm]}
+            style={[styles.actionCircleBtn, { backgroundColor: colors.surfaceElevated, borderColor: colors.borderSoft, borderRadius: radius.lg }, shadowSm]}
             onPress={() => {
               haptic();
               const next = viewMode === "list" ? "grid" : "list";
               setViewMode(next);
               setPref("viewMode", next);
             }}
+            accessibilityLabel={viewMode === "list" ? "Switch to grid view" : "Switch to list view"}
+            accessibilityRole="button"
           >
             <MaterialCommunityIcons name={viewMode === "list" ? "view-grid-outline" : "format-list-bulleted"} size={20} color={colors.content} />
           </TouchableOpacity>
 
           {/* Sort & Filter Trigger */}
           <TouchableOpacity
-            style={[styles.actionCircleBtn, { backgroundColor: colors.surfaceElevated }, shadowSm]}
+            style={[styles.actionCircleBtn, { backgroundColor: colors.surfaceElevated, borderColor: colors.borderSoft, borderRadius: radius.lg }, shadowSm]}
             onPress={() => {
               haptic();
               setShowSortSheet(true);
             }}
+            accessibilityLabel="Sort and filter"
+            accessibilityRole="button"
           >
             <MaterialCommunityIcons name="sort-variant" size={20} color={sortField !== "name" || sortOrder !== "asc" || filterCategory !== "all" ? colors.accent : colors.content} />
             {(sortField !== "name" || sortOrder !== "asc" || filterCategory !== "all") && (
@@ -575,13 +579,18 @@ export default function BrowserScreen({ route, navigation }: Props) {
           </TouchableOpacity>
 
           {/* New Folder */}
-          <TouchableOpacity style={[styles.actionBtnElevated, { backgroundColor: colors.surfaceElevated }, shadowSm]} onPress={() => setShowNewFolder(true)}>
+          <TouchableOpacity
+            style={[styles.actionBtnElevated, { backgroundColor: colors.surfaceElevated, borderColor: colors.borderSoft, borderRadius: radius.lg }, shadowSm]}
+            onPress={() => setShowNewFolder(true)}
+            accessibilityLabel="New folder"
+            accessibilityRole="button"
+          >
             <MaterialCommunityIcons name="folder-plus-outline" size={18} color={colors.content} />
             <Text style={[styles.actionText, { color: colors.content, fontSize: font.sm }]}>Folder</Text>
           </TouchableOpacity>
 
           {/* Primary Upload Button */}
-          <TouchableOpacity style={[styles.uploadBtnContainer, shadowSm]} onPress={handleUpload} disabled={uploading}>
+          <TouchableOpacity style={[styles.uploadBtnContainer, { borderRadius: radius.lg }, shadowSm]} onPress={handleUpload} disabled={uploading}>
             <LinearGradient colors={[...gradients.brand]} style={styles.uploadGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
               {uploading ? (
                 <ActivityIndicator color="#fff" size="small" />
@@ -621,29 +630,12 @@ export default function BrowserScreen({ route, navigation }: Props) {
               <ListSkeleton rows={9} />
             )
           ) : (
-            <View style={styles.emptyContainer}>
-              <View style={[styles.emptyCard, { backgroundColor: colors.surfaceElevated }, shadow]}>
-                <LinearGradient
-                  colors={["rgba(255,255,255,0.03)", "transparent"]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.glassHighlight}
-                />
-                <EmptyState
-                  icon={error ? "alert-circle-outline" : "folder-open-outline"}
-                  title={error || "This folder is empty"}
-                  hint={error ? "Pull down to retry." : "Use the upload button below to add files."}
-                />
-                {!error && (
-                  <TouchableOpacity onPress={handleUpload} style={styles.emptyUploadBtn} activeOpacity={0.8}>
-                    <LinearGradient colors={[...gradients.brand]} style={styles.emptyUploadGradient} start={{x:0, y:0}} end={{x:1, y:1}}>
-                      <MaterialCommunityIcons name="upload" size={20} color="#fff" />
-                      <Text style={styles.emptyUploadText}>Upload File</Text>
-                    </LinearGradient>
-                  </TouchableOpacity>
-                )}
-              </View>
-            </View>
+            <EmptyState
+              icon={error ? "alert-circle-outline" : "folder-open-outline"}
+              title={error || "This folder is empty"}
+              hint={error ? "Pull down to retry." : "Use the upload button below to add files."}
+              action={!error ? { label: "Upload file", onPress: handleUpload, icon: "upload" } : undefined}
+            />
           )
         }
         onEndReached={loadMore}
@@ -953,38 +945,6 @@ const styles = StyleSheet.create({
     borderRadius: 14,
   },
 
-  // Empty state
-  emptyContainer: {
-    padding: 24,
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 32,
-  },
-  emptyCard: {
-    borderRadius: 24,
-    padding: 24,
-    alignItems: "center",
-    width: "100%",
-  },
-  emptyUploadBtn: {
-    marginTop: 16,
-    width: "100%",
-    borderRadius: 14,
-    overflow: "hidden",
-  },
-  emptyUploadGradient: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 14,
-    gap: 8,
-  },
-  emptyUploadText: {
-    color: "#fff",
-    fontSize: 15,
-    fontWeight: "700",
-  },
-
   // Actions Bar
   actions: {
     position: "absolute",
@@ -1001,9 +961,9 @@ const styles = StyleSheet.create({
   actionCircleBtn: {
     width: 44,
     height: 44,
-    borderRadius: 22,
     alignItems: "center",
     justifyContent: "center",
+    borderWidth: 1,
   },
   actionBtnElevated: {
     flex: 1,
@@ -1011,13 +971,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    borderRadius: 22,
     paddingVertical: 12,
+    borderWidth: 1,
   },
   actionText: { fontWeight: "600" },
   uploadBtnContainer: {
     flex: 1.4,
-    borderRadius: 22,
     overflow: "hidden",
   },
   uploadGradient: {
@@ -1027,7 +986,7 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingVertical: 12,
   },
-  uploadText: { color: "#fff", fontSize: 13, fontWeight: "700" },
+  uploadText: { color: "#fff", fontSize: 13, fontWeight: "700", letterSpacing: 0.1 },
 
   // Sort Sheet
   sheetSection: { marginBottom: 16 },

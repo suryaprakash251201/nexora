@@ -125,7 +125,7 @@ function NowPlayingArtworkInner({
   const fallback = useMemo(
     () => (
       <LinearGradient
-        colors={["#3B2A6B", "#241B47"]}
+        colors={["#1C2650", "#3D53DB", "#5B8CFF"]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={StyleSheet.absoluteFill}
@@ -133,7 +133,7 @@ function NowPlayingArtworkInner({
         <MaterialCommunityIcons
           name="music-note"
           size={80}
-          color="rgba(255,255,255,0.85)"
+          color="rgba(255,255,255,0.92)"
           style={styles.fallbackIcon}
         />
       </LinearGradient>

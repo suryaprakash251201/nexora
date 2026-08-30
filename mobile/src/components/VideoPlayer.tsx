@@ -15,6 +15,7 @@ import {
 import * as ScreenOrientation from "expo-screen-orientation";
 import * as Brightness from "expo-brightness";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useVideoPlayer, VideoView } from "expo-video";
@@ -24,6 +25,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { haptic } from "../store/SettingsContext";
 import { useAudio } from "../store/AudioContext";
 import { setVideoOverlayActive } from "../lib/uiBus";
+import { useTheme } from "../store/ThemeContext";
 import { BottomSheet } from "./BottomSheet";
 
 // ── Constants ─────────────────────────────────────────────────────────
@@ -105,6 +107,7 @@ export default function VideoPlayer({
 
   // ── Player ──
   const videoViewRef = useRef<VideoView>(null);
+  const { colors, font, radius, spacing, gradients, isDark, hairline } = useTheme();
   const player = useVideoPlayer(initialUri, (p) => {
     p.loop = false; // repeat is user-controlled now
     // CRITICAL: expo-video defaults timeUpdateEventInterval to 0 — the
@@ -792,15 +795,19 @@ export default function VideoPlayer({
   if (failed) {
     return (
       <View style={styles.videoErrorWrap}>
-        <MaterialCommunityIcons name="video-off-outline" size={44} color="#8A8F98" />
-        <Text style={styles.videoErrorTitle}>Could not play this video</Text>
-        <Text style={styles.videoErrorSub}>
+        <View style={[styles.videoErrorIcon, { backgroundColor: colors.surface, borderColor: colors.borderSoft, borderRadius: radius.xl }]}>
+          <MaterialCommunityIcons name="video-off-outline" size={36} color={colors.muted} />
+        </View>
+        <Text style={[styles.videoErrorTitle, { color: colors.content, fontSize: font.lg, letterSpacing: -0.2 }]}>
+          Could not play this video
+        </Text>
+        <Text style={[styles.videoErrorSub, { color: colors.muted, fontSize: font.sm, maxWidth: 320 }]}>
           The format may be unsupported on this device, or the connection was
           interrupted.
         </Text>
         <View style={styles.videoErrorRow}>
           <TouchableOpacity
-            style={styles.videoErrorBtn}
+            style={[styles.videoErrorBtn, { borderRadius: radius.pill }]}
             onPress={() => {
               // Retry: prefer the transcode stream when it hasn't been tried
               // yet, otherwise force-reload the current source.
@@ -813,19 +820,31 @@ export default function VideoPlayer({
                 player.play();
               } catch {}
             }}
-            activeOpacity={0.8}
+            activeOpacity={0.85}
+            accessibilityLabel="Try server transcode"
           >
+            <LinearGradient
+              colors={[...gradients.brand]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={StyleSheet.absoluteFill}
+            />
             <MaterialCommunityIcons name="refresh" size={16} color="#fff" />
             <Text style={styles.videoErrorBtnText}>Try server transcode</Text>
           </TouchableOpacity>
           {onFallback ? (
             <TouchableOpacity
-              style={[styles.videoErrorBtn, styles.videoErrorBtnAlt]}
+              style={[
+                styles.videoErrorBtn,
+                styles.videoErrorBtnAlt,
+                { backgroundColor: colors.surfaceElevated, borderColor: colors.borderSoft, borderRadius: radius.pill },
+              ]}
               onPress={onFallback}
-              activeOpacity={0.8}
+              activeOpacity={0.85}
+              accessibilityLabel="Download or open with"
             >
-              <MaterialCommunityIcons name="download" size={16} color="#fff" />
-              <Text style={styles.videoErrorBtnText}>Download / Open with…</Text>
+              <MaterialCommunityIcons name="download" size={16} color={colors.content} />
+              <Text style={[styles.videoErrorBtnText, { color: colors.content }]}>Download / Open with…</Text>
             </TouchableOpacity>
           ) : null}
         </View>
@@ -886,7 +905,9 @@ export default function VideoPlayer({
 
       {(!ready || switching) && !failed ? (
         <View style={styles.loading} pointerEvents="none">
-          <ActivityIndicator size="large" color="#8B5CF6" />
+          <View style={styles.loadingInner}>
+            <ActivityIndicator size="large" color={colors.accent} />
+          </View>
         </View>
       ) : null}
 
@@ -933,51 +954,77 @@ export default function VideoPlayer({
         );
       })}
 
-      {/* Gesture HUD */}
+      {/* Gesture HUD — frosted bubble with subtle gradient backing */}
       {hud ? (
         <View pointerEvents="none" style={styles.hudWrap}>
           <View style={styles.hudBubble}>
-            <MaterialCommunityIcons
-              name={(hud.kind === "seek" ? "play-speed" : hud.icon) as any}
-              size={16}
-              color="#fff"
-            />
-            <Text style={styles.hudText}>
-              {hud.kind === "seek"
-                ? hud.label
-                : hud.label
-                  ? hud.label
-                  : `${hud.pct}%`}
-            </Text>
+            {hud.kind !== "seek" ? (
+              <View style={styles.hudIconWrap}>
+                <MaterialCommunityIcons
+                  name={hud.icon as any}
+                  size={18}
+                  color="#fff"
+                />
+              </View>
+            ) : null}
+            <View style={{ alignItems: hud.kind === "seek" ? "center" : "flex-start", flex: 1 }}>
+              {hud.kind === "seek" ? (
+                <Text style={styles.hudSeekText}>
+                  {hud.label}
+                </Text>
+              ) : (
+                <>
+                  <Text style={styles.hudText}>
+                    {hud.label ?? `${hud.pct}%`}
+                  </Text>
+                  <View style={styles.hudLevelTrack}>
+                    <View
+                      style={[
+                        styles.hudLevelFill,
+                        { width: `${hud.pct}%` },
+                      ]}
+                    />
+                  </View>
+                </>
+              )}
+            </View>
           </View>
         </View>
       ) : null}
 
-      {/* Resume chip */}
+      {/* Resume chip — glassy surface, brand gradient CTA */}
       {resumeAt != null && !locked ? (
         <View style={styles.resumeChip} pointerEvents="box-none">
-          <Text style={styles.resumeText} numberOfLines={1}>
-            Resume from {fmtTimeLong(resumeAt)}?
-          </Text>
+          <View style={styles.resumeIconWrap}>
+            <MaterialCommunityIcons name="restore" size={18} color={colors.accent} />
+          </View>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={styles.resumeText} numberOfLines={1}>
+              Resume from {fmtTimeLong(resumeAt)}?
+            </Text>
+          </View>
           <TouchableOpacity
-            style={styles.resumeBtnGhost}
+            style={[styles.resumeBtnGhost, { borderColor: "rgba(255,255,255,0.30)" }]}
             onPress={() => applyResume(false)}
             activeOpacity={0.7}
+            accessibilityLabel="Start over"
           >
             <Text style={styles.resumeBtnGhostText}>Start over</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.resumeBtn}
             onPress={() => applyResume(true)}
-            activeOpacity={0.8}
+            activeOpacity={0.85}
+            accessibilityLabel="Resume playback"
           >
             <LinearGradient
-              colors={["#8B5CF6", "#5B8CFF"]}
+              colors={[...gradients.brand]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
               style={StyleSheet.absoluteFill}
             />
-            <Text style={styles.resumeBtnText}>Resume ▸</Text>
+            <Text style={styles.resumeBtnText}>Resume</Text>
+            <MaterialCommunityIcons name="play" size={13} color="#fff" style={{ marginLeft: 2 }} />
           </TouchableOpacity>
         </View>
       ) : null}
@@ -993,21 +1040,22 @@ export default function VideoPlayer({
           }}
           accessibilityLabel="Unlock video controls"
         >
-          <MaterialCommunityIcons name="lock-open-variant" size={15} color="#fff" />
+          <MaterialCommunityIcons name="lock-open-variant" size={16} color="#fff" />
         </TouchableOpacity>
       ) : null}
 
       {showChrome ? (
         <>
+          {/* Top + bottom soft fades for legibility over any frame */}
           <LinearGradient
-            colors={["rgba(0,0,0,0.55)", "transparent"]}
+            colors={["rgba(0,0,0,0.65)", "rgba(0,0,0,0.10)", "transparent"]}
             start={{ x: 0, y: 0 }}
             end={{ x: 0, y: 1 }}
             style={[styles.fade, styles.fadeTop]}
             pointerEvents="none"
           />
           <LinearGradient
-            colors={["transparent", "rgba(0,0,0,0.65)"]}
+            colors={["transparent", "rgba(0,0,0,0.40)", "rgba(0,0,0,0.78)"]}
             start={{ x: 0, y: 0 }}
             end={{ x: 0, y: 1 }}
             style={[styles.fade, styles.fadeBottom]}
@@ -1032,11 +1080,21 @@ export default function VideoPlayer({
                 <MaterialCommunityIcons name="chevron-down" size={26} color="#fff" />
               </TouchableOpacity>
             ) : null}
-            <Text style={styles.title} numberOfLines={1} ellipsizeMode="middle">
-              {title || "Now playing"}
-            </Text>
+            <View style={styles.titleWrap}>
+              <Text
+                style={styles.titleEyebrow}
+                numberOfLines={1}
+                ellipsizeMode="tail"
+              >
+                Now playing
+              </Text>
+              <Text style={styles.title} numberOfLines={1} ellipsizeMode="middle">
+                {title || "Video"}
+              </Text>
+            </View>
             {qualityLabel ? (
               <View style={styles.qualityChip}>
+                <View style={styles.qualityDot} />
                 <Text style={styles.qualityChipText}>{qualityLabel}</Text>
               </View>
             ) : null}
@@ -1058,10 +1116,12 @@ export default function VideoPlayer({
             <TouchableOpacity
               style={styles.skipBtn}
               onPress={() => skipBy(-10)}
-              activeOpacity={0.7}
+              activeOpacity={0.6}
               accessibilityLabel="Back 10 seconds"
             >
-              <MaterialCommunityIcons name="rewind-10" size={28} color="#fff" />
+              <View style={styles.skipInner}>
+                <MaterialCommunityIcons name="rewind-10" size={30} color="#fff" />
+              </View>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.playBtn}
@@ -1069,15 +1129,26 @@ export default function VideoPlayer({
               activeOpacity={0.85}
               accessibilityLabel={playing ? "Pause" : "Play"}
             >
+              {/* Frosted glass layer */}
+              <BlurView
+                intensity={isDark ? 35 : 55}
+                tint="light"
+                experimentalBlurMethod={Platform.OS === "android" ? ("dimezisBlurView" as const) : undefined}
+                style={StyleSheet.absoluteFill}
+                pointerEvents="none"
+              />
               <LinearGradient
-                colors={["rgba(255,255,255,0.16)", "rgba(255,255,255,0.06)"]}
+                colors={["rgba(255,255,255,0.30)", "rgba(255,255,255,0.10)"]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={StyleSheet.absoluteFill}
+                pointerEvents="none"
               />
+              {/* Glassy inner ring */}
+              <View style={styles.playRing} />
               <MaterialCommunityIcons
                 name={ended ? "replay" : playing ? "pause" : "play"}
-                size={38}
+                size={42}
                 color="#fff"
                 style={!playing && !ended ? { marginLeft: 4 } : undefined}
               />
@@ -1085,10 +1156,12 @@ export default function VideoPlayer({
             <TouchableOpacity
               style={styles.skipBtn}
               onPress={() => skipBy(10)}
-              activeOpacity={0.7}
+              activeOpacity={0.6}
               accessibilityLabel="Forward 10 seconds"
             >
-              <MaterialCommunityIcons name="fast-forward-10" size={28} color="#fff" />
+              <View style={styles.skipInner}>
+                <MaterialCommunityIcons name="fast-forward-10" size={30} color="#fff" />
+              </View>
             </TouchableOpacity>
           </View>
 
@@ -1096,7 +1169,7 @@ export default function VideoPlayer({
           <View
             style={[
               styles.bottomPanel,
-              { paddingBottom: (immersive ? insets.bottom : 0) + 12 },
+              { paddingBottom: (immersive ? insets.bottom : 0) + 14 },
             ]}
             pointerEvents="box-none"
           >
@@ -1109,11 +1182,11 @@ export default function VideoPlayer({
               >
                 <MaterialCommunityIcons
                   name={ended ? "replay" : playing ? "pause" : "play"}
-                  size={22}
+                  size={20}
                   color="#fff"
                 />
               </TouchableOpacity>
-              <Text style={styles.timeText}>
+              <Text style={[styles.timeText, { fontVariant: ["tabular-nums"] }]}>
                 {fmtTimeLong(scrubRatio != null ? scrubRatio * duration : currentTime)}
               </Text>
 
@@ -1142,7 +1215,7 @@ export default function VideoPlayer({
                 <View style={[styles.seekBuf, { width: `${bufPct * 100}%` }]} />
                 <View style={[styles.seekFill, { width: `${pct * 100}%` }]}>
                   <LinearGradient
-                    colors={["#8FB5FF", "#5B8CFF"]}
+                    colors={[gradients.brand[0], gradients.brand[1]]}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 0 }}
                     style={StyleSheet.absoluteFill}
@@ -1163,7 +1236,7 @@ export default function VideoPlayer({
                 ) : null}
               </View>
 
-              <Text style={styles.timeText}>{fmtTimeLong(duration)}</Text>
+              <Text style={[styles.timeText, { fontVariant: ["tabular-nums"] }]}>{fmtTimeLong(duration)}</Text>
             </View>
 
             {/* Secondary row */}
@@ -1174,6 +1247,7 @@ export default function VideoPlayer({
                 activeOpacity={0.7}
                 accessibilityLabel={`Playback speed ${VIDEO_RATES[rateIdx]}x`}
               >
+                <MaterialCommunityIcons name="speedometer" size={13} color="#fff" style={{ opacity: 0.85 }} />
                 <Text style={styles.pillText}>{VIDEO_RATES[rateIdx]}×</Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -1291,7 +1365,7 @@ export default function VideoPlayer({
         {VIDEO_RATES.map((r, i) => (
           <TouchableOpacity
             key={r}
-            style={[styles.sheetRow, rateIdx === i && styles.sheetRowActive]}
+            style={[styles.sheetRow, rateIdx === i && { backgroundColor: colors.accentSoft, borderRadius: radius.md }]}
             onPress={() => {
               setRate(i);
               setSheetOpen("options");
@@ -1299,11 +1373,11 @@ export default function VideoPlayer({
             activeOpacity={0.6}
           >
             <MaterialCommunityIcons
-              name={rateIdx === i ? "check-circle" : "chevron-right"}
+              name={rateIdx === i ? "check-circle" : "circle-outline"}
               size={18}
-              color={rateIdx === i ? "#8B5CF6" : "rgba(255,255,255,0.4)"}
+              color={rateIdx === i ? colors.accent : "rgba(255,255,255,0.4)"}
             />
-            <Text style={styles.sheetRowText}>{r}×</Text>
+            <Text style={[styles.sheetRowText, rateIdx === i && { color: colors.content }]}>{r}×</Text>
           </TouchableOpacity>
         ))}
       </BottomSheet>
@@ -1319,7 +1393,7 @@ export default function VideoPlayer({
           audioTracks.map((tr) => (
             <TouchableOpacity
               key={tr.id}
-              style={[styles.sheetRow, audioTrack?.id === tr.id && styles.sheetRowActive]}
+              style={[styles.sheetRow, audioTrack?.id === tr.id && { backgroundColor: colors.accentSoft, borderRadius: radius.md }]}
               onPress={() => {
                 try {
                   player.audioTrack = tr;
@@ -1332,9 +1406,9 @@ export default function VideoPlayer({
               <MaterialCommunityIcons
                 name={audioTrack?.id === tr.id ? "check-circle" : "music-note"}
                 size={18}
-                color={audioTrack?.id === tr.id ? "#8B5CF6" : "rgba(255,255,255,0.5)"}
+                color={audioTrack?.id === tr.id ? colors.accent : "rgba(255,255,255,0.5)"}
               />
-              <Text style={styles.sheetRowText} numberOfLines={1}>
+              <Text style={[styles.sheetRowText, audioTrack?.id === tr.id && { color: colors.content }]} numberOfLines={1}>
                 {tr.label || tr.language || tr.id}
               </Text>
             </TouchableOpacity>
@@ -1348,7 +1422,7 @@ export default function VideoPlayer({
         title="Subtitles"
       >
         <TouchableOpacity
-          style={[styles.sheetRow, !subtitleTrack && styles.sheetRowActive]}
+          style={[styles.sheetRow, !subtitleTrack && { backgroundColor: colors.accentSoft, borderRadius: radius.md }]}
           onPress={() => {
             try {
               player.subtitleTrack = null;
@@ -1361,14 +1435,14 @@ export default function VideoPlayer({
           <MaterialCommunityIcons
             name={!subtitleTrack ? "check-circle" : "subtitles-outline"}
             size={18}
-            color={!subtitleTrack ? "#8B5CF6" : "rgba(255,255,255,0.5)"}
+            color={!subtitleTrack ? colors.accent : "rgba(255,255,255,0.5)"}
           />
-          <Text style={styles.sheetRowText}>Off</Text>
+          <Text style={[styles.sheetRowText, !subtitleTrack && { color: colors.content }]}>Off</Text>
         </TouchableOpacity>
         {subtitleTracks.map((tr) => (
           <TouchableOpacity
             key={tr.id}
-            style={[styles.sheetRow, subtitleTrack?.id === tr.id && styles.sheetRowActive]}
+            style={[styles.sheetRow, subtitleTrack?.id === tr.id && { backgroundColor: colors.accentSoft, borderRadius: radius.md }]}
             onPress={() => {
               try {
                 player.subtitleTrack = tr;
@@ -1381,9 +1455,9 @@ export default function VideoPlayer({
             <MaterialCommunityIcons
               name={subtitleTrack?.id === tr.id ? "check-circle" : "subtitles"}
               size={18}
-              color={subtitleTrack?.id === tr.id ? "#8B5CF6" : "rgba(255,255,255,0.5)"}
+              color={subtitleTrack?.id === tr.id ? colors.accent : "rgba(255,255,255,0.5)"}
             />
-            <Text style={styles.sheetRowText} numberOfLines={1}>
+            <Text style={[styles.sheetRowText, subtitleTrack?.id === tr.id && { color: colors.content }]} numberOfLines={1}>
               {tr.label || tr.language || tr.id}
             </Text>
           </TouchableOpacity>
@@ -1452,7 +1526,7 @@ function SheetActions({
           onPress={r.onPress}
           activeOpacity={0.6}
         >
-          <MaterialCommunityIcons name={r.icon as any} size={20} color="#C9CDD6" />
+          <MaterialCommunityIcons name={r.icon as any} size={20} color="rgba(255,255,255,0.78)" />
           <Text style={styles.sheetActionText}>{r.label}</Text>
           {r.value ? <Text style={styles.sheetActionValue}>{r.value}</Text> : null}
         </TouchableOpacity>
@@ -1492,107 +1566,194 @@ const styles = StyleSheet.create({
   },
   scrubBubbleWrap: {
     position: "absolute",
-    top: -34,
-    marginLeft: -32,
-    width: 64,
+    top: -42,
+    marginLeft: -36,
+    width: 72,
     alignItems: "center",
   },
   scrubBubbleText: {
     color: "#fff",
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: "800",
     fontVariant: ["tabular-nums"],
-    backgroundColor: "rgba(0,0,0,0.75)",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
+    backgroundColor: "rgba(15,17,24,0.92)",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
     overflow: "hidden",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.12)",
+    letterSpacing: 0.2,
   },
   seekThumbGlowActive: { width: 28, height: 28, borderRadius: 14 },
   seekThumbActive: { width: 16, height: 16, borderRadius: 8 },
   loading: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center" },
+  loadingInner: {
+    paddingHorizontal: 22,
+    paddingVertical: 22,
+    borderRadius: 28,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.10)",
+  },
   bufferPill: {
     position: "absolute",
-    top: 14,
+    top: 16,
     alignSelf: "center",
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     borderRadius: 999,
     backgroundColor: "rgba(0,0,0,0.55)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.12)",
   },
-  bufferText: { color: "#fff", fontSize: 12, fontWeight: "600" },
+  bufferText: { color: "#fff", fontSize: 12, fontWeight: "600", letterSpacing: 0.2 },
 
   ripple: {
     position: "absolute",
     top: "40%",
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    backgroundColor: "rgba(255,255,255,0.18)",
+    width: 104,
+    height: 104,
+    borderRadius: 52,
+    backgroundColor: "rgba(255,255,255,0.20)",
     alignItems: "center",
     justifyContent: "center",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.18)",
   },
 
   hudWrap: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center" },
   hudBubble: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 14,
-    backgroundColor: "rgba(0,0,0,0.65)",
+    gap: 12,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    borderRadius: 18,
+    backgroundColor: "rgba(0,0,0,0.70)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.10)",
+    minWidth: 120,
   },
-  hudText: { color: "#fff", fontSize: 13, fontWeight: "700", fontVariant: ["tabular-nums"] },
+  hudIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.10)",
+  },
+  hudSeekText: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "800",
+    fontVariant: ["tabular-nums"],
+    letterSpacing: 0.2,
+  },
+  hudText: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "700",
+    fontVariant: ["tabular-nums"],
+    letterSpacing: 0.2,
+  },
+  hudLevelTrack: {
+    width: 120,
+    height: 4,
+    borderRadius: 2,
+    marginTop: 4,
+    backgroundColor: "rgba(255,255,255,0.20)",
+    overflow: "hidden",
+  },
+  hudLevelFill: {
+    height: "100%",
+    backgroundColor: "#fff",
+    borderRadius: 2,
+  },
 
   resumeChip: {
     position: "absolute",
-    left: 12,
-    bottom: 86,
+    left: 14,
+    right: 14,
+    bottom: 96,
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    maxWidth: "92%",
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 14,
-    backgroundColor: "rgba(0,0,0,0.72)",
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 18,
+    backgroundColor: "rgba(15,17,24,0.85)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.12)",
+    overflow: "hidden",
   },
-  resumeText: { color: "#fff", fontSize: 13, fontWeight: "600", flexShrink: 1 },
+  resumeIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(91,140,255,0.20)",
+  },
+  resumeText: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "600",
+    flexShrink: 1,
+    letterSpacing: 0.1,
+  },
   resumeBtnGhost: {
-    paddingHorizontal: 10,
-    paddingVertical: 7,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.35)",
   },
-  resumeBtnGhostText: { color: "#fff", fontSize: 12, fontWeight: "700" },
+  resumeBtnGhostText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "700",
+    letterSpacing: 0.2,
+  },
   resumeBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 7,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     borderRadius: 999,
     overflow: "hidden",
   },
-  resumeBtnText: { color: "#fff", fontSize: 12, fontWeight: "800" },
+  resumeBtnText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 0.3,
+  },
 
   lockPill: {
     position: "absolute",
-    top: 14,
-    right: 14,
-    width: 36,
-    height: 36,
-    borderRadius: 999,
-    backgroundColor: "rgba(0,0,0,0.55)",
+    top: 16,
+    right: 16,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: "rgba(0,0,0,0.55)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.18)",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 10,
+    elevation: 6,
   },
 
-  fade: { position: "absolute", left: 0, right: 0, height: 90 },
-  fadeTop: { top: 0 },
-  fadeBottom: { bottom: 0, height: 120 },
+  fade: { position: "absolute", left: 0, right: 0 },
+  fadeTop: { top: 0, height: 100 },
+  fadeBottom: { bottom: 0, height: 140 },
 
   topBar: {
     position: "absolute",
@@ -1606,14 +1767,48 @@ const styles = StyleSheet.create({
     paddingTop: 10,
     paddingBottom: 6,
   },
-  title: { flex: 1, color: "#fff", fontSize: 14, fontWeight: "700" },
-  qualityChip: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.14)",
+  titleWrap: {
+    flex: 1,
+    minWidth: 0,
   },
-  qualityChipText: { color: "#fff", fontSize: 11, fontWeight: "700", fontVariant: ["tabular-nums"] },
+  titleEyebrow: {
+    color: "rgba(255,255,255,0.55)",
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 1.2,
+    textTransform: "uppercase",
+    marginBottom: 2,
+  },
+  title: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "700",
+    letterSpacing: -0.2,
+  },
+  qualityChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.16)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.18)",
+  },
+  qualityDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: "#7DFFB0",
+  },
+  qualityChipText: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "700",
+    fontVariant: ["tabular-nums"],
+    letterSpacing: 0.2,
+  },
   iconBtn: { padding: 8 },
 
   centerRow: {
@@ -1621,17 +1816,49 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 26,
+    gap: 36,
   },
-  skipBtn: { padding: 10, borderRadius: 999, backgroundColor: "rgba(0,0,0,0.25)" },
-  playBtn: {
-    width: 72,
-    height: 72,
-    borderRadius: 999,
+  skipBtn: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+  skipInner: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "rgba(0,0,0,0.35)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.10)",
+  },
+  playBtn: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0,0,0,0.30)",
     overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.4,
+    shadowRadius: 14,
+    elevation: 10,
+  },
+  playRing: {
+    position: "absolute",
+    top: 4,
+    left: 4,
+    right: 4,
+    bottom: 4,
+    borderRadius: 36,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.32)",
   },
 
   bottomPanel: { position: "absolute", left: 0, right: 0, bottom: 0 },
@@ -1648,50 +1875,65 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "700",
     fontVariant: ["tabular-nums"],
-    minWidth: 42,
+    minWidth: 46,
     textAlign: "center",
+    letterSpacing: 0.2,
   },
 
-  seekTrack: { height: 28, justifyContent: "center" },
+  seekTrack: { height: 32, justifyContent: "center" },
   seekBg: {
     position: "absolute",
     left: 0,
     right: 0,
-    height: 4,
-    borderRadius: 2,
+    height: 5,
+    borderRadius: 3,
     backgroundColor: "rgba(255,255,255,0.22)",
   },
   seekBuf: {
     position: "absolute",
     left: 0,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: "rgba(255,255,255,0.32)",
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: "rgba(255,255,255,0.36)",
   },
   seekFill: {
     position: "absolute",
     left: 0,
-    height: 4,
-    borderRadius: 2,
+    height: 5,
+    borderRadius: 3,
     overflow: "hidden",
+    shadowColor: "#5B8CFF",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.6,
+    shadowRadius: 6,
   },
   seekThumbWrap: {
     position: "absolute",
     top: 0,
     bottom: 0,
-    width: 18,
-    marginLeft: -9,
+    width: 22,
+    marginLeft: -11,
     alignItems: "center",
     justifyContent: "center",
   },
   seekThumbGlow: {
     position: "absolute",
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: "rgba(91,140,255,0.35)",
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: "rgba(91,140,255,0.45)",
   },
-  seekThumb: { width: 12, height: 12, borderRadius: 6, backgroundColor: "#fff" },
+  seekThumb: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: "#fff",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.4,
+    shadowRadius: 2,
+    elevation: 2,
+  },
 
   secondaryRow: {
     flexDirection: "row",
@@ -1701,63 +1943,116 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
   },
   pill: {
-    paddingHorizontal: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 11,
     paddingVertical: 6,
     borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.14)",
+    backgroundColor: "rgba(255,255,255,0.16)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.14)",
   },
-  pillText: { color: "#fff", fontSize: 12, fontWeight: "800", fontVariant: ["tabular-nums"] },
+  pillText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "800",
+    fontVariant: ["tabular-nums"],
+    letterSpacing: 0.2,
+  },
 
   sheetRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 12,
     paddingVertical: 12,
-    paddingHorizontal: 4,
-    borderRadius: 10,
+    paddingHorizontal: 10,
+    borderRadius: 12,
   },
   sheetRowActive: { backgroundColor: "rgba(139,92,246,0.12)" },
-  sheetRowText: { color: "#fff", fontSize: 14, fontWeight: "600", flex: 1 },
-  sheetEmpty: { color: "rgba(255,255,255,0.5)", fontSize: 13, paddingVertical: 10 },
+  sheetRowText: {
+    color: "rgba(255,255,255,0.92)",
+    fontSize: 14,
+    fontWeight: "600",
+    flex: 1,
+    letterSpacing: 0.1,
+  },
+  sheetEmpty: {
+    color: "rgba(255,255,255,0.5)",
+    fontSize: 13,
+    paddingVertical: 12,
+    textAlign: "center",
+  },
 
   sheetActionRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    paddingVertical: 13,
+    paddingVertical: 14,
     paddingHorizontal: 4,
   },
-  sheetActionText: { color: "#E7E9EE", fontSize: 14, fontWeight: "600", flex: 1 },
-  sheetActionValue: { color: "rgba(255,255,255,0.45)", fontSize: 13, fontWeight: "700" },
+  sheetActionText: {
+    color: "rgba(255,255,255,0.92)",
+    fontSize: 14,
+    fontWeight: "600",
+    flex: 1,
+    letterSpacing: 0.1,
+  },
+  sheetActionValue: {
+    color: "rgba(255,255,255,0.45)",
+    fontSize: 13,
+    fontWeight: "700",
+  },
 
   videoErrorWrap: {
     width: "100%",
-    minHeight: 220,
+    minHeight: 240,
     flexGrow: 1,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#0B0D12",
-    gap: 8,
+    gap: 10,
     padding: 24,
   },
-  videoErrorTitle: { color: "#fff", fontWeight: "800", fontSize: 15, marginTop: 4 },
+  videoErrorIcon: {
+    width: 76,
+    height: 76,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    marginBottom: 4,
+  },
+  videoErrorTitle: {
+    color: "#fff",
+    fontWeight: "800",
+    marginTop: 4,
+  },
   videoErrorSub: {
-    color: "#8A8F98",
-    fontSize: 12,
+    color: "rgba(255,255,255,0.55)",
+    fontSize: 13,
     textAlign: "center",
-    lineHeight: 17,
+    lineHeight: 19,
     marginBottom: 8,
   },
-  videoErrorRow: { flexDirection: "row", gap: 8, flexWrap: "wrap", justifyContent: "center" },
+  videoErrorRow: {
+    flexDirection: "row",
+    gap: 10,
+    flexWrap: "wrap",
+    justifyContent: "center",
+  },
   videoErrorBtn: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    borderRadius: 999,
-    backgroundColor: "#8B5CF6",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    overflow: "hidden",
   },
-  videoErrorBtnAlt: { backgroundColor: "rgba(255,255,255,0.12)" },
-  videoErrorBtnText: { color: "#fff", fontSize: 12, fontWeight: "700" },
+  videoErrorBtnAlt: {},
+  videoErrorBtnText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "700",
+    letterSpacing: 0.2,
+  },
 });

@@ -38,20 +38,33 @@ export function BottomSheet({ visible, onClose, title, actions, children }: Prop
                 backgroundColor: isDark ? "rgba(21,24,34,0.72)" : "rgba(255,255,255,0.85)",
                 borderColor: colors.borderSoft,
                 paddingHorizontal: spacing.lg,
-                paddingBottom: insets.bottom + 24,
+                paddingBottom: insets.bottom + 20,
+                paddingTop: 8,
               },
             ]}
             onPress={() => {}}
           >
           {/* Frosted glass surface — the dimmed app glows softly through. */}
           <BlurView
-            intensity={isDark ? 55 : 70}
+            intensity={isDark ? 60 : 75}
             tint={isDark ? "dark" : "light"}
             experimentalBlurMethod={Platform.OS === "android" ? ("dimezisBlurView" as const) : undefined}
-            style={[StyleSheet.absoluteFill, { borderTopLeftRadius: 26, borderTopRightRadius: 26 }]}
+            style={[StyleSheet.absoluteFill, { borderTopLeftRadius: 28, borderTopRightRadius: 28 }]}
             pointerEvents="none"
           />
-          <View style={[styles.grabber, { backgroundColor: isDark ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.15)" }]} />
+          {/* Hairline highlight along the top edge for a glassy sheen */}
+          <View
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 24,
+              right: 24,
+              height: StyleSheet.hairlineWidth,
+              backgroundColor: isDark ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.06)",
+            }}
+            pointerEvents="none"
+          />
+          <View style={[styles.grabber, { backgroundColor: isDark ? "rgba(255,255,255,0.22)" : "rgba(0,0,0,0.18)" }]} />
           {title ? (
             <Text style={[styles.title, { color: colors.content, fontSize: font.md, marginBottom: spacing.md }]} numberOfLines={1}>
               {title}
@@ -77,13 +90,13 @@ export function BottomSheet({ visible, onClose, title, actions, children }: Prop
                   onClose();
                 }
               }}
-              activeOpacity={0.6}
+              activeOpacity={0.55}
             >
               {a.icon ? (
                 <View
                   style={[
                     styles.actionIconWrap,
-                    { backgroundColor: a.destructive ? "rgba(239,68,68,0.12)" : colors.accentSoft },
+                    { backgroundColor: a.destructive ? colors.dangerSoft : colors.accentSofter, borderRadius: radius.sm },
                   ]}
                 >
                   <MaterialCommunityIcons name={a.icon as any} size={18} color={a.destructive ? colors.danger : colors.accent} />
@@ -92,7 +105,7 @@ export function BottomSheet({ visible, onClose, title, actions, children }: Prop
               <Text style={[styles.actionText, { color: a.destructive ? colors.danger : colors.content, fontSize: font.md }]}>
                 {a.label}
               </Text>
-              <MaterialCommunityIcons name="chevron-right" size={18} color={colors.muted} style={{ opacity: 0.5 }} />
+              <MaterialCommunityIcons name="chevron-right" size={18} color={colors.muted} style={{ opacity: 0.45 }} />
             </TouchableOpacity>
           ))}
 
@@ -103,7 +116,7 @@ export function BottomSheet({ visible, onClose, title, actions, children }: Prop
             onPress={onClose}
             activeOpacity={0.7}
           >
-            <Text style={[styles.cancelText, { color: colors.muted, fontSize: font.md }]}>Cancel</Text>
+            <Text style={[styles.cancelText, { color: colors.muted, fontSize: font.md, fontWeight: "600" }]}>Cancel</Text>
           </TouchableOpacity>
           </Pressable>
         </KeyboardAvoidingView>
@@ -119,22 +132,22 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   sheet: {
-    borderTopLeftRadius: 26,
-    borderTopRightRadius: 26,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
     borderWidth: 1,
     borderBottomWidth: 0,
-    paddingTop: 12,
   },
   grabber: {
     alignSelf: "center",
-    width: 42,
+    width: 40,
     height: 5,
     borderRadius: 3,
-    marginBottom: 16,
+    marginBottom: 14,
   },
   title: {
     fontWeight: "700",
     paddingHorizontal: 4,
+    letterSpacing: -0.1,
   },
   action: {
     flexDirection: "row",
@@ -144,21 +157,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   actionIconWrap: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
+    width: 36,
+    height: 36,
     alignItems: "center",
     justifyContent: "center",
   },
   actionText: {
     fontWeight: "600",
     flex: 1,
+    letterSpacing: -0.1,
   },
   cancel: {
     paddingVertical: 15,
     alignItems: "center",
   },
-  cancelText: {
-    fontWeight: "600",
-  },
+  cancelText: {},
 });

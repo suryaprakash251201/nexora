@@ -26,7 +26,8 @@ import type { Root, FileItem, Playlist, FavoriteItem } from "../api/types";
 import type { RootStackParamList, MainTabParamList } from "../navigation/types";
 import { useAudio } from "../store/AudioContext";
 import { haptic } from "../store/SettingsContext";
-import { PressScale, FadeSlideIn } from "../components/motion";
+import { PressScale, FadeSlideIn, SectionReveal } from "../components/motion";
+import { SectionDivider } from "../components/SectionDivider";
 
 type Nav = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, "Home">,
@@ -158,17 +159,17 @@ export default function HomeScreen() {
   if (loading) {
     return (
       <View style={[styles.root, { backgroundColor: colors.bg }]}>
-        <View style={[styles.hero, { paddingTop: insets.top + 20 }]}>
-          <LinearGradient colors={[...gradients.hero]} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={StyleSheet.absoluteFill} pointerEvents="none" />
+        <View style={[styles.hero, { paddingTop: insets.top + 24 }]}>
+          <LinearGradient colors={[...gradients.heroGlow]} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={StyleSheet.absoluteFill} pointerEvents="none" />
           <View style={styles.headerRow}>
             <View>
-              <View style={{ width: IS_ANDROID ? 100 : 120, height: 16, borderRadius: 8, backgroundColor: colors.card }} />
-              <View style={{ width: IS_ANDROID ? 140 : 160, height: IS_ANDROID ? 26 : 32, borderRadius: 8, backgroundColor: colors.card, marginTop: 10 }} />
+              <View style={{ width: IS_ANDROID ? 100 : 120, height: 14, borderRadius: 6, backgroundColor: colors.card }} />
+              <View style={{ width: IS_ANDROID ? 160 : 200, height: IS_ANDROID ? 28 : 34, borderRadius: 8, backgroundColor: colors.card, marginTop: 10 }} />
             </View>
             <View style={{ width: IS_ANDROID ? 44 : 52, height: IS_ANDROID ? 44 : 52, borderRadius: IS_ANDROID ? 22 : 26, backgroundColor: colors.card }} />
           </View>
         </View>
-        <View style={{ paddingHorizontal: spacing.xl, gap: spacing.md, flexDirection: "row", marginTop: spacing.xl }}>
+        <View style={{ paddingHorizontal: spacing.lg, gap: spacing.md, flexDirection: "row", marginTop: spacing.lg }}>
           <GridCardSkeleton />
           <GridCardSkeleton />
         </View>
@@ -244,31 +245,52 @@ export default function HomeScreen() {
         );
       }}
       ListHeaderComponent={
-        <FadeSlideIn distance={18}>
+        <SectionReveal>
         <View>
-          {/* Dashboard Header */}
+          {/* Dashboard Header — dual-glow + softer gradient mesh */}
           <View style={[styles.hero, { paddingTop: insets.top + 24 }]}>
-            <LinearGradient colors={[...gradients.hero]} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={StyleSheet.absoluteFill} pointerEvents="none" />
+            {/* base wash — vertical accent gradient */}
+            <LinearGradient
+              colors={[...gradients.hero]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 0, y: 1 }}
+              style={StyleSheet.absoluteFill}
+              pointerEvents="none"
+            />
+            {/* secondary cyan glow on the right (mirrors web's blob art) */}
+            <LinearGradient
+              colors={isDark
+                ? ["rgba(53, 211, 255, 0.10)", "transparent"]
+                : ["rgba(53, 211, 255, 0.05)", "transparent"]}
+              start={{ x: 1, y: 0 }}
+              end={{ x: 0.4, y: 1 }}
+              style={StyleSheet.absoluteFill}
+              pointerEvents="none"
+            />
 
             <View style={styles.headerRow}>
               <View style={{ flex: 1 }}>
-                <Text style={[styles.greeting, { color: colors.muted, fontSize: font.md }]} maxFontSizeMultiplier={1.15}>{greeting}</Text>
-                <Text style={[styles.heroName, { color: colors.content }]} maxFontSizeMultiplier={1.15}>{firstName || "Explorer"}</Text>
+                <Text style={[styles.greeting, { color: colors.muted }]} maxFontSizeMultiplier={1.15}>
+                  {greeting}
+                </Text>
+                <Text style={[styles.heroName, { color: colors.content, fontSize: IS_ANDROID ? 26 : 32 }]} maxFontSizeMultiplier={1.15}>
+                  {firstName || "Explorer"}
+                </Text>
               </View>
               <TouchableOpacity
                 style={[styles.avatarBtn, shadowSm]}
                 activeOpacity={0.85}
                 onPress={() => navigation.navigate("Settings")}
+                accessibilityLabel="Open settings"
+                accessibilityRole="button"
               >
                 <LinearGradient colors={[...gradients.brand]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
-                <Text style={styles.avatarText}>{initials}</Text>
+                <Text style={[styles.avatarText, { fontSize: IS_ANDROID ? 18 : 20 }]}>{initials}</Text>
               </TouchableOpacity>
             </View>
 
-
-
             {error ? (
-              <TouchableOpacity style={[styles.errorPill, { borderColor: "rgba(244,63,94,0.3)" }]} onPress={() => load(true)}>
+              <TouchableOpacity style={[styles.errorPill, { borderColor: colors.dangerSoft }]} onPress={() => load(true)}>
                 <MaterialCommunityIcons name="alert-circle-outline" size={16} color={colors.danger} />
                 <Text style={[styles.errorText, { color: colors.danger, fontSize: font.sm }]}>{error} — Tap to retry</Text>
               </TouchableOpacity>
@@ -277,25 +299,34 @@ export default function HomeScreen() {
 
           {/* Quick Categories Bar */}
           <View style={styles.quickWrap}>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: spacing.lg, gap: 16 }}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ paddingHorizontal: spacing.lg, gap: spacing.md }}
+            >
               {QUICK_CATEGORIES.map((cat, ci) => (
-                <FadeSlideIn key={cat.id} delay={120 + ci * 60} distance={10}>
-                  <PressScale scaleTo={0.93}>
+                <FadeSlideIn key={cat.id} delay={120 + ci * 55} distance={10}>
+                  <PressScale scaleTo={0.92} opacityTo={0.85}>
                     <TouchableOpacity
                       style={styles.quickCard}
                       activeOpacity={0.75}
                       onPress={() => ("screen" in cat ? navigation.navigate(cat.screen) : openCategory(cat.kind, cat.title))}
+                      accessibilityLabel={cat.title}
+                      accessibilityRole="button"
                     >
-                  <View style={[styles.quickIconWrap, shadowSm]}>
-                    <LinearGradient
-                      colors={[...cat.gradient]}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 1 }}
-                      style={StyleSheet.absoluteFill}
-                    />
-                    <MaterialCommunityIcons name={cat.icon as any} size={IS_ANDROID ? 24 : 28} color="#fff" />
-                  </View>
-                  <Text style={[styles.quickLabel, { color: colors.content, fontSize: font.sm }]} maxFontSizeMultiplier={1.15}>{cat.title}</Text>
+                      <View style={[styles.quickIconWrap, shadowSm]}>
+                        <LinearGradient
+                          colors={[...cat.gradient]}
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 1, y: 1 }}
+                          style={StyleSheet.absoluteFill}
+                        />
+                        <View style={styles.quickIconGlow} />
+                        <MaterialCommunityIcons name={cat.icon as any} size={IS_ANDROID ? 24 : 28} color="#fff" />
+                      </View>
+                      <Text style={[styles.quickLabel, { color: colors.contentSecondary, fontSize: font.xs }]} maxFontSizeMultiplier={1.15}>
+                        {cat.title}
+                      </Text>
                     </TouchableOpacity>
                   </PressScale>
                 </FadeSlideIn>
@@ -313,11 +344,11 @@ export default function HomeScreen() {
                 borderRadius: radius.xl,
                 marginHorizontal: spacing.lg,
               },
-              shadow,
+              shadowSm,
             ]}
           >
             <LinearGradient
-              colors={["rgba(255,255,255,0.03)", "transparent"]}
+              colors={["rgba(255,255,255,0.04)", "transparent"]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={styles.glassHighlight}
@@ -327,7 +358,7 @@ export default function HomeScreen() {
                 <MaterialCommunityIcons name="server" size={18} color={colors.accent} />
                 <Text style={[styles.statValue, { color: colors.content, fontSize: font.xl }]}>{roots.length}</Text>
               </View>
-              <Text style={[styles.statLabel, { color: colors.muted, fontSize: font.sm }]}>Active Roots</Text>
+              <Text style={[styles.statLabel, { color: colors.muted, fontSize: font.xs }]}>Active Roots</Text>
             </View>
             <View style={[styles.statDivider, { backgroundColor: colors.borderSoft }]} />
             <View style={styles.statItem}>
@@ -335,7 +366,7 @@ export default function HomeScreen() {
                 <MaterialCommunityIcons name="clock-outline" size={18} color={colors.purple} />
                 <Text style={[styles.statValue, { color: colors.content, fontSize: font.xl }]}>{recents.length}</Text>
               </View>
-              <Text style={[styles.statLabel, { color: colors.muted, fontSize: font.sm }]}>Recent Files</Text>
+              <Text style={[styles.statLabel, { color: colors.muted, fontSize: font.xs }]}>Recent Files</Text>
             </View>
             <View style={[styles.statDivider, { backgroundColor: colors.borderSoft }]} />
             <View style={styles.statItem}>
@@ -343,13 +374,13 @@ export default function HomeScreen() {
                 <MaterialCommunityIcons name="shield-check" size={18} color={colors.success} />
                 <Text style={[styles.statValue, { color: colors.success, fontSize: font.md }]}>Secure</Text>
               </View>
-              <Text style={[styles.statLabel, { color: colors.muted, fontSize: font.sm }]}>Connection</Text>
+              <Text style={[styles.statLabel, { color: colors.muted, fontSize: font.xs }]}>Connection</Text>
             </View>
           </View>
 
-          <SectionLabel>Storage Locations</SectionLabel>
+          <SectionDivider label="Storage Locations" />
         </View>
-        </FadeSlideIn>
+        </SectionReveal>
       }
       ListEmptyComponent={
         !loading && roots.length === 0 ? (
@@ -361,56 +392,70 @@ export default function HomeScreen() {
         ) : null
       }
       ListFooterComponent={
-        <View style={{ marginTop: 12 }}>
+        <View style={{ marginTop: 4 }}>
           {/* Playlists — created in the web app, synced via /playlists */}
           {playlists.length > 0 && (
-            <View style={{ marginBottom: 24 }}>
+            <View style={{ marginBottom: spacing.xl }}>
               <View style={styles.sectionRow}>
-                <SectionLabel>Your Playlists</SectionLabel>
+                <Text style={[styles.sectionLabelText, { color: colors.muted, fontSize: font.xxs }]}>
+                  Your Playlists
+                </Text>
                 <Text style={[styles.playlistSync, { color: colors.muted, fontSize: font.xs }]}>synced with web</Text>
               </View>
-              {/* One playlist card — tap to open the full list of playlists */}
-              <TouchableOpacity
-                style={[styles.playlistCard, { backgroundColor: colors.surface, borderColor: colors.borderSoft, borderRadius: radius.xl, marginHorizontal: spacing.lg }, shadowSm]}
-                activeOpacity={0.8}
-                onPress={() => navigation.navigate("Playlists")}
-              >
-                <LinearGradient colors={["rgba(255,255,255,0.06)", "transparent"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
-                <View style={styles.playlistCover}>
-                  <LinearGradient colors={[...gradients.brand]} style={StyleSheet.absoluteFill} />
-                  <MaterialCommunityIcons name="playlist-music" size={IS_ANDROID ? 22 : 26} color="#fff" />
-                </View>
-                <View style={styles.playlistBody}>
-                  <Text style={[styles.playlistTitle, { color: colors.content, fontSize: font.md }]}>Playlists</Text>
-                  <Text style={[styles.playlistSub, { color: colors.muted, fontSize: font.xs }]}>
-                    {playlists.length} playlist{playlists.length === 1 ? "" : "s"} · tap to open
-                  </Text>
-                </View>
-                <MaterialCommunityIcons name="chevron-right" size={22} color={colors.muted} style={{ opacity: 0.5 }} />
-              </TouchableOpacity>
+              <FadeSlideIn delay={80} distance={10}>
+                <PressScale scaleTo={0.98}>
+                  <TouchableOpacity
+                    style={[styles.playlistCard, { backgroundColor: colors.surface, borderColor: colors.borderSoft, borderRadius: radius.xl, marginHorizontal: spacing.lg }, shadowSm]}
+                    activeOpacity={0.8}
+                    onPress={() => navigation.navigate("Playlists")}
+                    accessibilityLabel="Open playlists"
+                    accessibilityRole="button"
+                  >
+                    <LinearGradient colors={["rgba(255,255,255,0.06)", "transparent"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+                    <View style={styles.playlistCover}>
+                      <LinearGradient colors={[...gradients.brand]} style={StyleSheet.absoluteFill} />
+                      <MaterialCommunityIcons name="playlist-music" size={IS_ANDROID ? 22 : 26} color="#fff" />
+                    </View>
+                    <View style={styles.playlistBody}>
+                      <Text style={[styles.playlistTitle, { color: colors.content, fontSize: font.md }]}>Playlists</Text>
+                      <Text style={[styles.playlistSub, { color: colors.muted, fontSize: font.xs }]}>
+                        {playlists.length} playlist{playlists.length === 1 ? "" : "s"} · tap to open
+                      </Text>
+                    </View>
+                    <View style={[styles.chevronWrap, { backgroundColor: colors.card }]}>
+                      <MaterialCommunityIcons name="chevron-right" size={18} color={colors.muted} />
+                    </View>
+                  </TouchableOpacity>
+                </PressScale>
+              </FadeSlideIn>
             </View>
           )}
 
           {recents.filter(f => previewKind(f) === "audio").length > 0 && (
-            <View style={{ marginBottom: 24 }}>
-              <View style={styles.sectionRow}>
-                <SectionLabel>Recently Played Songs</SectionLabel>
-              </View>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: spacing.lg, gap: 12 }}>
-                {recents.filter(f => previewKind(f) === "audio").slice(0, 5).map(f => (
-                  <TouchableOpacity
-                    key={f.root_id + f.path}
-                    style={[styles.audioCard, { backgroundColor: colors.surface, borderColor: colors.borderSoft, borderRadius: radius.xl }, shadowSm]}
-                    activeOpacity={0.8}
-                    onPress={() => openFile(f)}
-                  >
-                    <LinearGradient colors={["rgba(255,255,255,0.06)", "transparent"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
-                    <View style={styles.audioIcon}>
-                      <MaterialCommunityIcons name="music-circle" size={32} color={colors.accent} />
-                    </View>
-                    <Text style={[styles.audioTitle, { color: colors.content, fontSize: font.sm }]} numberOfLines={1}>{f.name}</Text>
-                    <Text style={[styles.audioSub, { color: colors.muted, fontSize: font.xs }]}>Music</Text>
-                  </TouchableOpacity>
+            <View style={{ marginBottom: spacing.xl }}>
+              <SectionDivider label="Recently Played" />
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ paddingHorizontal: spacing.lg, gap: spacing.md }}
+              >
+                {recents.filter(f => previewKind(f) === "audio").slice(0, 6).map((f, i) => (
+                  <FadeSlideIn key={f.root_id + f.path} delay={60 + i * 40} distance={8}>
+                    <PressScale scaleTo={0.96}>
+                      <TouchableOpacity
+                        style={[styles.audioCard, { backgroundColor: colors.surface, borderColor: colors.borderSoft, borderRadius: radius.lg }, shadowSm]}
+                        activeOpacity={0.8}
+                        onPress={() => openFile(f)}
+                      >
+                        <LinearGradient colors={["rgba(255,255,255,0.06)", "transparent"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+                        <View style={[styles.audioIcon, { backgroundColor: colors.accentSofter }]}>
+                          <MaterialCommunityIcons name="music-circle" size={32} color={colors.accent} />
+                        </View>
+                        <Text style={[styles.audioTitle, { color: colors.content, fontSize: font.sm }]} numberOfLines={1}>{f.name}</Text>
+                        <Text style={[styles.audioSub, { color: colors.muted, fontSize: font.xs }]}>Music</Text>
+                      </TouchableOpacity>
+                    </PressScale>
+                  </FadeSlideIn>
                 ))}
               </ScrollView>
             </View>
@@ -418,28 +463,34 @@ export default function HomeScreen() {
 
           {/* Liked Songs — one cover card that opens the full liked list */}
           {likedSongs.length > 0 && (
-            <View style={{ marginBottom: 24 }}>
-              <View style={styles.sectionRow}>
-                <SectionLabel>Liked Songs</SectionLabel>
-              </View>
-              <TouchableOpacity
-                style={[styles.likedCard, { backgroundColor: colors.surface, borderColor: colors.borderSoft, borderRadius: radius.xl, marginHorizontal: spacing.lg }, shadowSm]}
-                activeOpacity={0.8}
-                onPress={() => navigation.navigate("Liked")}
-              >
-                <LinearGradient colors={["rgba(255,255,255,0.06)", "transparent"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
-                <View style={styles.likedCover}>
-                  <LinearGradient colors={["#F43F5E", "#BE123C"]} style={StyleSheet.absoluteFill} />
-                  <MaterialCommunityIcons name="heart" size={IS_ANDROID ? 26 : 30} color="#fff" />
-                </View>
-                <View style={styles.likedBody}>
-                  <Text style={[styles.likedTitle, { color: colors.content, fontSize: font.md }]}>Liked Songs</Text>
-                  <Text style={[styles.likedSub, { color: colors.muted, fontSize: font.xs }]}>
-                    {likedSongs.length} song{likedSongs.length === 1 ? "" : "s"} · tap to open
-                  </Text>
-                </View>
-                <MaterialCommunityIcons name="chevron-right" size={22} color={colors.muted} style={{ opacity: 0.5 }} />
-              </TouchableOpacity>
+            <View style={{ marginBottom: spacing.xl }}>
+              <SectionDivider label="Liked Songs" />
+              <FadeSlideIn delay={80} distance={10}>
+                <PressScale scaleTo={0.98}>
+                  <TouchableOpacity
+                    style={[styles.likedCard, { backgroundColor: colors.surface, borderColor: colors.borderSoft, borderRadius: radius.xl, marginHorizontal: spacing.lg }, shadowSm]}
+                    activeOpacity={0.8}
+                    onPress={() => navigation.navigate("Liked")}
+                    accessibilityLabel="Open liked songs"
+                    accessibilityRole="button"
+                  >
+                    <LinearGradient colors={["rgba(255,255,255,0.06)", "transparent"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+                    <View style={styles.likedCover}>
+                      <LinearGradient colors={["#F43F5E", "#BE123C"]} style={StyleSheet.absoluteFill} />
+                      <MaterialCommunityIcons name="heart" size={IS_ANDROID ? 26 : 30} color="#fff" />
+                    </View>
+                    <View style={styles.likedBody}>
+                      <Text style={[styles.likedTitle, { color: colors.content, fontSize: font.md }]}>Liked Songs</Text>
+                      <Text style={[styles.likedSub, { color: colors.muted, fontSize: font.xs }]}>
+                        {likedSongs.length} song{likedSongs.length === 1 ? "" : "s"} · tap to open
+                      </Text>
+                    </View>
+                    <View style={[styles.chevronWrap, { backgroundColor: colors.card }]}>
+                      <MaterialCommunityIcons name="chevron-right" size={18} color={colors.muted} />
+                    </View>
+                  </TouchableOpacity>
+                </PressScale>
+              </FadeSlideIn>
             </View>
           )}
         </View>
@@ -472,8 +523,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: IS_ANDROID ? 18 : 24,
   },
-  greeting: { fontWeight: "600", letterSpacing: 0.5 },
-  heroName: { fontSize: IS_ANDROID ? 28 : 34, fontWeight: "800", letterSpacing: 0.2, marginTop: 4 },
+  greeting: { fontWeight: "600", letterSpacing: 0.3, textTransform: "uppercase", fontSize: 11 },
+  heroName: { fontWeight: "800", letterSpacing: -0.4, marginTop: 6, lineHeight: IS_ANDROID ? 32 : 38 },
   avatarBtn: {
     width: IS_ANDROID ? 44 : 52,
     height: IS_ANDROID ? 44 : 52,
@@ -482,7 +533,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     overflow: "hidden",
   },
-  avatarText: { color: "#fff", fontSize: IS_ANDROID ? 18 : 20, fontWeight: "800" },
+  avatarText: { color: "#fff", fontWeight: "800" },
 
   // ── Search Trigger ──
   searchBar: {
@@ -516,10 +567,10 @@ const styles = StyleSheet.create({
   errorText: { fontWeight: "600" },
 
   // ── Quick Categories ──
-  quickWrap: { marginTop: IS_ANDROID ? 12 : 16, marginBottom: IS_ANDROID ? 12 : 16 },
+  quickWrap: { marginTop: IS_ANDROID ? 8 : 12, marginBottom: IS_ANDROID ? 16 : 20 },
   quickCard: {
     alignItems: "center",
-    width: IS_ANDROID ? 72 : 84,
+    width: IS_ANDROID ? 72 : 80,
     gap: IS_ANDROID ? 8 : 10,
   },
   quickIconWrap: {
@@ -529,8 +580,19 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
+    position: "relative",
   },
-  quickLabel: { fontWeight: "600", textAlign: "center" },
+  quickIconGlow: {
+    position: "absolute",
+    top: -8,
+    left: -8,
+    right: -8,
+    bottom: -8,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderRadius: 999,
+    opacity: 0.5,
+  },
+  quickLabel: { fontWeight: "600", textAlign: "center", letterSpacing: 0.1 },
 
   // ── Stats Bar ──
   statsBar: {
@@ -587,10 +649,16 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingRight: 24,
-    marginBottom: 8,
+    paddingHorizontal: 20,
+    paddingTop: 24,
+    paddingBottom: 8,
   },
-  playlistSync: { fontWeight: "600", marginTop: 18 },
+  sectionLabelText: {
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 1.4,
+  },
+  playlistSync: { fontWeight: "600", opacity: 0.7, letterSpacing: 0.2 },
   likedCard: {
     flexDirection: "row",
     alignItems: "center",
@@ -631,6 +699,13 @@ const styles = StyleSheet.create({
   playlistBody: { flex: 1 },
   playlistTitle: { fontWeight: "700", marginBottom: 2 },
   playlistSub: { fontWeight: "600" },
+  chevronWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
 
   seeAll: { flexDirection: "row", alignItems: "center", gap: 2, padding: 4, marginTop: 18 },
   seeAllText: { fontWeight: "700" },
@@ -640,20 +715,19 @@ const styles = StyleSheet.create({
   },
   audioCard: {
     width: IS_ANDROID ? 124 : 140,
-    padding: IS_ANDROID ? 12 : 16,
+    padding: IS_ANDROID ? 12 : 14,
     borderWidth: 1,
     overflow: "hidden",
     alignItems: "flex-start",
   },
   audioIcon: {
-    width: IS_ANDROID ? 40 : 48,
-    height: IS_ANDROID ? 40 : 48,
-    borderRadius: IS_ANDROID ? 20 : 24,
-    backgroundColor: "rgba(255,255,255,0.05)",
+    width: IS_ANDROID ? 42 : 50,
+    height: IS_ANDROID ? 42 : 50,
+    borderRadius: IS_ANDROID ? 14 : 16,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: IS_ANDROID ? 10 : 12,
   },
-  audioTitle: { fontWeight: "700", marginBottom: 2 },
-  audioSub: { fontWeight: "600" },
+  audioTitle: { fontWeight: "700", marginBottom: 2, letterSpacing: -0.1 },
+  audioSub: { fontWeight: "600", opacity: 0.7, letterSpacing: 0.2, textTransform: "uppercase" },
 });

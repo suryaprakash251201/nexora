@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from "react";
-import { Animated, Platform, StyleSheet, View } from "react-native";
+import { Animated, Easing, Platform, StyleSheet, View } from "react-native";
 import { useTheme } from "../store/ThemeContext";
 
 /** Pulsing placeholder blocks shown while lists load. */
@@ -9,8 +9,18 @@ function usePulse() {
   useEffect(() => {
     const loop = Animated.loop(
       Animated.sequence([
-        Animated.timing(opacity, { toValue: 0.8, duration: 700, useNativeDriver: true }),
-        Animated.timing(opacity, { toValue: 0.35, duration: 700, useNativeDriver: true }),
+        Animated.timing(opacity, {
+          toValue: 0.85,
+          duration: 850,
+          easing: Easing.inOut(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.timing(opacity, {
+          toValue: 0.4,
+          duration: 850,
+          easing: Easing.inOut(Easing.cubic),
+          useNativeDriver: true,
+        }),
       ])
     );
     loop.start();
@@ -103,16 +113,16 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: "row",
     alignItems: "center",
-    height: IS_ANDROID ? 58 : 68,
+    height: IS_ANDROID ? 60 : 70,
   },
-  icon: { width: IS_ANDROID ? 40 : 46, height: IS_ANDROID ? 40 : 46 },
+  icon: { width: IS_ANDROID ? 40 : 46, height: IS_ANDROID ? 40 : 46, borderRadius: 12 },
   body: { flex: 1 },
   gridCard: {
     flex: 1,
     borderWidth: 1,
   },
   gridIcon: {
-    width: IS_ANDROID ? 42 : 48,
-    height: IS_ANDROID ? 42 : 48,
+    width: IS_ANDROID ? 44 : 52,
+    height: IS_ANDROID ? 44 : 52,
   },
 });

@@ -62,7 +62,7 @@ export const FileRow = memo(function FileRow({
   onSelect,
   highlight,
 }: Props) {
-  const { colors, font, spacing } = useTheme();
+  const { colors, font, spacing, hairline } = useTheme();
   const { name, color } = fileIconFor(item, colors.accent);
   const sub =
     subtitle ??
@@ -75,12 +75,16 @@ export const FileRow = memo(function FileRow({
         {
           paddingHorizontal: spacing.lg,
           backgroundColor: selected ? colors.accentSoft : "transparent",
+          minHeight: IS_ANDROID ? 60 : 70,
         },
       ]}
-      activeOpacity={0.8}
+      activeOpacity={0.7}
       onPress={() => (selectMode && onSelect ? onSelect(item) : onPress ? onPress(item) : undefined)}
       onLongPress={onLongPress ? () => onLongPress(item) : undefined}
       delayLongPress={350}
+      accessibilityLabel={item.name}
+      accessibilityRole="button"
+      accessibilityState={selected ? { selected: true } : undefined}
     >
       {selected && (
         <LinearGradient
@@ -100,12 +104,21 @@ export const FileRow = memo(function FileRow({
             },
           ]}
           onPress={() => onSelect?.(item)}
+          hitSlop={6}
         >
           {selected && <MaterialCommunityIcons name="check" size={14} color="#fff" />}
         </TouchableOpacity>
       )}
 
-      <View style={[styles.iconWrap, { backgroundColor: item.is_dir ? "transparent" : `${color}18` }]}>
+      <View
+        style={[
+          styles.iconWrap,
+          {
+            backgroundColor: item.is_dir ? "transparent" : `${color}1A`,
+            borderRadius: IS_ANDROID ? 12 : 14,
+          },
+        ]}
+      >
         {item.is_dir ? (
           <Image source={folderImage} style={{ width: 38, height: 38 }} contentFit="contain" />
         ) : isAudioFile(item) ? (
@@ -125,7 +138,11 @@ export const FileRow = memo(function FileRow({
       </View>
 
       <View style={styles.body}>
-        <Text style={[styles.title, { color: colors.content, fontSize: font.md }]} numberOfLines={1} maxFontSizeMultiplier={1.15}>
+        <Text
+          style={[styles.title, { color: colors.content, fontSize: font.md }]}
+          numberOfLines={1}
+          maxFontSizeMultiplier={1.15}
+        >
           {splitHighlight(item.name, highlight ?? "").map((part, i) =>
             part.hit ? (
               <Text key={i} style={{ color: colors.accent, fontWeight: "800" }}>{part.text}</Text>
@@ -134,7 +151,11 @@ export const FileRow = memo(function FileRow({
             )
           )}
         </Text>
-        <Text style={[styles.sub, { color: colors.muted, fontSize: font.xs }]} numberOfLines={1} maxFontSizeMultiplier={1.15}>
+        <Text
+          style={[styles.sub, { color: colors.muted, fontSize: font.xs }]}
+          numberOfLines={1}
+          maxFontSizeMultiplier={1.15}
+        >
           {sub}
         </Text>
       </View>
@@ -184,29 +205,64 @@ export function MoreButton({ onPress }: { onPress: () => void }) {
   );
 }
 
-export function EmptyState({ icon = "folder-open-outline", title, hint }: { icon?: string; title: string; hint?: string }) {
-  const { colors, font, shadowSm } = useTheme();
+export function EmptyState({
+  icon = "folder-open-outline",
+  title,
+  hint,
+  action,
+}: {
+  icon?: string;
+  title: string;
+  hint?: string;
+  action?: { label: string; onPress: () => void; icon?: string };
+}) {
+  const { colors, font, radius, spacing, shadowSm } = useTheme();
   return (
     <View style={styles.empty}>
-      <View style={[styles.emptyIconOuter, { backgroundColor: colors.surface, borderColor: colors.borderSoft }, shadowSm]}>
+      <View
+        style={[
+          styles.emptyIconOuter,
+          { backgroundColor: colors.surface, borderColor: colors.borderSoft, borderRadius: radius.xl },
+          shadowSm,
+        ]}
+      >
         <LinearGradient
           colors={["rgba(255,255,255,0.04)", "transparent"]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
-          style={{ borderRadius: 24, position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
+          style={[StyleSheet.absoluteFill, { borderRadius: radius.xl }]}
         />
-        <View style={[styles.emptyIcon, { backgroundColor: colors.card }]}>
-          <MaterialCommunityIcons name={icon as any} size={32} color={colors.muted} />
+        <View style={[styles.emptyIcon, { backgroundColor: colors.card, borderRadius: radius.md }]}>
+          <MaterialCommunityIcons name={icon as any} size={32} color={colors.accent} style={{ opacity: 0.85 }} />
         </View>
       </View>
       <Text style={[styles.emptyTitle, { color: colors.content, fontSize: font.lg }]}>{title}</Text>
-      {hint ? <Text style={[styles.emptyHint, { color: colors.muted, fontSize: font.sm }]}>{hint}</Text> : null}
+      {hint ? (
+        <Text style={[styles.emptyHint, { color: colors.muted, fontSize: font.sm, maxWidth: 300 }]}>{hint}</Text>
+      ) : null}
+      {action ? (
+        <TouchableOpacity
+          onPress={action.onPress}
+          activeOpacity={0.85}
+          style={[
+            styles.emptyAction,
+            { backgroundColor: colors.accent, borderRadius: radius.pill, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm + 2, marginTop: spacing.sm },
+          ]}
+          accessibilityLabel={action.label}
+          accessibilityRole="button"
+        >
+          {action.icon ? (
+            <MaterialCommunityIcons name={action.icon as any} size={16} color="#fff" />
+          ) : null}
+          <Text style={[styles.emptyActionText, { fontSize: font.sm }]}>{action.label}</Text>
+        </TouchableOpacity>
+      ) : null}
     </View>
   );
 }
 
 export function SectionLabel({ children }: { children: React.ReactNode }) {
-  const { colors, spacing } = useTheme();
+  const { colors, spacing, font } = useTheme();
   return (
     <Text
       style={[
@@ -215,6 +271,7 @@ export function SectionLabel({ children }: { children: React.ReactNode }) {
           color: colors.muted,
           paddingHorizontal: spacing.lg,
           paddingTop: spacing.xl,
+          fontSize: font.xxs,
         },
       ]}
     >
@@ -223,14 +280,13 @@ export function SectionLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
-const ROW_HEIGHT = IS_ANDROID ? 58 : 68;
+const ROW_HEIGHT = IS_ANDROID ? 60 : 70;
 
 const styles = StyleSheet.create({
   row: {
     flexDirection: "row",
     alignItems: "center",
     gap: IS_ANDROID ? 10 : 12,
-    height: ROW_HEIGHT,
   },
   checkbox: {
     width: 22,
@@ -243,7 +299,6 @@ const styles = StyleSheet.create({
   iconWrap: {
     width: IS_ANDROID ? 40 : 46,
     height: IS_ANDROID ? 40 : 46,
-    borderRadius: IS_ANDROID ? 12 : 14,
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
@@ -266,39 +321,43 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   body: { flex: 1, marginLeft: 2 },
-  title: { fontWeight: "600", letterSpacing: 0.1 },
-  sub: { marginTop: 3 },
+  title: { fontWeight: "600", letterSpacing: -0.1 },
+  sub: { marginTop: 3, letterSpacing: 0.1 },
   more: { padding: 6 },
   empty: {
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 64,
     paddingHorizontal: 32,
-    gap: 12,
+    gap: 10,
   },
   emptyIconOuter: {
-    width: 80,
-    height: 80,
-    borderRadius: 24,
-    borderWidth: 1,
+    width: 88,
+    height: 88,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 4,
+    marginBottom: 8,
+    borderWidth: 1,
+    overflow: "hidden",
   },
   emptyIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 16,
+    width: 60,
+    height: 60,
     alignItems: "center",
     justifyContent: "center",
   },
-  emptyTitle: { fontWeight: "700" },
-  emptyHint: { textAlign: "center", lineHeight: 20, maxWidth: 280 },
+  emptyTitle: { fontWeight: "700", letterSpacing: -0.2 },
+  emptyHint: { textAlign: "center", lineHeight: 20 },
+  emptyAction: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  emptyActionText: { color: "#fff", fontWeight: "700" },
   section: {
-    fontSize: 11,
-    fontWeight: "700",
+    fontWeight: "800",
     textTransform: "uppercase",
-    letterSpacing: 1.2,
+    letterSpacing: 1.4,
     paddingBottom: 8,
   },
 });

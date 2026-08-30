@@ -91,20 +91,33 @@ export default function SettingsScreen() {
 
   return (
     <ScrollView style={[styles.root, { backgroundColor: colors.bg }]} contentContainerStyle={{ paddingBottom: 130 }}>
-      <LinearGradient colors={[...gradients.hero]} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={styles.heroGrad} pointerEvents="none" />
+      <LinearGradient colors={[...gradients.heroGlow]} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={styles.heroGrad} pointerEvents="none" />
 
       {/* User Profile Header */}
       <View style={styles.profile}>
-        <View style={[styles.avatarRing, { borderColor: colors.accent }]}>
+        <View style={[styles.avatarRing, { borderColor: colors.accentSoft, shadowColor: colors.accent }]}>
           <View style={styles.avatarWrap}>
             <LinearGradient colors={[...gradients.brand]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
             <Text style={styles.avatarText}>{initials}</Text>
           </View>
         </View>
-        <Text style={[styles.name, { color: colors.content, fontSize: font.xl }]}>{user?.display_name || user?.username}</Text>
+        <Text style={[styles.name, { color: colors.content, fontSize: font.xl, letterSpacing: -0.3 }]}>
+          {user?.display_name || user?.username}
+        </Text>
         <Text style={[styles.email, { color: colors.muted, fontSize: font.sm }]}>{user?.email || "no email attached"}</Text>
 
-        <View style={[styles.badge, { backgroundColor: user?.role === "admin" ? colors.accentSoft : colors.card }]}>
+        <View
+          style={[
+            styles.badge,
+            { backgroundColor: user?.role === "admin" ? colors.accentSoft : colors.card, borderRadius: radius.pill },
+          ]}
+        >
+          <MaterialCommunityIcons
+            name={user?.role === "admin" ? "shield-star-outline" : "account-outline"}
+            size={12}
+            color={user?.role === "admin" ? colors.accent : colors.muted}
+            style={{ marginRight: 4 }}
+          />
           <Text style={{ fontSize: font.xs, fontWeight: "700", color: user?.role === "admin" ? colors.accent : colors.muted }}>
             {user?.role === "admin" ? "Administrator" : "Standard User"}
           </Text>
@@ -390,30 +403,49 @@ function Row({
 }
 
 function CustomSwitch({ value, onValueChange }: { value: boolean; onValueChange: () => void }) {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const anim = useRef(new Animated.Value(value ? 1 : 0)).current;
 
   useEffect(() => {
     Animated.spring(anim, {
       toValue: value ? 1 : 0,
       useNativeDriver: false,
+      friction: 7,
+      tension: 80,
     }).start();
   }, [value, anim]);
 
   const toggleBg = anim.interpolate({
     inputRange: [0, 1],
-    outputRange: [colors.border, colors.accent],
+    outputRange: [
+      isDark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.10)",
+      colors.accent,
+    ],
   });
 
   const thumbPos = anim.interpolate({
     inputRange: [0, 1],
-    outputRange: [3, 27],
+    outputRange: [2, 26],
+  });
+
+  const thumbScale = anim.interpolate({
+    inputRange: [0, 0.5, 1],
+    outputRange: [1, 1.05, 1],
   });
 
   return (
-    <TouchableOpacity activeOpacity={0.8} onPress={onValueChange}>
+    <TouchableOpacity activeOpacity={0.8} onPress={onValueChange} accessibilityRole="switch" accessibilityState={{ checked: value }}>
       <Animated.View style={[styles.toggleTrack, { backgroundColor: toggleBg }]}>
-        <Animated.View style={[styles.toggleThumb, { transform: [{ translateX: thumbPos }] }]} />
+        <Animated.View
+          style={[
+            styles.toggleThumb,
+            {
+              transform: [{ translateX: thumbPos }, { scale: thumbScale }],
+              shadowColor: isDark ? "#000" : "#000",
+              shadowOpacity: 0.3,
+            },
+          ]}
+        />
       </Animated.View>
     </TouchableOpacity>
   );
@@ -451,17 +483,17 @@ const styles = StyleSheet.create({
   },
   section: {
     fontSize: 11,
-    fontWeight: "700",
+    fontWeight: "800",
     textTransform: "uppercase",
-    letterSpacing: 1.1,
+    letterSpacing: 1.4,
     paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 6,
+    paddingTop: 28,
+    paddingBottom: 8,
   },
   card: {
     marginHorizontal: 20,
     borderWidth: 1,
-    padding: 20,
+    padding: 16,
     gap: 12,
     overflow: "hidden",
   },
@@ -502,17 +534,17 @@ const styles = StyleSheet.create({
   statusRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   statusDot: { width: 8, height: 8, borderRadius: 4 },
   hint: { flex: 1 },
-  row: { flexDirection: "row", alignItems: "center", gap: 12 },
+  row: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 2 },
   rowIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 9,
+    width: 34,
+    height: 34,
+    borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
   },
-  rowLabel: { flex: 1, fontWeight: "600" },
-  rowValue: { fontWeight: "500" },
-  divider: { height: StyleSheet.hairlineWidth },
+  rowLabel: { flex: 1, fontWeight: "600", letterSpacing: -0.1 },
+  rowValue: { fontWeight: "500", letterSpacing: 0.1 },
+  divider: { height: StyleSheet.hairlineWidth, marginLeft: 46 },
   brandRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -528,20 +560,18 @@ const styles = StyleSheet.create({
 
   toggleTrack: {
     width: 52,
-    height: 28,
-    borderRadius: 14,
+    height: 30,
+    borderRadius: 15,
     justifyContent: "center",
   },
   toggleThumb: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     backgroundColor: "#fff",
-    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
-    elevation: 2,
+    shadowRadius: 4,
+    elevation: 3,
   },
 
   logoutGradient: {

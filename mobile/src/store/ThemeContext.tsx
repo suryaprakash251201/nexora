@@ -1,15 +1,18 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { 
-  darkColors, 
-  lightColors, 
-  gradients as darkGradients, 
+import {
+  darkColors,
+  lightColors,
+  gradients as darkGradients,
   lightGradients,
   spacing,
   radius,
   font,
   shadow,
-  shadowSm
+  shadowSm,
+  shadowGlow,
+  hairline,
+  motion,
 } from '../theme';
 
 type ThemeType = 'dark' | 'light';
@@ -26,6 +29,9 @@ interface ThemeContextType {
   font: typeof font;
   shadow: typeof shadow;
   shadowSm: typeof shadowSm;
+  shadowGlow: typeof shadowGlow;
+  hairline: number;
+  motion: typeof motion;
 }
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
@@ -78,7 +84,10 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
     radius,
     font,
     shadow,
-    shadowSm
+    shadowSm,
+    shadowGlow,
+    hairline,
+    motion,
   };
 
   if (!isLoaded) {

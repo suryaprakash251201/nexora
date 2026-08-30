@@ -283,7 +283,17 @@ export default function RecentsScreen({ variant = "recents" }: { variant?: "rece
     <View style={[styles.root, { backgroundColor: colors.bg }]}>
       {/* Search Input Bar */}
       <View style={styles.searchContainer}>
-        <View style={[styles.searchWrap, { backgroundColor: colors.surfaceElevated, borderColor: query ? colors.accent : colors.borderSoft, borderRadius: radius.xl }, shadow]}>
+        <View
+          style={[
+            styles.searchWrap,
+            {
+              backgroundColor: colors.surfaceElevated,
+              borderColor: query ? colors.accentRing : colors.borderSoft,
+              borderRadius: radius.lg,
+            },
+            shadowSm,
+          ]}
+        >
           <LinearGradient
             colors={["rgba(255,255,255,0.06)", "transparent"]}
             start={{ x: 0, y: 0 }}
@@ -303,6 +313,8 @@ export default function RecentsScreen({ variant = "recents" }: { variant?: "rece
             returnKeyType="search"
             onSubmitEditing={() => runSearchNow(query)}
             selectionColor={colors.accent}
+            accessibilityLabel="Search"
+            accessibilityRole="search"
           />
           {searching && <ActivityIndicator size="small" color={colors.accent} />}
           {query.trim() !== "" && !searching && (
@@ -322,34 +334,42 @@ export default function RecentsScreen({ variant = "recents" }: { variant?: "rece
               { id: "video", label: "Videos", icon: "play-circle" },
               { id: "audio", label: "Audio", icon: "music-note" },
             ] as { id: FilterTag; label: string; icon: string }[]
-          ).map((tag) => (
-            <TouchableOpacity
-              key={tag.id}
-              style={[
-                styles.filterTagPill,
-                {
-                  backgroundColor: activeFilter === tag.id ? colors.accent : colors.card,
-                  borderColor: activeFilter === tag.id ? colors.accent : colors.borderSoft,
-                },
-              ]}
-              onPress={() => selectFilter(tag.id)}
-            >
-              <MaterialCommunityIcons
-                name={tag.icon as any}
-                size={13}
-                color={activeFilter === tag.id ? "#fff" : colors.muted}
-              />
-              <Text
-                style={{
-                  color: activeFilter === tag.id ? "#fff" : colors.muted,
-                  fontSize: font.xs,
-                  fontWeight: "700",
-                }}
+          ).map((tag) => {
+            const isActive = activeFilter === tag.id;
+            return (
+              <TouchableOpacity
+                key={tag.id}
+                style={[
+                  styles.filterTagPill,
+                  {
+                    backgroundColor: isActive ? colors.accent : colors.card,
+                    borderColor: isActive ? colors.accent : colors.borderSoft,
+                    borderRadius: radius.pill,
+                  },
+                ]}
+                onPress={() => selectFilter(tag.id)}
+                accessibilityLabel={tag.label}
+                accessibilityRole="button"
+                accessibilityState={isActive ? { selected: true } : {}}
               >
-                {tag.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
+                <MaterialCommunityIcons
+                  name={tag.icon as any}
+                  size={13}
+                  color={isActive ? "#fff" : colors.muted}
+                />
+                <Text
+                  style={{
+                    color: isActive ? "#fff" : colors.muted,
+                    fontSize: font.xs,
+                    fontWeight: "700",
+                    letterSpacing: 0.2,
+                  }}
+                >
+                  {tag.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
         </View>
 
         {/* Recent searches (search tab, empty query) */}
@@ -453,7 +473,7 @@ const styles = StyleSheet.create({
   filterRow: {
     flexDirection: "row",
     gap: 8,
-    marginTop: 2,
+    marginTop: 4,
   },
   filterTagPill: {
     flexDirection: "row",
@@ -461,7 +481,6 @@ const styles = StyleSheet.create({
     gap: 5,
     paddingHorizontal: 12,
     paddingVertical: 7,
-    borderRadius: 14,
     borderWidth: 1,
   },
   recentRow: {
@@ -469,12 +488,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flexWrap: "wrap",
     gap: 8,
-    marginTop: 10,
+    marginTop: 12,
   },
   recentChip: {
     flexDirection: "row",
     alignItems: "center",
-    maxWidth: 150,
+    maxWidth: 160,
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: 999,
     paddingHorizontal: 12,
