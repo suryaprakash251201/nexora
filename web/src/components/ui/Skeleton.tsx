@@ -20,7 +20,7 @@ export function SkeletonFileRow({ index = 0 }: { index?: number }) {
 export function SkeletonListRow({ index = 0 }: { index?: number }) {
   const widths = ['75%', '65%', '80%', '55%', '70%', '85%', '60%', '90%'];
   return (
-    <div className="grid grid-cols-[auto_1fr_auto_auto] gap-3 px-4 sm:px-6 py-3 rounded-xl">
+    <div className="grid grid-cols-[auto_1fr_auto_auto] gap-3 px-4 sm:px-6 py-3 rounded-2xl border border-glass-border-soft bg-glass-bg-subtle">
       <div className="w-6 flex justify-center items-center shrink-0">
         <div className="skeleton w-4 h-4 rounded" />
       </div>
@@ -36,7 +36,7 @@ export function SkeletonListRow({ index = 0 }: { index?: number }) {
 
 export function SkeletonList({ count = 8 }: { count?: number }) {
   return (
-    <div className="space-y-1">
+    <div className="space-y-2">
       {Array.from({ length: count }).map((_, i) => <SkeletonListRow key={i} index={i} />)}
     </div>
   );

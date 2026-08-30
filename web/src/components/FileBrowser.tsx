@@ -415,7 +415,8 @@ export default function FileBrowser({
   const listVirt = useVirtualizer({
     count: items.length,
     getScrollElement: () => scrollEl,
-    estimateSize: () => (density === "compact" ? 46 : density === "spacious" ? 76 : 62),
+    // Card list: row height + bottom gap between cards.
+    estimateSize: () => (density === "compact" ? 50 : density === "spacious" ? 84 : 70),
     overscan: 10,
   });
   const gridVirt = useVirtualizer({
@@ -739,6 +740,7 @@ export default function FileBrowser({
                     key={item.path}
                     data-index={vr.index}
                     ref={listVirt.measureElement}
+                    className={d === "compact" ? "pb-1" : "pb-2"}
                     style={{ position: "absolute", top: 0, left: 0, width: "100%", transform: `translateY(${vr.start}px)` }}
                   >
                   <div
@@ -755,27 +757,20 @@ export default function FileBrowser({
                     onDragEnd={endDragMove}
                     {...folderDropHandlers(item)}
                     className={cn(
-                      "group relative grid grid-cols-[auto_1fr_auto_auto] items-center cursor-pointer transition-colors duration-150 border border-transparent rounded-xl",
+                      // Line-by-line card: bordered surface per row with a
+                      // gentle hover lift — mirrors the Home cards' language.
+                      "group relative grid grid-cols-[auto_1fr_auto_auto] items-center cursor-pointer rounded-2xl border transition-all duration-200",
+                      "bg-glass-bg-subtle shadow-[0_1px_2px_rgba(0,0,0,0.05)]",
                       dc.listRow[d],
                       selected
-                        ? "bg-accent/10 border-accent/25 ring-1 ring-inset ring-accent/30"
-                        : "hover:bg-glass-bg-subtle",
+                        ? "bg-accent/10 border-accent/40 ring-1 ring-inset ring-accent/30"
+                        : "border-glass-border-soft hover:border-accent/40 hover:bg-glass-bg hover:shadow-md hover:-translate-y-px",
                       dropTarget === item.path
-                        ? "ring-2 ring-accent/80 border-accent/40 bg-accent/10 shadow-[0_0_0_4px_rgba(91,140,255,0.14)]"
+                        ? "border-accent/60 ring-2 ring-accent/80 shadow-[0_0_0_4px_rgba(91,140,255,0.14)]"
                         : "",
                       draggedPaths?.includes(item.path) ? "opacity-40 saturate-50" : ""
                     )}
                   >
-                    {/* Left kicker strip — quiet hover cue, solid when selected */}
-                    <span
-                      aria-hidden="true"
-                      className={cn(
-                        "absolute left-0 top-1/2 -translate-y-1/2 w-[3px] rounded-r-full bg-accent transition-all duration-150",
-                        selected
-                          ? "h-[60%] opacity-100"
-                          : "h-4 opacity-0 group-hover:opacity-70"
-                      )}
-                    />
                     {/* Checkbox */}
                     <div role="gridcell" className="flex justify-center items-center">
                       <input
