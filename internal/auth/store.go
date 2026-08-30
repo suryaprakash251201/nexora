@@ -3,10 +3,11 @@ package auth
 import (
 	"database/sql"
 	"errors"
+	"fmt"
+	"strings"
+	"time"
 
 	"github.com/nexora/nexora/internal/database"
-	"fmt"
-
 	"github.com/nexora/nexora/internal/util"
 )
 
@@ -209,9 +210,36 @@ func (s *UserStore) CreateResetToken(userID, tokenHash, expiresAt string) error 
 // log and the user-visible error message stay accurate. Expired tokens are
 // still deleted (one-time-use contract); unknown tokens are not.
 func (s *UserStore) ConsumeResetToken(tokenHash string) (string, error) {
+	// Retry on SQLITE_BUSY / "database is locked" which can happen under
+	// concurrent load on SQLite (even with WAL + busy_timeout). The race test
+	// fires 16 goroutines at one token; without retry some losers get
+	// SQLITE_BUSY instead of the expected sql.ErrNoRows, flaking CI. Production
+	// also benefits: a busy from a concurrent writer should be retried, not
+	// surfaced as 500. 5 attempts with 10-40ms backoff is enough for the
+	// tiny transaction.
+	var lastErr error
+	for attempt := 0; attempt < 5; attempt++ {
+		if attempt > 0 {
+			// Exponential backoff with jitter: 10ms, 20ms, 40ms...
+			importedTimeSleep := time.Duration(10<<attempt) * time.Millisecond
+			if importedTimeSleep > 50*time.Millisecond {
+				importedTimeSleep = 50 * time.Millisecond
+			}
+			time.Sleep(importedTimeSleep)
+		}
+		userID, err, isBusy := s.consumeResetTokenOnce(tokenHash)
+		if !isBusy {
+			return userID, err
+		}
+		lastErr = err
+	}
+	return "", lastErr
+}
+
+func (s *UserStore) consumeResetTokenOnce(tokenHash string) (string, error, bool) {
 	tx, err := s.db.Begin()
 	if err != nil {
-		return "", err
+		return "", err, isBusyError(err)
 	}
 	committed := false
 	defer func() {
@@ -225,7 +253,7 @@ func (s *UserStore) ConsumeResetToken(tokenHash string) (string, error) {
 		`SELECT id, user_id, expires_at FROM reset_tokens WHERE token_hash=?`, tokenHash,
 	).Scan(&id, &userID, &expiresAt)
 	if err != nil {
-		return "", err
+		return "", err, isBusyError(err)
 	}
 
 	// Check expiry BEFORE deleting so the audit log can attribute the
@@ -234,10 +262,10 @@ func (s *UserStore) ConsumeResetToken(tokenHash string) (string, error) {
 	if expiresAt < util.NowUTC() {
 		_, _ = tx.Exec(`DELETE FROM reset_tokens WHERE id=?`, id)
 		if cerr := tx.Commit(); cerr != nil {
-			return "", cerr
+			return "", cerr, isBusyError(cerr)
 		}
 		committed = true
-		return "", ErrResetExpired
+		return "", ErrResetExpired, false
 	}
 
 	// Delete-then-commit is the only safe way to make this single-use: the
@@ -247,18 +275,26 @@ func (s *UserStore) ConsumeResetToken(tokenHash string) (string, error) {
 	// "invalid token"). Either way the token cannot be used twice.
 	res, err := tx.Exec(`DELETE FROM reset_tokens WHERE id=?`, id)
 	if err != nil {
-		return "", err
+		return "", err, isBusyError(err)
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
 		// Row vanished between SELECT and DELETE; treat as not found rather
 		// than silently succeeding.
-		return "", fmt.Errorf("reset token not found")
+		return "", fmt.Errorf("reset token not found"), false
 	}
 	if err := tx.Commit(); err != nil {
-		return "", err
+		return "", err, isBusyError(err)
 	}
 	committed = true
-	return userID, nil
+	return userID, nil, false
+}
+
+func isBusyError(err error) bool {
+	if err == nil {
+		return false
+	}
+	s := strings.ToLower(err.Error())
+	return strings.Contains(s, "database is locked") || strings.Contains(s, "sqlite_busy")
 }
 
 // CleanupExpiredResetTokens removes expired reset tokens.

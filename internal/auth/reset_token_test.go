@@ -45,7 +45,9 @@ func newResetTokenStore(t *testing.T) *UserStore {
 	path := filepath.Join(t.TempDir(), "reset-"+strings.ReplaceAll(t.Name(), "/", "_")+".db")
 	// Match production openSQLite pragmas: WAL + busy_timeout so concurrent
 	// transactions serialize instead of failing with SQLITE_BUSY.
-	dsn := "file:" + path + "?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)"
+	// Use 30s like production (not 5s) to avoid flakes on slower CI runners;
+	// the race test deliberately hammers the DB with 16 concurrent writers.
+	dsn := "file:" + path + "?_pragma=busy_timeout(30000)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)"
 	dbh, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		t.Fatal(err)
