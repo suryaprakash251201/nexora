@@ -2,13 +2,12 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { X, Plus, Tag as TagIcon, Check, Pencil, Trash2, Save } from "lucide-react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
-;
 import { tagsApi } from "../api/endpoints";
 import type { Tag } from "../api/types";
 import { cn } from "@/lib/utils";
 import { toast } from "../lib/toast";
 import { ConfirmDialog } from "./ui/ConfirmDialog";
-const TAG_COLORS = [
+export const TAG_COLORS = [
   { name: "Red", value: "#EF4444" },
   { name: "Orange", value: "#F97316" },
   { name: "Amber", value: "#F59E0B" },

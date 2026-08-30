@@ -927,7 +927,7 @@ function TagsEditor({ rootId, path }: { rootId: string; path: string }) {
               />
               <div className="flex items-center gap-2">
                 <div className="flex flex-wrap gap-1.5 flex-1">
-                  {TAG_COLORS.map((c) => (
+                  {TAG_COLORS.map((c: { name: string; value: string }) => (
                     <button
                       key={c.value}
                       type="button"
