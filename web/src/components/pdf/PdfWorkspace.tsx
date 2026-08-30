@@ -19,6 +19,8 @@ import { ViewerStatus } from "./ViewerStatus";
 
 /** Idle time before chrome (header/dock) fades out while reading. */
 const CHROME_IDLE_MS = 3200;
+/** Faster hide in true fullscreen — less obstruction while reading. */
+const CHROME_IDLE_MS_FULLSCREEN = 2200;
 
 /**
  * The Document Space — Nexora's dedicated PDF workspace. Owns all viewer
@@ -137,10 +139,11 @@ export default function PdfWorkspace({
   const reportActivity = useCallback(() => {
     setChromeIdle(false);
     if (activityTimerRef.current !== null) window.clearTimeout(activityTimerRef.current);
+    const idleMs = isFullscreen ? CHROME_IDLE_MS_FULLSCREEN : CHROME_IDLE_MS;
     activityTimerRef.current = window.setTimeout(() => {
       if (!anyPanelOpenRef.current) setChromeIdle(true);
-    }, CHROME_IDLE_MS);
-  }, []);
+    }, idleMs);
+  }, [isFullscreen]);
 
   useEffect(() => {
     reportActivity();
@@ -148,6 +151,18 @@ export default function PdfWorkspace({
       if (activityTimerRef.current !== null) window.clearTimeout(activityTimerRef.current);
     };
   }, [reportActivity]);
+
+  // In true browser / Tauri fullscreen, hide chrome immediately and require
+  // explicit mouse movement to reveal — avoids the “controls disturb preview”
+  // feeling where the dock sits over the page after entering fullscreen.
+  useEffect(() => {
+    if (isFullscreen) {
+      setChromeIdle(true);
+      if (activityTimerRef.current !== null) window.clearTimeout(activityTimerRef.current);
+    } else {
+      reportActivity();
+    }
+  }, [isFullscreen, reportActivity]);
 
   const chromeVisible = !chromeIdle || anyPanelOpen;
 
@@ -167,19 +182,93 @@ export default function PdfWorkspace({
   }, [reportActivity]);
 
   // ── Fullscreen ──────────────────────────────────────────────────────
-  const toggleFullscreen = useCallback(() => {
+  // Supports both browser Fullscreen API and Tauri window fullscreen
+  // (where the web API is unavailable). Keeps isFullscreen in sync with
+  // whatever surface is actually fullscreened. Exits fullscreen on viewer
+  // close so “back to files / home” never leaves the app stuck in fullscreen.
+  const toggleFullscreen = useCallback(async () => {
+    const isTauriEnv =
+      typeof window !== "undefined" &&
+      (!!(window as any).__TAURI_INTERNALS__ || !!(window as any).isTauri);
+    if (isTauriEnv) {
+      try {
+        const { getCurrentWindow } = await import("@tauri-apps/api/window");
+        const win = getCurrentWindow();
+        const cur = await win.isFullscreen();
+        await win.setFullscreen(!cur);
+        setIsFullscreen(!cur);
+        return;
+      } catch {
+        // fall through to web API
+      }
+    }
     try {
-      if (!document.fullscreenElement) void document.documentElement.requestFullscreen?.();
-      else void document.exitFullscreen?.();
+      if (!document.fullscreenElement) await document.documentElement.requestFullscreen?.();
+      else await document.exitFullscreen?.();
     } catch {
-      /* fullscreen unavailable (Tauri webview) */
+      /* fullscreen unavailable */
     }
   }, []);
 
+  const exitFullscreenIfNeeded = useCallback(async () => {
+    if (!isFullscreen) return;
+    const isTauriEnv =
+      typeof window !== "undefined" &&
+      (!!(window as any).__TAURI_INTERNALS__ || !!(window as any).isTauri);
+    if (isTauriEnv) {
+      try {
+        const { getCurrentWindow } = await import("@tauri-apps/api/window");
+        const win = getCurrentWindow();
+        if (await win.isFullscreen()) await win.setFullscreen(false);
+      } catch {}
+    }
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+    } catch {}
+    setIsFullscreen(false);
+  }, [isFullscreen]);
+
+  // Wrapper used for every “close viewer / back to files” path — ensures the
+  // app never stays in OS fullscreen after the document is dismissed.
+  // Satisfies: “fullscreen to back exit home automatically” and
+  // “F11 fullscreen mode to exit entire application home”.
+  const closeViewerAndExitFullscreen = useCallback(async () => {
+    await exitFullscreenIfNeeded();
+    onClose();
+  }, [exitFullscreenIfNeeded, onClose]);
+
+  // Keep isFullscreen in sync for browser API; Tauri path updates state
+  // directly in toggleFullscreen / exitFullscreenIfNeeded.
   useEffect(() => {
     const onFsChange = () => setIsFullscreen(!!document.fullscreenElement);
     document.addEventListener("fullscreenchange", onFsChange);
-    return () => document.removeEventListener("fullscreenchange", onFsChange);
+    // Also handle F11-initiated browser fullscreen changes (documentElement)
+    document.addEventListener("webkitfullscreenchange" as any, onFsChange);
+    return () => {
+      document.removeEventListener("fullscreenchange", onFsChange);
+      document.removeEventListener("webkitfullscreenchange" as any, onFsChange);
+    };
+  }, []);
+
+  // Safety: if the viewer unmounts while still fullscreen, leave fullscreen
+  // so the underlying file browser isn't rendered stuck in fullscreen.
+  useEffect(() => {
+    return () => {
+      if (document.fullscreenElement) {
+        void document.exitFullscreen().catch(() => {});
+      }
+      // Tauri: don't block unmount on async window call
+      if (typeof window !== "undefined" && (window as any).__TAURI_INTERNALS__) {
+        void import("@tauri-apps/api/window")
+          .then(({ getCurrentWindow }) => {
+            const win = getCurrentWindow();
+            return win.isFullscreen().then((fs: boolean) => {
+              if (fs) return win.setFullscreen(false);
+            });
+          })
+          .catch(() => {});
+      }
+    };
   }, []);
 
   // ── Actions ─────────────────────────────────────────────────────────
@@ -271,9 +360,32 @@ export default function PdfWorkspace({
       const typing = !!target?.closest?.("input, textarea, select, [contenteditable]");
       const mod = e.ctrlKey || e.metaKey;
 
+      // F11 — toggle app fullscreen; when leaving fullscreen via F11,
+      // also exit the viewer to “home” per product spec:
+      // “F11 fullscreen mode to exit entire application home”.
+      if (e.key === "F11") {
+        e.preventDefault();
+        e.stopPropagation();
+        if (isFullscreen) {
+          void exitFullscreenIfNeeded().then(() => onClose());
+        } else {
+          void toggleFullscreen();
+        }
+        return;
+      }
+
       // Escape cascade: close the top-most surface; only let the event
       // bubble out (closing the viewer itself) when nothing is open.
+      // In true fullscreen, Escape first exits fullscreen (no viewer close)
+      // — second Escape then closes the viewer. This prevents “stuck in
+      // fullscreen” and satisfies “fullscreen to back exit home automatically”.
       if (e.key === "Escape") {
+        if (isFullscreen) {
+          e.preventDefault();
+          e.stopPropagation();
+          void exitFullscreenIfNeeded();
+          return;
+        }
         if (paletteOpen) {
           e.preventDefault();
           e.stopPropagation();
@@ -389,6 +501,7 @@ export default function PdfWorkspace({
     infoOpen,
     pagesOpen,
     focusMode,
+    isFullscreen,
     closeSearch,
     openSearch,
     zoomBy,
@@ -398,6 +511,9 @@ export default function PdfWorkspace({
     toggleFocus,
     toggleInfoFn,
     togglePagesFn,
+    toggleFullscreen,
+    exitFullscreenIfNeeded,
+    onClose,
     numPages,
     reportActivity,
   ]);
@@ -468,7 +584,7 @@ export default function PdfWorkspace({
 
       hasShareFlow: !!onShare,
       requestShare: () => onShare?.(item),
-      closeViewer: onClose,
+      closeViewer: closeViewerAndExitFullscreen,
       download,
       print,
       openInNewTab: openExternalTab,
@@ -480,7 +596,7 @@ export default function PdfWorkspace({
       paletteOpen, searchOpen, query, resultsByPage, flatResults, resultsTruncated,
       searching, searchProgressPage, activeResult, openSearch, closeSearch,
       gotoResult, nextResult, prevResult, focusMode, toggleFocus, isFullscreen,
-      toggleFullscreen, chromeVisible, reportActivity, onShare, onClose,
+      toggleFullscreen, closeViewerAndExitFullscreen, chromeVisible, reportActivity, onShare, onClose,
       download, print, openExternalTab,
     ]
   );
@@ -492,8 +608,9 @@ export default function PdfWorkspace({
           shellRef.current = el;
           setShellEl(el);
         }}
-        className="doc-shell relative flex h-full min-h-0 w-full flex-col overflow-hidden outline-none"
+        className={`doc-shell relative flex h-full min-h-0 w-full flex-col overflow-hidden outline-none ${isFullscreen && chromeIdle && !anyPanelOpen ? "cursor-none" : ""}`}
         data-focus={focusMode || undefined}
+        data-fullscreen={isFullscreen || undefined}
         onMouseMove={reportActivity}
         onPointerDown={reportActivity}
         onWheel={reportActivity}
