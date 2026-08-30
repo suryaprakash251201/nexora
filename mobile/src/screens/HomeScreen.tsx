@@ -93,15 +93,20 @@ export default function HomeScreen() {
     else setLoading(true);
     setError(null);
     try {
-      const [r, rc, pl, fav] = await Promise.all([
+      const [r, rc, pl, pub, fav] = await Promise.all([
         api.listRoots(),
         api.listRecents(),
-        api.listPlaylists(),
+        api.listPlaylists().catch(() => ({ items: [] as any[] })),
+        api.listPublicPlaylists().catch(() => ({ items: [] as any[] })),
         api.listFavorites(),
       ]);
       setRoots(r.roots.filter((x) => x.enabled));
       setRecents(rc.items.slice(0, 6));
-      setPlaylists(pl.items || []);
+      {
+        const seen = new Set((pl.items || []).map((p: any) => p.id));
+        const publicOnly = (pub.items || []).filter((p: any) => !seen.has(p.id));
+        setPlaylists([...(pl.items || []), ...publicOnly]);
+      }
       // “Liked Songs” = favorited audio files, newest first.
       const songs = (fav.items || [])
         .filter((f) => previewKind(favoriteToFile(f)) === "audio")

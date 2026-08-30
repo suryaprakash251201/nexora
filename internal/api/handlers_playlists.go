@@ -106,7 +106,12 @@ func (s *Server) handleListPlaylists(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleListPublicPlaylists(w http.ResponseWriter, r *http.Request) {
-	pls, err := s.Playlists.ListPublic()
+	user, ok := auth.UserFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthenticated", "Authentication required", middleware.GetRequestID(r.Context()))
+		return
+	}
+	pls, err := s.Playlists.ListPublic(user.ID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error", "Failed to list public playlists", middleware.GetRequestID(r.Context()))
 		return

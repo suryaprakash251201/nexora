@@ -43,8 +43,14 @@ export default function PlaylistsScreen({ navigation }: Props) {
       else setLoading(true);
       setError(null);
       try {
-        const res = await api.listPlaylists();
-        setPlaylists(res.items || []);
+        const [mine, pub] = await Promise.all([
+          api.listPlaylists().catch(() => ({ items: [] as Playlist[] })),
+          api.listPublicPlaylists().catch(() => ({ items: [] as Playlist[] })),
+        ]);
+        const seen = new Set((mine.items || []).map((pl) => pl.id));
+        const publicOnly = (pub.items || []).filter((pl) => !seen.has(pl.id));
+        // Show private/shared first, then public from others
+        setPlaylists([...(mine.items || []), ...publicOnly]);
       } catch (e: any) {
         setError(e?.message || "Failed to load playlists.");
       } finally {

@@ -373,31 +373,35 @@ export default function PlaylistsPanel({ user }: { user?: User }) {
     localStorage.setItem("nx-playlists-view", viewMode);
   }, [viewMode]);
 
-  const selected = selectedId ? playlists.find((p) => p.id === selectedId) : null;
-  const canEditSelected = !!selected && (selected.is_owner || selected.can_edit);
-  const isOwnerSelected = !!selected && !!selected.is_owner;
-
   const publicPlaylists = useMemo(() => {
     const list = publicData?.items || [];
     const ownedIds = new Set(playlists.map((p) => p.id));
     return list.filter((p) => !ownedIds.has(p.id));
   }, [publicData, playlists]);
 
+  // All visible playlists (private+shared + public from others) for detail/playback lookup.
+  // Public playlists are not in `playlists`, so a direct `playlists.find` would miss them.
+  const allVisiblePlaylists = useMemo(() => [...(playlists as unknown as StorePlaylist[]), ...(publicPlaylists as unknown as StorePlaylist[])], [playlists, publicPlaylists]);
+
+  const selected = selectedId ? (allVisiblePlaylists.find((p) => p.id === selectedId) as any) ?? null : null;
+  const canEditSelected = !!selected && (selected.is_owner || selected.can_edit);
+  const isOwnerSelected = !!selected && !!selected.is_owner;
+
   // ── Playback ──
   const playFrom = useCallback((id: string, index: number) => {
-    const pl = playlists.find((p) => p.id === id);
+    const pl = (allVisiblePlaylists as any[]).find((p) => p.id === id) as any;
     if (!pl?.items.length) return;
     usePlayer.getState().setShuffle(false);
     usePlayer.getState().play(pl.items as any, Math.max(0, Math.min(index, pl.items.length - 1)));
-  }, [playlists]);
+  }, [allVisiblePlaylists]);
 
   const shufflePlay = useCallback((id: string) => {
-    const pl = playlists.find((p) => p.id === id);
+    const pl = (allVisiblePlaylists as any[]).find((p) => p.id === id) as any;
     if (!pl?.items.length) return;
     usePlayer.getState().setShuffle(true);
     const start = Math.floor(Math.random() * pl.items.length);
     usePlayer.getState().play(pl.items as any, start);
-  }, [playlists]);
+  }, [allVisiblePlaylists]);
 
   // ── CRUD helpers ──
   const handleCreate = async ({ name, description, coverRootId, coverPath }: { name: string; description: string; coverRootId?: string; coverPath?: string }) => {
@@ -759,7 +763,7 @@ export default function PlaylistsPanel({ user }: { user?: User }) {
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
           {Array.from({ length: 12 }).map((_, i) => <PlaylistCardSkeleton key={i} />)}
         </div>
-      ) : playlists.length === 0 ? (
+      ) : playlists.length === 0 && publicPlaylists.length === 0 ? (
         <div className="text-center text-content-muted p-12 glass rounded-2xl">
           <div className="h-16 w-16 mx-auto mb-4 rounded-2xl bg-accent/10 grid place-items-center">
             <ListMusic className="h-8 w-8 text-accent" />
@@ -776,9 +780,12 @@ export default function PlaylistsPanel({ user }: { user?: User }) {
         </div>
       ) : (
         <div className="space-y-8">
-          {renderSection("My Playlists", <ListMusic className="h-3.5 w-3.5" />, mine)}
-          {renderSection("Shared with me", <Users className="h-3.5 w-3.5" />, shared)}
-          {renderSection("Public Playlists", <Globe className="h-3.5 w-3.5" />, publicPlaylists as unknown as StorePlaylist[], "public")}
+          {mine.length > 0 && renderSection("My Playlists", <ListMusic className="h-3.5 w-3.5" />, mine)}
+          {shared.length > 0 && renderSection("Shared with me", <Users className="h-3.5 w-3.5" />, shared)}
+          {publicPlaylists.length > 0 && renderSection("Public Playlists", <Globe className="h-3.5 w-3.5" />, publicPlaylists as unknown as StorePlaylist[], "public")}
+          {playlists.length === 0 && publicPlaylists.length > 0 && (
+            <p className="text-sm text-content-muted text-center pt-2">Your playlists will appear here once you create or receive one.</p>
+          )}
         </div>
       )}
 

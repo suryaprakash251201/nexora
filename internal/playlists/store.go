@@ -124,8 +124,12 @@ func (s *Store) ListForUser(userID string) ([]Playlist, error) {
 	return playlists, nil
 }
 
-func (s *Store) ListPublic() ([]Playlist, error) {
-	rows, err := s.db.Query(`SELECT id, user_id, name, COALESCE(description,''), COALESCE(cover_root_id,''), COALESCE(cover_path,''), created_at, updated_at FROM playlists WHERE is_public = 1 ORDER BY updated_at DESC`)
+func (s *Store) ListPublic(viewerUserID string) ([]Playlist, error) {
+	rows, err := s.db.Query(`SELECT p.id, p.user_id, p.name, COALESCE(p.description,''), COALESCE(p.cover_root_id,''), COALESCE(p.cover_path,''), COALESCE(p.is_public,0), p.created_at, p.updated_at, COALESCE(u.username,''),
+		CASE WHEN p.user_id = ? THEN 1 ELSE 0 END,
+		CASE WHEN p.user_id = ? THEN 1 ELSE COALESCE((SELECT 1 FROM playlist_collaborators pc WHERE pc.playlist_id = p.id AND pc.user_id = ? AND pc.role = 'editor'), 0) END
+		FROM playlists p LEFT JOIN users u ON p.user_id = u.id
+		WHERE p.is_public = 1 ORDER BY p.updated_at DESC`, viewerUserID, viewerUserID, viewerUserID)
 	if err != nil {
 		return nil, err
 	}
@@ -134,8 +138,7 @@ func (s *Store) ListPublic() ([]Playlist, error) {
 	var playlists []Playlist
 	for rows.Next() {
 		var p Playlist
-		p.IsPublic = true
-		if err := rows.Scan(&p.ID, &p.UserID, &p.Name, &p.Description, &p.CoverRootID, &p.CoverPath, &p.CreatedAt, &p.UpdatedAt); err != nil {
+		if err := rows.Scan(&p.ID, &p.UserID, &p.Name, &p.Description, &p.CoverRootID, &p.CoverPath, &p.IsPublic, &p.CreatedAt, &p.UpdatedAt, &p.OwnerUsername, &p.IsOwner, &p.CanEdit); err != nil {
 			return nil, err
 		}
 		p.Items = make([]PlaylistItem, 0)

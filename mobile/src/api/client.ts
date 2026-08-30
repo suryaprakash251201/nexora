@@ -541,6 +541,10 @@ export class Api {
     return this.get("/playlists");
   }
 
+  listPublicPlaylists(): Promise<PlaylistListResponse> {
+    return this.get("/playlists/public");
+  }
+
   createPlaylist(name: string, items?: { root_id: string; path: string }[], description?: string): Promise<Playlist> {
     return this.post("/playlists", { name, description: description || "", items: items || [] });
   }
