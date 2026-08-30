@@ -19,22 +19,17 @@ export function SkeletonFileRow({ index = 0 }: { index?: number }) {
 
 export function SkeletonListRow({ index = 0 }: { index?: number }) {
   const widths = ['75%', '65%', '80%', '55%', '70%', '85%', '60%', '90%'];
-  const subWidths = ['45%', '35%', '50%', '40%'];
   return (
-    <div className="grid grid-cols-[auto_1fr_auto] sm:grid-cols-[auto_1fr_auto_auto] lg:grid-cols-[auto_1fr_auto_auto_auto] gap-2 sm:gap-4 px-3 sm:px-6 py-3">
+    <div className="grid grid-cols-[auto_1fr_auto_auto] gap-3 px-4 sm:px-6 py-3 rounded-xl">
       <div className="w-6 flex justify-center items-center shrink-0">
         <div className="skeleton w-4 h-4 rounded" />
       </div>
-      <div className="flex items-center gap-4 min-w-0">
-        <div className="skeleton w-5 h-5 rounded shrink-0" />
-        <div className="min-w-0 flex-1 space-y-1.5">
-          <div className="skeleton h-3.5" style={{ width: widths[index % widths.length] }} />
-          <div className="skeleton h-2.5" style={{ width: subWidths[index % subWidths.length] }} />
-        </div>
-        <div className="skeleton h-2.5 w-24 shrink-0 hidden lg:block" />
-        <div className="skeleton h-2.5 w-16 shrink-0" />
-        <div className="skeleton h-2.5 w-24 shrink-0 hidden sm:block" />
+      <div className="flex items-center gap-3 min-w-0">
+        <div className="skeleton w-10 h-10 rounded-xl shrink-0" />
+        <div className="skeleton h-3.5 min-w-0 flex-1 max-w-[50%]" style={{ width: widths[index % widths.length] }} />
       </div>
+      <div className="skeleton h-3 w-16 shrink-0 self-center" />
+      <div className="skeleton h-3 w-24 shrink-0 self-center" />
     </div>
   );
 }

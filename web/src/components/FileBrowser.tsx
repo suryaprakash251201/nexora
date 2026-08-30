@@ -699,7 +699,7 @@ export default function FileBrowser({
           {/* Grid owns both the sticky header row and data rows for valid ARIA ownership. */}
           <div ref={itemsGridRef} role="grid" aria-multiselectable="true" aria-rowcount={items.length + 1} aria-label="File list" onKeyDown={handleArrowNavigation}>
           <div role="row" className={cn(
-            "grid grid-cols-[auto_1fr_auto_auto] items-center border-b border-glass-border-soft sticky top-0 z-10 mb-1",
+            "grid grid-cols-[auto_1fr_auto_auto] items-center border-b border-glass-border-soft/80 sticky top-0 z-10 mb-1.5 bg-background/80 backdrop-blur-md rounded-lg",
             dc.listHeader[d]
           )}>
             <span role="columnheader" className="flex justify-center items-center">
@@ -711,12 +711,18 @@ export default function FileBrowser({
                 className={cn("rounded border-2 border-glass-border bg-glass-bg text-accent focus:ring-accent cursor-pointer transition-all", dc.headerCheckbox[d])}
               />
             </span>
-            <span role="columnheader" className="truncate font-semibold text-text-secondary">Name</span>
+            <span role="columnheader" className="truncate font-semibold uppercase tracking-wider text-[11px] text-text-tertiary">
+              <span className="hidden sm:inline">Name</span>
+              <span className="sm:hidden">File</span>
+            </span>
             {visibleColumns.size && (
-              <span role="columnheader" className={cn("text-right truncate text-text-tertiary", dc.listSizeWidth[d])}>Size</span>
+              <span role="columnheader" className={cn("text-right truncate font-semibold uppercase tracking-wider text-[11px] text-text-tertiary/80", dc.listSizeWidth[d])}>Size</span>
             )}
             {visibleColumns.modified && (
-              <span role="columnheader" className={cn("text-right truncate text-text-tertiary", dc.listDateWidth[d])}>Modified</span>
+              <span role="columnheader" className={cn("text-right truncate font-semibold uppercase tracking-wider text-[11px] text-text-tertiary/80", dc.listDateWidth[d])}>
+                <span className="hidden md:inline">Modified</span>
+                <span className="md:hidden">Date</span>
+              </span>
             )}
           </div>
 
@@ -749,18 +755,27 @@ export default function FileBrowser({
                     onDragEnd={endDragMove}
                     {...folderDropHandlers(item)}
                     className={cn(
-                      "group relative grid grid-cols-[auto_1fr_auto_auto] items-center cursor-pointer transition-all duration-150 border border-transparent rounded-xl",
+                      "group relative grid grid-cols-[auto_1fr_auto_auto] items-center cursor-pointer transition-colors duration-150 border border-transparent rounded-xl",
                       dc.listRow[d],
-                      index % 2 === 0 ? "bg-glass-bg-subtle/30" : "",
                       selected
-                        ? "bg-accent/10 border-accent/30"
-                        : "hover:bg-accent/5",
+                        ? "bg-accent/10 border-accent/25 ring-1 ring-inset ring-accent/30"
+                        : "hover:bg-glass-bg-subtle",
                       dropTarget === item.path
                         ? "ring-2 ring-accent/80 border-accent/40 bg-accent/10 shadow-[0_0_0_4px_rgba(91,140,255,0.14)]"
                         : "",
                       draggedPaths?.includes(item.path) ? "opacity-40 saturate-50" : ""
                     )}
                   >
+                    {/* Left kicker strip — quiet hover cue, solid when selected */}
+                    <span
+                      aria-hidden="true"
+                      className={cn(
+                        "absolute left-0 top-1/2 -translate-y-1/2 w-[3px] rounded-r-full bg-accent transition-all duration-150",
+                        selected
+                          ? "h-[60%] opacity-100"
+                          : "h-4 opacity-0 group-hover:opacity-70"
+                      )}
+                    />
                     {/* Checkbox */}
                     <div role="gridcell" className="flex justify-center items-center">
                       <input
@@ -782,42 +797,46 @@ export default function FileBrowser({
                       <div className={cn("shrink-0 flex items-center justify-center", dc.listIcon[d])}>
                         <FileIconForItem item={item} className={dc.listIconInner[d]} />
                       </div>
-                      <span className={cn("truncate font-medium transition-colors", dc.listName[d], selected ? "text-foreground" : "text-text-primary group-hover:text-accent")} title={item.name}>
+                      <span className={cn("truncate transition-colors", dc.listName[d], item.is_dir ? "font-semibold" : "font-medium", selected ? "text-foreground" : "text-text-primary group-hover:text-accent")} title={item.name}>
                         {item.name}
                       </span>
 
                       {item.tags && item.tags.length > 0 && (
-                        <div className="flex items-center gap-1 overflow-hidden shrink-0">
+                        <div className="flex items-center gap-1 overflow-hidden shrink-0 max-w-[30%]">
                           {item.tags.map(t => <TagChip key={t.id} tag={t} small />)}
                         </div>
                       )}
 
                       {visibleColumns.kind && (
-                        <span className="text-[10px] font-medium text-text-tertiary hidden lg:inline capitalize px-1.5 py-0.5 rounded bg-glass-bg-subtle">
+                        <span className="text-[10px] font-medium text-text-tertiary hidden lg:inline capitalize px-1.5 py-0.5 rounded bg-glass-bg-subtle border border-glass-border-soft">
                           {item.is_dir ? "Folder" : (item.extension ? item.extension.replace(/^\./, "").toUpperCase() : "File")}
                         </span>
                       )}
 
-                      {/* Hover action buttons */}
+                      {/* Floating action pill — anchored to the row's right edge,
+                          slides in over the size/date cells on hover (no layout shift). */}
                       {!selectMode && (
-                        <div className="ml-auto flex items-center gap-0.5 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150" onClick={(e) => e.stopPropagation()}>
+                        <div
+                          className="absolute right-3 top-1/2 -translate-y-1/2 z-10 flex items-center gap-0.5 rounded-xl border border-glass-border bg-surface/95 backdrop-blur-md shadow-lg p-1 opacity-0 translate-x-1.5 group-hover:opacity-100 group-hover:translate-x-0 group-focus-within:opacity-100 group-focus-within:translate-x-0 transition-all duration-150"
+                          onClick={(e) => e.stopPropagation()}
+                        >
                           <motion.button
                             whileTap={{ scale: 0.9 }}
                             onClick={(e) => { e.stopPropagation(); onOpen(item); }}
-                            className="p-1.5 rounded-lg text-text-tertiary hover:text-accent hover:bg-accent/10 transition-colors"
+                            className="p-1.5 rounded-lg text-text-secondary hover:text-accent hover:bg-accent/10 transition-colors"
                             title={action.label}
                             aria-label={action.label}
                           >
-                            <ActionIcon className="h-3.5 w-3.5" fill={action.filled ? "currentColor" : "none"} />
+                            <ActionIcon className="h-4 w-4" fill={action.filled ? "currentColor" : "none"} />
                           </motion.button>
                           <motion.button
                             whileTap={{ scale: 0.9 }}
                             onClick={(e) => { e.stopPropagation(); onContextMenu(e, item); }}
-                            className="p-1.5 rounded-lg text-text-tertiary hover:text-foreground hover:bg-glass-bg transition-colors"
+                            className="p-1.5 rounded-lg text-text-secondary hover:text-foreground hover:bg-glass-bg transition-colors"
                             title="More actions"
                             aria-label={`More actions for ${item.name}`}
                           >
-                            <MoreVertical className="h-3.5 w-3.5" />
+                            <MoreVertical className="h-4 w-4" />
                           </motion.button>
                         </div>
                       )}
@@ -825,14 +844,14 @@ export default function FileBrowser({
 
                     {/* Size */}
                     {visibleColumns.size && (
-                      <span role="gridcell" className={cn("text-right font-medium text-text-tertiary truncate", dc.listMeta[d], dc.listSizeWidth[d])}>
+                      <span role="gridcell" className={cn("text-right font-medium text-text-tertiary tabular-nums truncate", dc.listMeta[d], dc.listSizeWidth[d])}>
                         {item.is_dir ? "—" : formatBytes(item.size)}
                       </span>
                     )}
 
                     {/* Modified */}
                     {visibleColumns.modified && (
-                      <span role="gridcell" className={cn("text-right font-medium text-text-tertiary truncate", dc.listMeta[d], dc.listDateWidth[d])}>
+                      <span role="gridcell" className={cn("text-right font-medium text-text-tertiary/90 tabular-nums truncate", dc.listMeta[d], dc.listDateWidth[d])}>
                         {formatDate(item.modified)}
                       </span>
                     )}
