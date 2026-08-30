@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -145,29 +145,14 @@ export default function HomeScreen() {
 
   // Liked songs open from the single “Liked Songs” card on Home.
 
-  const greeting = useMemo(() => {
-    const h = new Date().getHours();
-    if (h < 6) return "Good night";
-    if (h < 12) return "Good morning";
-    if (h < 18) return "Good afternoon";
-    return "Good evening";
-  }, []);
-
-  const firstName = user?.display_name?.split(" ")[0] || user?.username || "";
   const initials = (user?.display_name || user?.username || "?").slice(0, 1).toUpperCase();
 
   if (loading) {
     return (
       <View style={[styles.root, { backgroundColor: colors.bg }]}>
-        <View style={[styles.hero, { paddingTop: insets.top + 24 }]}>
-          <LinearGradient colors={[...gradients.heroGlow]} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={StyleSheet.absoluteFill} pointerEvents="none" />
-          <View style={styles.headerRow}>
-            <View>
-              <View style={{ width: IS_ANDROID ? 100 : 120, height: 14, borderRadius: 6, backgroundColor: colors.card }} />
-              <View style={{ width: IS_ANDROID ? 160 : 200, height: IS_ANDROID ? 28 : 34, borderRadius: 8, backgroundColor: colors.card, marginTop: 10 }} />
-            </View>
-            <View style={{ width: IS_ANDROID ? 44 : 52, height: IS_ANDROID ? 44 : 52, borderRadius: IS_ANDROID ? 22 : 26, backgroundColor: colors.card }} />
-          </View>
+        <View style={[styles.topBarMinimal, { paddingTop: insets.top + 12 }]}>
+          <View style={{ flex: 1 }} />
+          <View style={{ width: IS_ANDROID ? 44 : 52, height: IS_ANDROID ? 44 : 52, borderRadius: IS_ANDROID ? 22 : 26, backgroundColor: colors.card }} />
         </View>
         <View style={{ paddingHorizontal: spacing.lg, gap: spacing.md, flexDirection: "row", marginTop: spacing.lg }}>
           <GridCardSkeleton />
@@ -247,55 +232,30 @@ export default function HomeScreen() {
       ListHeaderComponent={
         <SectionReveal>
         <View>
-          {/* Dashboard Header — dual-glow + softer gradient mesh */}
-          <View style={[styles.hero, { paddingTop: insets.top + 24 }]}>
-            {/* base wash — vertical accent gradient */}
-            <LinearGradient
-              colors={[...gradients.hero]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 0, y: 1 }}
-              style={StyleSheet.absoluteFill}
-              pointerEvents="none"
-            />
-            {/* secondary cyan glow on the right (mirrors web's blob art) */}
-            <LinearGradient
-              colors={isDark
-                ? ["rgba(53, 211, 255, 0.10)", "transparent"]
-                : ["rgba(53, 211, 255, 0.05)", "transparent"]}
-              start={{ x: 1, y: 0 }}
-              end={{ x: 0.4, y: 1 }}
-              style={StyleSheet.absoluteFill}
-              pointerEvents="none"
-            />
-
-            <View style={styles.headerRow}>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.greeting, { color: colors.muted }]} maxFontSizeMultiplier={1.15}>
-                  {greeting}
-                </Text>
-                <Text style={[styles.heroName, { color: colors.content, fontSize: IS_ANDROID ? 26 : 32 }]} maxFontSizeMultiplier={1.15}>
-                  {firstName || "Explorer"}
-                </Text>
-              </View>
-              <TouchableOpacity
-                style={[styles.avatarBtn, shadowSm]}
-                activeOpacity={0.85}
-                onPress={() => navigation.navigate("Settings")}
-                accessibilityLabel="Open settings"
-                accessibilityRole="button"
-              >
-                <LinearGradient colors={[...gradients.brand]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
-                <Text style={[styles.avatarText, { fontSize: IS_ANDROID ? 18 : 20 }]}>{initials}</Text>
-              </TouchableOpacity>
-            </View>
-
-            {error ? (
-              <TouchableOpacity style={[styles.errorPill, { borderColor: colors.dangerSoft }]} onPress={() => load(true)}>
-                <MaterialCommunityIcons name="alert-circle-outline" size={16} color={colors.danger} />
-                <Text style={[styles.errorText, { color: colors.danger, fontSize: font.sm }]}>{error} — Tap to retry</Text>
-              </TouchableOpacity>
-            ) : null}
+          {/* Top bar — avatar only, hugging the safe area */}
+          <View style={[styles.topBarMinimal, { paddingTop: insets.top + 12 }]}>
+            <View style={{ flex: 1 }} />
+            <TouchableOpacity
+              style={[styles.avatarBtn, shadowSm]}
+              activeOpacity={0.85}
+              onPress={() => navigation.navigate("Settings")}
+              accessibilityLabel="Open settings"
+              accessibilityRole="button"
+            >
+              <LinearGradient colors={[...gradients.brand]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+              <Text style={[styles.avatarText, { fontSize: IS_ANDROID ? 18 : 20 }]}>{initials}</Text>
+            </TouchableOpacity>
           </View>
+
+          {error ? (
+            <TouchableOpacity
+              style={[styles.errorPill, { borderColor: colors.dangerSoft, marginHorizontal: spacing.lg, marginBottom: spacing.md }]}
+              onPress={() => load(true)}
+            >
+              <MaterialCommunityIcons name="alert-circle-outline" size={16} color={colors.danger} />
+              <Text style={[styles.errorText, { color: colors.danger, fontSize: font.sm }]}>{error} — Tap to retry</Text>
+            </TouchableOpacity>
+          ) : null}
 
           {/* Quick Categories Bar */}
           <View style={styles.quickWrap}>
@@ -511,20 +471,13 @@ const styles = StyleSheet.create({
     pointerEvents: "none",
   },
 
-  // ── Hero Header ──
-  hero: {
-    paddingHorizontal: IS_ANDROID ? 20 : 24,
-    paddingBottom: IS_ANDROID ? 22 : 28,
-    overflow: "hidden",
-  },
-  headerRow: {
+  // ── Top bar (avatar only) ──
+  topBarMinimal: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: IS_ANDROID ? 18 : 24,
+    paddingHorizontal: IS_ANDROID ? 20 : 24,
+    paddingBottom: IS_ANDROID ? 8 : 10,
   },
-  greeting: { fontWeight: "600", letterSpacing: 0.3, textTransform: "uppercase", fontSize: 11 },
-  heroName: { fontWeight: "800", letterSpacing: -0.4, marginTop: 6, lineHeight: IS_ANDROID ? 32 : 38 },
   avatarBtn: {
     width: IS_ANDROID ? 44 : 52,
     height: IS_ANDROID ? 44 : 52,

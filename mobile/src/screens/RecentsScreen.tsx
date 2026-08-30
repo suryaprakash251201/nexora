@@ -14,6 +14,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RouteProp } from "@react-navigation/native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useSession } from "../store/SessionContext";
 import { useTheme } from "../store/ThemeContext";
 import { FileRow, EmptyState, ROW_HEIGHT } from "../components/FileRow";
@@ -37,6 +38,7 @@ export default function RecentsScreen({ variant = "recents" }: { variant?: "rece
   const { api } = useSession();
   const { colors, font, radius, spacing, shadow, shadowSm } = useTheme();
   const { playTrack } = useAudio();
+  const insets = useSafeAreaInsets();
   const searchRef = useRef<TextInput>(null);
 
   const [items, setItems] = useState<FileItem[]>([]);
@@ -282,7 +284,7 @@ export default function RecentsScreen({ variant = "recents" }: { variant?: "rece
   return (
     <View style={[styles.root, { backgroundColor: colors.bg }]}>
       {/* Search Input Bar */}
-      <View style={styles.searchContainer}>
+      <View style={[styles.searchContainer, { paddingTop: insets.top + 8 }]}>
         <View
           style={[
             styles.searchWrap,

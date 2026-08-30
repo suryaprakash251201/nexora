@@ -13,6 +13,7 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 import Constants from "expo-constants";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useSession } from "../store/SessionContext";
 import { useTheme } from "../store/ThemeContext";
 import { useSettings, haptic } from "../store/SettingsContext";
@@ -32,6 +33,7 @@ export default function SettingsScreen() {
   const { serverUrl, user, api, connect, logout } = useSession();
   const { colors, font, gradients, radius, spacing, shadow, shadowSm, isDark, setTheme } = useTheme();
   const { prefs, setPref, toggleHaptics } = useSettings();
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation<SettingsNav>();
 
   const [urlDraft, setUrlDraft] = useState(serverUrl || "");
@@ -94,7 +96,7 @@ export default function SettingsScreen() {
       <LinearGradient colors={[...gradients.heroGlow]} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={styles.heroGrad} pointerEvents="none" />
 
       {/* User Profile Header */}
-      <View style={styles.profile}>
+      <View style={[styles.profile, { paddingTop: insets.top + 12 }]}>
         <View style={[styles.avatarRing, { borderColor: colors.accentSoft, shadowColor: colors.accent }]}>
           <View style={styles.avatarWrap}>
             <LinearGradient colors={[...gradients.brand]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />

@@ -46,47 +46,15 @@ const Tabs = createBottomTabNavigator<MainTabParamList>();
 const TAB_ROUTES = new Set(["Home", "Search", "Recents", "Settings"]);
 
 function MainTabs() {
-  const { colors } = useTheme();
-
   return (
     <Tabs.Navigator
       tabBar={(props) => <PremiumTabBar {...props} />}
-      screenOptions={({ route }) => ({
-        headerStyle: { backgroundColor: colors.surface },
-        headerTintColor: colors.content,
-        headerTitleStyle: { fontWeight: "700" },
-        headerShadowVisible: false,
-      })}
+      screenOptions={{ headerShown: false }}
     >
-      <Tabs.Screen
-        name="Home"
-        component={HomeScreen}
-        options={{
-          title: "Home",
-          headerShown: false,
-        }}
-      />
-      <Tabs.Screen
-        name="Search"
-        component={SearchScreen}
-        options={{
-          title: "Search",
-        }}
-      />
-      <Tabs.Screen
-        name="Recents"
-        component={RecentsScreen}
-        options={{
-          title: "Recents",
-        }}
-      />
-      <Tabs.Screen
-        name="Settings"
-        component={SettingsScreen}
-        options={{
-          title: "Settings",
-        }}
-      />
+      <Tabs.Screen name="Home" component={HomeScreen} />
+      <Tabs.Screen name="Search" component={SearchScreen} />
+      <Tabs.Screen name="Recents" component={RecentsScreen} />
+      <Tabs.Screen name="Settings" component={SettingsScreen} />
     </Tabs.Navigator>
   );
 }
@@ -185,23 +153,20 @@ function RootNavigation() {
       <StatusBar style={isDark ? "light" : "dark"} />
       <Stack.Navigator
         screenOptions={{
-          headerStyle: { backgroundColor: colors.surface },
-          headerTintColor: colors.content,
-          headerTitleStyle: { fontWeight: "700" },
-          headerShadowVisible: false,
+          headerShown: false,
           contentStyle: { backgroundColor: colors.bg },
         }}
       >
-        <Stack.Screen name="Main" component={MainTabs} options={{ headerShown: false }} />
-        <Stack.Screen name="Browser" component={BrowserScreen} options={({ route }) => ({ title: route.params.rootName })} />
-        <Stack.Screen name="Preview" component={PreviewScreen} options={({ route }) => ({ title: route.params.item.name })} />
-        <Stack.Screen name="Playlist" component={PlaylistScreen} options={{ title: "Playlist" }} />
-        <Stack.Screen name="Playlists" component={PlaylistsScreen} options={{ title: "Playlists" }} />
-        <Stack.Screen name="Category" component={CategoryScreen} options={{ title: "Category" }} />
-        <Stack.Screen name="Liked" component={LikedScreen} options={{ title: "Liked Songs" }} />
-        <Stack.Screen name="Admin" component={AdminScreen} options={{ title: "Administration" }} />
-        <Stack.Screen name="Favorites" component={FavoritesScreen} options={{ title: "Favorites" }} />
-        <Stack.Screen name="Trash" component={TrashScreen} options={{ title: "Trash" }} />
+        <Stack.Screen name="Main" component={MainTabs} />
+        <Stack.Screen name="Browser" component={BrowserScreen} />
+        <Stack.Screen name="Preview" component={PreviewScreen} />
+        <Stack.Screen name="Playlist" component={PlaylistScreen} />
+        <Stack.Screen name="Playlists" component={PlaylistsScreen} />
+        <Stack.Screen name="Category" component={CategoryScreen} />
+        <Stack.Screen name="Liked" component={LikedScreen} />
+        <Stack.Screen name="Admin" component={AdminScreen} />
+        <Stack.Screen name="Favorites" component={FavoritesScreen} />
+        <Stack.Screen name="Trash" component={TrashScreen} />
       </Stack.Navigator>
       <MiniPlayer tabVisible={tabVisible && !videoOverlay} />
     </NavigationContainer>
