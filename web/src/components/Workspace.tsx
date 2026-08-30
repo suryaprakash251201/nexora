@@ -49,24 +49,8 @@ import { Button } from "./ui/Button";
 import { isEditable, isAudio } from "../lib/preview";
 import {
   Download, Trash2, Pencil, Copy, Eye, FolderOpen, Star, Share2, Archive, FolderInput, FileEdit, ListMusic, Upload, Move, Info, Tag as TagIcon, CheckSquare,
-  Home, Search, Clock, Images, BarChart3, Shield, History
+  History
 } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
-import { WorkspaceHeader } from "./layout/WorkspaceHeader";
-
-// ── Workspace header meta — label + icon per view (matches the sidebar) ──
-const VIEW_HEADER_META: Partial<Record<SidebarView, { label: string; icon: LucideIcon }>> = {
-  home: { label: "Home", icon: Home },
-  search: { label: "Search", icon: Search },
-  recents: { label: "Recent", icon: Clock },
-  favorites: { label: "Favorites", icon: Star },
-  shares: { label: "Shared", icon: Share2 },
-  playlists: { label: "Playlists", icon: ListMusic },
-  trash: { label: "Trash", icon: Trash2 },
-  photos: { label: "Photos", icon: Images },
-  analytics: { label: "Analytics", icon: BarChart3 },
-  admin: { label: "Admin", icon: Shield },
-};
 
 // Hooks
 import { useTransfers } from "./hooks/useTransfers";
@@ -188,20 +172,6 @@ export default function Workspace({ user }: { user: User }) {
   }, [qParam]);
 
   // ── Workspace header scroll awareness ──────────────────────────────
-  // Capture-phase listener catches every scroller in the workspace
-  // (main content pane AND views with internal scroll like Home).
-  // State flips only when the threshold is crossed → no render spam.
-  const [contentScrolled, setContentScrolled] = useState(false);
-  useEffect(() => {
-    const onScrollCapture = (e: Event) => {
-      const t = e.target;
-      if (!(t instanceof HTMLElement)) return;
-      const down = t.scrollTop > 8;
-      setContentScrolled((prev) => (prev === down ? prev : down));
-    };
-    window.addEventListener("scroll", onScrollCapture, { capture: true, passive: true });
-    return () => window.removeEventListener("scroll", onScrollCapture, { capture: true });
-  }, []);
   const [filter, setFilter] = useState("all");
   const [sort, setSort] = useState("name");
   const [order, setOrder] = useState("asc");
@@ -641,7 +611,7 @@ export default function Workspace({ user }: { user: User }) {
         onLogout={logout}
       />
 
-      <div className="flex-1 flex flex-col min-w-0 pb-24 md:pb-0">
+      <div className="flex-1 flex flex-col min-w-0 pb-24 md:pb-0 relative">
         {showCommandBar && (
           <CommandBar
             rootName={activeRoot!.name}
@@ -681,14 +651,11 @@ export default function Workspace({ user }: { user: User }) {
           />
         )}
         {view !== "files" && !videoItem && (
-          <WorkspaceHeader
-            title={VIEW_HEADER_META[view]?.label ?? view.charAt(0).toUpperCase() + view.slice(1)}
-            icon={VIEW_HEADER_META[view]?.icon}
-            scrolled={contentScrolled}
-            actions={
-              <ProfileMenu user={user} isAdmin={isAdmin} onLogout={logout} onAdmin={() => setView("admin")} />
-            }
-          />
+          // Top-right floating avatar — no box-shape header bar, just the
+          // user menu in the same top-right corner as before.
+          <div className="absolute top-3 right-3 sm:top-4 sm:right-5 z-20">
+            <ProfileMenu user={user} isAdmin={isAdmin} onLogout={logout} onAdmin={() => setView("admin")} />
+          </div>
         )}
 
         <input ref={fileInput} type="file" multiple className="hidden" onChange={(e) => { uploadFiles(e.target.files); e.target.value = ""; }} />
