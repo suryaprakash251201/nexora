@@ -771,9 +771,9 @@ export default function FileBrowser({
                       draggedPaths?.includes(item.path) ? "opacity-40 saturate-50" : ""
                     )}
                   >
-                    {/* Checkbox — always visible so multi-select is discoverable.
-                        Dimmed outline when idle, full strength once selected or
-                        while select mode (right-click → Select) is active. */}
+                    {/* Checkbox — hidden on idle rows (matches grid view);
+                        fully visible on ALL rows while select mode is active
+                        (right-click → Select) or once the row is selected. */}
                     <div role="gridcell" className="flex justify-center items-center">
                       <input
                         type="checkbox"
@@ -782,7 +782,7 @@ export default function FileBrowser({
                           "rounded border-2 border-glass-border bg-glass-bg text-accent focus:ring-2 focus:ring-accent/50 cursor-pointer transition-all",
                           selected || selectMode
                             ? "opacity-100"
-                            : "opacity-60 group-hover:opacity-100",
+                            : "opacity-0 group-hover:opacity-100",
                           dc.checkbox[d]
                         )}
                         checked={selected}
