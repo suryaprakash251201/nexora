@@ -5,7 +5,7 @@ import {
   canDropInto,
   currentDragPaths,
   endDragMove,
-  isInternalMoveDrag,
+  isInternalMoveDragEvent,
 } from "../lib/dragMove";
 
 export default function Breadcrumbs({
@@ -34,7 +34,7 @@ export default function Breadcrumbs({
   const isFileDrag = (e: React.DragEvent) => [...e.dataTransfer.types].includes("Files");
   const canAccept = (e: React.DragEvent, targetPath: string) => {
     if (isFileDrag(e)) return !!onUploadFiles;
-    if (!isInternalMoveDrag(e)) return false;
+    if (!isInternalMoveDragEvent(e)) return false;
     // Never accept a drop into itself or its own descendants.
     return !!onDropToFolder && canDropInto(targetPath, currentDragPaths());
   };
@@ -52,7 +52,7 @@ export default function Breadcrumbs({
   };
 
   const handleDrop = (e: React.DragEvent, targetPath: string) => {
-    const wasInternal = isInternalMoveDrag(e);
+    const wasInternal = isInternalMoveDragEvent(e);
     e.preventDefault();
     setDragTarget(null);
     if (isFileDrag(e)) {

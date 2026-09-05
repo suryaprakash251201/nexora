@@ -7,7 +7,7 @@ import { FileItem } from "../api/types";
 import { EmptyState } from "./ui/EmptyState";
 import { formatBytes, formatDate } from "../lib/format";
 import {
-  beginDragMove, endDragMove, isInternalMoveDrag, canDropInto,
+  beginDragMove, endDragMove, isInternalMoveDragEvent, canDropInto,
   currentDragPaths, payloadFromItems, useDragMove,
 } from "../lib/dragMove";
 import { FileThumb } from "./FileThumb";
@@ -330,7 +330,7 @@ export default function FileBrowser({
               setDropKind("upload");
               return;
             }
-            if (!isInternalMoveDrag(e)) return;
+            if (!isInternalMoveDragEvent(e)) return;
             const paths = currentDragPaths();
             // Invalid destination (self / descendant / read-only): no
             // preventDefault → browser shows the forbidden cursor.
@@ -342,7 +342,7 @@ export default function FileBrowser({
           },
           onDragLeave: () => setDropTarget((t) => (t === item.path ? null : t)),
           onDrop: (e: React.DragEvent) => {
-            const wasInternal = isInternalMoveDrag(e);
+            const wasInternal = isInternalMoveDragEvent(e);
             const isFiles = [...(e.dataTransfer?.types ?? [])].includes("Files");
             setDropTarget(null);
             if (!wasInternal && !isFiles) return;

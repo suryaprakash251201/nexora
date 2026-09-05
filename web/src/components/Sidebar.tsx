@@ -6,7 +6,7 @@ import { rootIcon } from "../lib/rootIcons";
 import { versionApi, adminApi, trashApi, sharesApi, favoritesApi } from "../api/endpoints";
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
-import { canDropInto, currentDragPaths, endDragMove, isInternalMoveDrag } from "../lib/dragMove";
+import { canDropInto, currentDragPaths, endDragMove, isInternalMoveDragEvent } from "../lib/dragMove";
 import { formatBytes } from "../lib/format";
 import NexoraLogo from "./icons/NexoraLogo";
 
@@ -201,7 +201,7 @@ export default memo(function Sidebar({
                 <button key={r.id} onClick={() => onSelectRoot(r.id)} title={collapsed ? r.name : undefined}
                   aria-current={isActive ? "page" : undefined}
                   onDragOver={(e) => {
-                    if (!acceptRootDrop || !isInternalMoveDrag(e)) return;
+                    if (!acceptRootDrop || !isInternalMoveDragEvent(e)) return;
                     if (!canDropInto("", currentDragPaths())) return;
                     e.preventDefault();
                     e.dataTransfer.dropEffect = "move";
@@ -209,7 +209,7 @@ export default memo(function Sidebar({
                   }}
                   onDragLeave={() => setRootDropId((cur) => (cur === r.id ? null : cur))}
                   onDrop={(e) => {
-                    if (!acceptRootDrop || !isInternalMoveDrag(e)) return;
+                    if (!acceptRootDrop || !isInternalMoveDragEvent(e)) return;
                     e.preventDefault();
                     const paths = currentDragPaths().filter((p) => p.includes("/"));
                     setRootDropId(null);

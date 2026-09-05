@@ -52,8 +52,6 @@ pub async fn audio_native_open(
     bearer: Option<String>,
     start_sec: Option<f64>,
 ) -> Result<serde_json::Value, String> {
-    use nexora_audio::output::rodio_out::RodioSink;
-
     // Opening performs blocking network I/O (HTTP open + 256 KiB tail
     // prefetch). Run it on a worker thread so a slow server can never stall
     // the main thread / UI.
@@ -102,7 +100,10 @@ macro_rules! with_player {
     ($session:expr, $body:expr) => {{
         let guard = $session.0.lock().expect("session lock");
         match guard.as_ref() {
-            Some(p) => $body(p),
+            // PlayerHandle methods fail with PlayerError while commands
+            // report String — normalize here so every command stays
+            // `Result<_, String>` without per-call-site map_err noise.
+            Some(p) => $body(p).map_err(|e| e.to_string()),
             None => return Err("no active native track".into()),
         }
     }};

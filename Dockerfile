@@ -5,7 +5,7 @@
 # Pinned to $BUILDPLATFORM: dist/ is arch-independent, so we build it ONCE
 # natively on the runner instead of emulating node for linux/arm64.
 ############################
-FROM --platform=$BUILDPLATFORM node:20-alpine AS web
+FROM --platform=$BUILDPLATFORM node:22-alpine AS web
 WORKDIR /web
 COPY web/package.json web/package-lock.json* ./
 RUN npm ci && npm cache clean --force

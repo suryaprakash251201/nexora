@@ -22,6 +22,9 @@ func newTestBus(t *testing.T) *Bus {
 	}
 	t.Cleanup(func() { db.Close() })
 	b := NewBus(db, nil)
+	// httptest servers bind loopback, which the SSRF guard blocks by
+	// default — allow private targets for delivery-path tests only.
+	b.AllowPrivateTargets = true
 	t.Cleanup(b.Stop)
 	return b
 }
@@ -274,4 +277,18 @@ func validSignature(secret string, payload []byte, sig string) bool {
 	mac.Write(payload)
 	want := hex.EncodeToString(mac.Sum(nil))
 	return strings.EqualFold(sig, want)
+}
+
+func TestPinnedWebhookClientBlocksPrivateByDefault(t *testing.T) {
+	// Loopback must be refused under the secure default (DNS-rebinding guard).
+	if _, err := pinnedWebhookClient("http://127.0.0.1:8080/hook", false); err == nil {
+		t.Fatal("expected loopback to be blocked by default")
+	}
+	if _, err := pinnedWebhookClient("http://169.254.169.254/latest/meta-data/", false); err == nil {
+		t.Fatal("expected cloud metadata IP to be blocked by default")
+	}
+	// Test mode explicitly allows loopback for httptest servers.
+	if _, err := pinnedWebhookClient("http://127.0.0.1:8080/hook", true); err != nil {
+		t.Fatalf("expected loopback allowed with allowPrivate=true, got %v", err)
+	}
 }

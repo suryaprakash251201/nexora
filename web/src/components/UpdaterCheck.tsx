@@ -1,7 +1,6 @@
 import { useEffect } from "react";
-import { check } from "@tauri-apps/plugin-updater";
 import { toast } from "../lib/toast";
-import { getPlatform } from "../lib/desktop";
+import { getPlatform, isTauri } from "../lib/desktop";
 
 /**
  * One-shot update check on startup (Tauri desktop only).
@@ -12,8 +11,12 @@ import { getPlatform } from "../lib/desktop";
  */
 export default function UpdaterCheck() {
   useEffect(() => {
+    // Skip entirely in a plain browser: the static code path used to import
+    // the updater plugin into the web bundle and call check() only to throw.
+    if (!isTauri()) return;
     async function checkForUpdates() {
       try {
+        const { check } = await import("@tauri-apps/plugin-updater");
         const update = await check();
         if (!update) return;
 

@@ -18,7 +18,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 	"sync"
@@ -91,6 +93,13 @@ type Bus struct {
 	db        *database.DB
 	client    *http.Client
 	log       *logger.Logger // optional; nil disables delivery-failure logging
+
+	// AllowPrivateTargets permits webhook delivery to loopback/private/
+	// link-local addresses. Default false (secure). Tests that use
+	// httptest servers (127.0.0.1) set this to true; production keeps it
+	// false so the SSRF guard cannot be bypassed. Registration-time
+	// validation in the api package always rejects private URLs.
+	AllowPrivateTargets bool
 
 	queue   chan webhookJob
 	wg      sync.WaitGroup
@@ -318,6 +327,24 @@ func (b *Bus) deliverOnce(evt Event, wh WebhookTarget) {
 	}
 	sig := Signature(wh.Secret, payload)
 
+	// Re-validate + pin DNS at delivery time. The registration-time check
+	// in validateWebhookURL can be defeated by DNS rebinding (record flips
+	// to 169.254.169.254 / loopback between validation and delivery, or
+	// after registration). We resolve here, reject blocked IPs, dial only
+	// the verified addresses, and refuse redirects to blocked hosts.
+	pinned, perr := pinnedWebhookClient(wh.URL, b.AllowPrivateTargets)
+	if perr != nil {
+		if b.log != nil {
+			b.log.Warn("webhook delivery skipped: url blocked",
+				"url", redactWebhookURL(wh.URL), "event", string(evt.Type), "error", perr)
+		}
+		return
+	}
+	client := pinned
+	if b.client != nil && b.client.Timeout != 0 {
+		client.Timeout = b.client.Timeout
+	}
+
 	var lastErr error
 	for attempt := 0; attempt < webhookMaxRetry; attempt++ {
 		if attempt > 0 {
@@ -336,7 +363,7 @@ func (b *Bus) deliverOnce(evt Event, wh WebhookTarget) {
 		req.Header.Set("X-Nexora-Event-ID", evt.ID)
 		req.Header.Set("X-Nexora-Signature", sig)
 
-		resp, err := b.client.Do(req)
+		resp, err := client.Do(req)
 		if err != nil {
 			lastErr = err
 			continue
@@ -384,6 +411,135 @@ func sendOrDrop(b *Bus, ch chan Event, evt Event) {
 			// caller can detect this via metrics if needed.
 		}
 	}
+}
+
+// pinnedWebhookClient resolves whURL, rejects loopback/private/link-local/
+// multicast/unspecified targets (including cloud metadata 169.254.169.254),
+// and returns an http.Client whose dialer connects ONLY to the verified IPs
+// and whose redirect policy re-validates every hop. This closes the
+// validate-then-use DNS-rebinding gap: even if the record flips after the
+// registration-time check, delivery still cannot reach an internal address.
+func pinnedWebhookClient(whURL string, allowPrivate bool) (*http.Client, error) {
+	u, err := url.Parse(whURL)
+	if err != nil {
+		return nil, fmt.Errorf("invalid url")
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return nil, fmt.Errorf("url must use http or https")
+	}
+	host := u.Hostname()
+	if host == "" {
+		return nil, fmt.Errorf("url is missing a host")
+	}
+	port := u.Port()
+	if port == "" {
+		if u.Scheme == "https" {
+			port = "443"
+		} else {
+			port = "80"
+		}
+	}
+
+	var ips []net.IP
+	if ip := net.ParseIP(host); ip != nil {
+		if !allowPrivate && isWebhookBlockedIP(ip) {
+			return nil, fmt.Errorf("url points to a private or loopback address")
+		}
+		ips = []net.IP{ip}
+	} else {
+		resolved, err := net.LookupIP(host)
+		if err != nil || len(resolved) == 0 {
+			return nil, fmt.Errorf("could not resolve url host")
+		}
+		for _, ip := range resolved {
+			if !allowPrivate && isWebhookBlockedIP(ip) {
+				return nil, fmt.Errorf("url resolves to a private or loopback address")
+			}
+		}
+		ips = resolved
+	}
+
+	// Pin the verified address set. The dialer round-robins across them so
+	// multi-A records still get failover without ever touching the resolver
+	// again for this delivery.
+	var dialIdx uint32
+	baseDialer := &net.Dialer{Timeout: 5 * time.Second, KeepAlive: 30 * time.Second}
+	dial := func(ctx context.Context, network, _ string) (net.Conn, error) {
+		i := atomic.AddUint32(&dialIdx, 1)
+		// Try each verified IP once, starting at a rotating offset.
+		var lastErr error
+		for n := 0; n < len(ips); n++ {
+			ip := ips[int((i+uint32(n))%uint32(len(ips)))]
+			addr := net.JoinHostPort(ip.String(), port)
+			c, err := baseDialer.DialContext(ctx, network, addr)
+			if err == nil {
+				return c, nil
+			}
+			lastErr = err
+		}
+		if lastErr == nil {
+			lastErr = fmt.Errorf("no verified webhook address available")
+		}
+		return nil, lastErr
+	}
+	transport := &http.Transport{
+		DialContext:           dial,
+		DialTLSContext:        dial,
+		TLSHandshakeTimeout:   5 * time.Second,
+		ResponseHeaderTimeout: 10 * time.Second,
+	}
+	return &http.Client{
+		Timeout:   10 * time.Second,
+		Transport: transport,
+		CheckRedirect: func(req *http.Request, _ []*http.Request) error {
+			if allowPrivate {
+				return nil
+			}
+			rh := req.URL.Hostname()
+			if rh == "" {
+				return fmt.Errorf("redirect without host blocked")
+			}
+			if ip := net.ParseIP(rh); ip != nil {
+				if isWebhookBlockedIP(ip) {
+					return fmt.Errorf("redirect to private address blocked")
+				}
+				return nil
+			}
+			rips, err := net.LookupIP(rh)
+			if err != nil || len(rips) == 0 {
+				return fmt.Errorf("redirect host unresolvable")
+			}
+			for _, ip := range rips {
+				if isWebhookBlockedIP(ip) {
+					return fmt.Errorf("redirect to private address blocked")
+				}
+			}
+			return nil
+		},
+	}, nil
+}
+
+// isWebhookBlockedIP mirrors the registration-time range check so delivery
+// stays consistent even if the api package check evolves.
+func isWebhookBlockedIP(ip net.IP) bool {
+	if ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() ||
+		ip.IsPrivate() || ip.IsMulticast() || ip.IsUnspecified() {
+		return true
+	}
+	if v4 := ip.To4(); v4 != nil && v4[0] == 169 && v4[1] == 254 {
+		return true
+	}
+	return false
+}
+
+func redactWebhookURL(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return "<unparseable>"
+	}
+	u.RawQuery = ""
+	u.User = nil
+	return u.String()
 }
 
 func (wh WebhookTarget) subscribes(t EventType) bool {

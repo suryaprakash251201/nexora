@@ -38,6 +38,8 @@ import { AddToPlaylistMenu } from "../PlaylistAdder";
 import LyricsPanel from "../LyricsPanel";
 import { QueuePanel } from "./QueuePanel";
 import { MiniPlayer } from "./MiniPlayer";
+import { CassettePlayer, CASSETTE_EJECT_MS } from "./CassettePlayer";
+import { usePlayerStyle } from "../../lib/usePlayerStyle";
 import { fmtTime } from "@nexora/core";
 import { CoverArt } from "./CoverArt";
 import Tonearm from "./Tonearm";
@@ -129,6 +131,8 @@ export function AudioPlayer({
   const sessionIdRef = useRef(generateSessionId());
   /** Latest `step` for the uncontrolled ended-listener (see effect below). */
   const onEndedStepRef = useRef<() => void>(() => {});
+  /** Latest `step` for the global media-key handler (next/previous track). */
+  const stepRef = useRef<(dir: number) => void>(() => {});
 
   useEffect(() => {
     setFallbackStage(-1);
@@ -186,6 +190,10 @@ export function AudioPlayer({
           return;
         }
         if (a) { a.pause(); a.currentTime = 0; setLCur(0); }
+      } else if (action === "MediaNextTrack") {
+        stepRef.current(1);
+      } else if (action === "MediaPreviousTrack") {
+        stepRef.current(-1);
       }
     };
     window.addEventListener("nexora:media", handler);
@@ -318,6 +326,10 @@ export function AudioPlayer({
     const ni = (qIndex + dir + playlist.length) % playlist.length;
     onSelect(ni);
   };
+  // Keep the media-key ref live (same staleness trap as onEndedStepRef:
+  // the handler effect only re-subscribes when `controlled` changes, but
+  // `step` closes over the queue index).
+  stepRef.current = step;
 
   const playing = controlled ? isPlaying : lPlaying;
   const buffering = controlled ? player.buffering : lBuffering;
@@ -362,13 +374,39 @@ export function AudioPlayer({
     setFs(true);
   };
 
-  const closeFs = (exitFullscreen = true) => {
+  // Full-screen player style — vinyl disc (default) or vintage cassette deck.
+  const [playerStyle] = usePlayerStyle();
+  const isCassette = playerStyle === "cassette";
+  const [ejecting, setEjecting] = useState(false);
+  const ejectTimerRef = useRef<number | null>(null);
+  useEffect(() => () => {
+    if (ejectTimerRef.current !== null) clearTimeout(ejectTimerRef.current);
+  }, []);
+
+  const finishCloseFs = (exitFullscreen: boolean) => {
     setFs(false);
+    setEjecting(false);
     if (exitFullscreen && document.fullscreenElement) {
       suppressFsExitRef.current = true;
       document.exitFullscreen?.().catch(() => {});
     }
     onClose?.();
+  };
+
+  const closeFs = (exitFullscreen = true) => {
+    // Cassette mode: run the mechanical eject animation before the overlay
+    // is torn down. Audio keeps playing the whole time — only the view closes.
+    if (isCassette && !ejecting) {
+      if (ejectTimerRef.current !== null) clearTimeout(ejectTimerRef.current);
+      setEjecting(true);
+      ejectTimerRef.current = window.setTimeout(() => {
+        ejectTimerRef.current = null;
+        finishCloseFs(exitFullscreen);
+      }, CASSETTE_EJECT_MS);
+      return;
+    }
+    if (isCassette && ejecting) return; // eject already in flight — let it finish
+    finishCloseFs(exitFullscreen);
   };
 
   // Enter real browser fullscreen on the player overlay itself whenever the
@@ -559,7 +597,20 @@ export function AudioPlayer({
       {/* Player row — shifts left on desktop to make room for the lyrics/queue panel */}
       <div className={`relative z-10 flex min-h-0 w-full flex-1 items-center justify-center transition-[padding] duration-500 ease-out ${panel !== "none" ? "lg:pr-[43%]" : ""}`}>
       <div className="relative flex w-full max-w-2xl flex-col items-center justify-center px-4 sm:px-6 pt-4 sm:pt-0 pb-20 sm:pb-8" style={{ paddingBottom: "max(5rem, env(safe-area-inset-bottom))" }}>
-        {/* Album Art — spinning vinyl with tonearm (nudged below center) */}
+        {/* Hero — vinyl disc + tonearm (default) or vintage cassette deck,
+            selected in Settings → Appearance → Audio Player Style. */}
+        {isCassette ? (
+          <div className="relative mt-2 sm:mt-6 mb-4 sm:mb-8 flex-shrink-0" style={{ width: "min(86vw, 500px, calc(92svh * 1.5))" }}>
+            <CassettePlayer
+              track={cur ?? null}
+              playing={playing}
+              progress={duration > 0 ? Math.min(1, Math.max(0, pct / 100)) : 0}
+              trackNumber={qIndex + 1}
+              ejecting={ejecting}
+              onToggle={toggle}
+            />
+          </div>
+        ) : (
         <div className="relative mt-2 sm:mt-8 mb-4 sm:mb-10 flex-shrink-0">
           {/* Tonearm — realistic S-shaped arm; cueing gesture (lift → swing →
               drop) is driven by CSS in index.css via the two state classes. */}
@@ -585,11 +636,15 @@ export function AudioPlayer({
           </div>
           </div>
         </div>
+        )}
 
-        {/* Track Info — sits above the lossless identity */}
+        {/* Track Info — sits above the lossless identity. The cassette mode
+            shows the title on the tape label itself, so skip the duplicate. */}
+        {!isCassette && (
         <div className={`w-full flex flex-col items-center text-center ${cur && quality?.isLossless ? "mb-2" : "mb-4 sm:mb-7"}`}>
           <h2 className="text-white font-bold text-lg sm:text-2xl md:text-3xl truncate drop-shadow-md">{cur ? cleanTrackTitle(cur.name) : ""}</h2>
         </div>
+        )}
 
         {/* Lossless identity — enlarged wave logo; tap/click reveals the
             measured bit depth / sample rate beneath it. Static (never rotates). */}

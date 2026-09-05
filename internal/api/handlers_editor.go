@@ -83,7 +83,7 @@ func (s *Server) handleSaveContent(w http.ResponseWriter, r *http.Request) {
 		Content string `json:"content"`
 		Version string `json:"version"` // expected current version (from GET)
 	}
-	if err := decodeJSON(r, &req); err != nil {
+	if err := decodeJSONLimit(r, &req, s.Cfg.MaxEditableSize); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_body", err.Error(), middleware.GetRequestID(r.Context()))
 		return
 	}

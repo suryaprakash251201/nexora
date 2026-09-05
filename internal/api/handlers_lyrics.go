@@ -304,7 +304,7 @@ func (s *Server) handleSaveAudioLyrics(w http.ResponseWriter, r *http.Request) {
 		Raw    string `json:"raw"`
 		Format string `json:"format"`
 	}
-	if err := decodeJSON(r, &req); err != nil {
+	if err := decodeJSONLimit(r, &req, 2<<20); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_body", err.Error(), middleware.GetRequestID(r.Context()))
 		return
 	}

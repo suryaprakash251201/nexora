@@ -53,6 +53,19 @@ export function isInternalMoveDrag(e: { dataTransfer: DataTransfer | null; types
 }
 
 /**
+ * dragover/drop-safe variant of isInternalMoveDrag. Some engines (notably
+ * older WebKitGTK on Linux desktop) hide custom dataTransfer types until
+ * drop, so a types-only check would never preventDefault and the drop
+ * would never fire there. The module store is set on dragstart for every
+ * internal move drag, making it an exact fallback: an OS-file drag never
+ * activates it, so upload-vs-move discrimination is preserved.
+ */
+export function isInternalMoveDragEvent(e: { dataTransfer: DataTransfer | null }): boolean {
+  if (isInternalMoveDrag(e)) return true;
+  return useDragMove.getState().active;
+}
+
+/**
  * Start a move drag from a source item/selection: publishes the payload to
  * the store, stamps the dataTransfer, and installs a premium floating
  * preview as the native drag image.

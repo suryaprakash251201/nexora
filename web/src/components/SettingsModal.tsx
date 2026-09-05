@@ -1,6 +1,6 @@
 import { useEffect, useState, type MouseEvent } from "react";
 import { createPortal } from "react-dom";
-import { KeyRound, Smartphone, MonitorSmartphone, Shield, ShieldAlert, Check, AlertCircle, ArrowLeft, ChevronRight, X, Sun, Moon, Power, Music } from "lucide-react";
+import { KeyRound, Smartphone, MonitorSmartphone, Shield, ShieldAlert, Check, AlertCircle, ArrowLeft, ChevronRight, X, Sun, Moon, Power, Music, Disc3, CassetteTape } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useQueryClient } from "@tanstack/react-query";
 import { isTauri as isTauriRuntime } from "../lib/desktop";
@@ -12,6 +12,7 @@ import { Button } from "./ui/Button";
 import { useFocusTrap } from "../lib/useFocusTrap";
 type View = "main" | "password" | "totp" | "sessions" | "tokens";
 import { useAccentTheme, accentThemes } from "../lib/useAccentTheme";
+import { usePlayerStyle } from "../lib/usePlayerStyle";
 import { SessionsBody } from "./SessionsModal";
 import { TokensBody } from "./TokensModal";
 export default function SettingsModal({ user, onClose, initialView = "main" }: { user: User; onClose: () => void; initialView?: View }) {
@@ -19,6 +20,9 @@ export default function SettingsModal({ user, onClose, initialView = "main" }: {
   const { resolvedTheme, setTheme } = useTheme();
   const isDark = resolvedTheme !== "light";
   const [accent, setAccent] = useAccentTheme();
+  // Full-screen audio player style: vinyl disc (default) vs cassette deck.
+  const [playerStyle, setPlayerStyle] = usePlayerStyle();
+  const cassetteOn = playerStyle === "cassette";
   const queryClient = useQueryClient();
   const dialogRef = useFocusTrap(true);
   const isTauri = isTauriRuntime();
@@ -227,6 +231,34 @@ export default function SettingsModal({ user, onClose, initialView = "main" }: {
                         </button>
                       ))}
                     </div>
+                  </div>
+                  {/* Audio Player Style — vinyl disc vs vintage cassette deck */}
+                  <div className="flex items-center justify-between px-4 py-3 rounded-xl bg-surface-muted/30 border border-border/50">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="p-2 rounded-lg bg-accent/10 text-accent shrink-0">
+                        {cassetteOn ? <CassetteTape className="h-5 w-5" /> : <Disc3 className="h-5 w-5" />}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-content">Audio Player Style</p>
+                        <p className="text-xs text-content-muted truncate">
+                          {cassetteOn ? "Cassette tape deck in full-screen player" : "Vinyl disc in full-screen player"}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setPlayerStyle(cassetteOn ? "vinyl" : "cassette")}
+                      role="switch"
+                      aria-checked={cassetteOn}
+                      aria-label="Cassette tape player style"
+                      title={cassetteOn ? "Switch to vinyl disc" : "Switch to cassette tape"}
+                      className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
+                        cassetteOn ? "bg-accent" : "bg-surface-muted border border-border"
+                      }`}
+                    >
+                      <span className={`inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${
+                        cassetteOn ? "translate-x-6" : "translate-x-1"
+                      }`} />
+                    </button>
                   </div>
                 </div>
               </div>

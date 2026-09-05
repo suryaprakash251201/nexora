@@ -7,6 +7,7 @@ import (
 	"github.com/nexora/nexora/internal/middleware"
 	"github.com/nexora/nexora/internal/storage"
 	"github.com/nexora/nexora/internal/util"
+	"io"
 	"net/http"
 	"path"
 	"strings"
@@ -248,7 +249,7 @@ func (s *Server) handleCreateFile(w http.ResponseWriter, r *http.Request) {
 		Path    string `json:"path"`
 		Content string `json:"content"`
 	}
-	if err := decodeJSON(r, &req); err != nil {
+	if err := decodeJSONLimit(r, &req, 10<<20); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_body", err.Error(), middleware.GetRequestID(r.Context()))
 		return
 	}
@@ -281,9 +282,23 @@ func (s *Server) handleCreateFile(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, map[string]any{"ok": true, "path": rel})
 }
 
+// maxJSONBody caps every decodeJSON body at 1 MiB. Without a cap, an
+// unauthenticated caller can post a multi-GB body that the JSON decoder
+// buffers in memory (DoS). Handlers needing larger payloads (file create
+// with inline content) set their own http.MaxBytesReader before calling
+// decodeJSON; this is the last-resort floor, not a raise of those limits.
+const maxJSONBody = 1 << 20
+
 func decodeJSON(r *http.Request, v any) error {
+	return decodeJSONLimit(r, v, maxJSONBody)
+}
+
+// decodeJSONLimit is decodeJSON with an explicit cap for handlers that
+// legitimately accept larger payloads (inline file content). The limit must
+// never exceed the handler's own http.MaxBytesReader bound.
+func decodeJSONLimit(r *http.Request, v any, limit int64) error {
 	defer r.Body.Close()
-	return json.NewDecoder(r.Body).Decode(v)
+	return json.NewDecoder(io.LimitReader(r.Body, limit+1)).Decode(v)
 }
 
 func boolToInt(b bool) int {

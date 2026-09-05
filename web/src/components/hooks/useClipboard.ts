@@ -54,6 +54,11 @@ export function useClipboard({
     const failures: string[] = [];
     for (const p of paths) {
       if (p === destPath || destPath.startsWith(p + '/')) continue; // skip self/descendant
+      // Dropping back into the item's own folder resolves to the identical
+      // path — skip quietly instead of surfacing a server "already
+      // exists" error for a no-op (e.g. drop onto the current breadcrumb).
+      const base = p.split('/').pop() ?? p;
+      if ((destPath ? destPath + '/' : '') + base === p) continue;
       try {
         await post(`/files/${mode}`, {
           root: rootId,

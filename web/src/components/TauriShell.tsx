@@ -50,7 +50,9 @@ async function ensurePlugins() {
         try {
           // Media keys — these register globally so the app can respond
           // even when not focused (the actual behavior depends on the OS).
-          const shortcuts = ["MediaPlay", "MediaPause", "MediaStop"];
+          // Play/Pause/Stop are handled by both players; Next/PreviousTrack
+          // advance the audio queue (AudioPlayer listens for them).
+          const shortcuts = ["MediaPlay", "MediaPause", "MediaStop", "MediaNextTrack", "MediaPreviousTrack"];
           for (const s of shortcuts) {
             await register(s, () => {
               // Dispatch a custom event that the MediaPlayer component listens to

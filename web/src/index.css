@@ -777,6 +777,553 @@ body {
 }
 
 /* ============================================================
+   Cassette player — vintage cassette deck hero (alternative to
+   the vinyl disc, selected via Settings → Audio Player style).
+   The cassette body/label live in CassettePlayer.tsx as markup;
+   this section owns the keyframes, machine bay and reel motion.
+   ============================================================ */
+
+@keyframes n-cassette-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Load sequence: rises from below the deck, clicks into place with
+   a small overshoot/settle (physical, never bouncy). ~950ms. */
+@keyframes n-cassette-load {
+  0%   { opacity: 0; transform: translateY(84px) scale(0.92); }
+  14%  { opacity: 1; }
+  58%  { transform: translateY(7px) scale(0.99); }
+  74%  { transform: translateY(-3px) scale(1.002); }
+  87%  { transform: translateY(2px) scale(0.998); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Eject: a small mechanical hop, then the cassette withdraws downward. */
+@keyframes n-cassette-eject {
+  0%   { opacity: 1; transform: translateY(0) scale(1); }
+  28%  { transform: translateY(8px) scale(0.985); }
+  100% { opacity: 0; transform: translateY(96px) scale(0.9); }
+}
+
+/* Track change: a tiny settle nudge, like the deck re-clamping the tape. */
+@keyframes n-cassette-nudge {
+  0%, 100% { transform: translateY(0); }
+  35% { transform: translateY(3px); }
+  70% { transform: translateY(-1px); }
+}
+
+/* Playing vibration: sub-pixel shudder of the shell while the reels turn. */
+@keyframes n-cassette-vibe {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  25% { transform: translate3d(0.4px, 0.2px, 0); }
+  50% { transform: translate3d(-0.3px, 0.4px, 0); }
+  75% { transform: translate3d(0.3px, -0.2px, 0); }
+}
+
+/* Dark cassette bay behind the tape — depth comes from inset shadows,
+   not gradients-heavy glass. Sits slightly wider than the cassette. */
+.cassette-deck {
+  position: absolute;
+  inset: -7% -4.5% -9%;
+  border-radius: 4.5% / 8%;
+  background: linear-gradient(180deg, #111113 0%, #060607 60%, #0a0a0c 100%);
+  box-shadow:
+    inset 0 2px 3px rgba(255, 255, 255, 0.05),
+    inset 0 -2px 8px rgba(0, 0, 0, 0.9),
+    inset 0 0 42px rgba(0, 0, 0, 0.75),
+    0 34px 80px rgba(0, 0, 0, 0.65);
+  pointer-events: none;
+}
+
+/* The slot lip across the top of the bay — the line the cassette
+   visually disappears behind while loading. */
+.cassette-deck::before {
+  content: "";
+  position: absolute;
+  inset-inline: 4%;
+  top: 13%;
+  height: 1.5%;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.85);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.045),
+    0 -1px 2px rgba(0, 0, 0, 0.8);
+}
+
+.cassette-rig {
+  position: relative;
+  transform: translateY(0) scale(1);
+  will-change: transform, opacity;
+}
+
+.cassette-rig.is-loading {
+  animation: n-cassette-load 950ms cubic-bezier(0.22, 0.9, 0.32, 1.02) both;
+}
+
+.cassette-rig.is-ejecting {
+  animation: n-cassette-eject 620ms cubic-bezier(0.55, 0.05, 0.7, 0.4) both;
+}
+
+.cassette-rig.is-swapping {
+  animation: n-cassette-nudge 420ms ease-in-out;
+}
+
+/* Black textured plastic shell */
+.cassette-body {
+  position: relative;
+  aspect-ratio: 100 / 63;
+  border-radius: 7% / 11%;
+  background:
+    /* fine plastic grain */
+    repeating-linear-gradient(115deg,
+      rgba(255, 255, 255, 0.014) 0px, rgba(255, 255, 255, 0.014) 1px,
+      transparent 1px, transparent 3px),
+    linear-gradient(165deg, #2b2b2e 0%, #1a1a1d 42%, #101012 78%, #161618 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.09),
+    inset 0 -2px 5px rgba(0, 0, 0, 0.7),
+    inset 2px 0 4px rgba(0, 0, 0, 0.45),
+    inset -2px 0 4px rgba(0, 0, 0, 0.45),
+    0 18px 46px rgba(0, 0, 0, 0.55);
+}
+
+.cassette-shell:focus-visible .cassette-body {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.09),
+    inset 0 -2px 5px rgba(0, 0, 0, 0.7),
+    0 18px 46px rgba(0, 0, 0, 0.55),
+    0 0 0 2px var(--color-accent);
+}
+
+.cassette-shell[data-playing="true"] .cassette-body {
+  animation: n-cassette-vibe 0.22s linear infinite;
+}
+
+.cassette-screw {
+  position: absolute;
+  width: 3.2%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #3d3d41, #0c0c0d 70%);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.8), 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+.cassette-screw::after {
+  content: "";
+  position: absolute;
+  inset: 30% 18%;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.7);
+  transform: rotate(28deg);
+}
+
+/* Cream label — vintage-styled printed sticker that wraps the cover
+   photo + metadata. Vertical allocation (top→bottom):
+     - red header band (brand + side indicator)
+     - cover photo (the wide hero, ~62% of label height)
+     - printed metadata strip (title + artist, red rule above)
+   The window below the label is reserved for tape + reels. */
+.cassette-label {
+  position: absolute;
+  inset: 11% 5% 35%;
+  border-radius: 2.5% / 4.5%;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.18), transparent 32%),
+    linear-gradient(180deg, #ece4cf 0%, #e2d8bd 78%, #d6c9a9 100%);
+  box-shadow:
+    inset 0 1px 2px rgba(0, 0, 0, 0.28),
+    inset 0 -1px 2px rgba(0, 0, 0, 0.18),
+    0 1px 0 rgba(255, 255, 255, 0.04);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Faint paper grain — sits behind everything else in the label. */
+.cassette-label-grain {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(7deg,
+      rgba(120, 90, 60, 0.025) 0 1px,
+      transparent 1px 3px),
+    repeating-linear-gradient(110deg,
+      rgba(255, 255, 255, 0.04) 0 1px,
+      transparent 1px 4px);
+  mix-blend-mode: multiply;
+  opacity: 0.7;
+}
+
+/* Red header band — brand left, side right. No more separate stripe
+   element; the gradient IS the header now. */
+.cassette-label-header {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 4.5%;
+  height: 9.5%;
+  min-height: 14px;
+  background: linear-gradient(180deg, #b8402f 0%, #a23325 100%);
+  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.25);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-weight: 700;
+  font-size: clamp(6px, 1.4vw, 9px);
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+  color: rgba(255, 245, 230, 0.95);
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
+  z-index: 1;
+}
+
+.cassette-label-brand,
+.cassette-label-side {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Centered cover photo — the visual hero. Now a WIDE rectangle that
+   spans the full label width, so the photo is the dominant element
+   instead of feeling like a tiny sticker in a sea of cream. */
+.cassette-photo-frame {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3% 4.5% 2%;
+  min-height: 0;
+  position: relative;
+  z-index: 1;
+}
+
+.cassette-photo {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 3px;
+  overflow: hidden;
+  background: #2b1f17;
+  /* Drop shadow + thin printed-sticker frame around the photo */
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.55),
+    0 0 0 2px rgba(255, 252, 240, 0.45),
+    0 2px 6px rgba(0, 0, 0, 0.45),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  transition: opacity 320ms ease-out, transform 320ms ease-out;
+}
+
+/* Track-change swap: photo slides in from the right while fading in,
+   so the eye tracks the new cover across the label. */
+.cassette-photo.is-swapping {
+  opacity: 0;
+  transform: translateX(8px) scale(0.985);
+}
+
+.cassette-photo-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  display: block;
+  /* Ken-Burns drift while playing — wider amplitude than before because
+     the photo is the main visual element now. */
+  animation: n-cassette-photo-drift 22s ease-in-out infinite alternate;
+  animation-play-state: paused;
+  will-change: transform;
+}
+
+.cassette-scene[data-playing="true"] .cassette-photo-img {
+  animation-play-state: running;
+}
+
+/* Inner paper border on top of the photo — drawn on a separate layer so
+   the photo can zoom without dragging the border with it. */
+.cassette-photo-frame-inner {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.35),
+    inset 0 0 8px rgba(0, 0, 0, 0.18);
+}
+
+.cassette-photo-vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.14) 0%, transparent 16%, transparent 84%, rgba(0, 0, 0, 0.18) 100%),
+    radial-gradient(140% 100% at 50% 50%, transparent 60%, rgba(0, 0, 0, 0.16) 100%);
+}
+
+.cassette-photo-placeholder {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: clamp(8px, 1.8vw, 11px);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  background:
+    repeating-linear-gradient(45deg,
+      rgba(255, 255, 255, 0.04) 0 6px,
+      transparent 6px 12px),
+    linear-gradient(135deg, #2b1f17, #1a120c);
+}
+
+/* Printed metadata strip — title (left) + artist (right) with a thin
+   red rule above. Two-column typewriter feel that reads as real label
+   text rather than a centered caption. */
+.cassette-caption {
+  position: relative;
+  padding: 1.5% 5.5% 3%;
+  flex: 0 0 auto;
+  transition: opacity 320ms ease-out, transform 320ms ease-out;
+  z-index: 1;
+}
+
+.cassette-caption.is-swapping {
+  opacity: 0;
+  transform: translateY(2px);
+}
+
+.cassette-caption-rule {
+  height: 1.5px;
+  background: linear-gradient(90deg, #b8402f, #c9553f 55%, #a23325);
+  margin-bottom: 4px;
+  opacity: 0.85;
+}
+
+.cassette-caption-row {
+  display: flex;
+  align-items: baseline;
+  gap: 4%;
+  min-width: 0;
+}
+
+.cassette-caption-title {
+  flex: 1 1 60%;
+  min-width: 0;
+  font-weight: 600;
+  color: #2b2320;
+  font-size: clamp(10px, 2.3vw, 14px);
+  line-height: 1.15;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cassette-caption-artist {
+  flex: 0 1 40%;
+  min-width: 0;
+  text-align: right;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: clamp(7px, 1.5vw, 9px);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: #6d5a4d;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@keyframes n-cassette-photo-drift {
+  from { transform: scale(1.04) translate(-1.5%, -0.8%); }
+  to   { transform: scale(1.10) translate(1.5%, 0.8%); }
+}
+
+/* Recessed tape window — sits in the bottom band of the shell, between
+   the label and the bottom edge. Holds the magnetic tape strip + reels. */
+.cassette-window {
+  position: absolute;
+  inset: 71% 17% 11%;
+  border-radius: 4% / 12%;
+  background: linear-gradient(180deg, #050506 0%, #0c0c0e 55%, #060607 100%);
+  box-shadow:
+    inset 0 3px 8px rgba(0, 0, 0, 0.95),
+    inset 0 -1px 2px rgba(255, 255, 255, 0.05),
+    0 1px 0 rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+}
+
+/* The brown magnetic tape strip — runs from left reel to right reel behind
+   the tape packs. The sheen is a separate element that travels along it. */
+.cassette-tape-strip {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 18%;
+  transform: translateY(-50%);
+  background:
+    /* faint horizontal striations, like coiled ferric oxide */
+    repeating-linear-gradient(90deg,
+      rgba(0, 0, 0, 0.18) 0 1px,
+      transparent 1px 4px),
+    linear-gradient(180deg, #2d1f12 0%, #3a2a1a 50%, #25180d 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+}
+
+@keyframes n-cassette-tape-flow {
+  from { transform: translate3d(-45%, 0, 0); }
+  to   { transform: translate3d(45%, 0, 0); }
+}
+
+/* The moving highlight that travels along the strip while playing. The
+   gradient is wider than the strip so the loop hides cleanly. */
+.cassette-tape-sheen {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(255, 230, 180, 0.0) 20%,
+    rgba(255, 235, 200, 0.32) 50%,
+    rgba(255, 230, 180, 0.0) 80%,
+    transparent 100%);
+  filter: blur(0.4px);
+  opacity: 0;
+  animation: n-cassette-tape-flow 1.2s linear infinite;
+  animation-play-state: paused;
+  will-change: transform;
+}
+
+.cassette-scene[data-playing="true"] .cassette-tape-sheen {
+  opacity: 0.85;
+  animation-play-state: running;
+}
+
+/* Tape pack — a brown circle whose scale is driven by playback progress
+   (CSS var --tape-s). Only `transform` changes, so this stays GPU-cheap.
+   Sits on top of the strip so the strip appears to disappear into the spool. */
+.cassette-tape {
+  position: absolute;
+  top: 50%;
+  height: 92%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  transform: translate(-50%, -50%) scale(var(--tape-s, 1));
+  background:
+    radial-gradient(circle at 50% 50%, #3a2a1c 0%, #2c2013 62%, #1f1509 100%);
+  box-shadow:
+    inset 0 0 0 2px rgba(0, 0, 0, 0.45),
+    inset 0 2px 6px rgba(0, 0, 0, 0.6),
+    0 0 4px rgba(0, 0, 0, 0.7);
+  transition: transform 0.6s linear;
+}
+
+.cassette-reel {
+  position: absolute;
+  top: 50%;
+  height: 60%;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.6));
+}
+
+.cassette-reel-svg {
+  width: 100%;
+  height: 100%;
+  animation: n-cassette-spin 1.5s linear infinite;
+  animation-play-state: paused;
+}
+
+.cassette-reel-right .cassette-reel-svg {
+  animation-duration: 1.85s;
+}
+
+.cassette-scene[data-playing="true"] .cassette-reel-svg {
+  animation-play-state: running;
+}
+
+/* Head assembly — the rectangular block in the middle of the window that
+   would press on the tape in a real deck. Sits between the reels. */
+.cassette-head {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 18%;
+  height: 46%;
+  transform: translate(-50%, -50%);
+  background: linear-gradient(180deg, #1c1c1f 0%, #0b0b0d 60%, #15151a 100%);
+  border-radius: 2px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+.cassette-head::before {
+  content: "";
+  position: absolute;
+  inset: 30% 18% 30% 18%;
+  background: linear-gradient(180deg, #2a2a2e, #0e0e10);
+  border-radius: 1px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+/* Capstan / pinch roller posts — the two cylinders between the reels and
+   the head. Just a touch of detail to sell the "mechanism" look. */
+.cassette-post {
+  position: absolute;
+  top: 50%;
+  width: 3%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(circle at 35% 30%, #4a4a4e, #0a0a0c 70%);
+  box-shadow: 0 0 2px rgba(0, 0, 0, 0.85), inset 0 1px 1px rgba(255, 255, 255, 0.08);
+}
+
+/* Static glass sheen across the window (does not rotate) */
+.cassette-window-sheen {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(112deg, transparent 30%, rgba(255, 255, 255, 0.055) 42%, transparent 55%);
+  pointer-events: none;
+}
+
+/* Reduced motion: kill the load/eject travel, vibration, reel spin,
+   tape-strip sheen and the photo Ken-Burns drift; the state change
+   (playing/paused, label swap) still happens via the functional
+   transitions that remain. */
+@media (prefers-reduced-motion: reduce) {
+  .cassette-rig.is-loading,
+  .cassette-rig.is-ejecting {
+    animation: n-cassette-fade 0.25s ease both;
+  }
+  .cassette-rig.is-swapping {
+    animation: none;
+  }
+  .cassette-shell[data-playing="true"] .cassette-body {
+    animation: none;
+  }
+  .cassette-reel-svg,
+  .cassette-tape-sheen,
+  .cassette-photo-img {
+    animation: none !important;
+  }
+  .cassette-tape-sheen {
+    opacity: 0.6;
+  }
+  .cassette-tape {
+    transition: none;
+  }
+}
+
+@keyframes n-cassette-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* ============================================================
    Utility Classes
    ============================================================ */
 
