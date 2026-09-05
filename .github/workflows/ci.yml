@@ -14,6 +14,27 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  lint:
+    name: Lint (golangci-lint)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: '1.26.6'
+          cache: true
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v8
+        with:
+          # Versioned install avoids stale local binaries that can't read
+          # Go 1.2x export data. Config: .golangci.yml (gofmt, goimports,
+          # govet, errcheck, staticcheck, unused, ineffassign, typecheck).
+          version: latest
+
   backend:
     name: Backend (vet + test + build)
     runs-on: ubuntu-latest

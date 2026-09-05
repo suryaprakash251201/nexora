@@ -29,6 +29,6 @@ Self-hosted file workspace. Go API + SQLite with embedded migrations, plus four 
 - All config is `NEXORA_*` env vars in `.env` (see `.env.example`). If `NEXORA_SESSION_SECRET` is empty, a random secret is generated and persisted. `Config.Validate()` now enforces `NEXORA_DATABASE_URL` for postgres, `NEXORA_SESSION_SECRET` length, and `NEXORA_CORS_ORIGINS` format.
 - Docker: `Dockerfile` builds the image as `nexora:nexora` (`100:101` via `addgroup -S -g 101` / `adduser -S -u 100`); container runs as that user with read-only root fs and tmpfs `/tmp`; `nexora-init` one-shot chowns the bind mounts to `100:101`. Data lives in the `nexora-data` volume (`/app/data`: DB, thumbnail cache, archive workspace). The web stage uses `npm ci` for reproducibility.
 - Current version is tracked in the repo-root `VERSION` file (`1.8.0`) — `web` and `desktop` are synced to it; `mobile` has an independent app-store version. See `CHANGELOG.md`.
-- `internal/webdav` is currently **unwired** (dead code, not mounted in `server.go`) — don't extend it until it's decided whether to expose WebDAV.
+- `internal/webdav` was removed (was unwired dead code). If WebDAV is wanted later, re-introduce it via a `server.go` mount.
 - Repo-root `nexora` / `nexora_test` binaries, `web/dist/`, `data/`, `node_modules/` are gitignored build artifacts — don't commit them.
 - UI design tokens and conventions: `docs/design-system.md` (which now documents the real `web/src/index.css` tokens; that file is the source of truth). Endpoint docs: `internal/api/server.go`.
