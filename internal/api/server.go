@@ -237,6 +237,7 @@ func (s *Server) Routes() http.Handler {
 
 	// Lossless audio metadata and server capabilities.
 	authed.Get("/audio/info", s.handleAudioInfo)
+	authed.Post("/audio/info/batch", s.handleAudioInfoBatch)
 	authed.Get("/audio/formats", s.handleAudioFormats)
 	authed.Get("/audio/lyrics", s.handleAudioLyrics)
 	authed.Post("/audio/lyrics", s.handleSaveAudioLyrics)

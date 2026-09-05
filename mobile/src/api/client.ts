@@ -246,6 +246,19 @@ export class Api {
     return this.get("/audio/lyrics", { root: rootId, path });
   }
 
+  /** Enriched song metadata (codec + normalized artist/container extraction). */
+  getAudioInfo(rootId: string, path: string): Promise<any> {
+    return this.get("/audio/info", { root: rootId, path });
+  }
+
+  /** Batch song-container metadata for a queue/playlist (≤50 items). */
+  getAudioInfoBatch(items: Array<{ root: string; path: string }>): Promise<{
+    items: Array<{ root: string; path: string; ok: boolean; info?: any; error?: string }>;
+    count: number;
+  }> {
+    return this.request("/audio/info/batch", { method: "POST", body: { items } });
+  }
+
   async request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
     const method = opts.method || "GET";
     const headers: Record<string, string> = { ...opts.headers };

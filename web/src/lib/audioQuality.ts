@@ -4,7 +4,10 @@ import { audioApi } from "../api/endpoints";
 
 export type AudioTier = "lossless-hi-res" | "lossless" | "lossy-high" | "lossy" | "unknown";
 
-/** Rich metadata returned by GET /audio/info (ffprobe-backed). */
+/** Rich metadata returned by GET /audio/info (ffprobe-backed).
+ * Normalized music fields (title/artist/album/…) are extracted server-side
+ * from the song container tags — the player song container should render
+ * these instead of reading raw tags (whose keys vary by container). */
 export interface AudioInfo {
   codec: string;
   codec_long: string;
@@ -17,6 +20,29 @@ export interface AudioInfo {
   format: string;
   tags: Record<string, string>;
   lossless: boolean;
+  // ── Normalized song container / artist extraction (server-provided) ──
+  container: string;
+  extension: string;
+  title: string;
+  artist: string;
+  artists: string[];
+  album: string;
+  album_artist: string;
+  genre: string;
+  genres: string[];
+  year: number;
+  date: string;
+  track_no: number;
+  track_total: number;
+  disc_no: number;
+  disc_total: number;
+  composer: string;
+  performer: string;
+  publisher: string;
+  bpm: number;
+  musical_key: string;
+  comment: string;
+  has_cover: boolean;
 }
 
 export interface AudioQualityInfo {
@@ -211,6 +237,54 @@ export async function fetchAudioInfo(rootId: string, path: string): Promise<Audi
   } catch {
     return null;
   }
+}
+
+/** Batch-fetch enriched metadata for a song container (queue/playlist) in one
+ * round-trip. Results populate the same per-file cache as fetchAudioInfo. */
+export async function fetchAudioInfoBatch(
+  items: Array<{ root_id: string; path: string }>
+): Promise<Map<string, AudioInfo | null>> {
+  const out = new Map<string, AudioInfo | null>();
+  const missing = items.filter((it) => {
+    const hit = infoCache.get(`${it.root_id}|${it.path}`);
+    if (hit) {
+      out.set(`${it.root_id}|${it.path}`, hit);
+      return false;
+    }
+    return true;
+  });
+  if (!missing.length) return out;
+  try {
+    const res = await audioApi.infoBatch(
+      missing.map((m) => ({ root: m.root_id, path: m.path }))
+    );
+    for (const row of res.items || []) {
+      const key = `${row.root}|${row.path}`;
+      if (row.ok && row.info) {
+        infoCache.set(key, row.info as AudioInfo);
+        out.set(key, row.info as AudioInfo);
+      } else {
+        out.set(key, null);
+      }
+    }
+  } catch {
+    for (const m of missing) out.set(`${m.root_id}|${m.path}`, null);
+  }
+  return out;
+}
+
+/** Player-ready display fields for a track: prefers normalized server
+ * extraction, falls back to filename cleaning when tags are absent. */
+export function getTrackDisplay(
+  item: { name?: string; path?: string },
+  info?: AudioInfo | null
+): { title: string; artist: string; album: string } {
+  const fallbackTitle = (item.name || item.path?.split("/").pop() || "Unknown track").replace(/\.[^.]+$/, "");
+  return {
+    title: info?.title || fallbackTitle,
+    artist: info?.artist || "",
+    album: info?.album || "",
+  };
 }
 
 export function clearAudioInfoCache(): void {

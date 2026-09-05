@@ -56,10 +56,12 @@ export default function AudioInfoPanel({ item, compact = false, onDark = false }
   }
 
   const tags = info?.tags || {};
-  const title = tags.title || tags.TITLE;
-  const artist = tags.artist || tags.ARTIST;
-  const album = tags.album || tags.ALBUM;
-  const year = tags.year || tags.date || tags.DATE;
+  // Prefer normalized server extraction (container-aware, case-insensitive);
+  // fall back to raw tags for older servers that lack the new fields.
+  const title = info?.title || tags.title || tags.TITLE;
+  const artist = info?.artist || (info?.artists?.[0] ?? "") || tags.artist || tags.ARTIST;
+  const album = info?.album || tags.album || tags.ALBUM;
+  const year = info?.year || tags.year || tags.date || tags.DATE;
 
   return (
     <div className="w-full max-w-sm rounded-2xl glass-strong border border-white/10 p-3 sm:p-4 text-left space-y-3 animate-scale-in">

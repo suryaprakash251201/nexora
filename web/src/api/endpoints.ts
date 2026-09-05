@@ -356,9 +356,15 @@ export const photosApi = {
 
 // Audio diagnostics (used by lib/audioQuality)
 export const audioApi = {
-  /** GET /audio/info?root=&path= */
+  /** GET /audio/info?root=&path= — enriched song metadata + artist extraction */
   info: (root: string, path: string) => get<any>("/audio/info", { root, path }),
-  /** GET /audio/formats */
+  /** POST /audio/info/batch { items: [{ root, path }] } — song-container batch */
+  infoBatch: (items: Array<{ root: string; path: string }>) =>
+    post<{ items: Array<{ root: string; path: string; ok: boolean; info?: any; error?: string }>; count: number }>(
+      "/audio/info/batch",
+      { items }
+    ),
+  /** GET /audio/formats — containers + transcode targets */
   formats: () => get<any>("/audio/formats"),
 };
 

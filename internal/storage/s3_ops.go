@@ -546,8 +546,22 @@ func detectMime(name string) string {
 		return "audio/flac"
 	case ".wav":
 		return "audio/wav"
-	case ".ogg", ".opus":
+	case ".ogg", ".oga", ".opus":
 		return "audio/ogg"
+	case ".m4a", ".m4b", ".aac":
+		return "audio/mp4"
+	case ".aif", ".aiff":
+		return "audio/aiff"
+	case ".wma":
+		return "audio/x-ms-wma"
+	case ".ape":
+		return "audio/x-ape"
+	case ".wv":
+		return "audio/x-wavpack"
+	case ".tta":
+		return "audio/x-tta"
+	case ".mka":
+		return "audio/x-matroska"
 	case ".pdf":
 		return "application/pdf"
 	case ".zip":

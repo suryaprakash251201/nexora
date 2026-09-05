@@ -445,18 +445,32 @@ func detectMimeByExt(name string) string {
 		return "audio/wav"
 	case "flac":
 		return "audio/flac"
-	case "m4a":
+	case "m4a", "m4b":
 		return "audio/mp4"
 	case "aac":
 		return "audio/aac"
 	case "opus":
 		return "audio/opus"
+	case "oga":
+		return "audio/ogg"
 	case "wma":
 		return "audio/x-ms-wma"
-	case "aiff":
+	case "aiff", "aif":
 		return "audio/aiff"
 	case "alac":
 		return "audio/alac"
+	case "ape":
+		return "audio/x-ape"
+	case "wv":
+		return "audio/x-wavpack"
+	case "tta":
+		return "audio/x-tta"
+	case "mka":
+		return "audio/x-matroska"
+	case "dsf":
+		return "audio/x-dsf"
+	case "dff":
+		return "audio/x-dff"
 	case "pdf":
 		return "application/pdf"
 	case "md", "markdown":

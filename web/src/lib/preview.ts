@@ -22,7 +22,7 @@ export const isAudio = coreIsAudio;
 export const cleanTrackTitle = coreCleanTrackTitle;
 
 // codeLanguage returns a coarse language label for display purposes.
-export { getAudioQuality, fetchAudioInfo, clearAudioInfoCache, isLosslessExtension, browserSupportsAlac } from "./audioQuality";
+export { getAudioQuality, fetchAudioInfo, fetchAudioInfoBatch, getTrackDisplay, clearAudioInfoCache, isLosslessExtension, browserSupportsAlac } from "./audioQuality";
 export type { AudioQualityInfo, AudioInfo, AudioTier } from "./audioQuality";
 
 export function codeLanguage(ext: string): string {

@@ -10,7 +10,7 @@ const EDITABLE_NAMES = new Set(["dockerfile", "docker-compose.yml", "docker-comp
 
 const IMAGE_EXT = new Set(["jpg", "jpeg", "png", "gif", "webp", "svg", "bmp", "avif", "heic", "heif"]);
 const VIDEO_EXT = new Set(["mp4", "webm", "mkv", "mov", "avi", "m4v", "3gp", "flv", "wmv"]);
-const AUDIO_EXT = new Set(["mp3", "flac", "wav", "ogg", "m4a", "aac", "opus", "wma", "alac", "m4b", "oga"]);
+const AUDIO_EXT = new Set(["mp3", "flac", "wav", "ogg", "oga", "m4a", "m4b", "aac", "opus", "wma", "alac", "aiff", "aif", "ape", "wv", "tta", "mka", "dsf", "dff"]);
 const CODE_EXT = new Set([
   "ts", "tsx", "js", "jsx", "mjs", "cjs", "py", "go", "rs", "rb", "php", "java", "kt", "swift",
   "c", "h", "cpp", "hpp", "cs", "sh", "bash", "sql", "html", "css", "scss", "vue", "svelte",

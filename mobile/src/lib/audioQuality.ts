@@ -37,6 +37,9 @@ export type AudioCodec =
   | "OPUS"
   | "WMA"
   | "M4A"
+  | "APE"
+  | "WV"
+  | "TTA"
   | "UNKNOWN";
 
 export type QualityTier =
@@ -158,6 +161,7 @@ const EXT_TO_CODEC: Record<string, AudioCodec> = {
   ".mp3": "MP3",
   ".aac": "AAC",
   ".m4a": "M4A",
+  ".m4b": "M4A",
   ".alac": "ALAC",
   ".flac": "FLAC",
   ".wav": "WAV",
@@ -170,6 +174,10 @@ const EXT_TO_CODEC: Record<string, AudioCodec> = {
   ".oga": "OGG",
   ".opus": "OPUS",
   ".wma": "WMA",
+  ".ape": "APE",
+  ".wv": "WV",
+  ".tta": "TTA",
+  ".mka": "M4A",
 };
 
 const MIME_TO_CODEC: Record<string, AudioCodec> = {
@@ -189,9 +197,15 @@ const MIME_TO_CODEC: Record<string, AudioCodec> = {
   "audio/x-aiff": "AIFF",
   "audio/dsd": "DSD",
   "audio/x-dsd": "DSD",
+  "audio/x-dsf": "DSD",
+  "audio/x-dff": "DSD",
   "audio/ogg": "OGG",
   "audio/opus": "OPUS",
   "audio/x-ms-wma": "WMA",
+  "audio/x-ape": "APE",
+  "audio/x-wavpack": "WV",
+  "audio/x-tta": "TTA",
+  "audio/x-matroska": "M4A",
 };
 
 // ─── Heuristics ──────────────────────────────────────────────────────
@@ -242,7 +256,7 @@ export function detectAudioQuality(
 
   // 3) Codec-specific builders
   if (codec === "DSD") return mkDsd(ext, overrides);
-  if (["FLAC", "ALAC", "WAV", "AIFF"].includes(codec))
+  if (["FLAC", "ALAC", "WAV", "AIFF", "APE", "WV", "TTA"].includes(codec))
     return mkLossless(codec, ext, fileSizeBytes, durationSec, overrides);
   if (codec === "M4A") {
     const big = fileSizeBytes && fileSizeBytes > 30 * 1024 * 1024;
@@ -536,4 +550,59 @@ export function formatChannels(ch: number | null): string {
   if (ch === 6) return "5.1";
   if (ch === 8) return "7.1";
   return `${ch}ch`;
+}
+
+// ─── Enriched server metadata (/audio/info) ──────────────────────────────
+
+/** Enriched track metadata returned by GET /audio/info.
+ * Normalized music fields (title/artist/album/…) are extracted server-side
+ * from the song container tags — render these instead of raw tags. */
+export interface AudioInfo {
+  codec: string;
+  codec_long: string;
+  sample_rate: number;
+  bit_depth: number;
+  channels: number;
+  channel_layout: string;
+  bit_rate: number;
+  duration: number;
+  format: string;
+  tags: Record<string, string>;
+  lossless: boolean;
+  container: string;
+  extension: string;
+  title: string;
+  artist: string;
+  artists: string[];
+  album: string;
+  album_artist: string;
+  genre: string;
+  genres: string[];
+  year: number;
+  date: string;
+  track_no: number;
+  track_total: number;
+  disc_no: number;
+  disc_total: number;
+  composer: string;
+  performer: string;
+  publisher: string;
+  bpm: number;
+  musical_key: string;
+  comment: string;
+  has_cover: boolean;
+}
+
+/** Player-ready display fields: prefers normalized server extraction,
+ * falls back to the filename when tags are absent. */
+export function getTrackDisplay(
+  item: { name?: string; path?: string },
+  info?: AudioInfo | null
+): { title: string; artist: string; album: string } {
+  const fallbackTitle = (item.name || item.path?.split("/").pop() || "Unknown track").replace(/\.[^.]+$/, "");
+  return {
+    title: info?.title || fallbackTitle,
+    artist: info?.artist || "",
+    album: info?.album || "",
+  };
 }
