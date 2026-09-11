@@ -44,13 +44,14 @@
     "zustand": "^5.0.15"
   },
   "devDependencies": {
+    "@babel/parser": "^7.29.8",
     "@playwright/test": "^1.62.1",
     "@tailwindcss/vite": "^4.0.0",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
     "@vitejs/plugin-react": "^6.0.5",
     "shadcn": "^4.19.1",
-    "typescript": "~5.9.2",
+    "typescript": "~7.0.2",
     "vite": "^8.2.2",
     "vitest": "^4.1.11"
   },
