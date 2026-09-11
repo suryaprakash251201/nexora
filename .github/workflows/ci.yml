@@ -169,7 +169,10 @@ jobs:
           node-version: 22
 
       - name: Install TypeScript
-        run: npm install --no-save typescript@~5.9.2
+        # --legacy-peer-deps works around an npm arborist crash
+        # ("Cannot read properties of null (reading 'edgesOut')") when it builds
+        # vitest 4's peer graph without a lockfile. This job only needs tsc.
+        run: npm install --no-save --legacy-peer-deps typescript@~5.9.2
 
       - name: Type check
         run: npx tsc --noEmit
