@@ -81,13 +81,6 @@ func (m *transcodeManager) cleanupStale(maxAge time.Duration) {
 	}
 }
 
-// countActive returns the number of running transcode sessions.
-func (m *transcodeManager) countActive() int {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return len(m.sessions)
-}
-
 var cleanupOnce sync.Once
 
 // startCleanup launches a background goroutine that periodically evicts

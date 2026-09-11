@@ -336,7 +336,7 @@ func (c *countAfterFirstByte) Write(p []byte) (int, error) {
 // resources. A symlink loop would also recurse forever on some
 // providers. The caps turn both into clean 413 responses.
 const (
-	maxShareFolderEntries = 50_000        // files in a single ZIP stream
+	maxShareFolderEntries = 50_000          // files in a single ZIP stream
 	maxShareFolderBytes   = int64(50 << 30) // 50 GB uncompressed total
 )
 

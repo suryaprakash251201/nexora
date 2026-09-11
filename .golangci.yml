@@ -1,12 +1,37 @@
+version: "2"
+
+# golangci-lint v2 config (the CI action installs `latest`, currently v2.x,
+# which rejects the old v1 schema outright). The exclusions below are the
+# v1-default presets, preserved by `golangci-lint migrate`.
 run:
-  timeout: 3m
+  timeout: 10m
+
 linters:
   enable:
-    - gofmt
-    - goimports
     - govet
     - errcheck
     - staticcheck
     - unused
     - ineffassign
-    - typecheck
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

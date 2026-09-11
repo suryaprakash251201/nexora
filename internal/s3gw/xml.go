@@ -142,7 +142,6 @@ const (
 // exhaust the disk via repeated large parts.
 const MaxS3PartSize = 5 << 30 // 5 GiB
 
-
 // ETagFor builds a stable opaque object tag from the file info we have
 // (size + mtime). Nexora does not store content hashes, so the tag is
 // deterministic per file state — enough for change detection when combined

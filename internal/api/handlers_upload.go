@@ -2,15 +2,16 @@ package api
 
 import (
 	"fmt"
-	"github.com/nexora/nexora/internal/events"
-	"github.com/nexora/nexora/internal/middleware"
-	"github.com/nexora/nexora/internal/storage"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/nexora/nexora/internal/events"
+	"github.com/nexora/nexora/internal/middleware"
+	"github.com/nexora/nexora/internal/storage"
 )
 
 func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {

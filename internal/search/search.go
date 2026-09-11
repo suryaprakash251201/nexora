@@ -8,14 +8,15 @@ import (
 	"context"
 	"errors"
 
-	"github.com/nexora/nexora/internal/database"
-	"github.com/nexora/nexora/internal/extract"
 	"database/sql"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/nexora/nexora/internal/database"
+	"github.com/nexora/nexora/internal/extract"
 
 	"github.com/nexora/nexora/internal/logger"
 	"github.com/nexora/nexora/internal/storage"
@@ -285,8 +286,8 @@ func (s *Service) Rename(rootID, src, dst string) {
 	for {
 		var (
 			id, path, name, ext, mime, modified string
-			size                                 int64
-			isDir                                int
+			size                                int64
+			isDir                               int
 		)
 		query := `SELECT id, path, name, ext, size, is_dir, mime, modified FROM search_index WHERE root_id = ? AND (id = ? OR path LIKE ?)`
 		args := []any{rootID, entryID(rootID, src), escapeLike(src) + "/%"}
@@ -377,8 +378,8 @@ func (s *Service) Rename(rootID, src, dst string) {
 // renameOp carries the data needed to update a single search_index row.
 type renameOp struct {
 	oldID, newID, newPath, name, ext, mime, modified string
-	size                                            int64
-	isDir                                           int
+	size                                             int64
+	isDir                                            int
 }
 
 // renameSingle is the cheap path for a single-file rename outside a
@@ -404,10 +405,6 @@ func (s *Service) renameSingle(rootID, src, dst string) {
 		   is_dir=excluded.is_dir, mime=excluded.mime, modified=excluded.modified`,
 		entryID(rootID, dst), rootID, dst, name, ext, size, isDir, mime, modified)
 	// Sync the extracted-text index (exact file + subtree prefix swap).
-	srcPrefix := src
-	if !strings.HasSuffix(srcPrefix, "/") {
-		srcPrefix += "/"
-	}
 	dstPrefix := dst
 	if !strings.HasSuffix(dstPrefix, "/") {
 		dstPrefix += "/"

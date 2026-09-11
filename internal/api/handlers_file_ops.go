@@ -2,15 +2,16 @@ package api
 
 import (
 	"encoding/json"
+	"io"
+	"net/http"
+	"path"
+	"strings"
+
 	"github.com/nexora/nexora/internal/auth"
 	"github.com/nexora/nexora/internal/events"
 	"github.com/nexora/nexora/internal/middleware"
 	"github.com/nexora/nexora/internal/storage"
 	"github.com/nexora/nexora/internal/util"
-	"io"
-	"net/http"
-	"path"
-	"strings"
 )
 
 func (s *Server) handleRename(w http.ResponseWriter, r *http.Request) {
@@ -70,7 +71,9 @@ func (s *Server) handleRename(w http.ResponseWriter, r *http.Request) {
 	s.indexUpsert(req.Root, acc.provider, dest)
 	// A rename changes the version key (root_id, path): drop history for
 	// the old path so snapshot bytes in the provider don't leak.
-	s.versionsStore().PurgeForPath(req.Root, rel, acc.provider)
+	if _, _, err := s.versionsStore().PurgeForPath(req.Root, rel, acc.provider); err != nil {
+		s.Log.Warn("version purge failed", "root", req.Root, "path", rel, "error", err)
+	}
 	s.audit(r, "rename", rel+" -> "+dest, "")
 	s.emit(events.EventFileRenamed, r, req.Root, dest, 0)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "path": dest})
@@ -118,9 +121,13 @@ func (s *Server) handleMove(w http.ResponseWriter, r *http.Request) {
 	// under the source; purge so snapshot bytes don't leak in the provider.
 	store := s.versionsStore()
 	if info, ierr := acc.provider.Stat(dst); ierr == nil && info.IsDir {
-		store.PurgeForPrefix(req.Root, src, acc.provider)
+		if _, _, err := store.PurgeForPrefix(req.Root, src, acc.provider); err != nil {
+			s.Log.Warn("version purge failed", "root", req.Root, "prefix", src, "error", err)
+		}
 	} else {
-		store.PurgeForPath(req.Root, src, acc.provider)
+		if _, _, err := store.PurgeForPath(req.Root, src, acc.provider); err != nil {
+			s.Log.Warn("version purge failed", "root", req.Root, "path", src, "error", err)
+		}
 	}
 	s.audit(r, "move", src+" -> "+dst, "")
 	s.emit(events.EventFileMoved, r, req.Root, dst, 0)

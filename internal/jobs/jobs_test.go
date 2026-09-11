@@ -19,7 +19,7 @@ import (
 
 // memProvider is an in-memory StorageProvider for tests.
 type memProvider struct {
-	mu  sync.Mutex
+	mu    sync.Mutex
 	files map[string][]byte
 	dirs  map[string]bool
 }
@@ -30,7 +30,8 @@ func newMemProvider() *memProvider {
 
 func (m *memProvider) List(path string) ([]storage.FileInfo, error) { return nil, nil }
 func (m *memProvider) Stat(path string) (storage.FileInfo, error) {
-	m.mu.Lock(); defer m.mu.Unlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	if m.dirs[path] {
 		return storage.FileInfo{Path: path, IsDir: true}, nil
 	}
@@ -40,7 +41,8 @@ func (m *memProvider) Stat(path string) (storage.FileInfo, error) {
 	return storage.FileInfo{}, storage.ErrNotFound
 }
 func (m *memProvider) Read(path string) (io.ReadCloser, error) {
-	m.mu.Lock(); defer m.mu.Unlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	d, ok := m.files[path]
 	if !ok {
 		return nil, storage.ErrNotFound
@@ -52,19 +54,22 @@ func (m *memProvider) Write(path string, r io.Reader, _ int64) error {
 	if err != nil {
 		return err
 	}
-	m.mu.Lock(); defer m.mu.Unlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.files[path] = b
 	return nil
 }
 func (m *memProvider) CreateDirectory(path string) error {
-	m.mu.Lock(); defer m.mu.Unlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.dirs[path] = true
 	return nil
 }
-func (m *memProvider) Move(_, _ string) error        { return nil }
-func (m *memProvider) Copy(_, _ string) error        { return nil }
+func (m *memProvider) Move(_, _ string) error { return nil }
+func (m *memProvider) Copy(_, _ string) error { return nil }
 func (m *memProvider) Delete(path string) error {
-	m.mu.Lock(); defer m.mu.Unlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	delete(m.files, path)
 	delete(m.dirs, path)
 	return nil
@@ -75,13 +80,6 @@ func (m *memProvider) OpenRange(path string, _, _ int64) (io.ReadCloser, int64, 
 }
 func (m *memProvider) Search(_ storage.SearchQuery) ([]storage.FileInfo, error) { return nil, nil }
 func (m *memProvider) GetQuota() (storage.Quota, error)                         { return storage.Quota{}, nil }
-
-// rootedProvider wraps a memProvider but stores the archive file under a
-// known path so doExtract can Read it via the same provider.
-type rootedProvider struct {
-	*memProvider
-	archivePath string
-}
 
 func makeZipBytes(t *testing.T, entries map[string][]byte) []byte {
 	t.Helper()

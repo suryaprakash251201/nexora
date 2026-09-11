@@ -3,9 +3,10 @@ package storage
 import (
 	"database/sql"
 
-	"github.com/nexora/nexora/internal/database"
 	"encoding/json"
 	"sync"
+
+	"github.com/nexora/nexora/internal/database"
 
 	"github.com/nexora/nexora/internal/util"
 )
@@ -35,9 +36,9 @@ type Root struct {
 
 // RootService manages storage roots and resolves providers/user permissions.
 type RootService struct {
-	db      *database.DB
-	mu      sync.RWMutex
-	cache   map[string]StorageProvider
+	db    *database.DB
+	mu    sync.RWMutex
+	cache map[string]StorageProvider
 }
 
 // NewRootService creates the service.
@@ -130,11 +131,11 @@ func (s *RootService) Delete(id string) error {
 		return err
 	}
 	if _, err := tx.Exec(`DELETE FROM user_roots WHERE root_id=?`, id); err != nil {
-		tx.Rollback()
+		_ = tx.Rollback()
 		return err
 	}
 	if _, err := tx.Exec(`DELETE FROM storage_roots WHERE id=?`, id); err != nil {
-		tx.Rollback()
+		_ = tx.Rollback()
 		return err
 	}
 	if err := tx.Commit(); err != nil {
@@ -318,7 +319,8 @@ func newS3ProviderFromConfig(configJSON string, readOnly bool) *S3Provider {
 		ForceListV1     bool   `json:"force_list_v1"`
 	}
 	if configJSON != "" {
-		json.Unmarshal([]byte(configJSON), &cfg)
+		// Best-effort: fall back to defaults when the stored JSON is malformed.
+		_ = json.Unmarshal([]byte(configJSON), &cfg)
 	}
 
 	s3Cfg := S3Config{

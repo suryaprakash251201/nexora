@@ -27,13 +27,9 @@ func writeError(w http.ResponseWriter, status int, code, message, requestID stri
 
 // Page is a cursor-style pagination result for list endpoints.
 type Page struct {
-	Items    any    `json:"items"`
-	Next     string `json:"next,omitempty"`
-	Prev     string `json:"prev,omitempty"`
-	Total    int    `json:"total,omitempty"`
-	HasMore  bool   `json:"has_more"`
-}
-
-func writePage(w http.ResponseWriter, p Page) {
-	writeJSON(w, http.StatusOK, p)
+	Items   any    `json:"items"`
+	Next    string `json:"next,omitempty"`
+	Prev    string `json:"prev,omitempty"`
+	Total   int    `json:"total,omitempty"`
+	HasMore bool   `json:"has_more"`
 }

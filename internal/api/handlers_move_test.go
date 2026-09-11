@@ -34,11 +34,11 @@ import (
 )
 
 type moveCase struct {
-	name      string
-	method    string
-	url       string
-	body      string
-	wantCode  int
+	name     string
+	method   string
+	url      string
+	body     string
+	wantCode int
 	// SetupDirs are the on-disk subdirectories to create under the root
 	// before issuing the request. Useful for the "sibling move" test
 	// that needs a real destination parent.

@@ -83,18 +83,18 @@ func TestIsInside(t *testing.T) {
 		root, candidate string
 		want            bool
 	}{
-		{"/app/web" + sep, "/app/web" + sep, true},                                // root itself
-		{"/app/web" + sep, "/app/web/index.html", true},                            // file directly under
-		{"/app/web" + sep, "/app/web/assets/index-abc.js", true},                   // nested file
-		{"/app/web" + sep, "/app/web-archive/index.html", false},                   // sibling
-		{"/app/web" + sep, "/app/web2/index.html", false},                          // similar prefix
-		{"/app/web" + sep, "/etc/passwd", false},                                   // unrelated
-		{"/app/web", "/app/web/index.html", true},                                  // root without trailing sep
-		{"/app/web", "/app/web-archive", false},                                    // sibling without trailing sep
-		{"/app/web" + sep, filepath.Clean("/app/web/../web/index.html"), true},     // resolves to a child
-		{"/app/web" + sep, filepath.Clean("/app/web/../../etc/passwd"), false},     // escapes root
-		{"", "/anything", false},                                                   // empty root
-		{"/anything", "", false},                                                   // empty candidate
+		{"/app/web" + sep, "/app/web" + sep, true},                             // root itself
+		{"/app/web" + sep, "/app/web/index.html", true},                        // file directly under
+		{"/app/web" + sep, "/app/web/assets/index-abc.js", true},               // nested file
+		{"/app/web" + sep, "/app/web-archive/index.html", false},               // sibling
+		{"/app/web" + sep, "/app/web2/index.html", false},                      // similar prefix
+		{"/app/web" + sep, "/etc/passwd", false},                               // unrelated
+		{"/app/web", "/app/web/index.html", true},                              // root without trailing sep
+		{"/app/web", "/app/web-archive", false},                                // sibling without trailing sep
+		{"/app/web" + sep, filepath.Clean("/app/web/../web/index.html"), true}, // resolves to a child
+		{"/app/web" + sep, filepath.Clean("/app/web/../../etc/passwd"), false}, // escapes root
+		{"", "/anything", false},                                               // empty root
+		{"/anything", "", false},                                               // empty candidate
 	}
 	for _, c := range cases {
 		got := IsInside(c.root, c.candidate)

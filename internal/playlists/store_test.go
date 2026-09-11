@@ -25,15 +25,6 @@ func newTestStore(t *testing.T) *Store {
 	return NewStore(database.Wrap(db, "sqlite"))
 }
 
-func seedUser(t *testing.T, db *sql.DB, id string) {
-	t.Helper()
-	_, err := db.Exec(`INSERT INTO users (id, username, email, display_name, password_hash) VALUES (?, ?, ?, '', 'x')`,
-		id, "user_"+id, id+"@test.local")
-	if err != nil {
-		t.Fatalf("seed user: %v", err)
-	}
-}
-
 func TestCreateWithItems_AtomicAndOrdered(t *testing.T) {
 	s := newTestStore(t)
 

@@ -517,15 +517,14 @@ func mp4BoxHeader(data []byte, i int) (size int, typ string, next int, err error
 	}
 	size = int(data[i])<<24 | int(data[i+1])<<16 | int(data[i+2])<<8 | int(data[i+3])
 	typ = string(data[i+4 : i+8])
-	next = i + 8
-	if size == 1 {
+	switch size {
+	case 1:
 		if i+16 > len(data) {
 			return 0, "", 0, ErrUnsupported
 		}
 		// 64-bit largesize; only the low 32 bits matter for our size caps.
 		size = int(data[i+12])<<24 | int(data[i+13])<<16 | int(data[i+14])<<8 | int(data[i+15])
-		next = i + 16
-	} else if size == 0 {
+	case 0:
 		size = len(data) - i
 	}
 	if size < 8 || i+size > len(data) {

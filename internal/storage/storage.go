@@ -11,14 +11,14 @@ import (
 
 // Common storage errors.
 var (
-	ErrNotFound      = errors.New("storage: not found")
-	ErrExists        = errors.New("storage: already exists")
-	ErrNotDir        = errors.New("storage: not a directory")
-	ErrIsDir         = errors.New("storage: is a directory")
-	ErrPermission    = errors.New("storage: permission denied")
-	ErrInvalidPath   = errors.New("storage: invalid path")
-	ErrTraversal     = errors.New("storage: path traversal denied")
-	ErrTooLarge      = errors.New("storage: file too large")
+	ErrNotFound    = errors.New("storage: not found")
+	ErrExists      = errors.New("storage: already exists")
+	ErrNotDir      = errors.New("storage: not a directory")
+	ErrIsDir       = errors.New("storage: is a directory")
+	ErrPermission  = errors.New("storage: permission denied")
+	ErrInvalidPath = errors.New("storage: invalid path")
+	ErrTraversal   = errors.New("storage: path traversal denied")
+	ErrTooLarge    = errors.New("storage: file too large")
 )
 
 // FileInfo describes a file or directory within a storage root.
@@ -34,17 +34,17 @@ type FileInfo struct {
 
 // SearchQuery describes a metadata search.
 type SearchQuery struct {
-	RootID    string
-	Path      string // restrict to this prefix (relative)
-	Name      string // substring/prefix match
-	Ext       string // extension filter (no dot)
-	IsDir     *bool
-	MinSize   int64
-	MaxSize   int64
+	RootID         string
+	Path           string // restrict to this prefix (relative)
+	Name           string // substring/prefix match
+	Ext            string // extension filter (no dot)
+	IsDir          *bool
+	MinSize        int64
+	MaxSize        int64
 	ModifiedAfter  time.Time
 	ModifiedBefore time.Time
-	Limit     int
-	Offset    int
+	Limit          int
+	Offset         int
 }
 
 // Quota describes storage usage for a root.

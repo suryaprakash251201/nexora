@@ -234,13 +234,17 @@ func (s *Server) handleTagFile(w http.ResponseWriter, r *http.Request) {
 		_, err := tx.Exec(`INSERT OR IGNORE INTO file_tags (tag_id, root_id, path, created_at) VALUES (?, ?, ?, ?)`,
 			req.TagID, req.RootID, p, now)
 		if err != nil {
-			tx.Rollback()
+			_ = tx.Rollback()
 			s.Log.Error("failed to tag file", "error", err)
 			writeError(w, http.StatusInternalServerError, "internal_error", "database error", middleware.GetRequestID(r.Context()))
 			return
 		}
 	}
-	tx.Commit()
+	if err := tx.Commit(); err != nil {
+		s.Log.Error("failed to commit tags", "error", err)
+		writeError(w, http.StatusInternalServerError, "internal_error", "database error", middleware.GetRequestID(r.Context()))
+		return
+	}
 
 	s.audit(r, "tag_apply", req.RootID, fmt.Sprintf("tag=%s paths=%d", req.TagID, len(req.Paths)))
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
@@ -294,13 +298,17 @@ func (s *Server) handleUntagFile(w http.ResponseWriter, r *http.Request) {
 		_, err := tx.Exec(`DELETE FROM file_tags WHERE tag_id = ? AND root_id = ? AND path = ?`,
 			req.TagID, req.RootID, p)
 		if err != nil {
-			tx.Rollback()
+			_ = tx.Rollback()
 			s.Log.Error("failed to untag file", "error", err)
 			writeError(w, http.StatusInternalServerError, "internal_error", "database error", middleware.GetRequestID(r.Context()))
 			return
 		}
 	}
-	tx.Commit()
+	if err := tx.Commit(); err != nil {
+		s.Log.Error("failed to commit untag", "error", err)
+		writeError(w, http.StatusInternalServerError, "internal_error", "database error", middleware.GetRequestID(r.Context()))
+		return
+	}
 
 	s.audit(r, "tag_remove", req.RootID, fmt.Sprintf("tag=%s paths=%s", req.TagID, req.Paths))
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})

@@ -228,12 +228,14 @@ func runMaintenance(ctx context.Context, db *database.DB, sessions *auth.Session
 			jobMgr.CleanupOldArchives(24 * time.Hour)
 			storage.PurgeExpiredTrash(ctx, db, roots, cfg.TrashTTL, log)
 			api.PurgeStaleUploadSessions(ctx, cfg.DataDir, cfg.UploadTTL, log)
-			versions.PurgeAllWithService(ctx, db, roots, versions.Config{
+			if _, _, err := versions.PurgeAllWithService(ctx, db, roots, versions.Config{
 				MaxPerFile:    cfg.VersionMaxPerFile,
 				MaxFileSize:   cfg.VersionMaxFileSize,
 				MaxTotalAge:   cfg.VersionMaxTotalAge,
 				MaxTotalBytes: cfg.VersionMaxTotalBytes,
-			}, log)
+			}, log); err != nil {
+				log.Warn("version purge failed", "error", err)
+			}
 		case <-scanTicker.C:
 			searchSvc.ScanAll(ctx)
 		}

@@ -10,15 +10,6 @@ import (
 	"github.com/nexora/nexora/internal/storage"
 )
 
-// requireAdmin is a short helper to fetch the admin user from context.
-func (s *Server) requireAdmin(r *http.Request) (auth.User, bool) {
-	u, ok := auth.UserFromContext(r.Context())
-	if !ok || u.Role != "admin" {
-		return u, false
-	}
-	return u, true
-}
-
 func (s *Server) handleAdminListRoots(w http.ResponseWriter, r *http.Request) {
 	roots, err := s.StorageRoots.List()
 	if err != nil {
@@ -76,14 +67,14 @@ func (s *Server) handleAdminCreateRoot(w http.ResponseWriter, r *http.Request) {
 		req.Config = "{}"
 	}
 	root, err := s.StorageRoots.Create(storage.Root{
-		Name:      req.Name,
-		Path:      req.Path,
-		Icon:      req.Icon,
-		Type:      req.Type,
-		Config:    req.Config,
-		ReadOnly:  req.ReadOnly,
-		Enabled:   true,
-		Indexed:   req.Indexed,
+		Name:     req.Name,
+		Path:     req.Path,
+		Icon:     req.Icon,
+		Type:     req.Type,
+		Config:   req.Config,
+		ReadOnly: req.ReadOnly,
+		Enabled:  true,
+		Indexed:  req.Indexed,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error", "could not create root", middleware.GetRequestID(r.Context()))

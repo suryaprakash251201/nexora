@@ -7,9 +7,10 @@ package sharing
 import (
 	"database/sql"
 
-	"github.com/nexora/nexora/internal/database"
 	"errors"
 	"time"
+
+	"github.com/nexora/nexora/internal/database"
 
 	"github.com/nexora/nexora/internal/auth"
 	"github.com/nexora/nexora/internal/util"

@@ -85,12 +85,12 @@ func Run(db *sql.DB) error {
 			return err
 		}
 		if _, err := tx.Exec(m.SQL); err != nil {
-			tx.Rollback()
+			_ = tx.Rollback()
 			return fmt.Errorf("apply %s: %w", m.Name, err)
 		}
 		if _, err := tx.Exec(`INSERT INTO schema_migrations(version, applied_at) VALUES(?, ?)`,
 			m.Name, util.NowUTC()); err != nil {
-			tx.Rollback()
+			_ = tx.Rollback()
 			return err
 		}
 		if err := tx.Commit(); err != nil {
@@ -139,12 +139,12 @@ func RunPostgres(db *sql.DB) error {
 			return err
 		}
 		if _, err := tx.Exec(sql); err != nil {
-			tx.Rollback()
+			_ = tx.Rollback()
 			return fmt.Errorf("apply %s: %w", m.Name, err)
 		}
 		if _, err := tx.Exec(`INSERT INTO schema_migrations(version, applied_at) VALUES($1, $2)`,
 			m.Name, util.NowUTC()); err != nil {
-			tx.Rollback()
+			_ = tx.Rollback()
 			return err
 		}
 		if err := tx.Commit(); err != nil {

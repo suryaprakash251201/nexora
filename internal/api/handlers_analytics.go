@@ -144,10 +144,10 @@ func (s *Server) computeFullHash(provider storage.StorageProvider, path string) 
 }
 
 type StatsResponse struct {
-	TotalFiles int64                     `json:"total_files"`
-	TotalSize  int64                     `json:"total_size"`
-	Breakdown  map[string]CategoryStat   `json:"breakdown"`
-	Largest    []map[string]any          `json:"largest"`
+	TotalFiles int64                   `json:"total_files"`
+	TotalSize  int64                   `json:"total_size"`
+	Breakdown  map[string]CategoryStat `json:"breakdown"`
+	Largest    []map[string]any        `json:"largest"`
 }
 
 type CategoryStat struct {

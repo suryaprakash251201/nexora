@@ -9,7 +9,6 @@ import (
 	"context"
 	"database/sql"
 
-	"github.com/nexora/nexora/internal/database"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -21,6 +20,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/nexora/nexora/internal/database"
 
 	"github.com/nexora/nexora/internal/logger"
 	"github.com/nexora/nexora/internal/storage"
@@ -502,7 +503,7 @@ func (m *Manager) doExtract(id string, p ExtractPayload) error {
 		if strings.HasPrefix(cleanedName, "..") {
 			return fmt.Errorf("zip-slip blocked (traversal in raw name): %q", name)
 		}
-		
+
 		cleanedDest := filepath.Clean(dest)
 		if cleanedDest == "" {
 			cleanedDest = "."

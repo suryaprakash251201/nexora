@@ -50,38 +50,38 @@ type Config struct {
 	// before it's killed and its semaphore slot released. Without this
 	// bound, a slow client (or a 50GB file) can pin one of the two
 	// transcode slots indefinitely. 0 = use the default (4h).
-	TranscodeTimeout  time.Duration
+	TranscodeTimeout time.Duration
 	// TranscodeClientWriteTimeout caps how long the server waits for the
 	// client to keep reading bytes before giving up on the transcode.
 	// 0 = use the default (10m).
 	TranscodeClientWriteTimeout time.Duration
-	DefaultRoots       []RootConfig
-	AllowRegistration  bool
-	BackupDir          string        // "" disables scheduled backups
-	TrashTTL           time.Duration // 0 disables auto-purge
-	UploadTTL          time.Duration // stale chunked-upload sessions (0 = 24h default applied in main)
-	BackupKeep         int
-	BackupHour         int
-	SecureCookies      bool
-	ReadonlyFS         bool
-	PlaylistCoverPath  string
-	TailscaleAuth      bool
+	DefaultRoots                []RootConfig
+	AllowRegistration           bool
+	BackupDir                   string        // "" disables scheduled backups
+	TrashTTL                    time.Duration // 0 disables auto-purge
+	UploadTTL                   time.Duration // stale chunked-upload sessions (0 = 24h default applied in main)
+	BackupKeep                  int
+	BackupHour                  int
+	SecureCookies               bool
+	ReadonlyFS                  bool
+	PlaylistCoverPath           string
+	TailscaleAuth               bool
 
 	// Full-text extraction (search inside PDFs/text/OCR). All values are
 	// safe to leave at zero (meaning "use default").
-	ExtractEnabled      bool   // master switch; default true
-	ExtractMaxFileSize  int64  // skip files larger than this; default 10 MB
-	ExtractMaxTextLen   int    // cap stored text; default 512 KiB
-	ExtractOCRBin       string // tesseract binary path; empty disables image OCR
+	ExtractEnabled     bool   // master switch; default true
+	ExtractMaxFileSize int64  // skip files larger than this; default 10 MB
+	ExtractMaxTextLen  int    // cap stored text; default 512 KiB
+	ExtractOCRBin      string // tesseract binary path; empty disables image OCR
 
 	// File versioning (N-series). All values are safe to leave at zero
 	// (meaning "use default") — the versions package fills them in.
-	VersionEnabled     bool          // master switch; default true
-	VersionAuto        bool          // auto-snapshot on overwrite; default true
-	VersionMaxPerFile  int           // cap per file; default 50
-	VersionMaxFileSize int64         // skip files larger than this; default 256 MB
-	VersionMaxTotalAge time.Duration // prune versions older than this; 0 = forever
-	VersionMaxTotalBytes int64       // prune oldest when total exceeds; 0 = unlimited
+	VersionEnabled       bool          // master switch; default true
+	VersionAuto          bool          // auto-snapshot on overwrite; default true
+	VersionMaxPerFile    int           // cap per file; default 50
+	VersionMaxFileSize   int64         // skip files larger than this; default 256 MB
+	VersionMaxTotalAge   time.Duration // prune versions older than this; 0 = forever
+	VersionMaxTotalBytes int64         // prune oldest when total exceeds; 0 = unlimited
 }
 
 // Load reads configuration from .env (if present) then environment variables.
@@ -90,33 +90,33 @@ func Load() (*Config, error) {
 	_ = godotenv.Load(".env")
 
 	c := &Config{
-		ListenAddr:         env("NEXORA_LISTEN_ADDR", ":8080"),
-		DataDir:            env("NEXORA_DATA_DIR", "./data"),
-		BaseURL:            env("NEXORA_BASE_URL", ""),
-		SessionSecret:      env("NEXORA_SESSION_SECRET", ""),
-		SessionLifetime:    envDuration("NEXORA_SESSION_LIFETIME", 7*24*time.Hour),
-		LogLevel:           env("NEXORA_LOG_LEVEL", "info"),
-		LogFormat:          env("NEXORA_LOG_FORMAT", "json"),
-		CORSOrigins:        envList("NEXORA_CORS_ORIGINS", []string{}),
-		TrustedProxies:     envList("NEXORA_TRUSTED_PROXIES", []string{}),
-		MaxUploadSize:      envBytes("NEXORA_MAX_UPLOAD_SIZE", 512<<30), // 512GB — effectively unlimited single-file uploads
-		AllowedMimeTypes:   envList("NEXORA_ALLOWED_MIME", []string{}),
-		RateLimitPerMin:    envInt("NEXORA_RATE_LIMIT_PER_MIN", 60),
-		LockoutAttempts:    envInt("NEXORA_LOCKOUT_ATTEMPTS", 5),
-		LockoutWindow:      envDuration("NEXORA_LOCKOUT_WINDOW", 15*time.Minute),
-		EnablePrometheus:   envBool("NEXORA_ENABLE_PROMETHEUS", false),
-		ThumbnailMaxSize:   envBytes("NEXORA_THUMBNAIL_MAX_SIZE", 20<<20),
-		ThumbnailTTL:       envDuration("NEXORA_THUMBNAIL_TTL", 24*7*time.Hour),
-		EnableFFmpegThumbs: envBool("NEXORA_ENABLE_FFMPEG_THUMBS", false),
-		MaxEditableSize:    envBytes("NEXORA_MAX_EDITABLE_SIZE", 5<<20),
-		TranscodeTimeout:   envDuration("NEXORA_TRANSCODE_TIMEOUT", 4*time.Hour),
+		ListenAddr:                  env("NEXORA_LISTEN_ADDR", ":8080"),
+		DataDir:                     env("NEXORA_DATA_DIR", "./data"),
+		BaseURL:                     env("NEXORA_BASE_URL", ""),
+		SessionSecret:               env("NEXORA_SESSION_SECRET", ""),
+		SessionLifetime:             envDuration("NEXORA_SESSION_LIFETIME", 7*24*time.Hour),
+		LogLevel:                    env("NEXORA_LOG_LEVEL", "info"),
+		LogFormat:                   env("NEXORA_LOG_FORMAT", "json"),
+		CORSOrigins:                 envList("NEXORA_CORS_ORIGINS", []string{}),
+		TrustedProxies:              envList("NEXORA_TRUSTED_PROXIES", []string{}),
+		MaxUploadSize:               envBytes("NEXORA_MAX_UPLOAD_SIZE", 512<<30), // 512GB — effectively unlimited single-file uploads
+		AllowedMimeTypes:            envList("NEXORA_ALLOWED_MIME", []string{}),
+		RateLimitPerMin:             envInt("NEXORA_RATE_LIMIT_PER_MIN", 60),
+		LockoutAttempts:             envInt("NEXORA_LOCKOUT_ATTEMPTS", 5),
+		LockoutWindow:               envDuration("NEXORA_LOCKOUT_WINDOW", 15*time.Minute),
+		EnablePrometheus:            envBool("NEXORA_ENABLE_PROMETHEUS", false),
+		ThumbnailMaxSize:            envBytes("NEXORA_THUMBNAIL_MAX_SIZE", 20<<20),
+		ThumbnailTTL:                envDuration("NEXORA_THUMBNAIL_TTL", 24*7*time.Hour),
+		EnableFFmpegThumbs:          envBool("NEXORA_ENABLE_FFMPEG_THUMBS", false),
+		MaxEditableSize:             envBytes("NEXORA_MAX_EDITABLE_SIZE", 5<<20),
+		TranscodeTimeout:            envDuration("NEXORA_TRANSCODE_TIMEOUT", 4*time.Hour),
 		TranscodeClientWriteTimeout: envDuration("NEXORA_TRANSCODE_CLIENT_WRITE_TIMEOUT", 10*time.Minute),
-		DefaultRoots:       parseRoots(env("NEXORA_DEFAULT_ROOTS", "Files:/mnt/files:false,Media:/mnt/media:true,Backups:/mnt/backups:false,Shared:/mnt/shared:false")),
-		AllowRegistration:  envBool("NEXORA_ALLOW_REGISTRATION", true),
-		SecureCookies:      envBool("NEXORA_SECURE_COOKIES", true), // secure by default; set false for plain-HTTP/LAN installs
-		ReadonlyFS:         envBool("NEXORA_READONLY_FS", false),
-		PlaylistCoverPath:  env("NEXORA_PLAYLIST_COVER_PATH", ""),
-		TailscaleAuth:      envBool("NEXORA_TAILSCALE_AUTH", false),
+		DefaultRoots:                parseRoots(env("NEXORA_DEFAULT_ROOTS", "Files:/mnt/files:false,Media:/mnt/media:true,Backups:/mnt/backups:false,Shared:/mnt/shared:false")),
+		AllowRegistration:           envBool("NEXORA_ALLOW_REGISTRATION", true),
+		SecureCookies:               envBool("NEXORA_SECURE_COOKIES", true), // secure by default; set false for plain-HTTP/LAN installs
+		ReadonlyFS:                  envBool("NEXORA_READONLY_FS", false),
+		PlaylistCoverPath:           env("NEXORA_PLAYLIST_COVER_PATH", ""),
+		TailscaleAuth:               envBool("NEXORA_TAILSCALE_AUTH", false),
 	}
 	c.DatabasePath = env("NEXORA_DATABASE_PATH", c.DataDir+"/nexora.db")
 	c.DatabaseType = env("NEXORA_DATABASE_TYPE", "sqlite")

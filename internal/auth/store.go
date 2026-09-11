@@ -29,17 +29,17 @@ var ErrResetExpired = errors.New("auth: reset token expired")
 // User is the persisted account record (without the password hash in most
 // API responses).
 type User struct {
-	ID          string
-	Username    string
-	Email       string
-	DisplayName string
+	ID           string
+	Username     string
+	Email        string
+	DisplayName  string
 	PasswordHash string
-	Role        Role
-	Status      string // active | disabled
-	TOTPSecret  string
-	TOTPEnabled bool
-	CreatedAt   string
-	UpdatedAt   string
+	Role         Role
+	Status       string // active | disabled
+	TOTPSecret   string
+	TOTPEnabled  bool
+	CreatedAt    string
+	UpdatedAt    string
 }
 
 // UserStore provides user persistence operations.

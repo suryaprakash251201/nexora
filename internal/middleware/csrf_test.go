@@ -16,7 +16,7 @@ func newCSRFCookie(t *testing.T, srv *httptest.Server) *http.Cookie {
 		t.Fatalf("GET failed: %v", err)
 	}
 	defer resp.Body.Close()
-	io.Copy(io.Discard, resp.Body)
+	_, _ = io.Copy(io.Discard, resp.Body)
 	for _, c := range resp.Cookies() {
 		if c.Name == csrfCookieName {
 			return c
@@ -41,7 +41,7 @@ func doCSRF(srv *httptest.Server, method string, cookies []*http.Cookie, header 
 	if err != nil {
 		return nil
 	}
-	io.Copy(io.Discard, resp.Body)
+	_, _ = io.Copy(io.Discard, resp.Body)
 	resp.Body.Close()
 	return resp
 }

@@ -5,7 +5,6 @@ package database
 import (
 	"database/sql"
 	"fmt"
-	"time"
 
 	_ "modernc.org/sqlite"
 
@@ -89,6 +88,3 @@ func CurrentSchemaVersion(db *sql.DB) (int, error) {
 	}
 	return n, nil
 }
-
-// now is a tiny convenience kept for callers that want a timestamp near DB ops.
-func now() string { return time.Now().UTC().Format(time.RFC3339) }

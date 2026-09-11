@@ -114,11 +114,11 @@ type audioInfo struct {
 	Lossless      bool              `json:"lossless"`
 
 	// ── Normalized song container / artist extraction ──
-	Container   string   `json:"container"`    // lower-case extension without dot, e.g. "flac"
-	Extension   string   `json:"extension"`    // alias of Container (client convenience)
+	Container   string   `json:"container"` // lower-case extension without dot, e.g. "flac"
+	Extension   string   `json:"extension"` // alias of Container (client convenience)
 	Title       string   `json:"title"`
-	Artist      string   `json:"artist"`       // display string (first artist)
-	Artists     []string `json:"artists"`      // split multi-artist values
+	Artist      string   `json:"artist"`  // display string (first artist)
+	Artists     []string `json:"artists"` // split multi-artist values
 	Album       string   `json:"album"`
 	AlbumArtist string   `json:"album_artist"`
 	Genre       string   `json:"genre"` // display string (first genre)
@@ -166,6 +166,7 @@ func isAudioFile(mime, rel string) bool {
 	}
 	return audioExtensions[strings.ToLower(storage.Ext(rel))]
 }
+
 // resolveAudioInput validates the request and returns an ffmpeg-friendly input
 // argument ("pipe:0" or a real seekable path), the open reader (which must be
 // closed unless it was converted to a real path), and the file info.
@@ -231,8 +232,8 @@ func (s *Server) writeAudioInputError(w http.ResponseWriter, r *http.Request, er
 // browser cache) would otherwise respawn ffprobe for identical files. A
 // replaced file gets a new size/mtime and re-probes naturally.
 var (
-	audioInfoCache   sync.Map // string -> audioInfo
-	audioInfoCacheN  atomic.Int64
+	audioInfoCache    sync.Map // string -> audioInfo
+	audioInfoCacheN   atomic.Int64
 	audioInfoCacheMax = 4096
 )
 

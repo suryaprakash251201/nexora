@@ -19,8 +19,8 @@ type RateLimiter struct {
 }
 
 type bucket struct {
-	tokens   float64
-	last     time.Time
+	tokens float64
+	last   time.Time
 }
 
 // NewRateLimiter creates a limiter with the given sustained rate and burst.

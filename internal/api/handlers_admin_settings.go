@@ -284,9 +284,8 @@ func (s *Server) handleAdminDeleteSetting(w http.ResponseWriter, r *http.Request
 		return
 	}
 	defMap := map[string]string{key: defaultVal}
-	if _, err := config.ApplySettings(s.Cfg, defMap); err != nil {
-		// default should always be valid; if not, keep current value.
-	}
+	// The default should always be valid; if it isn't, keep the current value.
+	_, _ = config.ApplySettings(s.Cfg, defMap)
 	if key == "rate_limit_per_min" || key == "lockout_window" {
 		if s.Limiter != nil {
 			s.Limiter.SetRate(s.Cfg.RateLimitPerMin, s.Cfg.LockoutWindow)

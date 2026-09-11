@@ -12,8 +12,6 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 
-	"github.com/nexora/nexora/internal/database"
-	"github.com/nexora/nexora/internal/logger"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -26,6 +24,9 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/nexora/nexora/internal/database"
+	"github.com/nexora/nexora/internal/logger"
 
 	"github.com/nexora/nexora/internal/util"
 )
@@ -404,12 +405,9 @@ func sendOrDrop(b *Bus, ch chan Event, evt Event) {
 	select {
 	case ch <- evt:
 	default:
-		// Drop event if listener is slow.
-		if b != nil && b.log != nil {
-			// Best-effort: do not log on every drop (would be very
-			// chatty). A closed channel will keep panicking; the
-			// caller can detect this via metrics if needed.
-		}
+		// Drop event if listener is slow. Best-effort: do not log on every
+		// drop (would be very chatty). A closed channel will keep panicking;
+		// the caller can detect this via metrics if needed.
 	}
 }
 

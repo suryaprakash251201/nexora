@@ -3,9 +3,10 @@ package auth
 import (
 	"crypto/sha256"
 
-	"github.com/nexora/nexora/internal/database"
 	"encoding/hex"
 	"time"
+
+	"github.com/nexora/nexora/internal/database"
 
 	"github.com/nexora/nexora/internal/util"
 )

@@ -44,7 +44,7 @@ func (f *fakeProvider) List(p string) ([]storage.FileInfo, error) {
 	}
 	return nil, storage.ErrNotFound
 }
-func (f *fakeProvider) Read(string) (io.ReadCloser, error)    { panic("not used") }
+func (f *fakeProvider) Read(string) (io.ReadCloser, error)   { panic("not used") }
 func (f *fakeProvider) Write(string, io.Reader, int64) error { panic("not used") }
 func (f *fakeProvider) CreateDirectory(string) error         { panic("not used") }
 func (f *fakeProvider) Move(string, string) error            { panic("not used") }

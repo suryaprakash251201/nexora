@@ -138,8 +138,8 @@ func TestConsumeResetToken_RaceFree(t *testing.T) {
 
 	const N = 16
 	var (
-		wg      sync.WaitGroup
-		mu      sync.Mutex
+		wg        sync.WaitGroup
+		mu        sync.Mutex
 		successes int
 	)
 	start := make(chan struct{})

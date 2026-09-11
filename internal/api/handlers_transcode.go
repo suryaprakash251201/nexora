@@ -57,48 +57,48 @@ func detectFfmpeg() (string, string, error) {
 // knownUnsupportedCodecs lists codecs that FFmpeg commonly cannot decode or
 // that would produce unwatchable output. This is used as a pre-flight check.
 var knownUnsupportedCodecs = map[string]string{
-	"dts":              "DTS audio is not supported — use a file with AAC or MP3 audio",
-	"dca":              "DTS audio is not supported — use a file with AAC or MP3 audio",
-	"truehd":           "Dolby TrueHD audio is not supported",
-	"mlp":              "MLP (Meridian Lossless Packing) audio is not supported",
-	"wmav1":            "Windows Media Audio 1 is not supported",
-	"wmav2":            "Windows Media Audio 2 is not supported",
-	"wmapro":           "Windows Media Audio Pro is not supported",
+	"dts":    "DTS audio is not supported — use a file with AAC or MP3 audio",
+	"dca":    "DTS audio is not supported — use a file with AAC or MP3 audio",
+	"truehd": "Dolby TrueHD audio is not supported",
+	"mlp":    "MLP (Meridian Lossless Packing) audio is not supported",
+	"wmav1":  "Windows Media Audio 1 is not supported",
+	"wmav2":  "Windows Media Audio 2 is not supported",
+	"wmapro": "Windows Media Audio Pro is not supported",
 	// ALAC (Apple Lossless) is intentionally NOT blocked: browsers cannot
 	// decode it natively, but FFmpeg decodes it fine, so it must be allowed
 	// through the transcode pipeline (ALAC -> AAC) to be playable.
-	"dolbyvision":      "Dolby Vision video is not supported",
-	"vp6":              "VP6 video is not supported",
-	"vp6f":             "VP6 video is not supported",
-	"svq1":             "Sorenson Video 1 is not supported",
-	"svq3":             "Sorenson Video 3 is not supported",
-	"wmv3":             "Windows Media Video 9 is not supported",
-	"vc1":              "VC-1 video is not supported",
-	"indeo5":           "Indeo 5 video is not supported",
-	"cook":             "Cooker audio is not supported",
-	"truespeech":       "TrueSpeech audio is not supported",
-	"qdmc":             "QDesign Music audio is not supported",
-	"qdm2":             "QDesign Music 2 audio is not supported",
-	"siren":            "Siren audio is not supported",
-	"atrac3":           "ATRAC3 audio is not supported",
-	"atrac3p":          "ATRAC3+ audio is not supported",
-	"atrac9":           "ATRAC9 audio is not supported",
-	"opus":             "Opus audio requires a compatible decoder (not available)",
+	"dolbyvision": "Dolby Vision video is not supported",
+	"vp6":         "VP6 video is not supported",
+	"vp6f":        "VP6 video is not supported",
+	"svq1":        "Sorenson Video 1 is not supported",
+	"svq3":        "Sorenson Video 3 is not supported",
+	"wmv3":        "Windows Media Video 9 is not supported",
+	"vc1":         "VC-1 video is not supported",
+	"indeo5":      "Indeo 5 video is not supported",
+	"cook":        "Cooker audio is not supported",
+	"truespeech":  "TrueSpeech audio is not supported",
+	"qdmc":        "QDesign Music audio is not supported",
+	"qdm2":        "QDesign Music 2 audio is not supported",
+	"siren":       "Siren audio is not supported",
+	"atrac3":      "ATRAC3 audio is not supported",
+	"atrac3p":     "ATRAC3+ audio is not supported",
+	"atrac9":      "ATRAC9 audio is not supported",
+	"opus":        "Opus audio requires a compatible decoder (not available)",
 	// 10-bit HEVC is supported via pixel format conversion; warn but allow.
 }
 
 // ffprobeStream represents a single stream from ffprobe JSON output.
 type ffprobeStream struct {
-	Index       int    `json:"index"`
-	CodecType   string `json:"codec_type"`
-	CodecName   string `json:"codec_name"`
+	Index         int    `json:"index"`
+	CodecType     string `json:"codec_type"`
+	CodecName     string `json:"codec_name"`
 	CodecLongName string `json:"codec_long_name"`
-	Profile     string `json:"profile"`
-	PixFmt      string `json:"pix_fmt"`
-	Width       int    `json:"width"`
-	Height      int    `json:"height"`
-	SampleRate  string `json:"sample_rate"`
-	Channels    int    `json:"channels"`
+	Profile       string `json:"profile"`
+	PixFmt        string `json:"pix_fmt"`
+	Width         int    `json:"width"`
+	Height        int    `json:"height"`
+	SampleRate    string `json:"sample_rate"`
+	Channels      int    `json:"channels"`
 }
 
 type ffprobeFormat struct {
@@ -161,22 +161,7 @@ func (s *Server) checkCodecSupport(probe *ffprobeOutput) error {
 	return nil
 }
 
-// flushWriter streams ffmpeg's stdout to the client and flushes so the
-// browser can begin playback before the whole file is transcoded.
-type flushWriter struct {
-	w http.ResponseWriter
-	f http.Flusher
-}
-
-func (fw *flushWriter) Write(p []byte) (int, error) {
-	n, err := fw.w.Write(p)
-	if fw.f != nil {
-		fw.f.Flush()
-	}
-	return n, err
-}
-
-// bailWriter is a flushWriter that cancels the transcode context as soon as
+// bailWriter is a writer that cancels the transcode context as soon as
 // the underlying ResponseWriter rejects a write (i.e. the client has gone
 // away). Without this, a stalled tab would let ffmpeg run to the
 // wall-clock timeout even though no one is reading. The cancel propagates
@@ -230,12 +215,12 @@ func (tw *timeoutWriter) Write(p []byte) (int, error) {
 //   - session      — client-generated UUID for session management (required)
 //   - start        — seek offset in seconds (optional, default 0)
 //   - format       — output audio codec (optional): "flac" re-encodes the audio
-//                    track losslessly (for lossless sources like ALAC .m4a), so
-//                    desktop/browser clients can play lossless audio without
-//                    losing quality. "flac24" is 24-bit FLAC, "wav" is 24-bit
-//                    PCM in a WAV container. Default is AAC.
+//     track losslessly (for lossless sources like ALAC .m4a), so
+//     desktop/browser clients can play lossless audio without
+//     losing quality. "flac24" is 24-bit FLAC, "wav" is 24-bit
+//     PCM in a WAV container. Default is AAC.
 //   - quality      — AAC bitrate hint (optional): lossless|high → 320k,
-//                    medium → 192k, default (empty) → 128k.
+//     medium → 192k, default (empty) → 128k.
 //
 // The session parameter lets the server explicitly kill the previous ffmpeg
 // process when the client seeks, rather than relying on HTTP connection abort.
@@ -380,11 +365,12 @@ func (s *Server) handleTranscode(w http.ResponseWriter, r *http.Request) {
 	default:
 		if probe != nil {
 			for _, st := range probe.Streams {
-				if st.CodecType == "video" {
+				switch st.CodecType {
+				case "video":
 					if (st.CodecName == "h264" || st.CodecName == "hevc" || st.CodecName == "av1") && !strings.Contains(st.PixFmt, "10le") && !strings.Contains(st.PixFmt, "12le") {
 						videoCodec = []string{"-c:v", "copy"}
 					}
-				} else if st.CodecType == "audio" {
+				case "audio":
 					if st.CodecName == "aac" || st.CodecName == "mp3" || st.CodecName == "opus" {
 						audioCodec = []string{"-c:a", "copy"}
 					}
@@ -489,15 +475,14 @@ func (s *Server) handleHLSPlaylist(w http.ResponseWriter, r *http.Request) {
 		s.writeProviderError(w, r, err)
 		return
 	}
-	inputArg := "pipe:0"
-	if f, ok := rc.(*os.File); ok {
-		inputArg = f.Name()
-		rc.Close()
-	} else {
+	f, ok := rc.(*os.File)
+	if !ok {
 		rc.Close()
 		writeError(w, http.StatusBadRequest, "unsupported", "HLS requires a local filesystem", middleware.GetRequestID(r.Context()))
 		return
 	}
+	inputArg := f.Name()
+	rc.Close()
 
 	_, ffprobeP, err := detectFfmpeg()
 	if err != nil || ffprobeP == "" {
@@ -563,15 +548,14 @@ func (s *Server) handleHLSSegment(w http.ResponseWriter, r *http.Request) {
 		s.writeProviderError(w, r, err)
 		return
 	}
-	inputArg := "pipe:0"
-	if f, ok := rc.(*os.File); ok {
-		inputArg = f.Name()
-		rc.Close()
-	} else {
+	f, ok := rc.(*os.File)
+	if !ok {
 		rc.Close()
 		writeError(w, http.StatusBadRequest, "unsupported", "HLS requires a local filesystem", middleware.GetRequestID(r.Context()))
 		return
 	}
+	inputArg := f.Name()
+	rc.Close()
 
 	ffp, _, err := detectFfmpeg()
 	if err != nil {
@@ -601,5 +585,7 @@ func (s *Server) handleHLSSegment(w http.ResponseWriter, r *http.Request) {
 
 	cmd.Stdout = w
 	cmd.Stderr = os.Stderr
-	cmd.Run()
+	if err := cmd.Run(); err != nil {
+		s.Log.Warn("hls segment transcode failed", "error", err)
+	}
 }

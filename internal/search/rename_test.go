@@ -70,11 +70,11 @@ func TestRenameDirectoryMovesAllDescendants(t *testing.T) {
 
 	// All photos/ entries must now be under pictures/ with new ids.
 	expected := map[string]string{
-		"r1:pictures":            "pictures",
-		"r1:pictures/a.jpg":      "pictures/a.jpg",
-		"r1:pictures/b.jpg":      "pictures/b.jpg",
-		"r1:pictures/sub/c.jpg":  "pictures/sub/c.jpg",
-		"r1:pictures/sub/d.jpg":  "pictures/sub/d.jpg",
+		"r1:pictures":           "pictures",
+		"r1:pictures/a.jpg":     "pictures/a.jpg",
+		"r1:pictures/b.jpg":     "pictures/b.jpg",
+		"r1:pictures/sub/c.jpg": "pictures/sub/c.jpg",
+		"r1:pictures/sub/d.jpg": "pictures/sub/d.jpg",
 	}
 	for id, wantPath := range expected {
 		var gotPath string

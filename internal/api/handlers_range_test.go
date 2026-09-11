@@ -14,10 +14,10 @@ func TestParseRange(t *testing.T) {
 		start, end  int64
 		satisfiable bool
 	}{
-		{"", 0, total - 1, true},                 // no range → whole file
-		{"bytes=0-1", 0, 1, true},                // AVPlayer/ExoPlayer probe
-		{"bytes=0-", 0, total - 1, true},         // full range
-		{"bytes=100-", 100, total - 1, true},     // open-ended
+		{"", 0, total - 1, true},             // no range → whole file
+		{"bytes=0-1", 0, 1, true},            // AVPlayer/ExoPlayer probe
+		{"bytes=0-", 0, total - 1, true},     // full range
+		{"bytes=100-", 100, total - 1, true}, // open-ended
 		{"bytes=500000-600000", 500000, 600000, true},
 		{"bytes=-500000", 500000, total - 1, true}, // suffix: last N bytes
 		{"bytes=-1", total - 1, total - 1, true},   // last byte only

@@ -109,7 +109,9 @@ func TestTags_CRUDAndAttach(t *testing.T) {
 	tok := mustSession(t, sessions)
 
 	// A real file to tag.
-	os.WriteFile(filepath.Join(rootDir, "photo.jpg"), []byte("jpeg"), 0o644)
+	if err := os.WriteFile(filepath.Join(rootDir, "photo.jpg"), []byte("jpeg"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	// 1) Create a tag.
 	rec := tagReq(t, h, "POST", "/api/v1/tags", tok, map[string]any{"name": "Vacation", "color": "#22C55E"})
@@ -198,7 +200,9 @@ func TestTags_ScopedToOwner(t *testing.T) {
 	s, sessions, rootDir := setupTagsTest(t)
 	h := s.Routes()
 	tok := mustSession(t, sessions)
-	os.WriteFile(filepath.Join(rootDir, "a.txt"), []byte("x"), 0o644)
+	if err := os.WriteFile(filepath.Join(rootDir, "a.txt"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	// Create user B (non-admin) with no tag of their own.
 	users := s.Users
@@ -260,7 +264,9 @@ func TestTags_ScopedToOwner(t *testing.T) {
 	if err := s.StorageRoots.Grant("usr_b", "root_ro", "read"); err != nil {
 		t.Fatal(err)
 	}
-	os.WriteFile(filepath.Join(roDir, "m.txt"), []byte("y"), 0o644)
+	if err := os.WriteFile(filepath.Join(roDir, "m.txt"), []byte("y"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	rec = tagReq(t, h, "POST", "/api/v1/files/tag", tokB, map[string]any{
 		"tag_id": bTag.ID, "root_id": "root_ro", "paths": []string{"m.txt"},
 	})

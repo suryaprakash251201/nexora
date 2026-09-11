@@ -140,7 +140,12 @@ func (s *Server) handleCreateSavedSearch(w http.ResponseWriter, r *http.Request)
 	_, err := s.DB.Exec(`
 		INSERT INTO saved_searches (id, user_id, name, query, filters, sort, sort_order, root_id, icon, color, is_pinned, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, id, user.ID, req.Name, req.Query, req.Filters, req.Sort, req.SortOrder, req.RootID, req.Icon, req.Color, func() int { if req.IsPinned { return 1 }; return 0 }(), now, now)
+	`, id, user.ID, req.Name, req.Query, req.Filters, req.Sort, req.SortOrder, req.RootID, req.Icon, req.Color, func() int {
+		if req.IsPinned {
+			return 1
+		}
+		return 0
+	}(), now, now)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error", "could not create saved search", middleware.GetRequestID(r.Context()))
 		return
@@ -200,7 +205,12 @@ func (s *Server) handleUpdateSavedSearch(w http.ResponseWriter, r *http.Request)
 		UPDATE saved_searches
 		SET name = ?, query = ?, filters = ?, sort = ?, sort_order = ?, root_id = ?, icon = ?, color = ?, is_pinned = ?, updated_at = ?
 		WHERE id = ? AND user_id = ?
-	`, req.Name, req.Query, req.Filters, req.Sort, req.SortOrder, req.RootID, req.Icon, req.Color, func() int { if req.IsPinned { return 1 }; return 0 }(), now, id, user.ID)
+	`, req.Name, req.Query, req.Filters, req.Sort, req.SortOrder, req.RootID, req.Icon, req.Color, func() int {
+		if req.IsPinned {
+			return 1
+		}
+		return 0
+	}(), now, id, user.ID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error", "could not update saved search", middleware.GetRequestID(r.Context()))
 		return
@@ -277,7 +287,8 @@ func (s *Server) handleExecuteSavedSearch(w http.ResponseWriter, r *http.Request
 	// Parse filters JSON
 	var filters map[string]string
 	if ss.Filters != "" {
-		json.Unmarshal([]byte(ss.Filters), &filters)
+		// Best-effort: a malformed stored filter simply yields no filter.
+		_ = json.Unmarshal([]byte(ss.Filters), &filters)
 	}
 
 	// Build search query
@@ -296,10 +307,10 @@ func (s *Server) handleExecuteSavedSearch(w http.ResponseWriter, r *http.Request
 	}
 
 	searchReq := search.Query{
-		Name:  ss.Query,
-		Limit: limit,
+		Name:   ss.Query,
+		Limit:  limit,
 		Offset: offset,
-		Sort:  ss.Sort,
+		Sort:   ss.Sort,
 	}
 	if ss.RootID != "" {
 		searchReq.RootID = ss.RootID

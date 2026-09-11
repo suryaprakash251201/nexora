@@ -24,8 +24,8 @@ import (
 type lyricCue struct {
 	// Time is the cue position in seconds. A negative Time marks an unsynced
 	// (plain-text) line that should be rendered but never highlighted.
-	Time  float64 `json:"time"`
-	Text  string  `json:"text"`
+	Time float64 `json:"time"`
+	Text string  `json:"text"`
 }
 
 type lyricsMeta struct {
@@ -37,12 +37,12 @@ type lyricsMeta struct {
 
 type lyricsResponse struct {
 	HasLyrics bool       `json:"has_lyrics"`
-	Raw        string    `json:"raw"`
-	Format     string    `json:"format"` // lrc | plain
-	Source     string    `json:"source"` // auto | user | ""
-	Synced     bool      `json:"synced"` // true when at least one timed cue exists
-	Meta       lyricsMeta `json:"meta"`
-	Cues       []lyricCue `json:"cues"`
+	Raw       string     `json:"raw"`
+	Format    string     `json:"format"` // lrc | plain
+	Source    string     `json:"source"` // auto | user | ""
+	Synced    bool       `json:"synced"` // true when at least one timed cue exists
+	Meta      lyricsMeta `json:"meta"`
+	Cues      []lyricCue `json:"cues"`
 }
 
 // lrcTag matches a single LRC time tag: [mm:ss.xx] or [mm:ss.xxx] (the
@@ -392,4 +392,3 @@ func copyLimited(src interface{ Read([]byte) (int, error) }, dst *strings.Builde
 		}
 	}
 }
-

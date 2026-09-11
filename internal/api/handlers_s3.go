@@ -93,17 +93,6 @@ func (s *Server) s3AuthMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// s3AuthRequired rejects S3 requests without an authenticated user.
-func (s *Server) s3AuthRequired(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if _, ok := auth.UserFromContext(r.Context()); !ok {
-			s3gw.WriteError(w, http.StatusForbidden, s3gw.ErrCodeInvalidAccessKeyID, "Missing credentials")
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
-}
-
 // resolveS3Bucket maps a bucket name to a storage root, checking the user has
 // read access. Accepts the root's display name (case-sensitive, then
 // case-insensitive) or its ID.

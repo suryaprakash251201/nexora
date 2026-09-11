@@ -3,9 +3,10 @@ package playlists
 import (
 	"database/sql"
 
-	"github.com/nexora/nexora/internal/database"
 	"fmt"
 	"strings"
+
+	"github.com/nexora/nexora/internal/database"
 
 	"github.com/nexora/nexora/internal/util"
 )
@@ -223,7 +224,7 @@ func (s *Store) CreateWithItems(userID, name, description string, items []Playli
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	id := util.RandToken(10)
 	now := util.NowUTC()
@@ -332,7 +333,7 @@ func (s *Store) AddItems(userID, playlistID string, items []PlaylistItem) (int, 
 	if err != nil {
 		return 0, err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	var maxPos int64
 	if err := tx.QueryRow(`SELECT COALESCE(MAX(position), -1) FROM playlist_items WHERE playlist_id = ?`, playlistID).Scan(&maxPos); err != nil {
@@ -379,7 +380,7 @@ func (s *Store) ReorderItems(userID, playlistID string, itemIDs []string) error 
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	for i, itemID := range itemIDs {
 		if _, err := tx.Exec(`UPDATE playlist_items SET position = ? WHERE id = ? AND playlist_id = ?`, i, itemID, playlistID); err != nil {
@@ -403,7 +404,7 @@ func (s *Store) RemoveItem(userID, playlistID, itemID string) error {
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	_, err = tx.Exec(`DELETE FROM playlist_items WHERE id = ? AND playlist_id = ?`, itemID, playlistID)
 	if err != nil {

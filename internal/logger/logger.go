@@ -82,7 +82,7 @@ func (l *Logger) log(level Level, msg string, fields map[string]any) {
 		return
 	}
 	l.mu.Lock()
-	l.out.Write(append(b, '\n'))
+	_, _ = l.out.Write(append(b, '\n'))
 	l.mu.Unlock()
 }
 

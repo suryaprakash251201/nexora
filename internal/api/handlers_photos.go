@@ -3,7 +3,7 @@ package api
 import (
 	"net/http"
 	"strconv"
-	
+
 	"github.com/nexora/nexora/internal/auth"
 	"github.com/nexora/nexora/internal/middleware"
 	"github.com/nexora/nexora/internal/search"

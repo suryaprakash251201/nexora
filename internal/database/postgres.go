@@ -3,7 +3,8 @@
 
 // Package database provides PostgreSQL database adapter.
 // Build with -tags postgres to enable PostgreSQL support:
-//   go build -tags postgres ./cmd/nexora
+//
+//	go build -tags postgres ./cmd/nexora
 //
 // The PostgreSQL adapter converts SQLite-style queries on the fly to be
 // PostgreSQL compatible. This allows a single codebase to support both
