@@ -243,7 +243,11 @@ export default memo(function PlayerBar() {
     a.preload = usePlayer.getState().isPlaying ? "auto" : "metadata";
     a.load();
     if (usePlayer.getState().isPlaying) a.play().catch(() => {});
-  }, [url]);
+    // `useNative` is a dep so the src is (re)assigned when the <audio>
+    // element remounts after a native→html5 fallback: the URL is unchanged
+    // across that transition, so a [url]-only effect would never run on the
+    // replacement node and playback would stay silent.
+  }, [url, useNative]);
 
   useEffect(() => {
     const a = audioRef.current;

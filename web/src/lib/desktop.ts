@@ -13,6 +13,8 @@ export interface DesktopPlatform {
   os: string;
   arch: string;
   family: string;
+  /** Linux only: true when launched from an AppImage bundle. */
+  is_appimage?: boolean;
 }
 
 /** Cached result of the native `get_platform` command (null in browser). */

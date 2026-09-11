@@ -71,7 +71,9 @@ const TIER_STYLE: Record<AudioTier, { color: string; badge: string }> = {
 // Codecs the Chromium/WebKitGTK webviews cannot decode natively (no decoder
 // compiled in), so playback must go through the server transcode pipeline.
 const NON_NATIVE_CODECS = new Set([
-  "alac", "wma", "wmav1", "wmav2", "wmapro", "ape", "wavpack", "tta",
+  // Extension values used by the no-metadata fallback below (e.g. "wv" for
+  // WavPack) as well as ffprobe codec names used by the real-metadata path.
+  "alac", "wma", "wmav1", "wmav2", "wmapro", "ape", "wavpack", "wv", "tta",
   "dts", "dca", "ac3", "eac3", "truehd", "mlp", "amr_nb", "amr_wb", "gsm_ms",
 ]);
 
@@ -192,6 +194,19 @@ export function getAudioQuality(
       isLossless: false,
       needsTranscode: true,
       detail: "WMA",
+    };
+  }
+  if (ext === "mka" || ext === "dsf" || ext === "dff") {
+    return {
+      tier: "unknown",
+      label: ext.toUpperCase(),
+      color: TIER_STYLE.unknown.color,
+      badge: TIER_STYLE.unknown.badge,
+      // DSD containers (dsf/dff) and Matroska audio are not decodable by the
+      // webviews, so they must go through the server transcode pipeline.
+      isLossless: ext === "dsf" || ext === "dff",
+      needsTranscode: true,
+      detail: ext.toUpperCase(),
     };
   }
   if (mime.startsWith("audio/")) {

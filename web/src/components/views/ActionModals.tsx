@@ -16,7 +16,9 @@ export function ActionModals({ menu, rootId, path, onClose, onDone, onArchiveExt
   onDone: () => void;
   onArchiveExtract: (src: string, dest: string) => void;
 }) {
-  const [value, setValue] = useState("");
+  const [value, setValue] = useState(
+    menu.kind === "rename" && menu.item ? menu.item.name : "",
+  );
   const [content, setContent] = useState("");
   const pushToast = useUI((s) => s.pushToast);
   const base = (name: string) => (path ? `${path}/${name}` : name);
@@ -64,9 +66,10 @@ export function ActionModals({ menu, rootId, path, onClose, onDone, onArchiveExt
     );
   }
   if (menu.kind === "rename" && menu.item) {
+    const trimmed = value.trim();
     return (
-      <Modal title="Rename" onClose={onClose} footer={<Button variant="primary" size="sm" onClick={() => run(() => filesApi.rename(rootId, menu.item!.path, value), "Renamed")}>Rename</Button>}>
-        <input autoFocus defaultValue={menu.item.name} onChange={(e) => setValue(e.target.value)} className="glass-input w-full rounded-xl px-3 py-2" />
+      <Modal title="Rename" onClose={onClose} footer={<Button variant="primary" size="sm" disabled={!trimmed} onClick={() => run(() => filesApi.rename(rootId, menu.item!.path, trimmed), "Renamed")}>Rename</Button>}>
+        <input autoFocus value={value} onChange={(e) => setValue(e.target.value)} className="glass-input w-full rounded-xl px-3 py-2" />
       </Modal>
     );
   }

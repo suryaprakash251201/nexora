@@ -46,11 +46,15 @@ export default function Toaster() {
             </button>
           </div>
           
-          <div className="h-1 w-full bg-border/50">
-            <div className={`h-full animate-[n-progress-bar_4s_linear_forwards] origin-left
-              ${t.kind === "success" ? "bg-success" : t.kind === "error" ? "bg-danger" : "bg-accent"}`} 
-            />
-          </div>
+          {Number.isFinite(t.duration ?? 4000) && (
+            <div className="h-1 w-full bg-border/50">
+              <div
+                className={`h-full origin-left
+                ${t.kind === "success" ? "bg-success" : t.kind === "error" ? "bg-danger" : "bg-accent"}`}
+                style={{ animation: `n-progress-bar ${t.duration ?? 4000}ms linear forwards` }}
+              />
+            </div>
+          )}
         </div>
       ))}
     </div>

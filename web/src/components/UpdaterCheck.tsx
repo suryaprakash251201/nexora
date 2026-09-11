@@ -21,16 +21,18 @@ export default function UpdaterCheck() {
         if (!update) return;
 
         const platform = await getPlatform();
+        // Only AppImage can self-install on Linux. The AppImage runtime sets
+        // APPIMAGE, surfaced by the native get_platform command; a URL-path
+        // check cannot detect it (window.location is the tauri:// origin).
         const linuxNonAppImage =
-          platform?.os === "linux" &&
-          !window.location.pathname.includes("/tmp/.mount_"); // AppImage mounts under /tmp/.mount_*
+          platform?.os === "linux" && !platform?.is_appimage;
 
         toast(`Update v${update.version} available!`, {
           description: linuxNonAppImage
             ? "Download the new version from GitHub Releases, then reinstall via your package manager."
             : "A new version of Nexora is ready to install.",
           duration: linuxNonAppImage ? Infinity : 10000,
-              action: linuxNonAppImage
+          action: linuxNonAppImage
             ? undefined
             : {
                 label: "Install & Restart",

@@ -129,8 +129,6 @@ export function AudioPlayer({
   const offsetRef = useRef(0);
   const fallbackFormats: AudioTranscodeFormat[] = isTauri ? ["flac", "flac24", "aac"] : ["aac", "flac"];
   const sessionIdRef = useRef(generateSessionId());
-  /** Latest `step` for the uncontrolled ended-listener (see effect below). */
-  const onEndedStepRef = useRef<() => void>(() => {});
   /** Latest `step` for the global media-key handler (next/previous track). */
   const stepRef = useRef<(dir: number) => void>(() => {});
 
@@ -204,11 +202,9 @@ export function AudioPlayer({
     if (controlled) return;
     const a = ref.current;
     if (!a) return;
-    // Keep a live reference to `step`: this effect only re-subscribes when
-    // the URL changes, but `step` closes over the queue index — without the
-    // ref, duplicate URLs at consecutive playlist positions would advance
-    // using a stale index.
-    onEndedStepRef.current = () => step(1);
+    // Read `step` through `stepRef` instead of closing over it: this effect
+    // only re-subscribes when the URL changes, so two consecutive queue
+    // entries with identical URLs would otherwise advance with a stale index.
     // Transcoded streams restart timestamps at 0 (?start=), so re-add the
     // offset to match the position the user actually seeked to.
     const onTime = () => setLCur(a.currentTime + offsetRef.current);
@@ -217,7 +213,7 @@ export function AudioPlayer({
     const onPause = () => setLPlaying(false);
     const onWaiting = () => setLBuffering(true);
     const onReady = () => setLBuffering(false);
-    const onEnded = () => onEndedStepRef.current?.();
+    const onEnded = () => stepRef.current(1);
     a.addEventListener("timeupdate", onTime);
     a.addEventListener("loadedmetadata", onMeta);
     a.addEventListener("play", onPlay);
@@ -326,9 +322,9 @@ export function AudioPlayer({
     const ni = (qIndex + dir + playlist.length) % playlist.length;
     onSelect(ni);
   };
-  // Keep the media-key ref live (same staleness trap as onEndedStepRef:
-  // the handler effect only re-subscribes when `controlled` changes, but
-  // `step` closes over the queue index).
+  // Keep the media-key ref live (same staleness trap as onEnded: the handler
+  // effect only re-subscribes when `controlled` changes, but `step` closes
+  // over the queue index).
   stepRef.current = step;
 
   const playing = controlled ? isPlaying : lPlaying;

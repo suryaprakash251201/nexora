@@ -585,7 +585,11 @@ async function runChunkedUpload(
         await putChunk(st, index, (delta) => bump(index, delta));
         st.inflight.delete(index);
         st.ackedBytes += Math.min(CHUNK_SIZE, total - index * CHUNK_SIZE);
-        setP({ loaded: Math.min(total, st.ackedBytes), status: "active" });
+        // Don't flip a paused transfer back to "active": pauseTransfer()
+        // already set the status, and the worker throws on the next loop turn.
+        setP(st.paused
+          ? { loaded: Math.min(total, st.ackedBytes) }
+          : { loaded: Math.min(total, st.ackedBytes), status: "active" });
       }
     };
 
@@ -612,7 +616,7 @@ async function runChunkedUpload(
     setP({ loaded: total, speed: 0, status: "done" });
     onDone?.();
   } catch (e: any) {
-    if (st.cancelled || e?.name === "AbortError") {
+    if (st.cancelled || st.paused || e?.name === "AbortError") {
       if (st.paused) {
         setP({ status: "paused", speed: 0 }); // keep session id → resume later
         return;

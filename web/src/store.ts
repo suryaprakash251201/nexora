@@ -118,7 +118,13 @@ export const useUI = create<UIState>((set, get) => ({
     if (overflow > 0) {
       for (const t of get().toasts.slice(0, overflow)) get().dismissToast(t.id);
     }
-    setTimeout(() => get().dismissToast(id), duration ?? 4000);
+    // `Infinity` means "pin until dismissed". Passing it to setTimeout would
+    // coerce to 0 and dismiss the toast on the next tick, so only schedule a
+    // timer for finite durations.
+    const ms = duration ?? 4000;
+    if (Number.isFinite(ms)) {
+      setTimeout(() => get().dismissToast(id), ms);
+    }
   },
   dismissToast: (id) => set({ toasts: get().toasts.filter((t) => t.id !== id) }),
 }));

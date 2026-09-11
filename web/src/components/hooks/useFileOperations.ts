@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { del, post, getBaseUrl } from '../../api/client';
+import { del, post, getMediaUrl } from '../../api/client';
 import { trashApi } from '../../api/endpoints';
 import { useUI } from '../../store';
 import type { QueryClient } from '@tanstack/react-query';
@@ -108,9 +108,18 @@ export function useFileOperations({
 }
 
 function pollArchive(jobId: string, pushToast: (k: any, m: string) => void) {
-  // Resolve against the configured API base — a relative URL never reaches
-  // the server in desktop builds pointed at a remote host.
-  const es = new EventSource(`${getBaseUrl()}/api/v1/jobs/${jobId}/events`);
+  // Resolve against the configured API base via getMediaUrl: it returns an
+  // absolute URL and appends the bearer query token in Tauri desktop builds
+  // (where the WebView's cookies aren't shared with the external server).
+  // A bare relative URL would resolve against tauri://localhost and never
+  // reach the API there.
+  const eventsUrl = getMediaUrl(`/jobs/${jobId}/events`);
+  const downloadUrl = getMediaUrl(`/jobs/${jobId}/download`);
+  if (!eventsUrl || !downloadUrl) {
+    pushToast('error', 'Archive failed');
+    return;
+  }
+  const es = new EventSource(eventsUrl);
   let settled = false;
   const finish = (ok: boolean, msg?: string) => {
     if (settled) return;
@@ -118,7 +127,7 @@ function pollArchive(jobId: string, pushToast: (k: any, m: string) => void) {
     es.close();
     if (ok) { 
       pushToast('success', 'Archive ready'); 
-      window.open(`${getBaseUrl()}/api/v1/jobs/${jobId}/download`, '_blank', 'noopener,noreferrer');
+      window.open(downloadUrl, '_blank', 'noopener,noreferrer');
     } else {
       pushToast('error', msg || 'Archive failed');
     }

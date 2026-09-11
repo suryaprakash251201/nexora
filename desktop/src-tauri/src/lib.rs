@@ -29,13 +29,17 @@ fn get_platform() -> serde_json::Value {
         "os": std::env::consts::OS,
         "arch": std::env::consts::ARCH,
         "family": std::env::consts::FAMILY,
+        // Set by the AppImage runtime; lets the frontend enable the in-app
+        // self-updater only where the updater plugin can actually install
+        // (AppImage). deb/rpm installs must update via their package manager.
+        "is_appimage": std::env::var_os("APPIMAGE").is_some(),
     })
 }
 
 /// Toggle system sleep inhibition for large transfers.
 /// Uses platform-specific APIs to prevent the system from sleeping.
 #[tauri::command]
-async fn set_sleep_inhibition(inhibit: bool, app: tauri::AppHandle) -> Result<(), String> {
+async fn set_sleep_inhibition(inhibit: bool) -> Result<(), String> {
     if inhibit == SLEEP_INHIBITED.load(Ordering::SeqCst) {
         return Ok(());
     }

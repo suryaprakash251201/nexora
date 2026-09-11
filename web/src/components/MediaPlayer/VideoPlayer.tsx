@@ -32,7 +32,7 @@ export function srtToVtt(srt: string): string {
     if (lines.length < 2) continue;
     let i = 0;
     if (/^\d+$/.test(lines[0])) i = 1;
-    const timing = lines[i].replace(",", ".");
+    const timing = lines[i].replace(/,/g, ".");
     out += timing + "\n" + lines.slice(i + 1).join("\n") + "\n\n";
   }
   return out;

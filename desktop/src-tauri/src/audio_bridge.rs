@@ -141,12 +141,25 @@ pub fn audio_native_set_speed(session: State<'_, AudioSession>, rate: f64) -> Re
     with_player!(session, |p: &PlayerHandle| p.set_speed(rate))
 }
 
+// These two return plain values (not `Result`), so they use an explicit
+// lock/match instead of `with_player!`. The macro's `$body(p).map_err(...)`
+// leaves the closure's error type unconstrained (`Ok(x)` infers an unknown
+// `E`), which fails to compile with E0282 — a bug the release workflow hits
+// because CI never builds the `native-audio` feature.
 #[tauri::command]
 pub fn audio_native_position(session: State<'_, AudioSession>) -> Result<f64, String> {
-    with_player!(session, |p: &PlayerHandle| Ok(p.position()))
+    let guard = session.0.lock().expect("session lock");
+    match guard.as_ref() {
+        Some(p) => Ok(p.position()),
+        None => Err("no active native track".into()),
+    }
 }
 
 #[tauri::command]
 pub fn audio_native_duration(session: State<'_, AudioSession>) -> Result<Option<f64>, String> {
-    with_player!(session, |p: &PlayerHandle| Ok(p.duration()))
+    let guard = session.0.lock().expect("session lock");
+    match guard.as_ref() {
+        Some(p) => Ok(p.duration()),
+        None => Err("no active native track".into()),
+    }
 }
