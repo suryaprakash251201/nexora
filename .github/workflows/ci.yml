@@ -28,7 +28,7 @@ jobs:
           cache: true
 
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v8
+        uses: golangci/golangci-lint-action@v9
         with:
           # Versioned install avoids stale local binaries that can't read
           # Go 1.2x export data. Config: .golangci.yml (gofmt, goimports,
