@@ -16,18 +16,9 @@
     "@tauri-apps/plugin-global-shortcut": "^2.3.2",
     "@tauri-apps/plugin-notification": "^2.4.0",
     "@tauri-apps/plugin-process": "^2.3.1",
-<<<<<<< HEAD
-    "@tauri-apps/plugin-shell": "^2.3.5",
-    "@tauri-apps/plugin-updater": "^2.11.0",
-=======
     "@tauri-apps/plugin-shell": "^2.3.6",
-    "@tauri-apps/plugin-updater": "^2.10.1",
-<<<<<<< HEAD
->>>>>>> eae1f90 (chore(deps): bump @tauri-apps/plugin-shell in /desktop)
-    "@tauri-apps/plugin-upload": "^2.4.0",
-=======
+    "@tauri-apps/plugin-updater": "^2.11.0",
     "@tauri-apps/plugin-upload": "^2.4.1",
->>>>>>> 94e1561 (chore(deps): bump @tauri-apps/plugin-upload in /desktop)
     "@tauri-apps/plugin-window-state": "^2.4.1"
   }
 }
