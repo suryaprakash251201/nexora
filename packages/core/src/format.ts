@@ -60,11 +60,24 @@ export function cleanTrackTitle(name: string): string {
   if (!name) return name;
   let t = name.replace(/\.[^.]+$/, "");
   t = t.replace(/^\s*\d{1,3}\s*[.\-–—)_]\s*/, "");
-  let prev: string;
-  do {
-    prev = t;
-    t = t.replace(/\s*[\(（\[].*?[\)）\]]\s*$/, "");
-  } while (t !== prev);
+  // Strip a trailing "(…)"/"[…]" tag (including full-width "（…）").
+  // Implemented as a single scan rather than the equivalent
+  // /\s*[\(（\[].*?[\)）\]]\s*$/ + loop: that regex backtracks
+  // polynomially on crafted input (CodeQL js/polynomial-redos), and because
+  // it anchors on the left-most opener the loop could only fire once anyway.
+  let end = t.length;
+  while (end > 0 && /\s/.test(t[end - 1])) end--;
+  if (end > 0) {
+    const last = t[end - 1];
+    if (last === ")" || last === "）" || last === "]") {
+      const openAt = t.search(/[\(（\[]/);
+      if (openAt >= 0 && openAt < end) {
+        let cut = openAt;
+        while (cut > 0 && /\s/.test(t[cut - 1])) cut--;
+        t = t.slice(0, cut);
+      }
+    }
+  }
   return t.trim();
 }
 

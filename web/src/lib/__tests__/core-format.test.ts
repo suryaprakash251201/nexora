@@ -31,6 +31,18 @@ describe("cleanTrackTitle", () => {
     expect(cleanTrackTitle("01 - Song Name.mp3")).toContain("Song Name");
     expect(cleanTrackTitle("Song Name.flac")).toBe(cleanTrackTitle("Song Name.flac"));
   });
+  it("strips trailing bracketed tags", () => {
+    expect(cleanTrackTitle("Song (Live)")).toBe("Song");
+    expect(cleanTrackTitle("Song [Remastered]")).toBe("Song");
+    expect(cleanTrackTitle("Song (Live) [Remastered]")).toBe("Song");
+    expect(cleanTrackTitle("Song （日本語）")).toBe("Song");
+  });
+  it("leaves an unclosed bracket unchanged and stays linear", () => {
+    // Guards against the previous polynomial regex: this input made the old
+    // implementation backtrack O(n^2). No closing bracket → no strip.
+    const nasty = "(".repeat(20000);
+    expect(cleanTrackTitle(nasty)).toBe(nasty);
+  });
   it("handles empty input", () => {
     expect(cleanTrackTitle("")).toBe("");
   });
