@@ -192,6 +192,14 @@ type ResetToken struct {
 	CreatedAt string
 }
 
+// DeleteResetTokensForUser revokes all outstanding reset tokens for a user.
+// Used to enforce a single active reset code: issuing a new code must
+// invalidate older ones so a leaked earlier code cannot be replayed.
+func (s *UserStore) DeleteResetTokensForUser(userID string) error {
+	_, err := s.db.Exec(`DELETE FROM reset_tokens WHERE user_id = ?`, userID)
+	return err
+}
+
 // CreateResetToken stores a hashed reset token with expiry.
 func (s *UserStore) CreateResetToken(userID, tokenHash, expiresAt string) error {
 	id := util.NewID("rt_", 12)

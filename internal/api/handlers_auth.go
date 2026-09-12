@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -53,6 +54,7 @@ type setupRequest struct {
 }
 
 func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	needs, err := s.Users.NeedsSetup()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error", "could not check setup state", middleware.GetRequestID(r.Context()))
@@ -110,6 +112,7 @@ type loginRequest struct {
 }
 
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	var req loginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_body", "request body is not valid JSON", middleware.GetRequestID(r.Context()))
@@ -121,7 +124,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	ip := clientIP(r)
 
-	if locked, _ := s.Guard.IsLocked(loginKey(req.Login)); locked {
+	if locked, _ := s.Guard.IsLocked(loginKey(req.Login, ip)); locked {
 		_ = s.Audit.Record("", "login_failed", req.Login, "account locked", ip)
 		writeError(w, http.StatusTooManyRequests, "account_locked", "account temporarily locked, try again later", middleware.GetRequestID(r.Context()))
 		return
@@ -133,7 +136,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !ok || !auth.VerifyPassword(req.Password, user.PasswordHash) {
-		backoff := s.Guard.RecordFailure(loginKey(req.Login))
+		backoff := s.Guard.RecordFailure(loginKey(req.Login, ip))
 		_ = s.Audit.Record("", "login_failed", req.Login, "invalid credentials", ip)
 		if s.Metrics != nil {
 			s.Metrics.IncLoginFailure()
@@ -151,7 +154,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.Guard.RecordSuccess(loginKey(req.Login))
+	s.Guard.RecordSuccess(loginKey(req.Login, ip))
 
 	if user.TOTPEnabled {
 		writeJSON(w, http.StatusOK, map[string]any{"totp_required": true, "user_id": user.ID})
@@ -207,18 +210,37 @@ type changePasswordRequest struct {
 }
 
 func (s *Server) handleForgotPassword(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	var req struct {
 		Login string `json:"login"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Login == "" {
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || strings.TrimSpace(req.Login) == "" {
 		writeError(w, http.StatusBadRequest, "invalid_body", "login is required", middleware.GetRequestID(r.Context()))
 		return
+	}
+	req.Login = strings.TrimSpace(req.Login)
+	ip := clientIP(r)
+
+	// Per-account throttle: at most LockoutAttempts reset codes per window.
+	// Without this, anyone who knows a login can mint an unbounded number of
+	// live reset tokens (and — since there is no mail channel and the code
+	// is returned in the response — probe the endpoint freely).
+	if s.Guard != nil {
+		if locked, _ := s.Guard.IsLocked("pwdreset:" + strings.ToLower(req.Login)); locked {
+			_ = s.Audit.Record("", "password_reset_throttled", req.Login, "", ip)
+			writeError(w, http.StatusTooManyRequests, "too_many_attempts",
+				"too many reset attempts; try again later", middleware.GetRequestID(r.Context()))
+			return
+		}
 	}
 
 	user, ok, err := s.Users.GetByLogin(req.Login)
 	if err != nil || !ok {
 		// Don't reveal whether the user exists.
-		// Add a constant-time delay to prevent timing-based user enumeration.
+		if s.Guard != nil {
+			_ = s.Guard.RecordFailure("pwdreset:" + strings.ToLower(req.Login))
+		}
+		// Constant-time delay to prevent timing-based user enumeration.
 		time.Sleep(200 * time.Millisecond)
 		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "message": "If the account exists, a reset code has been generated."})
 		return
@@ -229,17 +251,30 @@ func (s *Server) handleForgotPassword(w http.ResponseWriter, r *http.Request) {
 	tokenHash := hex.EncodeToString(sum[:])
 	expiresAt := time.Now().Add(15 * time.Minute).UTC().Format(time.RFC3339)
 
+	// Single active token per user: invalidate older codes so a leaked
+	// earlier code cannot be replayed after a newer one was issued.
+	_ = s.Users.DeleteResetTokensForUser(user.ID)
 	if err := s.Users.CreateResetToken(user.ID, tokenHash, expiresAt); err != nil {
 		s.Log.Error("failed to create reset token", "error", err)
 		writeError(w, http.StatusInternalServerError, "internal_error", "could not generate reset code", middleware.GetRequestID(r.Context()))
 		return
 	}
+	if s.Guard != nil {
+		_ = s.Guard.RecordFailure("pwdreset:" + strings.ToLower(req.Login))
+	}
 
-	_ = s.Audit.Record(user.ID, "password_reset_requested", user.Username, "", clientIP(r))
+	_ = s.Audit.Record(user.ID, "password_reset_requested", user.Username, "", ip)
+	// NOTE: the raw code is returned in the response because Nexora has no
+	// mail channel. Treat this endpoint as sensitive: it is rate-limited
+	// per IP, throttled per account, and only one code is valid at a time.
+	// Deployments that expose the API publicly should front it with an
+	// additional proxy-level limit.
+	time.Sleep(200 * time.Millisecond)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "token": raw, "message": "Use this code to reset your password. It expires in 15 minutes."})
 }
 
 func (s *Server) handleResetPassword(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	var req struct {
 		Token    string `json:"token"`
 		Password string `json:"password"`
@@ -267,10 +302,13 @@ func (s *Server) handleResetPassword(w http.ResponseWriter, r *http.Request) {
 		// non-Expiry sql.ErrNoRows falls through to the generic
 		// "invalid_token" path.
 		if errors.Is(err, auth.ErrResetExpired) {
-			_ = s.Audit.Record("", "password_reset_failed", req.Token[:min(8, len(req.Token))], "expired", clientIP(r))
+			// Never log token material, not even a prefix: prefixes of a
+			// low-entropy code shrink the search space for anyone with log access.
+			_ = s.Audit.Record("", "password_reset_failed", "[redacted]", "expired", clientIP(r))
 			writeError(w, http.StatusBadRequest, "token_expired", "This reset code has expired — please request a new one", middleware.GetRequestID(r.Context()))
 			return
 		}
+		_ = s.Audit.Record("", "password_reset_failed", "[redacted]", "invalid", clientIP(r))
 		writeError(w, http.StatusBadRequest, "invalid_token", "Invalid reset code", middleware.GetRequestID(r.Context()))
 		return
 	}
@@ -333,6 +371,15 @@ func (s *Server) handleTOTPSetup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Refuse to overwrite an active second factor: without this, any
+	// hijacked session could silently replace the victim's TOTP secret
+	// (the setup response contains the new QR) and lock them out. Users
+	// must disable (password-confirmed) before re-enrolling.
+	if user.TOTPEnabled {
+		writeError(w, http.StatusConflict, "totp_already_enabled", "Two-factor authentication is already enabled — disable it first to re-enroll", middleware.GetRequestID(r.Context()))
+		return
+	}
+
 	setup, err := auth.GenerateTOTPSetup(user.Username, "Nexora")
 	if err != nil {
 		s.Log.Error("failed to generate TOTP setup", "error", err)
@@ -367,9 +414,26 @@ func (s *Server) handleTOTPVerify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Throttle enrollment-code guessing: the 6-digit space is small and
+	// this endpoint is reachable with only a (possibly hijacked) session.
+	totpKey := "totp-enroll:" + user.ID
+	if s.Guard != nil {
+		if locked, _ := s.Guard.IsLocked(totpKey); locked {
+			writeError(w, http.StatusTooManyRequests, "too_many_attempts",
+				"too many failed attempts; try again later", middleware.GetRequestID(r.Context()))
+			return
+		}
+	}
+
 	if !auth.VerifyTOTPCode(user.TOTPSecret, req.Code) {
+		if s.Guard != nil {
+			_ = s.Guard.RecordFailure(totpKey)
+		}
 		writeError(w, http.StatusBadRequest, "invalid_code", "Invalid verification code", middleware.GetRequestID(r.Context()))
 		return
+	}
+	if s.Guard != nil {
+		s.Guard.RecordSuccess(totpKey)
 	}
 
 	if err := s.Users.UpdateTOTPEnabled(user.ID, true); err != nil {
@@ -411,6 +475,7 @@ func (s *Server) handleTOTPDisable(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleTOTPVerifyLogin(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	var req struct {
 		Login    string `json:"login"`
 		Password string `json:"password"`
@@ -421,25 +486,25 @@ func (s *Server) handleTOTPVerifyLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Per-account lockout (same key as the password step) so a brute-force
-	// attack on the 6-digit TOTP code is rate-limited per account even when
-	// the attacker already has valid credentials. Without this, the
+	ip := clientIP(r)
+
+	// Per-account+IP lockout (same key as the password step) so a
+	// brute-force attack on the 6-digit TOTP code is rate-limited even
+	// when the attacker already has valid credentials. Without this, the
 	// IP-based limiter allows ~1000 attempts/min/account and the TOTP
 	// space (10^6) is exhausted in a few hours.
 	if s.Guard != nil {
-		if locked, _ := s.Guard.IsLocked(loginKey(req.Login)); locked {
+		if locked, _ := s.Guard.IsLocked(loginKey(req.Login, ip)); locked {
 			writeError(w, http.StatusTooManyRequests, "too_many_attempts",
 				"too many failed attempts; try again later", middleware.GetRequestID(r.Context()))
 			return
 		}
 	}
 
-	ip := clientIP(r)
-
 	user, ok, err := s.Users.GetByLogin(req.Login)
 	if err != nil || !ok || !auth.VerifyPassword(req.Password, user.PasswordHash) {
 		if s.Guard != nil {
-			_ = s.Guard.RecordFailure(loginKey(req.Login))
+			_ = s.Guard.RecordFailure(loginKey(req.Login, ip))
 		}
 		_ = s.Audit.Record("", "login_failed", req.Login, "invalid credentials (2FA step)", ip)
 		writeError(w, http.StatusUnauthorized, "invalid_credentials", "invalid credentials", middleware.GetRequestID(r.Context()))
@@ -455,14 +520,14 @@ func (s *Server) handleTOTPVerifyLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	if !auth.VerifyTOTPCode(user.TOTPSecret, req.Code) {
 		if s.Guard != nil {
-			_ = s.Guard.RecordFailure(loginKey(req.Login))
+			_ = s.Guard.RecordFailure(loginKey(req.Login, ip))
 		}
 		_ = s.Audit.Record(user.ID, "login_failed", user.Username, "invalid 2FA code", ip)
 		writeError(w, http.StatusUnauthorized, "invalid_code", "Invalid authentication code", middleware.GetRequestID(r.Context()))
 		return
 	}
 	if s.Guard != nil {
-		s.Guard.RecordSuccess(loginKey(req.Login))
+		s.Guard.RecordSuccess(loginKey(req.Login, ip))
 	}
 
 	token := s.startSession(w, r, user.ID)
@@ -478,11 +543,24 @@ func (s *Server) handleTailscaleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// The Tailscale identity headers are plain HTTP headers: anyone who can
+	// reach the listener can forge them. Only honor them when the TCP peer
+	// is the local Tailscale sidecar (loopback) or an explicitly trusted
+	// reverse proxy that strips client-supplied values and re-injects them.
+	if !tailscalePeerAllowed(r, s.Cfg.TrustedProxies) {
+		_ = s.Audit.Record("", "tailscale_rejected", "", "untrusted peer", clientIP(r))
+		writeError(w, http.StatusForbidden, "tailscale_untrusted_peer",
+			"Tailscale identity is only accepted from the local tailnet sidecar or a trusted proxy", middleware.GetRequestID(r.Context()))
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	tailscaleUser := r.Header.Get("Tailscale-User-Login") // header injected by Tailscale Serve
 	if tailscaleUser == "" {
 		tailscaleUser = r.Header.Get("Tailscale-User") // fallback for Caddy-style proxies
 	}
-	if tailscaleUser == "" {
+	tailscaleUser = strings.TrimSpace(tailscaleUser)
+	if !validTailscaleIdentity(tailscaleUser) {
 		writeError(w, http.StatusUnauthorized, "tailscale_user_missing", "Tailscale identity header not found — ensure you're accessing via Tailscale", middleware.GetRequestID(r.Context()))
 		return
 	}
@@ -499,9 +577,13 @@ func (s *Server) handleTailscaleLogin(w http.ResponseWriter, r *http.Request) {
 		// Auto-provision a new user from Tailscale identity.
 		// Username is the part before @; role defaults to "user".
 		parts := strings.SplitN(tailscaleUser, "@", 2)
-		username := parts[0]
-		if len(username) < 3 {
-			username = tailscaleUser
+		username := sanitizeTailscaleUsername(parts[0])
+		if username == "" {
+			username = sanitizeTailscaleUsername(tailscaleUser)
+		}
+		if username == "" {
+			writeError(w, http.StatusBadRequest, "tailscale_user_invalid", "Tailscale identity cannot be mapped to a username", middleware.GetRequestID(r.Context()))
+			return
 		}
 		user = auth.User{
 			Username:    username,
@@ -546,6 +628,7 @@ func (s *Server) startSession(w http.ResponseWriter, r *http.Request, userID str
 		SameSite: http.SameSiteStrictMode,
 		Secure:   s.Cfg.SecureCookies,
 		MaxAge:   int(s.Cfg.SessionLifetime.Seconds()),
+		Expires:  sess.ExpiresAt,
 	})
 	return sess.Token
 }
@@ -564,7 +647,80 @@ func configRootsToStorage(in []config.RootConfig) []storage.Root {
 	return out
 }
 
-func loginKey(login string) string { return "login:" + login }
+// loginKey scopes brute-force tracking to an account AND a client IP.
+//
+// A per-account-only key lets any remote attacker hard-lock a victim's
+// account (lockout DoS). Keying by account+IP keeps the backoff effective
+// against single-source guessing while one attacker's failures can no
+// longer lock the legitimate user out from their own network. Distributed
+// guessing across many IPs is still bounded by the per-IP rate limiter.
+func loginKey(login, ip string) string {
+	return "login:" + strings.ToLower(strings.TrimSpace(login)) + "|" + strings.TrimSpace(ip)
+}
+
+// tailscalePeerAllowed reports whether the TCP peer of r is allowed to
+// assert a Tailscale identity: loopback (local `tailscale serve` sidecar)
+// or a CIDR from the trusted-proxies list. It deliberately inspects
+// RemoteAddr — not the resolved client IP — because X-Forwarded-For is
+// attacker-controlled whenever the peer itself is untrusted.
+func tailscalePeerAllowed(r *http.Request, trusted []string) bool {
+	host := r.RemoteAddr
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	host = strings.TrimSpace(host)
+	if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
+		return true
+	}
+	for _, c := range trusted {
+		c = strings.TrimSpace(c)
+		if c == "" {
+			continue
+		}
+		if !strings.Contains(c, "/") {
+			if c == host {
+				return true
+			}
+			continue
+		}
+		if _, ipnet, err := net.ParseCIDR(c); err == nil && ipnet.Contains(net.ParseIP(host)) {
+			return true
+		}
+	}
+	return false
+}
+
+// validTailscaleIdentity rejects empty, oversized, or control-character
+// laden identity headers (header-injection / log-forging hardening).
+func validTailscaleIdentity(v string) bool {
+	if v == "" || len(v) > 254 {
+		return false
+	}
+	for _, c := range v {
+		if c < 0x20 || c == 0x7f {
+			return false
+		}
+	}
+	return true
+}
+
+// sanitizeTailscaleUsername maps an identity fragment to a safe username:
+// lowercase alphanumerics plus . _ -, 3–64 chars. Anything else yields ""
+// so the caller can reject instead of persisting attacker-shaped names.
+func sanitizeTailscaleUsername(s string) string {
+	s = strings.ToLower(strings.TrimSpace(s))
+	var b strings.Builder
+	for _, c := range s {
+		if c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '.' || c == '_' || c == '-' {
+			b.WriteRune(c)
+		}
+	}
+	out := strings.Trim(b.String(), "._-")
+	if len(out) < 3 || len(out) > 64 {
+		return ""
+	}
+	return out
+}
 
 func clientIP(r *http.Request) string { return middleware.GetClientIP(r.Context()) }
 
@@ -585,7 +741,36 @@ func validatePassword(pw string) error {
 	if len(pw) > 256 {
 		return fmt.Errorf("password is too long")
 	}
+	// Require a mix of letters and digits so trivial passwords like
+	// "password" or "aaaaaaaa" are rejected even at 8+ characters.
+	var hasLetter, hasDigit bool
+	for _, c := range pw {
+		switch {
+		case c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z':
+			hasLetter = true
+		case c >= '0' && c <= '9':
+			hasDigit = true
+		}
+	}
+	if !hasLetter || !hasDigit {
+		return fmt.Errorf("password must contain both letters and numbers")
+	}
+	if commonPasswords[strings.ToLower(pw)] {
+		return fmt.Errorf("password is too common, choose a less predictable one")
+	}
 	return nil
+}
+
+// commonPasswords is a short denylist of the most abused passwords. It is
+// not a substitute for a breach-corpus check, but it blocks the guesses
+// that succeed first in credential-stuffing attacks.
+var commonPasswords = map[string]bool{
+	"password1": true, "password12": true, "password123": true,
+	"qwerty123": true, "abc12345": true, "12345678": true,
+	"letmein1": true, "welcome1": true, "admin123": true,
+	"nexora123": true, "changeme1": true, "monkey123": true,
+	"dragon123": true, "master123": true, "sunshine1": true,
+	"football1": true, "iloveyou1": true, "trustno1": true,
 }
 
 func emailLooksValid(email string) bool {
