@@ -69,6 +69,38 @@ jobs:
         run: npm ci
         working-directory: ./desktop
 
+      # Tauri hard-fails the build when an NPM @tauri-apps/plugin-* and its
+      # Rust tauri-plugin-* crate differ on major/minor (e.g. notification
+      # 2.4.0 vs 2.3.3). npm and cargo lockfiles drift silently when only one
+      # side is bumped, so fail fast here with the exact fix instead of a
+      # cryptic error 60s into every matrix leg.
+      - name: check tauri plugin versions in sync (npm vs cargo)
+        run: |
+          python3 - <<'EOF'
+          import json, re, sys
+          lock = json.load(open('desktop/package-lock.json'))
+          npm = {}
+          for k, v in lock.get('packages', {}).items():
+              name = k.split('node_modules/')[-1]
+              if name.startswith('@tauri-apps/plugin-'):
+                  npm[name.split('plugin-')[-1]] = v['version']
+          cargo_txt = open('desktop/src-tauri/Cargo.lock').read()
+          cargo = dict(re.findall(r'name = "tauri-plugin-([^"]+)"\nversion = "([^"]+)"', cargo_txt))
+          bad = []
+          for plugin, nver in sorted(npm.items()):
+              cver = cargo.get(plugin)
+              if not cver:
+                  continue
+              if tuple(nver.split('.')[:2]) != tuple(cver.split('.')[:2]):
+                  bad.append(f"{plugin}: npm {nver} vs cargo {cver}")
+          if bad:
+              print('Tauri plugin version mismatch (npm vs cargo, major.minor must match):')
+              print('\n'.join('  - ' + b for b in bad))
+              print('Fix: bump the lagging side, then refresh the lockfile (npm i / cargo update -p).')
+              sys.exit(1)
+          print('Tauri plugin versions in sync:', ', '.join(f'{k}={v}' for k, v in sorted(npm.items())))
+          EOF
+
       - name: generate app icons from favicon
         run: |
           cp ../web/public/favicon.svg src-tauri/icons/app-icon.svg
