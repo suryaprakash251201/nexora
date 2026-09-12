@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "motion/react";
 import {
   Home, Search, Folder, Star, Clock, ListMusic,
   Shield, LogOut, X, Ellipsis, Upload, FolderUp, FolderPlus, Trash2,
-  Share2, Images
+  Share2, Images, Calendar, CheckSquare
 } from "lucide-react";
 import type { SidebarView } from "../Sidebar";
 import type { Root } from "../../api/types";
@@ -220,6 +220,8 @@ export function MobileNav({
                     { id: "playlists" as SidebarView, label: "Playlists", icon: ListMusic },
                     { id: "shares" as SidebarView, label: "Shared", icon: Share2 },
                     { id: "photos" as SidebarView, label: "Photos", icon: Images },
+                    { id: "calendar" as SidebarView, label: "Calendar", icon: Calendar },
+                    { id: "tasks" as SidebarView, label: "Tasks", icon: CheckSquare },
                     { id: "trash" as SidebarView, label: "Trash", icon: Trash2 },
                   ].map((item) => {
                     const Icon = item.icon;

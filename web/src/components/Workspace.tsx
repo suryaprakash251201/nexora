@@ -33,6 +33,8 @@ const VideoView = React.lazy(() => import("./VideoView"));
 const ImageView = React.lazy(() => import("./ImageView"));
 const StorageAnalyticsPanel = React.lazy(() => import("./StorageAnalyticsPanel").then(m => ({ default: m.default })));
 const PhotosView = React.lazy(() => import("./PhotosView/index"));
+const CalendarPanel = React.lazy(() => import("./CalendarPanel"));
+const TasksPanel = React.lazy(() => import("./TasksPanel"));
 import { TagPicker, TagFilterBar, TagManager } from "./TagManager";
 import { VersionHistoryPanel } from "./VersionHistoryPanel";
 import { MobileNav } from "./layout/MobileNav";
@@ -100,6 +102,8 @@ export default function Workspace({ user }: { user: User }) {
   else if (pathname === "/playlists") view = "playlists";
   else if (pathname === "/analytics") view = "analytics";
   else if (pathname === "/photos") view = "photos";
+  else if (pathname === "/calendar") view = "calendar";
+  else if (pathname === "/tasks") view = "tasks";
   else if (pathname.startsWith("/admin")) view = "admin";
   
   const roots = useQuery({
@@ -138,6 +142,8 @@ export default function Workspace({ user }: { user: User }) {
       else if (v === "recents") navigate("/recents");
       else if (v === "playlists") navigate("/playlists");
       else if (v === "photos") navigate("/photos");
+      else if (v === "calendar") navigate("/calendar");
+      else if (v === "tasks") navigate("/tasks");
       else if (v === "admin") navigate("/admin");
     });
   }, [navigate, rootId, roots.data?.roots]);
@@ -317,6 +323,8 @@ export default function Workspace({ user }: { user: User }) {
       playlists: () => import("./PlaylistsPanel"),
       analytics: () => import("./StorageAnalyticsPanel"),
       photos: () => import("./PhotosView/index"),
+      calendar: () => import("./CalendarPanel"),
+      tasks: () => import("./TasksPanel"),
     };
     void chunkLoaders[v]?.().catch(() => {});
 
@@ -813,6 +821,16 @@ export default function Workspace({ user }: { user: User }) {
                 selectMode={selectMode}
                 onSelect={(id) => toggleSelect(id)}
               />
+            )}
+            {view === "calendar" && (
+              <Suspense fallback={<ViewSkeleton />}>
+                <CalendarPanel />
+              </Suspense>
+            )}
+            {view === "tasks" && (
+              <Suspense fallback={<ViewSkeleton />}>
+                <TasksPanel />
+              </Suspense>
             )}
             </Suspense>
           </motion.main>

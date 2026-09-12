@@ -81,14 +81,21 @@ func SecurityHeaders(cfg *config.Config) func(http.Handler) http.Handler {
 }
 
 func buildCSP() string {
+	// Google Identity Services + Calendar/Tasks REST endpoints. The web UI
+	// loads https://accounts.google.com/gsi/client directly (see
+	// web/src/lib/google.ts) and calls www.googleapis.com with the OAuth
+	// token, so both must be allow-listed — otherwise the GIS script is
+	// blocked and diagnostics stick at "Google library not loaded yet".
+	// Keep this in sync with desktop/src-tauri/tauri.conf.json `csp`.
 	return strings.Join([]string{
 		"default-src 'self'",
-		"script-src 'self'",
+		"script-src 'self' https://accounts.google.com https://apis.google.com",
 		"style-src 'self' 'unsafe-inline'",
 		"img-src 'self' data: blob:",
 		"media-src 'self' blob: data:",
 		"font-src 'self' data:",
-		"connect-src 'self'",
+		"connect-src 'self' https://accounts.google.com https://www.googleapis.com https://oauth2.googleapis.com",
+		"frame-src 'self' https://accounts.google.com",
 		"object-src 'none'",
 		"base-uri 'self'",
 		"frame-ancestors 'none'",

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useMemo } from "react";
 import { createPortal } from "react-dom";
-import { Search, Keyboard, Command, X, FolderOpen, File, Download, Upload, FolderUp, Share2, Star, Trash2, Pencil, Move, Copy, Archive, Settings, HelpCircle, RefreshCw, ChevronRight, Clock, Music, Archive as ArchiveIcon, FolderPlus, FilePlus, LayoutGrid, List, CheckSquare } from "lucide-react";
+import { Search, Keyboard, Command, X, FolderOpen, File, Download, Upload, FolderUp, Share2, Star, Trash2, Pencil, Move, Copy, Archive, Settings, HelpCircle, RefreshCw, ChevronRight, Clock, Music, Archive as ArchiveIcon, FolderPlus, FilePlus, LayoutGrid, List, CheckSquare, Calendar, ListTodo } from "lucide-react";
 import type { FileItem, Root, User } from "../api/types";
 import type { SidebarView } from "./Sidebar";
 import { formatBytes } from "../lib/format";
@@ -112,6 +112,8 @@ export default function CommandPalette({
       { id: "go-recents", label: "Go to Recent", description: "View recently accessed files", icon: <Clock className="h-4 w-4" />, shortcut: "G R", category: "navigation", action: () => { setView("recents"); onClose(); }, keywords: ["recent", "history"] },
       { id: "go-shares", label: "Go to Shared", description: "View shared files", icon: <Share2 className="h-4 w-4" />, shortcut: "G W", category: "navigation", action: () => { setView("shares"); onClose(); }, keywords: ["shared", "shares"] },
       { id: "go-playlists", label: "Go to Playlists", description: "Manage audio playlists", icon: <Music className="h-4 w-4" />, shortcut: "G P", category: "navigation", action: () => { setView("playlists"); onClose(); }, keywords: ["playlists", "music", "audio"] },
+      { id: "go-calendar", label: "Go to Calendar", description: "View calendar, sync Google Calendar", icon: <Calendar className="h-4 w-4" />, shortcut: "G C", category: "navigation", action: () => { setView("calendar"); onClose(); }, keywords: ["calendar", "events", "schedule", "google"] },
+      { id: "go-tasks", label: "Go to Tasks", description: "Manage to-dos, sync Google Tasks", icon: <ListTodo className="h-4 w-4" />, shortcut: "G K", category: "navigation", action: () => { setView("tasks"); onClose(); }, keywords: ["tasks", "todo", "todos", "google"] },
       { id: "go-search", label: "Search", description: "Open global search", icon: <Search className="h-4 w-4" />, shortcut: "G /", category: "navigation", action: () => { setView("search"); onClose(); }, keywords: ["search", "find"] },
 
       // File operations

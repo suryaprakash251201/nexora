@@ -1,4 +1,4 @@
-import { Trash2, Plus, Share2, Clock, Star, Search, Shield, ListMusic, Home, LogOut, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { Trash2, Plus, Share2, Clock, Star, Search, Shield, ListMusic, Home, LogOut, PanelLeftClose, PanelLeftOpen, Calendar, CheckSquare } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import type { Root } from "../api/types";
 import { memo, useState } from "react";
@@ -10,7 +10,7 @@ import { canDropInto, currentDragPaths, endDragMove, isInternalMoveDragEvent } f
 import { formatBytes } from "../lib/format";
 import NexoraLogo from "./icons/NexoraLogo";
 
-export type SidebarView = "home" | "files" | "trash" | "favorites" | "recents" | "shares" | "playlists" | "search" | "admin" | "video" | "image" | "analytics" | "photos";
+export type SidebarView = "home" | "files" | "trash" | "favorites" | "recents" | "shares" | "playlists" | "search" | "admin" | "video" | "image" | "analytics" | "photos" | "calendar" | "tasks";
 
 const viewColors: Record<string, string> = {
   home: "#5B8CFF",
@@ -24,7 +24,9 @@ const viewColors: Record<string, string> = {
   admin: "#F87171",
   video: "#818CF8",
   image: "#34D399",
-  photos: "#F43F5E"
+  photos: "#F43F5E",
+  calendar: "#34D399",
+  tasks: "#FBBF24"
 };
 
 const NavItem = ({ v, icon, label, isActive, badge, collapsed, onSelectView, onHoverView }: { v: SidebarView; icon: React.ReactNode; label: string; isActive: boolean; badge?: number; collapsed: boolean; onSelectView: (v: SidebarView) => void; onHoverView?: (v: SidebarView) => void; }) => {
@@ -183,6 +185,10 @@ export default memo(function Sidebar({
             <NavItem v="favorites" icon={<Star className="w-5 h-5" />} label="Favorites" isActive={view === "favorites"} badge={badgeCounts.favorites} collapsed={collapsed} onSelectView={onSelectView} onHoverView={onHoverView} />
             <NavItem v="shares" icon={<Share2 className="w-5 h-5" />} label="Shared" isActive={view === "shares"} badge={badgeCounts.shares} collapsed={collapsed} onSelectView={onSelectView} onHoverView={onHoverView} />
             <NavItem v="playlists" icon={<ListMusic className="w-5 h-5" />} label="Playlists" isActive={view === "playlists"} collapsed={collapsed} onSelectView={onSelectView} onHoverView={onHoverView} />
+
+            {!collapsed && <SectionLabel>Productivity</SectionLabel>}
+            <NavItem v="calendar" icon={<Calendar className="w-5 h-5" />} label="Calendar" isActive={view === "calendar"} collapsed={collapsed} onSelectView={onSelectView} onHoverView={onHoverView} />
+            <NavItem v="tasks" icon={<CheckSquare className="w-5 h-5" />} label="Tasks" isActive={view === "tasks"} collapsed={collapsed} onSelectView={onSelectView} onHoverView={onHoverView} />
 
             {!collapsed && <SectionLabel>Storage</SectionLabel>}
             <NavItem v="trash" icon={<Trash2 className="w-5 h-5" />} label="Trash" isActive={view === "trash"} badge={badgeCounts.trash} collapsed={collapsed} onSelectView={onSelectView} onHoverView={onHoverView} />

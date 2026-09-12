@@ -27,7 +27,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; img-src 'self' http: https: data: blob:; media-src 'self' http: https: blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; script-src 'self'; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' http: https: tauri:; frame-src 'self' blob: https://www.openstreetmap.org;"
+      "csp": "default-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; img-src 'self' http: https: data: blob:; media-src 'self' http: https: blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; script-src 'self' https://accounts.google.com https://apis.google.com; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' http: https: tauri: https://accounts.google.com https://www.googleapis.com https://oauth2.googleapis.com; frame-src 'self' blob: https://www.openstreetmap.org https://accounts.google.com;"
     }
   },
   "plugins": {
