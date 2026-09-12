@@ -84,9 +84,30 @@ impl AudioOut for NullSink {
 #[cfg(feature = "output")]
 pub mod rodio_out {
     use super::AudioOut;
-    use rodio::{OutputStream, OutputStreamHandle, SampleFormat, SamplesBuffer, Sink, Source};
+    use rodio::buffer::SamplesBuffer;
+    use rodio::{OutputStream, OutputStreamHandle, Sink, Source};
     use std::sync::atomic::{AtomicU64, Ordering};
-    use std::sync::Arc;
+    use std::sync::{Arc, OnceLock};
+
+    /// Process-wide audio device, opened once and intentionally never closed:
+    /// rodio's `OutputStream` must outlive every `Sink`, and since cpal 0.15
+    /// the stream is `!Send` on some platforms (macOS/Windows), so it cannot
+    /// live inside the `Send`-bound `RodioSink`. One device for the app's
+    /// lifetime is also kinder to the OS mixer than open-per-track churn.
+    static DEVICE_HANDLE: OnceLock<OutputStreamHandle> = OnceLock::new();
+
+    fn device_handle() -> Result<OutputStreamHandle, String> {
+        if let Some(h) = DEVICE_HANDLE.get() {
+            return Ok(h.clone());
+        }
+        let (stream, handle) =
+            OutputStream::try_default().map_err(|e| format!("no audio device: {e}"))?;
+        // If two threads race here the loser leaks one idle stream; harmless
+        // (it renders silence) and only the winner's handle is published.
+        let _ = DEVICE_HANDLE.set(handle.clone());
+        let _ = Box::leak(Box::new(stream));
+        Ok(DEVICE_HANDLE.get().expect("just set").clone())
+    }
 
     /// Wraps a samples chunk and counts every frame handed to the device.
     struct Counting {
@@ -97,9 +118,9 @@ pub mod rodio_out {
     impl Iterator for Counting {
         type Item = f32;
         fn next(&mut self) -> Option<f32> {
-            self.inner
-                .next()
-                .inspect(|_| self.counter.fetch_add(1, Ordering::Relaxed))
+            self.inner.next().inspect(|_| {
+                self.counter.fetch_add(1, Ordering::Relaxed);
+            })
         }
     }
 
@@ -107,14 +128,22 @@ pub mod rodio_out {
         fn current_frame_len(&self) -> Option<usize> {
             self.inner.current_frame_len()
         }
+        fn channels(&self) -> u16 {
+            self.inner.channels()
+        }
+        fn sample_rate(&self) -> u32 {
+            self.inner.sample_rate()
+        }
+        fn total_duration(&self) -> Option<std::time::Duration> {
+            self.inner.total_duration()
+        }
     }
 
-    /// rodio-backed output. One instance per track; owns the device stream so
-    /// dropping it releases the device cleanly. Channel/rate are supplied per
-    /// append (known only after decode).
+    /// rodio-backed output. One instance per track; shares the process-wide
+    /// device stream (see [`DEVICE_HANDLE`]) so dropping it only stops its
+    /// own `Sink`. Channel/rate are supplied per append (known only after
+    /// decode).
     pub struct RodioSink {
-        _stream: OutputStream, // must outlive the handle
-        handle: OutputStreamHandle,
         sink: Sink,
         counter: Arc<AtomicU64>,
         appended_total: u64,
@@ -123,13 +152,10 @@ pub mod rodio_out {
 
     impl RodioSink {
         pub fn try_new() -> Result<Self, String> {
-            let (stream, handle) =
-                OutputStream::try_default().map_err(|e| format!("no audio device: {e}"))?;
+            let handle = device_handle()?;
             let sink = Sink::try_new(&handle).map_err(|e| format!("sink init: {e}"))?;
             sink.set_volume(1.0);
             Ok(Self {
-                _stream: stream,
-                handle,
                 sink,
                 counter: Arc::new(AtomicU64::new(0)),
                 appended_total: 0,
@@ -140,12 +166,7 @@ pub mod rodio_out {
 
     impl AudioOut for RodioSink {
         fn append(&mut self, samples: &[f32], channels: u32, sample_rate: u32) {
-            let chunk = SamplesBuffer::new(
-                SampleFormat::F32,
-                channels as u16,
-                sample_rate,
-                samples.to_vec(),
-            );
+            let chunk = SamplesBuffer::new(channels as u16, sample_rate, samples.to_vec());
             self.sink.append(Counting {
                 inner: chunk,
                 counter: Arc::clone(&self.counter),
