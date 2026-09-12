@@ -126,6 +126,10 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
+      - name: list macos bundles (debug)
+        if: startsWith(matrix.platform, 'macos')
+        run: ls -lR desktop/src-tauri/target/release/bundle || true
+
       - name: upload macos bundles
         if: startsWith(matrix.platform, 'macos')
         uses: actions/upload-artifact@v7
