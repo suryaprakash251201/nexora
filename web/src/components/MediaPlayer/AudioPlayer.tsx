@@ -265,6 +265,10 @@ export function AudioPlayer({
     else a.pause();
   };
   const seek = (v: number) => {
+    if (!Number.isFinite(v)) return;
+    // No known duration yet (native MP3/VBR before ffprobe patch): the bar
+    // has no scale, so ignore pointer seeks instead of seeking to 0/NaN.
+    if (!(duration > 0) && controlled && engine.mode === "native") return;
     if (controlled) { player.seek(v); return; }
     // Transcoded streams don't support HTTP Range; restart via ?start= instead.
     const a = ref.current;
@@ -285,10 +289,13 @@ export function AudioPlayer({
     return !!a && a.src.includes("/files/transcode");
   };
   const seekFromPointer = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!(duration > 0)) return;
     const el = e.currentTarget;
     const rect = el.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / rect.width;
-    const t = Math.max(0, Math.min(duration || 0, x * (duration || 0)));
+    if (!(rect.width > 0)) return;
+    const x = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    const t = x * (duration || 0);
+    if (!Number.isFinite(t)) return;
     if (transcodeStream()) {
       dragTimeRef.current = t;
       setDragTime(t);

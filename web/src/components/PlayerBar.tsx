@@ -18,7 +18,7 @@ import {
 import type { FileItem } from "../api/types";
 import { usePlayer, engine } from "../store/player";
 import { useShallow } from "zustand/react/shallow";
-import { thumbUrl, rawUrl, audioTranscodeUrl, generateSessionId, serverSupportsTranscode, isLosslessExtension, isTauriRuntime, needsAudioTranscode, cleanTrackTitle } from "../lib/preview";
+import { thumbUrl, rawUrl, audioTranscodeUrl, generateSessionId, serverSupportsTranscode, isLosslessExtension, isTauriRuntime, needsAudioTranscode, cleanTrackTitle, fetchAudioInfo } from "../lib/preview";
 import type { AudioTranscodeFormat } from "../lib/preview";
 import { AudioInfoPanel, EqualizerBars } from "./LosslessPlayer";
 import MediaPlayer from "./MediaPlayer";
@@ -140,6 +140,15 @@ export default memo(function PlayerBar() {
         }
         if (took) {
           setUseNative(true);
+          // Symphonia reports no duration for MP3/VBR (no n_frames) → the
+          // timeline renders max=0 and every seek is degenerate (freeze).
+          // Patch the UI duration from ffprobe so seeking works natively.
+          if (usePlayer.getState().duration <= 0) {
+            fetchAudioInfo(current.root_id, current.path).then((info) => {
+              if (cancelled || !info || !(info.duration > 0)) return;
+              engine.setNativeDuration(info.duration);
+            });
+          }
           return;
         }
       }
@@ -466,9 +475,13 @@ export default memo(function PlayerBar() {
                   min={0}
                   max={duration || 0}
                   step={0.1}
-                  value={currentTime}
-                  onChange={(e) => engine.seek(Number(e.target.value))}
-                  className="absolute inset-0 w-full opacity-0 cursor-pointer"
+                  value={Number.isFinite(currentTime) ? Math.min(currentTime, duration || 0) : 0}
+                  disabled={!(duration > 0)}
+                  onChange={(e) => {
+                    const v = Number(e.target.value);
+                    if (Number.isFinite(v)) engine.seek(v);
+                  }}
+                  className="absolute inset-0 w-full opacity-0 cursor-pointer disabled:cursor-default"
                   aria-label="Seek"
                 />
               </div>

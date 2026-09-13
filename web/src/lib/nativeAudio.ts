@@ -167,10 +167,15 @@ let unlistenEvent: (() => void) | null = null;
  * Opens a track natively: resolves the media bearer, issues
  * `audio_native_open`, installs the shared event listener, and returns the
  * decoded TrackInfo. Null on any failure → caller falls back to HTML5.
+ *
+ * `startSec` positions the fresh session at the given offset (seek
+ * recovery): the decode thread of the new session performs the container
+ * seek while the OLD session keeps playing, so audio never goes silent.
  */
 export async function openTrack(
   url: string,
   handlers: { onEvent: (e: NativeAudioEvent) => void },
+  opts?: { startSec?: number },
 ): Promise<NativeTrackInfo | null> {
   const t = await tauri();
   if (!t) return null;
@@ -184,7 +189,7 @@ export async function openTrack(
       (await t.invoke<NativeTrackInfo>("audio_native_open", {
         url,
         bearer,
-        startSec: null,
+        startSec: opts?.startSec ?? null,
       })) ?? null
     );
   } catch {

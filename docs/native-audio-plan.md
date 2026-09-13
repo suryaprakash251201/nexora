@@ -31,3 +31,15 @@ Events: `audio://event` {ready|playing|paused|ended|error}; position polled.
   `audio_native_open`; session-cookie jar is not shared with reqwest/ureq.
 - Fallback rule: any unsupported codec/engine error falls back to the
   existing HTML5/transcode path — never worse than v1.9 behavior.
+- Seek robustness ("timeline moves but the song stops" on WASAPI):
+  - Playing devices defer the queue swap until the first post-seek chunk is
+    decoded (`seek_pending` in the player loop), so the still-buffered audio
+    keeps the device fed across slow or hanging HTTP range fetches instead
+    of starving WASAPI into silence. Paused devices swap immediately.
+  - Old player handles are dropped on a detached worker (`nexora-audio-drop`)
+    so a decode thread stuck in a slow read can never stall a subsequent
+    open/stop — including the seek-recovery reopen.
+  - The UI confirms seeks via the position poll; a seek unconfirmed after
+    `SEEK_STALL_GRACE_MS` (800 ms) is treated as stalled and re-opened at
+    the target (`audio_native_open` + `startSec`, fresh connection and
+    Sink). The old session keeps playing until the reopen is ready.

@@ -111,9 +111,13 @@ export function MiniPlayer({
               min={0}
               max={duration || 0}
               step={0.1}
-              value={curTime}
-              onChange={(e) => onSeek(Number(e.target.value))}
-              className="absolute inset-0 w-full opacity-0 cursor-pointer"
+              value={Number.isFinite(curTime) ? Math.min(curTime, duration || 0) : 0}
+              disabled={!(duration > 0)}
+              onChange={(e) => {
+                const v = Number(e.target.value);
+                if (Number.isFinite(v)) onSeek(v);
+              }}
+              className="absolute inset-0 w-full opacity-0 cursor-pointer disabled:cursor-default"
               aria-label="Seek"
             />
           </div>

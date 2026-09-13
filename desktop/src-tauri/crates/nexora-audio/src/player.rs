@@ -208,7 +208,53 @@ fn run_decode_thread(
     // comparing — otherwise stereo tracks only prebuffer half a second.
     const TARGET_BUFFERED_FRAMES_PER_CH: u64 = 44_100;
 
+    // Queue swap for a completed seek: drop the stale queue, rebase the
+    // position anchor to the target (accounting for everything the device
+    // consumed since the seek command), and revive Ended/Failed.
+    let do_swap = |pending: f64, dec: &TrackDecoder| {
+        // played_frames() counts interleaved SAMPLES, so divide by channels
+        // as well as sample rate — matching Shared::position(). Omitting
+        // /channels made the reported position jump backwards after a seek
+        // on stereo/multichannel tracks until the counter caught up.
+        let (sr, ch) = {
+            let info = dec.info();
+            (
+                info.sample_rate.max(1),
+                info.channels.max(1) as u32,
+            )
+        };
+        {
+            let mut out = shared.out.lock().expect("out lock");
+            out.clear();
+            *shared.base_sec.lock().expect("base lock") =
+                pending - out.played_frames() as f64 / f64::from(sr) / f64::from(ch);
+            let paused = out.is_paused();
+            drop(out);
+            // Seeking back from Ended (timeline click after the track
+            // finished, repeat-one restart) must revive playback — otherwise
+            // the thread feeds audio the phase machine still reports as
+            // finished and the UI never resumes.
+            let phase = *shared.phase.lock().expect("phase lock");
+            if matches!(phase, Phase::Ended | Phase::Failed) {
+                shared.set_phase(if paused { Phase::Paused } else { Phase::Playing });
+            }
+        }
+    };
+
     let mut appended_any = false;
+    // Consecutive transient decode failures (single bad packet / dropped
+    // HTTP range fetch). The old code killed the decode thread on the first
+    // error, freezing the timeline on a silent tail after a seek that landed
+    // on a slow/flaky chunk. Retry briefly; only fail after sustained errors.
+    let mut consec_errors: u32 = 0;
+    const MAX_CONSEC_ERRORS: u32 = 8;
+    // Seek target whose queue swap is still pending: the container has been
+    // seeked, but the old queued audio is intentionally left draining while
+    // the first post-seek chunk is fetched/decoded (see the feed loop). This
+    // keeps the device fed across slow or hanging seeks — without it, a seek
+    // that blocks on HTTP range requests starves the output into silence
+    // (the "timeline moves but the song stops" failure on WASAPI).
+    let mut seek_pending: Option<f64> = None;
 
     // Initial output setup.
     {
@@ -271,46 +317,48 @@ fn run_decode_thread(
                     shared.set_phase(Phase::Playing);
                 }
                 Cmd::Seek(t) => {
+                    // Sanitize IPC input: NaN/infinite/negative targets would
+                    // poison the position anchor (NaN propagates into every
+                    // poll and freezes the timeline at NaN).
+                    if !t.is_finite() {
+                        eprintln!("[nexora-audio] ignoring non-finite seek target");
+                        continue;
+                    }
+                    // Clamp into known bounds: seeking past EOS lands the
+                    // container at end-of-stream, the thread reports Ended and
+                    // the UI freezes on silence. Leave 200 ms headroom.
+                    let target = {
+                        let dur = *shared.duration_sec.lock().expect("duration lock");
+                        match dur {
+                            Some(d) if d > 0.25 => t.max(0.0).min(d - 0.2),
+                            _ => t.max(0.0),
+                        }
+                    };
                     // Seek the container FIRST: on failure the queued audio
                     // is untouched, so playback continues from the old
                     // position instead of going silent with a stale anchor.
-                    if let Err(e) = dec.seek_seconds(t) {
+                    if let Err(e) = dec.seek_seconds(target) {
                         eprintln!("[nexora-audio] seek failed: {e}");
                         continue;
                     }
-                    {
-                        let mut out = shared.out.lock().expect("out lock");
-                        out.clear();
-                    }
-                    // Reset position anchor to the seek target: played_frames
-                    // keeps its global count, so rebase it via a fresh epoch —
-                    // simplest correct approach: store played-at-seek.
-                    //
-                    // played_frames() counts interleaved SAMPLES, so divide by
-                    // channels as well as sample rate — matching
-                    // Shared::position(). Omitting /channels made the reported
-                    // position jump backwards after a seek on stereo/multichannel
-                    // tracks until the counter caught up.
-                    let (sr, ch) = {
-                        let info = dec.info();
-                        (
-                            info.sample_rate.max(1),
-                            info.channels.max(1) as u32,
-                        )
-                    };
-                    let paused = {
-                        let out = shared.out.lock().expect("out lock");
-                        *shared.base_sec.lock().expect("base lock") =
-                            t - out.played_frames() as f64 / f64::from(sr) / f64::from(ch);
-                        out.is_paused()
-                    };
-                    // Seeking back from Ended (timeline click after the track
-                    // finished, repeat-one restart) must revive playback —
-                    // otherwise the thread feeds audio the phase machine
-                    // still reports as finished and the UI never resumes.
-                    let phase = *shared.phase.lock().expect("phase lock");
-                    if matches!(phase, Phase::Ended | Phase::Failed) {
-                        shared.set_phase(if paused { Phase::Paused } else { Phase::Playing });
+                    consec_errors = 0;
+                    let device_paused =
+                        shared.out.lock().expect("out lock").is_paused();
+                    if device_paused {
+                        // Paused device: nothing is draining, so swap
+                        // immediately — dropping the stale queue loses
+                        // nothing audible and the anchor must move to the
+                        // target right away (the UI already shows it).
+                        // Playback starts from the target on resume.
+                        do_swap(target, &dec);
+                    } else {
+                        // Playing device: keep the still-buffered audio
+                        // draining while the first post-seek chunk is
+                        // fetched and decoded, so a slow or hanging seek
+                        // (HTTP range fetch) cannot starve the output into
+                        // silence. The queue swap happens when that chunk
+                        // arrives (feed loop below).
+                        seek_pending = Some(target);
                     }
                 }
                 Cmd::SetVolume(v) => shared.out.lock().expect("out lock").set_volume(v),
@@ -326,14 +374,28 @@ fn run_decode_thread(
         };
         let need_more = {
             let out = shared.out.lock().expect("out lock");
-            !out.is_paused()
-                && out.buffered_frames() < target_buffered
-                && !dec.is_eos()
+            seek_pending.is_some()
+                || (!out.is_paused()
+                    && out.buffered_frames() < target_buffered
+                    && !dec.is_eos())
         };
         if need_more {
             match dec.next_chunk() {
                 Ok(Some(samples)) => {
+                    consec_errors = 0;
                     appended_any = true;
+                    // ── Pending seek swap (playing device) ──
+                    // The container was seeked by the command loop; this is
+                    // the first decoded chunk at the target. Swap now: drop
+                    // the pre-seek queue and rebase the anchor to the target.
+                    // The anchor is rebased only here — not at seek-command
+                    // time — because the pre-seek audio kept playing while
+                    // this chunk was being fetched; played_frames() includes
+                    // that overlap, so rebase at swap time keeps the reported
+                    // position truthful.
+                    if let Some(pending) = seek_pending.take() {
+                        do_swap(pending, &dec);
+                    }
                     {
                         let info = dec.info();
                         shared.out.lock().expect("out lock").append(
@@ -356,12 +418,28 @@ fn run_decode_thread(
                         shared.set_phase(if autoplay { Phase::Playing } else { Phase::Paused });
                     }
                 }
-                Ok(None) => { /* EOS reached */ }
+                Ok(None) => {
+                    consec_errors = 0;
+                    // A pending seek that lands at EOS cannot be swapped (no
+                    // new chunk arrives); drop it so the feed loop does not
+                    // spin force-decoding None.
+                    seek_pending = None;
+                    /* EOS reached */
+                }
                 Err(e) => {
-                    eprintln!("[nexora-audio] decode error: {e}");
-                    shared.fire(PlayerEvent::Error(e.to_string()));
-                    shared.set_phase(Phase::Failed);
-                    return;
+                    consec_errors += 1;
+                    eprintln!(
+                        "[nexora-audio] decode error ({consec_errors}/{MAX_CONSEC_ERRORS}): {e}"
+                    );
+                    if consec_errors >= MAX_CONSEC_ERRORS {
+                        shared.fire(PlayerEvent::Error(e.to_string()));
+                        shared.set_phase(Phase::Failed);
+                        return;
+                    }
+                    // Transient (flaky range fetch / corrupt packet after a
+                    // coarse seek): back off briefly and retry instead of
+                    // killing playback and freezing the timeline.
+                    std::thread::sleep(Duration::from_millis(100));
                 }
             }
         }
@@ -405,6 +483,10 @@ fn run_decode_thread(
 #[cfg(all(test, feature = "decode"))]
 mod tests {
     use super::*;
+    use std::io;
+    use std::io::Read;
+    use std::io::Seek;
+    use std::io::SeekFrom;
     use std::time::Instant;
     use crate::output::NullSink;
     use std::io::Cursor;
@@ -565,5 +647,166 @@ mod tests {
 
         h.play().unwrap();
         assert_eq!(wait_phase(&h, |p| p == Phase::Ended, 6000), Phase::Ended);
+    }
+
+    // ── Keep-alive seek swap (regression: "timeline moves but song stops") ──
+
+    /// Device simulation with real buffering semantics: appended frames sit
+    /// in a queue until drained. Unlike `NullSink` (instant auto-consume),
+    /// this exposes the starvation window the old up-front `clear()` caused.
+    #[derive(Clone, Default)]
+    struct QueueSink(Arc<std::sync::Mutex<QueueState>>);
+
+    #[derive(Default)]
+    struct QueueState {
+        buffered: Vec<f32>,
+        played: u64,
+        paused: bool,
+        clears: usize,
+    }
+
+    impl QueueSink {
+        /// Simulates the device consuming `n` interleaved samples.
+        fn drain(&self, n: usize) {
+            let mut s = self.0.lock().unwrap();
+            let n = n.min(s.buffered.len());
+            s.buffered.drain(..n);
+            s.played += n as u64;
+        }
+    }
+
+    impl AudioOut for QueueSink {
+        fn append(&mut self, samples: &[f32], _channels: u32, _sample_rate: u32) {
+            self.0.lock().unwrap().buffered.extend_from_slice(samples);
+        }
+        fn clear(&mut self) {
+            let mut s = self.0.lock().unwrap();
+            s.buffered.clear();
+            s.clears += 1;
+        }
+        fn play(&mut self) {
+            self.0.lock().unwrap().paused = false;
+        }
+        fn pause(&mut self) {
+            self.0.lock().unwrap().paused = true;
+        }
+        fn is_paused(&self) -> bool {
+            self.0.lock().unwrap().paused
+        }
+        fn set_volume(&mut self, _v: f32) {}
+        fn volume(&self) -> f32 {
+            1.0
+        }
+        fn played_frames(&self) -> u64 {
+            self.0.lock().unwrap().played
+        }
+        fn buffered_frames(&self) -> u64 {
+            self.0.lock().unwrap().buffered.len() as u64
+        }
+    }
+
+    /// Source whose first read after every seek blocks briefly — models the
+    /// production `HttpRangeReader` fetching the seek-target chunk over a
+    /// slow HTTP range request. Symphonia's FLAC seek binary-searches the
+    /// stream (a few seek+read iterations), so the delay stays short (60 ms)
+    /// and the total seek lands in ~200 ms.
+    struct SlowSource {
+        inner: Cursor<Vec<u8>>,
+        len: u64,
+        delay: Duration,
+        delay_next_read: bool,
+    }
+
+    impl SlowSource {
+        fn new(bytes: Vec<u8>, delay: Duration) -> Self {
+            let len = bytes.len() as u64;
+            Self { inner: Cursor::new(bytes), len, delay, delay_next_read: false }
+        }
+    }
+
+    impl Read for SlowSource {
+        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+            if self.delay_next_read {
+                self.delay_next_read = false;
+                std::thread::sleep(self.delay);
+            }
+            self.inner.read(buf)
+        }
+    }
+
+    impl Seek for SlowSource {
+        fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
+            let r = self.inner.seek(pos)?;
+            self.delay_next_read = true;
+            Ok(r)
+        }
+    }
+
+    impl SymMediaSource for SlowSource {
+        fn is_seekable(&self) -> bool {
+            true
+        }
+        fn byte_len(&self) -> Option<u64> {
+            Some(self.len)
+        }
+    }
+
+    /// Uses the 1 s stereo FLAC fixture (contiguous frames after a seek, so
+    /// only the seek itself triggers the slow read; MP4 would seek the source
+    /// per packet). Its ~1 s prebuffer survives a 400 ms slow fetch.
+    fn fixture_bytes() -> Vec<u8> {
+        fixture("tone.flac")
+    }
+
+    #[test]
+    fn slow_seek_keeps_device_fed_until_swap() {
+        let src = Box::new(SlowSource::new(fixture_bytes(), Duration::from_millis(60)));
+        let sink = QueueSink::default();
+        let h = PlayerHandle::open(src, Box::new(sink.clone()), None, true).expect("open flac");
+
+        // Let the decode thread fill the queue (no consumption), then drain
+        // a little so the device has consumed audio and the position moves.
+        std::thread::sleep(Duration::from_millis(400));
+        sink.drain(8820); // 0.1 s of stereo audio
+        assert!(h.position() > 0.0, "playback should have started");
+        let pre_seek_buffered = sink.buffered_frames();
+        assert!(pre_seek_buffered > 0, "queue should hold pre-seek audio");
+
+        // Seek forward; the first post-seek read blocks briefly. While the
+        // swap is pending the pre-seek queue must keep draining — the old
+        // code cleared it up front and starved the device into silence.
+        h.seek(0.5).unwrap();
+        let mut min_buffered = u64::MAX;
+        let mut reached_target = false;
+        let mut max_pos = 0.0f64;
+        for _ in 0..40 {
+            std::thread::sleep(Duration::from_millis(20));
+            sink.drain(1764);
+            // Track starvation only until the swap lands: afterwards the
+            // track legitimately drains to zero at end-of-stream.
+            let b = sink.buffered_frames();
+            if !reached_target {
+                min_buffered = min_buffered.min(b);
+            }
+            let pos = h.position();
+            max_pos = max_pos.max(pos);
+            if (0.4..=0.75).contains(&pos) {
+                reached_target = true;
+            }
+        }
+        assert!(
+            min_buffered > 0,
+            "device starved during a slow seek: min_buffered={min_buffered}"
+        );
+        assert!(
+            reached_target,
+            "seek never landed at the target (position never reached ~0.5)"
+        );
+        assert!(
+            max_pos >= 0.6,
+            "playback did not continue after the swap (max_pos={max_pos})"
+        );
+        // Exactly one swap (one clear) for the single seek.
+        assert_eq!(sink.0.lock().unwrap().clears, 1, "one clear per seek swap");
     }
 }

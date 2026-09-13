@@ -87,6 +87,23 @@ function persist(immediate = false) {
 }
 
 // PlayerEngine owns the single <audio> element so playback survives navigation.
+
+/** Grace period (ms) after which an unconfirmed seek is considered stalled:
+ *  fast LAN seeks confirm in <100 ms, so a stale position after this long
+ *  means the decode thread is parked in a blocking symphonia seek or dead. */
+export const SEEK_STALL_GRACE_MS = 800;
+
+/** True when the backend hasn't confirmed a seek and the grace period
+ *  elapsed → the UI should re-open the track at the target so playback can
+ *  never stay frozen on a silent tail. */
+export function nativeSeekStalled(
+  pos: number,
+  target: number,
+  elapsedMs: number,
+): boolean {
+  return pos + 0.75 < target && elapsedMs > SEEK_STALL_GRACE_MS;
+}
+
 class PlayerEngine {
   audio: HTMLAudioElement | null = null;
   /** Active backend. 'native' routes transport to the Tauri audio engine;
@@ -101,6 +118,13 @@ class PlayerEngine {
   onTranscodeSeek: ((t: number) => void) | null = null;
   private pollTimer: number | null = null;
   private nativeDuration = 0;
+  /** Last native seek target + timestamp: polls that return a stale
+   *  pre-seek position while the decode thread is still seeking (blocking
+   *  HTTP range fetches) must not clobber the optimistic UI. */
+  private lastSeekTarget: number | null = null;
+  private lastSeekAt = 0;
+  /** True while a seek-recovery reopen is in flight (one at a time). */
+  private seekRecovering = false;
 
   bind(el: HTMLAudioElement) {
     // Idempotent per element: the <audio> node can be recreated around native
@@ -163,6 +187,9 @@ class PlayerEngine {
 
     this.mode = "native";
     this.nativeDuration = info.duration_sec ?? 0;
+    this.lastSeekTarget = null;
+    this.lastSeekAt = 0;
+    this.seekRecovering = false;
     const s = usePlayer.getState();
     void nativeAudio.setVolume(s.muted ? 0 : s.volume);
     if (s.playbackRate !== 1) void nativeAudio.setSpeed(s.playbackRate);
@@ -176,11 +203,78 @@ class PlayerEngine {
     return true;
   }
 
+  /** Patches the native duration once ffprobe metadata arrives (MP3/VBR
+   *  tracks report no n_frames, so symphonia yields duration null → the
+   *  timeline would render max=0 and every seek would be degenerate). */
+  setNativeDuration(d: number) {
+    if (!Number.isFinite(d) || d <= 0) return;
+    this.nativeDuration = d;
+    if (this.mode === "native") {
+      const s = usePlayer.getState();
+      if (!s.duration || s.duration <= 0) usePlayer.setState({ duration: d });
+    }
+  }
+
+  /**
+   * Recovers a stalled seek by re-opening the track AT the target. A seek
+   * that is never confirmed (blocking symphonia seek, hung HTTP range
+   * fetch, dead decode thread) leaves the timeline frozen on silence — the
+   * reopen replaces the engine with a fresh session positioned at the
+   * target. The OLD session keeps playing until the new one is ready, so
+   * audio never gaps during the recovery; on Windows this also sidesteps
+   * WASAPI wedges by landing on a fresh Sink.
+   */
+  private async recoverNativeSeek(target: number): Promise<void> {
+    const item = usePlayer.getState().current();
+    if (!item) {
+      this.seekRecovering = false;
+      return;
+    }
+    const paused = !usePlayer.getState().isPlaying;
+    const seq = ++this.nativeSeq;
+    const info = await nativeOpenTrack(rawUrl(item.root_id, item.path), {
+      onEvent: (e) => this.onNativeEvent(e),
+    }, { startSec: Math.max(0, target) });
+    // A newer seek may have landed while the reopen was in flight; capture
+    // it BEFORE clearing so the fresh session can be re-aimed at it.
+    const pendingTarget = this.lastSeekTarget;
+    if (seq !== this.nativeSeq) {
+      // A newer track-change superseded this recovery mid-flight.
+      if (info) void nativeStopTrack();
+      this.seekRecovering = false;
+      return;
+    }
+    if (!info) {
+      // Reopen failed → the html5 pipeline takes over (it seeks via the
+      // <audio> element, which handles slow streams itself).
+      this.seekRecovering = false;
+      this.fallbackToHtml5("Native seek stalled and the track could not be reopened — switching to browser player");
+      return;
+    }
+    this.seekRecovering = false;
+    this.mode = "native";
+    this.nativeDuration = info.duration_sec ?? 0;
+    const st = usePlayer.getState();
+    if (!st.duration || st.duration <= 0) {
+      usePlayer.setState({ duration: this.nativeDuration || st.duration });
+    }
+    this.lastSeekTarget = null;
+    this.lastSeekAt = 0;
+    usePlayer.setState({ currentTime: target, buffering: false, isPlaying: !paused });
+    void nativeAudio.setVolume(st.muted ? 0 : st.volume);
+    if (st.playbackRate !== 1) void nativeAudio.setSpeed(st.playbackRate);
+    if (paused) void nativeAudio.pause();
+    if (pendingTarget !== null && pendingTarget !== target) {
+      this.seek(pendingTarget);
+    }
+  }
+
   /** Native engine hit an unrecoverable error → drop back to html5. */
   fallbackToHtml5(msg?: string) {
     if (this.mode !== "native") return;
     this.mode = "html5";
     this.stopPolling();
+    this.seekRecovering = false;
     void nativeStopTrack();
     if (msg) usePlayer.getState().setAudioError(msg);
     window.dispatchEvent(new CustomEvent("nexora:native-fallback"));
@@ -189,6 +283,7 @@ class PlayerEngine {
   stopNative() {
     this.mode = "html5";
     this.stopPolling();
+    this.seekRecovering = false;
     void nativeStopTrack();
   }
 
@@ -220,8 +315,35 @@ class PlayerEngine {
     if (this.pollTimer !== null) return;
     this.pollTimer = window.setInterval(async () => {
       if (this.mode !== "native") return;
-      const pos = await nativeAudio.position();
-      usePlayer.getState()._syncTime(pos, this.nativeDuration || usePlayer.getState().duration);
+      let pos: number;
+      try {
+        pos = await nativeAudio.position();
+      } catch {
+        return; // no session yet / track switching — keep current UI time
+      }
+      if (!Number.isFinite(pos) || pos < 0) return;
+      const elapsed = Date.now() - this.lastSeekAt;
+      if (this.lastSeekTarget !== null && pos + 0.75 < this.lastSeekTarget) {
+        // A seek was issued and the backend hasn't caught up yet (decode
+        // thread blocked in HTTP range fetches): keep the optimistic target
+        // instead of snapping the thumb backwards. If it stays stale past
+        // the grace period the seek is stalled — re-open the track AT the
+        // target so playback can never stay frozen on a silent tail (the
+        // old session keeps playing until the reopen is ready).
+        if (
+          !this.seekRecovering &&
+          nativeSeekStalled(pos, this.lastSeekTarget, elapsed)
+        ) {
+          this.seekRecovering = true;
+          const target = this.lastSeekTarget;
+          void this.recoverNativeSeek(target);
+        }
+        return;
+      }
+      this.lastSeekTarget = null;
+      const st = usePlayer.getState();
+      usePlayer.setState({ buffering: false });
+      st._syncTime(pos, this.nativeDuration || st.duration);
     }, 250);
   }
   private stopPolling() {
@@ -249,11 +371,21 @@ class PlayerEngine {
   }
   seek(t: number) {
     if (this.mode === "native") {
-      const target = Math.max(0, t);
+      if (!Number.isFinite(t)) return;
+      const st = usePlayer.getState();
+      const dur = this.nativeDuration || st.duration;
+      let target = Math.max(0, t);
+      // Clamp into the known track bounds: seeking past EOS lands the
+      // container at end-of-stream, the decode thread reports Ended and the
+      // UI freezes on a silent tail. Leave 200 ms headroom instead.
+      if (dur > 0) target = Math.min(target, Math.max(0, dur - 0.2));
       // Optimistic UI: the next position poll is up to 250 ms away — paint
       // the target now so timeline clicks and +10 s fast-forward feel
       // instant instead of snapping back until the poll catches up.
-      usePlayer.setState({ currentTime: target });
+      this.lastSeekTarget = target;
+      this.lastSeekAt = Date.now();
+      this.seekRecovering = false;
+      usePlayer.setState({ currentTime: target, buffering: true });
       void nativeAudio.seek(target).catch((e) => console.debug("[player] native seek failed:", e));
       return;
     }

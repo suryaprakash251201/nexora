@@ -82,7 +82,19 @@ pub async fn audio_native_open(
     .map_err(|e| format!("open task failed: {e}"))??;
 
     let info = handle.track_info();
-    *session.0.lock().expect("session lock") = Some(handle);
+    let old = session.0.lock().expect("session lock").replace(handle);
+    // Dropping the previous handle joins its decode thread, which may be
+    // blocked inside a symphonia seek or read on a slow/hung HTTP range
+    // fetch (up to the 60 s request timeout). A stuck join here would stall
+    // EVERY subsequent open — including the seek-recovery reopen that is
+    // supposed to rescue that very situation. Drop it on a detached worker
+    // instead: the old thread exits on its own once its command channel
+    // disconnects.
+    if let Some(old) = old {
+        let _ = std::thread::Builder::new()
+            .name("nexora-audio-drop".into())
+            .spawn(move || drop(old));
+    }
 
     Ok(match info {
         Some(i) => serde_json::json!({
@@ -122,12 +134,24 @@ pub fn audio_native_pause(session: State<'_, AudioSession>) -> Result<(), String
 #[tauri::command]
 pub fn audio_native_stop(session: State<'_, AudioSession>) -> Result<(), String> {
     // Dropping the handle stops the decode thread and releases the device.
-    *session.0.lock().expect("session lock") = None;
+    // The drop joins the decode thread, which may be blocked in a slow/hung
+    // HTTP range read (up to 60 s) — and this is a SYNCHRONOUS command, so a
+    // stuck join would freeze the whole UI. Drop it on a detached worker
+    // instead; the thread exits on its own when its channel disconnects.
+    let old = session.0.lock().expect("session lock").take();
+    if let Some(old) = old {
+        let _ = std::thread::Builder::new()
+            .name("nexora-audio-drop".into())
+            .spawn(move || drop(old));
+    }
     Ok(())
 }
 
 #[tauri::command]
 pub fn audio_native_seek(session: State<'_, AudioSession>, sec: f64) -> Result<(), String> {
+    if (!sec.is_finite()) || sec < 0.0 {
+        return Err("invalid seek position".into());
+    }
     with_player!(session, |p: &PlayerHandle| p.seek(sec))
 }
 
