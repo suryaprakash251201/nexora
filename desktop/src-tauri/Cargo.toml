@@ -32,3 +32,19 @@ native-audio = ["dep:nexora-audio", "nexora-audio/decode", "nexora-audio/output"
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-updater = "2.11"
+
+# SECURITY: GHSA-wrw7-89jp-8q8g / RUSTSEC-2024-0429 — unsound `&p` -> `&mut p`
+# in `glib::VariantStrIter::impl_get` (glib >= 0.15.0, < 0.20.0).
+#
+# Tauri 2 cannot reach the fixed glib: every 2.x release depends on
+# `gtk ^0.18` (and wry 0.5x/tao 0.3x on `gdk`/`gdkx11` ^0.18), and cargo treats
+# a caret requirement on a 0.x version as `>=0.18, <0.19`. glib 0.20+ is only
+# reachable through gtk 0.19+, i.e. a gtk3 -> gtk4 port that Tauri 2 does not
+# ship. gtk-rs-core never backported the fix to the 0.18 branch (its tip *is*
+# the 0.18.5 tag), so we vendor a pristine 0.18.5 with only that one-line fix
+# backported from upstream commit b5a4071e. Nothing in the desktop dependency
+# tree calls `VariantStrIter`/`Variant::array_iter_str`, so this is a
+# defense-in-depth backport that keeps the lockfile audit-clean; drop it once
+# Tauri tracks gtk 0.19+.
+[patch.crates-io]
+glib = { path = "vendor/glib" }
