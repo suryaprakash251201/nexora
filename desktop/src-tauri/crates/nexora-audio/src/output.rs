@@ -175,6 +175,12 @@ pub mod rodio_out {
         }
         fn clear(&mut self) {
             self.sink.clear();
+            // The discarded sources were queued but never consumed, so their
+            // frames must leave the accounting too. Without this,
+            // buffered_frames() keeps reporting the dropped queue depth, the
+            // decode thread concludes the device is still full and stops
+            // feeding — audio goes silent right after every seek.
+            self.appended_total = self.counter.load(Ordering::Relaxed);
         }
         fn play(&mut self) {
             self.sink.play();

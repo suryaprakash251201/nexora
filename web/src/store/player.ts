@@ -248,7 +248,15 @@ class PlayerEngine {
     else this.pause();
   }
   seek(t: number) {
-    if (this.mode === "native") return void nativeAudio.seek(Math.max(0, t));
+    if (this.mode === "native") {
+      const target = Math.max(0, t);
+      // Optimistic UI: the next position poll is up to 250 ms away — paint
+      // the target now so timeline clicks and +10 s fast-forward feel
+      // instant instead of snapping back until the poll catches up.
+      usePlayer.setState({ currentTime: target });
+      void nativeAudio.seek(target).catch((e) => console.debug("[player] native seek failed:", e));
+      return;
+    }
     const a = this.audio;
     if (!a) return;
     // The transcode endpoint does not honor HTTP Range; a plain currentTime

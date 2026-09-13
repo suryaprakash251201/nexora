@@ -379,6 +379,11 @@ impl TrackDecoder {
             track_id: Some(self.track_id),
         };
         self.format.seek(SeekMode::Coarse, to)?;
+        // The next packet is discontinuous with the last decoded one (the
+        // defining case per symphonia's Decoder docs) — stale codec state
+        // (AAC overlap buffers, etc.) would corrupt or fail the first
+        // post-seek packets without this.
+        self.decoder.reset();
         self.eos = false;
         if let Some(sb) = self.sbuf.as_mut() {
             sb.clear();

@@ -222,25 +222,65 @@ fn run_decode_thread(
 
     loop {
         // ── Service all pending commands ──
+        // Drained first (non-blocking), then executed in order. Runs of
+        // consecutive Seeks collapse to the latest target: timeline drags
+        // and +10 s fast-forward spam queue one Seek per tick, and each
+        // seek costs blocking HTTP seeks — without coalescing, a burst
+        // keeps the decode thread seeking for seconds (looks "stuck").
+        let mut pending: Vec<Cmd> = Vec::new();
         loop {
             match cmd_rx.try_recv() {
-                Ok(Cmd::Exit) => return,
-                Ok(Cmd::Pause) => {
+                Ok(c) => pending.push(c),
+                Err(TryRecvError::Empty) => break,
+                Err(TryRecvError::Disconnected) => return,
+            }
+        }
+        let mut coalesced: Vec<Cmd> = Vec::with_capacity(pending.len());
+        let mut seek_target: Option<f64> = None;
+        for c in pending {
+            match c {
+                Cmd::Seek(t) => seek_target = Some(t),
+                Cmd::Exit => {
+                    if let Some(t) = seek_target.take() {
+                        coalesced.push(Cmd::Seek(t));
+                    }
+                    coalesced.push(Cmd::Exit);
+                    break;
+                }
+                other => {
+                    if let Some(t) = seek_target.take() {
+                        coalesced.push(Cmd::Seek(t));
+                    }
+                    coalesced.push(other);
+                }
+            }
+        }
+        if let Some(t) = seek_target.take() {
+            coalesced.push(Cmd::Seek(t));
+        }
+
+        for cmd in coalesced {
+            match cmd {
+                Cmd::Exit => return,
+                Cmd::Pause => {
                     shared.out.lock().expect("out lock").pause();
                     shared.set_phase(Phase::Paused);
                 }
-                Ok(Cmd::Resume) => {
+                Cmd::Resume => {
                     shared.out.lock().expect("out lock").play();
                     shared.set_phase(Phase::Playing);
                 }
-                Ok(Cmd::Seek(t)) => {
-                    {
-                        let mut out = shared.out.lock().expect("out lock");
-                        out.clear();
-                    }
+                Cmd::Seek(t) => {
+                    // Seek the container FIRST: on failure the queued audio
+                    // is untouched, so playback continues from the old
+                    // position instead of going silent with a stale anchor.
                     if let Err(e) = dec.seek_seconds(t) {
                         eprintln!("[nexora-audio] seek failed: {e}");
                         continue;
+                    }
+                    {
+                        let mut out = shared.out.lock().expect("out lock");
+                        out.clear();
                     }
                     // Reset position anchor to the seek target: played_frames
                     // keeps its global count, so rebase it via a fresh epoch —
@@ -258,16 +298,23 @@ fn run_decode_thread(
                             info.channels.max(1) as u32,
                         )
                     };
-                    {
+                    let paused = {
                         let out = shared.out.lock().expect("out lock");
                         *shared.base_sec.lock().expect("base lock") =
                             t - out.played_frames() as f64 / f64::from(sr) / f64::from(ch);
+                        out.is_paused()
+                    };
+                    // Seeking back from Ended (timeline click after the track
+                    // finished, repeat-one restart) must revive playback —
+                    // otherwise the thread feeds audio the phase machine
+                    // still reports as finished and the UI never resumes.
+                    let phase = *shared.phase.lock().expect("phase lock");
+                    if matches!(phase, Phase::Ended | Phase::Failed) {
+                        shared.set_phase(if paused { Phase::Paused } else { Phase::Playing });
                     }
                 }
-                Ok(Cmd::SetVolume(v)) => shared.out.lock().expect("out lock").set_volume(v),
-                Ok(Cmd::SetSpeed(r)) => shared.out.lock().expect("out lock").set_speed(r),
-                Err(TryRecvError::Empty) => break,
-                Err(TryRecvError::Disconnected) => return,
+                Cmd::SetVolume(v) => shared.out.lock().expect("out lock").set_volume(v),
+                Cmd::SetSpeed(r) => shared.out.lock().expect("out lock").set_speed(r),
             }
         }
 
@@ -440,6 +487,54 @@ mod tests {
 
         let end_phase = wait_phase(&h, |p| p == Phase::Ended, 5000);
         assert_eq!(end_phase, Phase::Ended);
+    }
+
+    #[test]
+    fn rapid_seek_burst_lands_on_latest_target() {
+        // Fast-forward spam / timeline drags queue one Seek per tick. While
+        // paused nothing is fed, so the position anchor holds exactly the
+        // last executed target — a burst must collapse to it, not drift.
+        // (Fixtures are 1 s tones: targets stay below the duration.)
+        let bytes = fixture("tone-alac.m4a");
+        let h = PlayerHandle::open(
+            Box::new(Cursor::new(bytes)),
+            Box::new(NullSink::new()),
+            None,
+            false, // paused → deterministic position anchor
+        )
+        .expect("open alac paused");
+        assert_eq!(wait_phase(&h, |p| p == Phase::Paused, 2000), Phase::Paused);
+
+        for i in 0..10 {
+            h.seek(0.05 * i as f64).unwrap();
+        }
+        h.seek(0.7).unwrap();
+        std::thread::sleep(Duration::from_millis(200));
+        let pos = h.position();
+        assert!(
+            (0.6..=0.8).contains(&pos),
+            "position after seek burst ≈0.7 s, got {pos}"
+        );
+
+        // And the track still plays through to the end afterwards.
+        h.play().unwrap();
+        assert_eq!(wait_phase(&h, |p| p == Phase::Ended, 6000), Phase::Ended);
+    }
+
+    #[test]
+    fn seek_after_end_revives_playback() {
+        // Clicking the timeline after the track finished must restart it —
+        // the phase machine must leave Ended, not keep feeding silently.
+        let h = open_alac(None);
+        assert_eq!(wait_phase(&h, |p| p == Phase::Ended, 4000), Phase::Ended);
+
+        h.seek(0.0).unwrap();
+        let revived = wait_phase(&h, |p| matches!(p, Phase::Playing | Phase::Paused), 2000);
+        assert!(
+            matches!(revived, Phase::Playing | Phase::Paused),
+            "seek after end should revive playback, got {revived:?}"
+        );
+        assert_eq!(wait_phase(&h, |p| p == Phase::Ended, 6000), Phase::Ended);
     }
 
     #[test]
