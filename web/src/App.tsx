@@ -71,6 +71,29 @@ function AppInner() {
     setInputUrl(url);
   };
 
+  const disconnect = () => {
+    localStorage.removeItem("nexora-api-url");
+    setApiUrl("");
+    setInputUrl("");
+    setDiscoverDone(false);
+    qc.clear();
+  };
+
+  // Tauri only: pill shown above Login/Setup so the user can see which
+  // server they are signing into and switch to another one.
+  const serverBadge = isTauriEnv && apiUrl ? (
+    <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 pl-3 pr-1.5 py-1.5 rounded-full border border-glass-border-soft bg-glass-bg-strong/90 backdrop-blur-xl shadow-glass-strong text-xs">
+      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shrink-0" aria-hidden="true" />
+      <span className="text-content-muted max-w-[220px] truncate font-mono" title={apiUrl}>{apiUrl}</span>
+      <button
+        onClick={disconnect}
+        className="px-2.5 py-1 rounded-full font-medium text-content hover:text-foreground hover:bg-glass-bg-subtle border border-glass-border-soft transition-colors"
+      >
+        Change server
+      </button>
+    </div>
+  ) : null;
+
   // ── Boot splash: show the branded logo briefly, but only once per
   // browser session so refreshes don't add perceived latency. ──
   const [splashDone, setSplashDone] = useState(() => {
@@ -179,7 +202,7 @@ function AppInner() {
     if (httpErr && session.isError) {
       localStorage.removeItem("nexora-token");
       clearMediaToken();
-      return <Login onSuccess={() => { qc.invalidateQueries(); }} />;
+      return (<>{serverBadge}<Login onSuccess={() => { qc.invalidateQueries(); }} /></>);
     }
     return (
       <div className="min-h-screen flex items-center justify-center bg-background text-foreground">
@@ -228,11 +251,11 @@ function AppInner() {
   }
 
   if (!needsSetup.data?.configured) {
-    return <Setup onSuccess={() => { qc.invalidateQueries(); }} />;
+    return (<>{serverBadge}<Setup onSuccess={() => { qc.invalidateQueries(); }} /></>);
   }
 
   if (!session.data?.user) {
-    return <Login onSuccess={() => { qc.invalidateQueries(); }} />;
+    return (<>{serverBadge}<Login onSuccess={() => { qc.invalidateQueries(); }} /></>);
   }
 
   return (
