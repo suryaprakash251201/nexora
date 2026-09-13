@@ -209,8 +209,7 @@ fn run_decode_thread(
     const TARGET_BUFFERED_FRAMES_PER_CH: u64 = 44_100;
 
     // Queue swap for a completed seek: drop the stale queue, rebase the
-    // position anchor to the target (accounting for everything the device
-    // consumed since the seek command), and revive Ended/Failed.
+    // position anchor to the target, and revive Ended/Failed.
     let do_swap = |pending: f64, dec: &TrackDecoder| {
         // played_frames() counts interleaved SAMPLES, so divide by channels
         // as well as sample rate — matching Shared::position(). Omitting
@@ -225,10 +224,18 @@ fn run_decode_thread(
         };
         {
             let mut out = shared.out.lock().expect("out lock");
+            // Capture the transport state BEFORE clear(): rodio's Sink::clear()
+            // pauses the sink as a side effect, and a sink left paused after a
+            // seek makes playback go silent while the position counter keeps
+            // advancing ("timeline moves but the song stops"). Restore it here
+            // so the swap is transport-preserving regardless of sink internals.
+            let was_paused = out.is_paused();
             out.clear();
+            if !was_paused {
+                out.play();
+            }
             *shared.base_sec.lock().expect("base lock") =
                 pending - out.played_frames() as f64 / f64::from(sr) / f64::from(ch);
-            let paused = out.is_paused();
             drop(out);
             // Seeking back from Ended (timeline click after the track
             // finished, repeat-one restart) must revive playback — otherwise
@@ -236,7 +243,7 @@ fn run_decode_thread(
             // finished and the UI never resumes.
             let phase = *shared.phase.lock().expect("phase lock");
             if matches!(phase, Phase::Ended | Phase::Failed) {
-                shared.set_phase(if paused { Phase::Paused } else { Phase::Playing });
+                shared.set_phase(if was_paused { Phase::Paused } else { Phase::Playing });
             }
         }
     };
@@ -683,6 +690,12 @@ mod tests {
             let mut s = self.0.lock().unwrap();
             s.buffered.clear();
             s.clears += 1;
+            // Mirror rodio's Sink::clear(), which pauses the sink as a side
+            // effect. The player must restore the transport state after the
+            // swap, otherwise every seek silences playback while the position
+            // counter keeps advancing (the reported "timeline moves but the
+            // song stops until pause+resume" bug).
+            s.paused = true;
         }
         fn play(&mut self) {
             self.0.lock().unwrap().paused = false;
@@ -808,5 +821,40 @@ mod tests {
         );
         // Exactly one swap (one clear) for the single seek.
         assert_eq!(sink.0.lock().unwrap().clears, 1, "one clear per seek swap");
+        // Regression: the sink must not be left paused after the swap (rodio's
+        // clear() pauses it), or the track goes silent until a manual resume.
+        assert!(
+            !sink.0.lock().unwrap().paused,
+            "sink left paused after seek swap → silent playback"
+        );
+    }
+
+    #[test]
+    fn seek_on_paused_track_stays_paused() {
+        // A paused sink must remain paused across a seek: the swap restores the
+        // captured transport state, and the position anchor still lands on the
+        // target so resume plays from there.
+        let bytes = fixture("tone.flac");
+        let sink = QueueSink::default();
+        let h = PlayerHandle::open(
+            Box::new(Cursor::new(bytes)),
+            Box::new(sink.clone()),
+            None,
+            false, // autoplay=false → starts Paused
+        )
+        .expect("open flac paused");
+        assert_eq!(wait_phase(&h, |p| p == Phase::Paused, 2000), Phase::Paused);
+
+        h.seek(0.4).unwrap();
+        std::thread::sleep(Duration::from_millis(200));
+        assert!(
+            sink.0.lock().unwrap().paused,
+            "a paused track must stay paused after seeking"
+        );
+        let pos = h.position();
+        assert!(
+            (0.3..=0.5).contains(&pos),
+            "paused seek should anchor near the target, got {pos}"
+        );
     }
 }

@@ -174,7 +174,19 @@ pub mod rodio_out {
             self.appended_total += samples.len() as u64;
         }
         fn clear(&mut self) {
+            // rodio's Sink::clear() also PAUSES the sink as a side effect
+            // (documented behaviour). Here clear() only means "drop stale
+            // queued audio" — leaving the sink paused silently muted a
+            // still-playing track after every seek, while the position
+            // counter kept advancing (the "timeline moves but the song stops"
+            // bug). It also made the decode thread's `!out.is_paused()` feed
+            // guard false, so no further audio was decoded. Preserve the
+            // transport state across the clear.
+            let was_paused = self.sink.is_paused();
             self.sink.clear();
+            if !was_paused {
+                self.sink.play();
+            }
             // The discarded sources were queued but never consumed, so their
             // frames must leave the accounting too. Without this,
             // buffered_frames() keeps reporting the dropped queue depth, the
