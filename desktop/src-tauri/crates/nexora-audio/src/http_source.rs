@@ -324,7 +324,17 @@ impl Inner {
     }
 
     /// Fetches one chunk and inserts it (protected while being consumed).
+    /// Skips the HTTP request when another path (read-ahead, tail prefetch,
+    /// a racing demand read) already cached the chunk — duplicate range
+    /// requests were pure latency/bandwidth on every seek and prefetch
+    /// overlap.
     fn fetch_chunk_sync(&self, idx: u64) -> Result<(), HttpSourceError> {
+        {
+            let c = self.cache.lock().expect("cache lock poisoned");
+            if c.chunks.contains_key(&idx) {
+                return Ok(());
+            }
+        }
         let start = idx * self.chunk_size;
         let end_incl = ((idx + 1) * self.chunk_size)
             .saturating_sub(1)
@@ -333,6 +343,34 @@ impl Inner {
         let mut c = self.cache.lock().expect("cache lock poisoned");
         c.insert(idx, data, idx);
         Ok(())
+    }
+
+    /// Waits (bounded) for an in-flight background fetch of `idx` to land.
+    /// Demand reads race the seek-warm / boundary read-ahead threads; without
+    /// this both sides issue the same range request. Returns as soon as the
+    /// chunk is cached or no fetch is in flight — the caller still verifies
+    /// the cache (fetch may have failed) and falls back to a sync fetch.
+    fn await_inflight(&self, idx: u64) {
+        for _ in 0..40 {
+            // Never hold both locks at once: the read-ahead completion path
+            // takes them in the opposite order (cache during insert, then
+            // inflight to deregister).
+            let fetching = self
+                .inflight
+                .lock()
+                .expect("inflight lock poisoned")
+                .contains(&idx);
+            let cached = self
+                .cache
+                .lock()
+                .expect("cache lock poisoned")
+                .chunks
+                .contains_key(&idx);
+            if cached || !fetching {
+                return;
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
     }
 
     /// Background read-ahead for `idx`. Best-effort: failures are dropped —
@@ -423,6 +461,11 @@ impl Read for HttpRangeReader {
                 Act::Copied(Some(next)) => self.inner.spawn_readahead(next),
                 Act::Copied(None) => {}
                 Act::Fetch { idx, warm } => {
+                    // A seek-warm or boundary read-ahead may already be
+                    // fetching this chunk — wait for it instead of firing a
+                    // duplicate range request (bounded; falls through to a
+                    // sync fetch on timeout/failure).
+                    self.inner.await_inflight(idx);
                     self.inner.fetch_chunk_sync(idx)?;
                     if let Some(next) = warm {
                         self.inner.spawn_readahead(next);
@@ -437,14 +480,29 @@ impl Read for HttpRangeReader {
 
 impl Seek for HttpRangeReader {
     fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
-        let mut cache = self.inner.cache.lock().expect("cache lock poisoned");
-        let target = match pos {
-            SeekFrom::Start(p) => p as i128,
-            SeekFrom::Current(d) => cache.cursor as i128 + d as i128,
-            SeekFrom::End(d) => self.inner.len as i128 + d as i128,
+        let (cursor, warm) = {
+            let mut cache = self.inner.cache.lock().expect("cache lock poisoned");
+            let target = match pos {
+                SeekFrom::Start(p) => p as i128,
+                SeekFrom::Current(d) => cache.cursor as i128 + d as i128,
+                SeekFrom::End(d) => self.inner.len as i128 + d as i128,
+            };
+            cache.cursor = target.clamp(0, self.inner.len as i128) as u64;
+            // Kick off a background fetch for the landing chunk while the
+            // caller (symphonia's seek binary search / the post-seek first
+            // read) is still working: timeline jumps then usually find the
+            // first bytes already resident instead of paying a full
+            // synchronous range round-trip. Best-effort — failures just
+            // fall through to the normal demand-fetch path, and
+            // fetch_chunk_sync skips the request if it landed first.
+            let warm = (cache.cursor < self.inner.len)
+                .then(|| cache.cursor / self.inner.chunk_size);
+            (cache.cursor, warm)
         };
-        cache.cursor = target.clamp(0, self.inner.len as i128) as u64;
-        Ok(cache.cursor)
+        if let Some(idx) = warm {
+            self.inner.spawn_readahead(idx);
+        }
+        Ok(cursor)
     }
 }
 

@@ -309,3 +309,66 @@ fn randomized_ops_match_reference_semantics() {
         }
     }
 }
+
+// ── 12. duplicate range fetches are skipped when already cached ─────────────
+#[test]
+fn cached_chunk_fetch_is_skipped() {
+    let chunk = 4096u64;
+    let data = test_data(chunk as usize * 4);
+    let (url, state, _stop) = spawn_mock(data.clone(), false);
+    let mut r = HttpRangeReader::open_with(&url, cfg_for(chunk, 16)).unwrap();
+    let base = state.hit_count(); // 1 open probe
+
+    // Warm chunk 2 via the tail-prefetch path, then read from it: the demand
+    // fetch must notice the resident chunk and skip its own request.
+    r.prefetch_tail(chunk).unwrap(); // fetches last chunk (idx 3)
+    let after_prefetch = state.hit_count();
+    assert_eq!(after_prefetch, base + 1, "prefetch should cost one request");
+
+    r.seek(SeekFrom::Start(chunk * 3)).unwrap();
+    // Give the seek-warm thread a chance to land first (local mock: ms).
+    std::thread::sleep(Duration::from_millis(50));
+    let mut one = [0u8; 1];
+    r.read_exact(&mut one).unwrap();
+    assert_eq!(one[0], data[(chunk * 3) as usize]);
+    assert_eq!(
+        state.hit_count(),
+        after_prefetch,
+        "reading a warmed chunk must not add requests"
+    );
+    let (hits, _) = r.stats();
+    assert!(hits >= 1, "expected cache hits, stats={:?}", r.stats());
+}
+
+// ── 13. seek kicks off a background fetch of the landing chunk ─────────────
+#[test]
+fn seek_warms_landing_chunk() {
+    let chunk = 4096u64;
+    let data = test_data(chunk as usize * 8);
+    let (url, state, _stop) = spawn_mock(data.clone(), false);
+    let mut r = HttpRangeReader::open_with(&url, cfg_for(chunk, 16)).unwrap();
+
+    // Seek far ahead without reading, then wait for the warm to land.
+    r.seek(SeekFrom::Start(chunk * 6 + 7)).unwrap();
+    let deadline = std::time::Instant::now() + Duration::from_secs(2);
+    loop {
+        {
+            let served = state.served_ranges();
+            if served.iter().any(|rg| rg.starts_with(&format!("{}", chunk * 6))) {
+                break;
+            }
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "seek-warm never fetched the landing chunk"
+        );
+        std::thread::sleep(Duration::from_millis(5));
+    }
+
+    // The demand read that follows must be a pure cache hit.
+    let before = state.hit_count();
+    let mut one = [0u8; 1];
+    r.read_exact(&mut one).unwrap();
+    assert_eq!(one[0], data[(chunk * 6 + 7) as usize]);
+    assert_eq!(state.hit_count(), before, "warmed read must be a hit");
+}

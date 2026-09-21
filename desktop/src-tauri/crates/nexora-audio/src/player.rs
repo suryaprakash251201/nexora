@@ -375,18 +375,30 @@ fn run_decode_thread(
 
         // ── Keep the queue fed (not while paused — mirrors a paused device,
         // which stops draining; keeps NullSink position semantics truthful).
+        //
+        // Drain (bounded) instead of one chunk per tick: an AAC packet is
+        // only ~23 ms of audio, so the old one-chunk-per-20 ms pacing barely
+        // outran realtime — after a seek the queue held a single chunk and
+        // any one slow range fetch underran the device into a stall. Filling
+        // the ~1 s prebuffer in one go makes seeks/startup robust; the cap
+        // keeps command latency bounded (a blocking fetch can still stall
+        // the thread — covered by the deferred swap + UI stall recovery).
         let target_buffered = {
             let info = dec.info();
             TARGET_BUFFERED_FRAMES_PER_CH * (info.channels.max(1) as u64)
         };
-        let need_more = {
-            let out = shared.out.lock().expect("out lock");
-            seek_pending.is_some()
-                || (!out.is_paused()
-                    && out.buffered_frames() < target_buffered
-                    && !dec.is_eos())
-        };
-        if need_more {
+        const MAX_CHUNKS_PER_TICK: usize = 16;
+        for _ in 0..MAX_CHUNKS_PER_TICK {
+            let need_more = {
+                let out = shared.out.lock().expect("out lock");
+                seek_pending.is_some()
+                    || (!out.is_paused()
+                        && out.buffered_frames() < target_buffered
+                        && !dec.is_eos())
+            };
+            if !need_more {
+                break;
+            }
             match dec.next_chunk() {
                 Ok(Some(samples)) => {
                     consec_errors = 0;
@@ -405,6 +417,16 @@ fn run_decode_thread(
                     }
                     {
                         let info = dec.info();
+                        // The decoder re-syncs rate/channels from every
+                        // decoded spec (mid-stream changes happen); mirror
+                        // them into the shared snapshot so position() keeps
+                        // dividing played source samples by the right values.
+                        if let Some(shared_info) =
+                            shared.info.lock().expect("info lock").as_mut()
+                        {
+                            shared_info.sample_rate = info.sample_rate;
+                            shared_info.channels = info.channels;
+                        }
                         shared.out.lock().expect("out lock").append(
                             &samples,
                             info.channels.max(1) as u32,
@@ -429,8 +451,10 @@ fn run_decode_thread(
                     consec_errors = 0;
                     // A pending seek that lands at EOS cannot be swapped (no
                     // new chunk arrives); drop it so the feed loop does not
-                    // spin force-decoding None.
+                    // spin force-decoding None. Break the drain too — further
+                    // next_chunk() calls would just return None again.
                     seek_pending = None;
+                    break;
                     /* EOS reached */
                 }
                 Err(e) => {
@@ -445,8 +469,10 @@ fn run_decode_thread(
                     }
                     // Transient (flaky range fetch / corrupt packet after a
                     // coarse seek): back off briefly and retry instead of
-                    // killing playback and freezing the timeline.
+                    // killing playback and freezing the timeline. Break the
+                    // drain so one bad chunk doesn't cost N backoffs.
                     std::thread::sleep(Duration::from_millis(100));
+                    break;
                 }
             }
         }
@@ -569,9 +595,14 @@ mod tests {
         h.seek(0.5).unwrap();
         std::thread::sleep(Duration::from_millis(120));
         let pos = h.position();
+        // NullSink consumes instantly, so the feed drain decodes the rest of
+        // the 1 s fixture to EOS within milliseconds and the position runs
+        // to the end (real sinks pace via buffered_frames, so this band
+        // only holds for an instant sink). What matters: the anchor landed
+        // at/after the target — not snapped back to 0 or stuck pre-seek.
         assert!(
-            (0.35..=0.75).contains(&pos),
-            "position after seek ≈0.5 s, got {pos}"
+            pos >= 0.35,
+            "position after seek should be at/after the 0.5 s target, got {pos}"
         );
 
         let end_phase = wait_phase(&h, |p| p == Phase::Ended, 5000);
@@ -856,5 +887,110 @@ mod tests {
             (0.3..=0.5).contains(&pos),
             "paused seek should anchor near the target, got {pos}"
         );
+    }
+
+    /// Sink that records the (channels, rate) of every append. Catches the
+    /// M4A half-speed bug: the decoder reported channels=0 for MP4 (the
+    /// container declares the rate but not the channel layout), so the
+    /// player fed stereo samples to the output as mono and every chunk
+    /// played back at half speed with a 2x-racing timeline.
+    #[derive(Clone, Default)]
+    struct RecordingSink {
+        appends: Arc<std::sync::Mutex<Vec<(u32, u32, usize)>>>,
+        played: Arc<std::sync::Mutex<u64>>,
+    }
+
+    impl AudioOut for RecordingSink {
+        fn append(&mut self, samples: &[f32], channels: u32, sample_rate: u32) {
+            self.appends
+                .lock()
+                .unwrap()
+                .push((channels, sample_rate, samples.len()));
+            *self.played.lock().unwrap() += samples.len() as u64;
+        }
+        fn clear(&mut self) {
+            self.appends.lock().unwrap().clear();
+        }
+        fn play(&mut self) {}
+        fn pause(&mut self) {}
+        fn is_paused(&self) -> bool {
+            false
+        }
+        fn set_volume(&mut self, _v: f32) {}
+        fn volume(&self) -> f32 {
+            1.0
+        }
+        fn played_frames(&self) -> u64 {
+            *self.played.lock().unwrap()
+        }
+        fn buffered_frames(&self) -> u64 {
+            // Instant-consume like NullSink, but keep the append log: the
+            // feed drain runs to EOS, exercising every chunk's params.
+            0
+        }
+    }
+
+    #[test]
+    fn m4a_reports_stereo_to_output() {
+        for name in ["tone-aac.m4a", "tone-alac.m4a", "tone-alac-moovend.m4a"] {
+            let sink = RecordingSink::default();
+            let h = PlayerHandle::open(
+                Box::new(Cursor::new(fixture(name))),
+                Box::new(sink.clone()),
+                None,
+                true,
+            )
+            .unwrap_or_else(|e| panic!("open {name}: {e}"));
+            assert_eq!(wait_phase(&h, |p| p == Phase::Ended, 5000), Phase::Ended);
+            let info = h.track_info().expect("track info");
+            assert_eq!(info.sample_rate, 44100, "{name} rate");
+            assert_eq!(info.channels, 2, "{name} channels");
+            let appends = sink.appends.lock().unwrap();
+            assert!(!appends.is_empty(), "{name}: no chunks appended");
+            for (i, (ch, sr, len)) in appends.iter().enumerate() {
+                assert_eq!(*ch, 2, "{name} chunk {i}: channels");
+                assert_eq!(*sr, 44100, "{name} chunk {i}: sample rate");
+                assert_eq!(*len % 2, 0, "{name} chunk {i}: even sample count");
+            }
+        }
+    }
+
+    #[test]
+    fn wav_plays_to_end_and_seeks() {
+        // WAV previously failed the probe (missing `wav` demuxer feature),
+        // so desktop WAV silently fell back to the browser pipeline.
+        let sink = RecordingSink::default();
+        let h = PlayerHandle::open(
+            Box::new(Cursor::new(fixture("tone.wav"))),
+            Box::new(sink.clone()),
+            None,
+            true,
+        )
+        .expect("open wav");
+        let info = h.track_info().expect("track info");
+        assert_eq!(info.codec, "pcm_s16le");
+        assert_eq!((info.sample_rate, info.channels), (44100, 2));
+        assert!(
+            matches!(info.duration_sec, Some(d) if (4.9..=5.1).contains(&d)),
+            "wav duration ≈5 s, got {:?}",
+            info.duration_sec
+        );
+
+        // Forward seek lands near the target and playback continues to end.
+        // (The instant-consume sink may already have raced to Ended — the
+        // seek revives playback from there via the do_swap Ended/Failed
+        // path, same as a timeline click after the track finished.)
+        wait_phase(&h, |p| matches!(p, Phase::Playing | Phase::Ended), 4000);
+        h.seek(3.0).unwrap();
+        std::thread::sleep(Duration::from_millis(150));
+        let pos = h.position();
+        assert!(
+            pos >= 2.7,
+            "wav position after forward seek should be at/after 3.0 s, got {pos}"
+        );
+        assert_eq!(wait_phase(&h, |p| p == Phase::Ended, 8000), Phase::Ended);
+        for (i, (ch, sr, _)) in sink.appends.lock().unwrap().iter().enumerate() {
+            assert_eq!((*ch, *sr), (2, 44100), "wav chunk {i} layout");
+        }
     }
 }

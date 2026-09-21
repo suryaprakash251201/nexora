@@ -122,6 +122,35 @@ fn decodes_flac_and_mp3_from_memory() {
     assert_tone(&mp3, "mp3");
 }
 
+/// WAV needs the `wav` demuxer feature (not just the `pcm` codec): without
+/// it the probe fails and desktop WAV silently falls back to the browser
+/// pipeline. 5 s stereo fixture, over memory and HTTP range.
+#[test]
+fn decodes_wav_from_memory_and_http_range() {
+    let bytes = fixture("tone.wav");
+
+    let mem = decode_all(Box::new(Cursor::new(bytes.clone()))).expect("cursor wav");
+    assert_eq!(mem.info.codec, "pcm_s16le");
+    assert_eq!(mem.info.sample_rate, 44100);
+    assert_eq!(mem.info.channels, 2);
+    let frames = mem.samples_f32.len() / mem.info.channels;
+    assert!(
+        (218_000..=223_000).contains(&(frames as i64)),
+        "frames={frames} should be ≈5 s of audio"
+    );
+    let peak = mem.samples_f32.iter().fold(0.0f32, |m, s| m.max(s.abs()));
+    assert!(peak > 0.05, "decoded wav is near-silent (peak={peak})");
+    if let Some(dur) = mem.info.duration_sec {
+        assert!((4.9..=5.1).contains(&dur), "duration_sec={dur}");
+    }
+
+    let (url, _state, _stop) = spawn_mock(bytes, false);
+    let reader = HttpRangeReader::open_with(url, cfg()).expect("open");
+    let streamed = decode_all(Box::new(reader)).expect("http-range wav");
+    assert_eq!(streamed.info.channels, 2);
+    assert_eq!(streamed.samples_f32.len(), mem.samples_f32.len());
+}
+
 #[test]
 fn alac_decodes_to_integer_pcm_samples() {
     let audio = decode_all(Box::new(Cursor::new(fixture("tone-alac.m4a")))).expect("alac");

@@ -20,8 +20,13 @@ decode = ["dep:symphonia"]
 
 [dependencies]
 ureq = { version = "2", default-features = false, features = ["tls", "gzip"] }
+# Demuxers must cover every NATIVE_EXTS member the frontend may hand us:
+# WAV/AIFF arrive as wav/aiff extensions (the pcm codec alone only decodes
+# samples once something else demuxes the RIFF container). Missing demuxers
+# surface as a probe failure at open, which the UI silently downgrades to
+# the browser pipeline.
 symphonia = { version = "0.5", optional = true, default-features = false, features = [
-    "isomp4", "alac", "aac", "flac", "pcm", "mp3",
+    "isomp4", "alac", "aac", "flac", "pcm", "mp3", "wav", "aiff",
 ] }
 rodio = { version = "0.20", optional = true, default-features = false, features = [] }
 

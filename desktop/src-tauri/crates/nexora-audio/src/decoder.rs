@@ -194,6 +194,24 @@ use symphonia::core::audio::SignalSpec;
 use symphonia::core::formats::{SeekMode, SeekTo};
 use symphonia::core::units::Time;
 
+/// Adopts the decoded [`SignalSpec`] into [`TrackInfo`]. The decoded spec is
+/// authoritative for the emitted samples: the output must be told the exact
+/// layout of the chunk it is about to render, or speed/pitch break. This
+/// mattered for MP4/M4A, which declares the sample rate but NOT the channel
+/// layout — the old backfill only ran when the rate was unknown, so channels
+/// stayed 0 and the player fed stereo samples to the output as mono (each
+/// chunk then lasts twice as long → half-speed, garbled playback, timeline
+/// racing at 2x). Container values survive only until the first decode.
+fn sync_info_from_spec(info: &mut TrackInfo, spec: &SignalSpec) {
+    if spec.rate != 0 {
+        info.sample_rate = spec.rate;
+    }
+    let channels = spec.channels.count();
+    if channels != 0 {
+        info.channels = channels;
+    }
+}
+
 /// A track opened for incremental playback: pull chunks with [`next_chunk`],
 /// seek with [`seek_seconds`]. Owned by the player's decode thread.
 pub struct TrackDecoder {
@@ -274,10 +292,14 @@ impl TrackDecoder {
             match td.decoder.decode(&packet) {
                 Ok(decoded) => {
                     td.spec = *decoded.spec();
-                    if td.info.sample_rate == 0 {
-                        td.info.sample_rate = td.spec.rate;
-                        td.info.channels = td.spec.channels.count();
-                    }
+                    // Backfill per-field from the decoded spec: containers
+                    // often declare only one of the two (MP4/M4A declares
+                    // the sample rate but NOT the channel layout, so the
+                    // old `sample_rate == 0` guard left channels stuck at 0
+                    // and the player fed stereo samples to the output as
+                    // mono — half-speed, garbled playback). The decoded
+                    // spec is authoritative for the emitted samples.
+                    sync_info_from_spec(&mut td.info, &td.spec);
                     if td.bits_per_sample == 0 {
                         use symphonia::core::audio::AudioBufferRef as Abr;
                         td.bits_per_sample = match &decoded {
@@ -346,10 +368,10 @@ impl TrackDecoder {
                         self.sbuf = None; // spec changed → reallocate
                         self.spec = spec;
                     }
-                    if self.info.sample_rate == 0 {
-                        self.info.sample_rate = spec.rate;
-                        self.info.channels = spec.channels.count();
-                    }
+                    // Keep the surfaced rate/channels glued to the emitted
+                    // samples (see sync_info_from_spec): the player reads
+                    // info() right after next_chunk() to size each append.
+                    sync_info_from_spec(&mut self.info, &spec);
                     let need = decoded.frames() * spec.channels.count();
                     let insufficient = self.sbuf.as_ref().map(|s| s.capacity() < need).unwrap_or(true);
                     if insufficient {
