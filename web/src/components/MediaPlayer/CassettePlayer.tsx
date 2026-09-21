@@ -4,67 +4,64 @@ import { cleanTrackTitle } from "@nexora/core";
 import { thumbUrl } from "../../lib/preview";
 
 /**
- * CassettePlayer — modern premium cassette hero for the full-screen audio
- * player. Pure presentation: all playback state comes in via props and every
- * interaction is delegated through callbacks, so the existing Zustand/engine
- * audio pipeline stays the single source of truth.
+ * CassettePlayer — retro 80s compact-cassette hero for the full-screen
+ * audio player. Pure presentation: all playback state comes in via props
+ * and every interaction is delegated through callbacks, so the existing
+ * Zustand/engine audio pipeline stays the single source of truth.
  *
  * Layout (top → bottom):
- *  - Dark glass body
- *      - Accent hairline + brand/side header
- *      - Cover photo (the hero, glass-ring frame)
- *      - Title (left) + artist (right) metadata strip
- *  - Glass tape window
- *      - Dark magnetic strip with accent-gradient travelling sheen
- *      - Two reels with rotating spools (accent-tinted hub)
- *      - Reel-position progress dots
+ *  - Cream plastic shell, corner screws
+ *      - Paper label: red/orange brand stripes, NEXORA wordmark + side
+ *        indicator, ruled handwriting lines (title / artist), cover-art
+ *        sticker
+ *      - Trapezoid tape window: brown tape line, tape packs that scale
+ *        with `progress`, two white 6-spoke reels (spin while playing)
+ *      - Bottom edge: trapezoid head cutout, "A" side engraving
+ *      - Tape-counter groove: fill width follows `progress`
  *
  * Animation model (see index.css "Cassette player" section):
  *  - mount  → .cassette-rig.is-loading  : cassette loads into the deck
  *  - eject  → .cassette-rig.is-ejecting : mechanical eject before overlay closes
- *  - swap   → .cassette-rig.is-swapping : tiny nudge + photo slide-in on track change
+ *  - swap   → .cassette-rig.is-swapping : tiny nudge + label slide on track change
  *  - reels  → CSS spin, play-state driven by `playing`; tape pack sizes follow `progress`
- *  - tape   → .cassette-tape-strip .sheen : accent gradient moves left → right while playing
- *  - glow   → .cassette-body plays a soft accent-tinted breathe while playing
  */
 
 /** Must match the `n-cassette-eject` duration in index.css. */
 export const CASSETTE_EJECT_MS = 620;
 
-// Reel centers (as % of window width) — inset from the edges so the
-// strip has somewhere to start/end and the reels read as the mechanism.
-const P = { left: 24, right: 76 } as const;
+/** Must match the `n-cassette-load` duration in index.css. */
+const CASSETTE_LOAD_MS = 950;
 
-function ReelSpokes() {
-  // A modern reel: a glass-tinted ring with 6 spoke cutouts and a small
-  // accent-tinted centre spindle hole. No white spool — that was the
-  // 1970s cassette; the modern look is a single dark disc with subtle
-  // accent details.
+// Reel centers (as % of window width).
+const P = { left: 30, right: 70 } as const;
+
+function ReelTeeth() {
+  // Classic compact-cassette hub: white plastic disc with 6 trapezoid
+  // teeth cutouts and a small centre spindle hole.
   return (
     <svg viewBox="0 0 100 100" className="cassette-reel-svg" aria-hidden="true">
-      {/* Outer dark glass ring */}
-      <circle cx="50" cy="50" r="36" fill="#0a0c14" />
-      <circle cx="50" cy="50" r="36" fill="none" stroke="rgba(255,255,255,0.10)" strokeWidth="1.5" />
-      {/* Six spoke cutouts — slim modern proportions */}
+      {/* White hub disc */}
+      <circle cx="50" cy="50" r="40" fill="#efe9d8" />
+      <circle cx="50" cy="50" r="40" fill="none" stroke="#b9ad8f" strokeWidth="2" />
+      <circle cx="50" cy="50" r="31" fill="none" stroke="rgba(0,0,0,0.12)" strokeWidth="1" />
+      {/* Six teeth cutouts */}
       {[0, 60, 120, 180, 240, 300].map((a) => (
-        <rect
+        <path
           key={a}
-          x="48.2"
-          y="13"
-          width="3.6"
-          height="20"
-          rx="1.8"
-          fill="#06080f"
+          d="M45 22 L55 22 L52 40 L48 40 Z"
+          fill="#141210"
           transform={`rotate(${a} 50 50)`}
         />
       ))}
-      {/* Inner accent ring */}
-      <circle cx="50" cy="50" r="14" fill="none" stroke="rgba(255,255,255,0.18)" strokeWidth="1" />
       {/* Centre spindle hole */}
-      <circle cx="50" cy="50" r="4.5" fill="#02030a" />
-      <circle cx="50" cy="50" r="4.5" fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="0.8" />
+      <circle cx="50" cy="50" r="7" fill="#141210" />
+      <circle cx="50" cy="50" r="7" fill="none" stroke="#b9ad8f" strokeWidth="1.2" />
     </svg>
   );
+}
+
+function Screw({ className = "" }: { className?: string }) {
+  return <span className={`cassette-screw ${className}`} aria-hidden="true" />;
 }
 
 export function CassettePlayer({
@@ -80,13 +77,20 @@ export function CassettePlayer({
   playing: boolean;
   /** Real playback position, 0 → 1 — drives the tape distribution between reels. */
   progress: number;
-  /** 1-based queue position for the "SIDE A · 01" cosmetic counter. */
+  /** 1-based queue position for the "A · 01" cosmetic counter. */
   trackNumber?: number;
   /** True while the eject animation plays (overlay closes right after). */
   ejecting?: boolean;
   onToggle?: () => void;
   className?: string;
 }) {
+  // Load-in runs once on mount so the cassette drops into the deck.
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    const t = window.setTimeout(() => setLoading(false), CASSETTE_LOAD_MS);
+    return () => window.clearTimeout(t);
+  }, []);
+
   // Track-change swap: old label fades out, new metadata fades in, with a
   // subtle physical nudge. Cassette body/reels are never remounted, so the
   // reel rotation never resets.
@@ -111,8 +115,9 @@ export function CassettePlayer({
   // No ID3 pipeline on FileItem — the parent folder is the common
   // "Artist — Album" convention, so use it as the cosmetic artist line.
   const folder = shownTrack ? shownTrack.path.split("/").slice(-2, -1)[0] || "" : "";
-  const side = `SIDE A · ${String(Math.max(1, trackNumber)).padStart(2, "0")}`;
+  const side = `A · ${String(Math.max(1, trackNumber)).padStart(2, "0")}`;
   const art = shownTrack ? thumbUrl(shownTrack) : "";
+  const rigState = ejecting ? "is-ejecting" : swapping ? "is-swapping" : loading ? "is-loading" : "";
 
   return (
     <div
@@ -122,75 +127,61 @@ export function CassettePlayer({
       {/* Deck bay — the dark slot the cassette loads into */}
       <div className="cassette-deck" aria-hidden="true" />
 
-      <div
-        className={`cassette-rig ${ejecting ? "is-ejecting" : swapping ? "is-swapping" : ""}`}
-      >
+      <div className={`cassette-rig ${rigState}`}>
         <button
           type="button"
           onClick={(e) => { e.stopPropagation(); onToggle?.(); }}
-          className="cassette-shell block w-full cursor-pointer border-0 bg-transparent p-0 outline-none focus-visible:ring-2 focus-visible:ring-accent/70 focus-visible:ring-offset-0 rounded-[6%/9%]"
+          className="cassette-shell block w-full cursor-pointer border-0 bg-transparent p-0 outline-none focus-visible:ring-2 focus-visible:ring-accent/70 focus-visible:ring-offset-0"
           aria-label={playing ? "Pause" : "Play"}
           title={playing ? "Pause" : "Play"}
         >
-          {/* Dark glass body */}
+          {/* Cream plastic shell */}
           <div className="cassette-body">
-            {/* Accent edge glow — subtle gradient halo around the perimeter */}
-            <div className="cassette-body-glow" aria-hidden="true" />
+            <Screw className="is-tl" />
+            <Screw className="is-tr" />
+            <Screw className="is-bl" />
+            <Screw className="is-br" />
 
-            {/* Top header strip: brand + side indicator on a single hairline */}
-            <div className="cassette-header">
-              <div className="cassette-header-rule" aria-hidden="true" />
-              <div className="cassette-header-row">
-                <span className="cassette-header-brand">Nexora Audio</span>
-                <span className="cassette-header-side">{side}</span>
+            {/* Paper label */}
+            <div className={`cassette-label ${swapping ? "is-swapping" : ""}`}>
+              {/* Brand stripes */}
+              <div className="cassette-stripes" aria-hidden="true" />
+              <div className="cassette-label-top">
+                <span className="cassette-brand">Nexora</span>
+                <span className="cassette-chrome">Compact Cassette · 90</span>
+                <span className="cassette-side">{side}</span>
+              </div>
+
+              {/* Handwriting lines + cover sticker */}
+              <div className="cassette-label-mid">
+                <div className="cassette-lines">
+                  <p className="cassette-line-title" title={title}>
+                    {title || "No cassette loaded"}
+                  </p>
+                  <p className="cassette-line-artist" title={folder}>
+                    {folder || "\u00A0"}
+                  </p>
+                </div>
+                <div className="cassette-sticker">
+                  {art ? (
+                    <img
+                      key={shownTrack?.path || "empty"}
+                      src={art}
+                      alt=""
+                      className="cassette-sticker-img"
+                      draggable={false}
+                    />
+                  ) : (
+                    <span className="cassette-sticker-empty">No art</span>
+                  )}
+                </div>
               </div>
             </div>
 
-            {/* Wide cover photo — the visual hero. Glass-ring frame, no
-                hard sticker border, accent-tinted vignette that brightens
-                while playing. */}
-            <div className="cassette-photo-frame">
-              <div
-                key={shownTrack?.path || "empty"}
-                className={`cassette-photo ${swapping ? "is-swapping" : ""}`}
-              >
-                {art ? (
-                  <img
-                    src={art}
-                    alt=""
-                    className="cassette-photo-img"
-                    draggable={false}
-                  />
-                ) : (
-                  <div className="cassette-photo-placeholder">
-                    <span>No artwork</span>
-                  </div>
-                )}
-                {/* Subtle accent-tinted vignette — only visible while playing */}
-                <div className="cassette-photo-glow" aria-hidden="true" />
-              </div>
-            </div>
-
-            {/* Metadata strip — title (left) + artist (right), single hairline */}
-            <div className={`cassette-meta ${swapping ? "is-swapping" : ""}`}>
-              <div className="cassette-meta-row">
-                <p className="cassette-meta-title" title={title}>
-                  {title || "No cassette loaded"}
-                </p>
-                <p className="cassette-meta-artist" title={folder}>
-                  {folder || "\u00A0"}
-                </p>
-              </div>
-            </div>
-
-            {/* Glass tape window — visible magnetic strip + reels + dots */}
+            {/* Trapezoid tape window */}
             <div className="cassette-window" aria-hidden="true">
-              {/* Strip base — always visible, gives the "tape present" look */}
-              <div className="cassette-tape-strip">
-                {/* Accent gradient travels left → right while playing */}
-                <div className="cassette-tape-sheen" />
-              </div>
-
+              {/* Brown magnetic tape line */}
+              <div className="cassette-tape-line" />
               {/* Tape packs — scale follows real playback progress */}
               <div
                 className="cassette-tape"
@@ -200,29 +191,28 @@ export function CassettePlayer({
                 className="cassette-tape"
                 style={{ left: `${P.right}%`, ["--tape-s" as string]: rightScale }}
               />
-
-              {/* Rotating spools */}
+              {/* Rotating hubs */}
               <div className="cassette-reel" style={{ left: `${P.left}%` }}>
-                <ReelSpokes />
+                <ReelTeeth />
               </div>
               <div className="cassette-reel cassette-reel-right" style={{ left: `${P.right}%` }}>
-                <ReelSpokes />
+                <ReelTeeth />
               </div>
-
-              {/* Reel-position progress dots — abstract, modern, less literal
-                  than the head assembly + capstan posts of the old design. */}
-              <div className="cassette-progress-dots">
-                {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
-                  <span
-                    key={i}
-                    className={`cassette-progress-dot ${i / 7 <= p ? "is-lit" : ""}`}
-                    style={{ ["--i" as string]: i }}
-                  />
-                ))}
-              </div>
-
-              {/* Glass sheen over the window */}
+              {/* Window glass sheen */}
               <div className="cassette-window-sheen" />
+            </div>
+
+            {/* Tape-counter groove (paints under the head block) */}
+            <div className="cassette-counter" aria-hidden="true">
+              <div className="cassette-counter-fill" style={{ width: `${p * 100}%` }} />
+            </div>
+
+            {/* Bottom edge: head cutout + side engraving */}
+            <div className="cassette-bottom" aria-hidden="true">
+              <span className="cassette-bottom-letter">A</span>
+              <span className="cassette-head-hole" />
+              <span className="cassette-guide-hole is-left" />
+              <span className="cassette-guide-hole is-right" />
             </div>
           </div>
         </button>
