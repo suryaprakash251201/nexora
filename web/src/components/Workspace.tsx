@@ -305,11 +305,11 @@ export default function Workspace({ user }: { user: User }) {
   const createPlaylistMutation = useCreatePlaylist();
 
   const refresh = useCallback(() => {
-    qc.invalidateQueries({ queryKey: ["files", rootId, path, sort, order, fileOffset] });
+    qc.invalidateQueries({ queryKey: ["files"] });
     qc.invalidateQueries({ queryKey: ["trash"] });
     qc.invalidateQueries({ queryKey: ["roots"] });
     qc.invalidateQueries({ queryKey: ["favorites"] });
-  }, [qc, rootId, path, sort, order, fileOffset]);
+  }, [qc]);
 
   // Warm the target view's data while the pointer hovers a nav item, so a
   // click swaps views with data already in the cache (no spinner / skeleton).
@@ -661,7 +661,10 @@ export default function Workspace({ user }: { user: User }) {
         {view !== "files" && !videoItem && (
           // Top-right floating avatar — no box-shape header bar, just the
           // user menu in the same top-right corner as before.
-          <div className="absolute top-3 right-3 sm:top-4 sm:right-5 z-20">
+          // z-30 (not z-20): the sticky view headers (ViewHeader, AdminPanel)
+          // also use z-20 and being later in the DOM were painting over this
+          // menu, so clicks on the avatar opened the header underneath.
+          <div className="absolute top-3 right-3 sm:top-4 sm:right-5 z-30">
             <ProfileMenu user={user} isAdmin={isAdmin} onLogout={logout} onAdmin={() => setView("admin")} />
           </div>
         )}
@@ -732,7 +735,7 @@ export default function Workspace({ user }: { user: User }) {
               />
               </>
             )}
-            {view === "trash" && <TrashView items={trash.data?.items || []} loading={trash.isLoading} onRestore={async (id) => { await trashApi.restore(id); refresh(); }} onDelete={async (id) => { await trashApi.delete(id); refresh(); }} selection={selection} selectMode={selectMode} onSelect={(id) => toggleSelect(id)} />}
+            {view === "trash" && <TrashView items={trash.data?.items || []} loading={trash.isLoading} onRestore={async (id) => { try { await trashApi.restore(id); pushToast("success", "Restored from trash"); } catch (err) { pushToast("error", (err as Error)?.message || "Restore failed"); } refresh(); }} onDelete={async (id) => { try { await trashApi.delete(id); pushToast("success", "Deleted forever"); } catch (err) { pushToast("error", (err as Error)?.message || "Delete failed"); } refresh(); }} selection={selection} selectMode={selectMode} onSelect={(id) => toggleSelect(id)} />}
             {view === "favorites" && <FavouritesView
               loading={favorites.isLoading}
               items={(favorites.data?.items || []).map((f) => ({

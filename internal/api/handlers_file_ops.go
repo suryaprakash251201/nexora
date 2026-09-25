@@ -69,6 +69,7 @@ func (s *Server) handleRename(w http.ResponseWriter, r *http.Request) {
 	}
 	s.indexRemove(req.Root, rel)
 	s.indexUpsert(req.Root, acc.provider, dest)
+	s.pruneRecents(req.Root, rel)
 	// A rename changes the version key (root_id, path): drop history for
 	// the old path so snapshot bytes in the provider don't leak.
 	if _, _, err := s.versionsStore().PurgeForPath(req.Root, rel, acc.provider); err != nil {
@@ -117,6 +118,7 @@ func (s *Server) handleMove(w http.ResponseWriter, r *http.Request) {
 	}
 	s.indexRemove(req.Root, src)
 	s.indexUpsert(req.Root, acc.provider, dst)
+	s.pruneRecents(req.Root, src)
 	// Moving a file (or folder) changes every (root_id, path) version key
 	// under the source; purge so snapshot bytes don't leak in the provider.
 	store := s.versionsStore()
@@ -198,6 +200,7 @@ func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.indexRemove(rootID, rel)
+		s.pruneRecents(rootID, rel)
 		s.audit(r, "delete_permanent", rel, "")
 		s.emit(events.EventFileDeleted, r, rootID, rel, 0)
 		writeJSON(w, http.StatusOK, map[string]any{"ok": true})
@@ -245,6 +248,7 @@ func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	s.audit(r, "delete", rel, "moved to trash")
 	s.indexRemove(rootID, rel)
+	s.pruneRecents(rootID, rel)
 	s.emit(events.EventFileDeleted, r, rootID, rel, info.Size)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "trashed": true})
 }

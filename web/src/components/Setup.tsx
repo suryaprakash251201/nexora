@@ -53,18 +53,18 @@ export default function Setup({ onSuccess }: { onSuccess: () => void }) {
             <div className="absolute top-1/2 left-0 right-0 h-1 bg-border/50 -translate-y-1/2 z-0 rounded-full overflow-hidden">
               <div className="h-full bg-accent transition-all duration-500" style={{ width: step === 1 ? '50%' : '100%' }} />
             </div>
-            <div className={`relative z-10 h-8 w-8 rounded-full grid place-items-center font-bold text-xs transition-colors duration-300 ${step >= 1 ? 'bg-accent text-white shadow-lg shadow-accent/20' : 'bg-surface border border-border/50 text-content-muted'}`}>
+            <div className={`relative z-10 h-8 w-8 rounded-full grid place-items-center font-bold text-xs transition-colors duration-300 ${step >= 1 ? 'bg-accent text-primary-foreground shadow-lg shadow-accent/20' : 'bg-surface border border-border/50 text-content-muted'}`}>
               {step > 1 ? <CheckCircle2 className="h-5 w-5" /> : '1'}
             </div>
-            <div className={`relative z-10 h-8 w-8 rounded-full grid place-items-center font-bold text-xs transition-colors duration-300 ${step >= 2 ? 'bg-accent text-white shadow-lg shadow-accent/20' : 'bg-surface border border-border/50 text-content-muted'}`}>
+            <div className={`relative z-10 h-8 w-8 rounded-full grid place-items-center font-bold text-xs transition-colors duration-300 ${step >= 2 ? 'bg-accent text-primary-foreground shadow-lg shadow-accent/20' : 'bg-surface border border-border/50 text-content-muted'}`}>
               2
             </div>
           </div>
           <form onSubmit={step === 1 ? (e) => { e.preventDefault(); if (canProceedToStep2) setStep(2); } : submit}>
-            <div className="relative overflow-hidden" style={{ minHeight: '260px' }}>
+            <div className="grid overflow-hidden" style={{ minHeight: '260px' }}>
               {/* Step 1: Profile */}
               <div
-                className={`absolute inset-0 transition-all duration-500 ease-in-out ${step === 1 ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-full pointer-events-none'}`}
+                className={`[grid-area:1/1] transition-all duration-500 ease-in-out ${step === 1 ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-full pointer-events-none'}`}
                 {...(step === 1 ? {} : { inert: true, "aria-hidden": true, tabIndex: -1 })}
               >
                 <div className="space-y-4">
@@ -124,7 +124,7 @@ export default function Setup({ onSuccess }: { onSuccess: () => void }) {
               </div>
               {/* Step 2: Security */}
               <div
-                className={`absolute inset-0 transition-all duration-500 ease-in-out ${step === 2 ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-full pointer-events-none'}`}
+                className={`[grid-area:1/1] transition-all duration-500 ease-in-out ${step === 2 ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-full pointer-events-none'}`}
                 {...(step === 2 ? {} : { inert: true, "aria-hidden": true, tabIndex: -1 })}
               >
                 <div className="space-y-4">

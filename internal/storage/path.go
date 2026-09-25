@@ -51,13 +51,20 @@ func Resolve(rootPath, rel string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	joined := filepath.Clean(filepath.Join(absRoot, filepath.FromSlash(cleaned)))
 
-	joinedAbs, err := filepath.Abs(joined)
+	rootAbs, err := filepath.Abs(absRoot)
 	if err != nil {
 		return "", err
 	}
-	rootAbs, err := filepath.Abs(absRoot)
+	// Canonicalize the root too: on Windows a root given in 8.3 form
+	// (C:\Users\JOHNDO~1\...) must compare against EvalSymlinks output
+	// (C:\Users\John Doe\...) or every existing file looks like a traversal.
+	if canonical, cerr := filepath.EvalSymlinks(rootAbs); cerr == nil {
+		rootAbs = canonical
+	}
+
+	joined := filepath.Clean(filepath.Join(rootAbs, filepath.FromSlash(cleaned)))
+	joinedAbs, err := filepath.Abs(joined)
 	if err != nil {
 		return "", err
 	}
@@ -71,7 +78,7 @@ func Resolve(rootPath, rel string) (string, error) {
 		return "", err
 	}
 	if err == nil {
-		rel3, err := filepath.Rel(absRoot, resolved)
+		rel3, err := filepath.Rel(rootAbs, resolved)
 		if err != nil || rel3 == ".." || strings.HasPrefix(rel3, ".."+string(filepath.Separator)) {
 			return "", ErrTraversal
 		}
@@ -121,6 +128,11 @@ func IsInside(root, candidate string) bool {
 	if root == "" || candidate == "" {
 		return false
 	}
+	// Clean both sides so a root written with the platform separator compares
+	// correctly against candidates built with forward slashes (and vice versa)
+	// — otherwise the prefix check silently fails on Windows.
+	root = filepath.Clean(root)
+	candidate = filepath.Clean(candidate)
 	if candidate == root {
 		return true
 	}

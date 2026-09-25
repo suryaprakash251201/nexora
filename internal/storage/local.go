@@ -41,7 +41,18 @@ type LocalFilesystemProvider struct {
 
 // NewLocalFilesystemProvider creates a provider bound to an absolute path.
 func NewLocalFilesystemProvider(rootPath string, readOnly bool) *LocalFilesystemProvider {
-	return &LocalFilesystemProvider{rootPath: filepath.Clean(rootPath), readOnly: readOnly}
+	root := filepath.Clean(rootPath)
+	// Canonicalize once here so every path derived from the root shares one
+	// form: on Windows an 8.3 short root (C:\Users\JOHNDO~1\...) would
+	// otherwise mismatch EvalSymlinks output (C:\Users\John Doe\...) inside
+	// Resolve's traversal guard and Search's filepath.Rel.
+	if abs, err := filepath.Abs(root); err == nil {
+		root = abs
+	}
+	if canonical, err := filepath.EvalSymlinks(root); err == nil {
+		root = canonical
+	}
+	return &LocalFilesystemProvider{rootPath: root, readOnly: readOnly}
 }
 
 func (p *LocalFilesystemProvider) abs(rel string) (string, error) {

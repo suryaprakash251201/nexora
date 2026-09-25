@@ -108,7 +108,7 @@ func (s *Server) handleListRecents(w http.ResponseWriter, r *http.Request) {
 	rows, err := s.DB.Query(
 		`SELECT rc.root_id, rc.path, rc.accessed_at, r.name
 		 FROM recents rc LEFT JOIN storage_roots r ON r.id=rc.root_id
-		 WHERE rc.user_id=? ORDER BY rc.accessed_at DESC LIMIT ?`, user.ID, limit)
+		 WHERE rc.user_id=? ORDER BY rc.accessed_at DESC LIMIT 100`, user.ID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error", "could not list recents", middleware.GetRequestID(r.Context()))
 		return
@@ -127,6 +127,11 @@ func (s *Server) handleListRecents(w http.ResponseWriter, r *http.Request) {
 			"name":        storage.NameFromPath(path),
 			"accessed_at": accessedAt,
 		})
+	}
+	rows.Close()
+	out = s.filterLiveRecents(out)
+	if len(out) > limit {
+		out = out[:limit]
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"items": out})
 }
@@ -152,13 +157,64 @@ func (s *Server) recordRecent(r *http.Request, rootID, path, kind string) {
 		)`, user.ID, user.ID)
 }
 
+// pruneRecents drops a path (and anything nested under it) from every user's
+// recents for that root. Delete/move/rename must call this: Home and the
+// Recents list read this table verbatim, so stale rows render thumbnails for
+// files that no longer exist (404s in the console) or point at the wrong name.
+func (s *Server) pruneRecents(rootID, path string) {
+	if rootID == "" || path == "" {
+		return
+	}
+	_, _ = s.DB.Exec(
+		`DELETE FROM recents WHERE root_id=? AND (path=? OR substr(path,1,length(?)+1)=?||'/')`,
+		rootID, path, path, path)
+}
+
+// recentExists reports whether a recents row still points at a real file.
+// Files can disappear outside the app (deleted over SMB, another client, a
+// failed upload), so listings verify instead of trusting the table.
+func (s *Server) recentExists(cache map[string]storage.StorageProvider, rootID, path string) bool {
+	prov, ok := cache[rootID]
+	if !ok {
+		if root, found, err := s.StorageRoots.Get(rootID); err == nil && found {
+			prov = s.StorageRoots.ProviderFor(root)
+		}
+		cache[rootID] = prov
+	}
+	if prov == nil {
+		return false
+	}
+	_, err := prov.Stat(path)
+	return err == nil
+}
+
+// filterLiveRecents drops rows whose file is gone (and prunes them so the
+// next read is cheap). Callers must close their rows before calling this:
+// pruning writes to the same table the cursor just read.
+func (s *Server) filterLiveRecents(items []map[string]any) []map[string]any {
+	cache := map[string]storage.StorageProvider{}
+	live := items[:0]
+	for _, it := range items {
+		rootID, _ := it["root_id"].(string)
+		path, _ := it["path"].(string)
+		if !s.recentExists(cache, rootID, path) {
+			s.pruneRecents(rootID, path)
+			continue
+		}
+		live = append(live, it)
+	}
+	return live
+}
+
 // recentItems returns the user's most recent recents of a given kind.
 func (s *Server) recentItems(userID, kind string, limit int) []map[string]any {
+	// Over-fetch: filtering removes rows the table no longer backs, and the
+	// per-user table is capped at 100 rows anyway.
 	rows, err := s.DB.Query(
 		`SELECT rc.root_id, rc.path, rc.accessed_at, r.name
 		 FROM recents rc LEFT JOIN storage_roots r ON r.id=rc.root_id
-		 WHERE rc.user_id=? AND rc.kind=? ORDER BY rc.accessed_at DESC LIMIT ?`,
-		userID, kind, limit)
+		 WHERE rc.user_id=? AND rc.kind=? ORDER BY rc.accessed_at DESC LIMIT 100`,
+		userID, kind)
 	if err != nil {
 		return []map[string]any{}
 	}
@@ -176,6 +232,11 @@ func (s *Server) recentItems(userID, kind string, limit int) []map[string]any {
 			"name":        storage.NameFromPath(path),
 			"accessed_at": accessedAt,
 		})
+	}
+	rows.Close()
+	out = s.filterLiveRecents(out)
+	if len(out) > limit {
+		out = out[:limit]
 	}
 	return out
 }
@@ -227,14 +288,14 @@ func (s *Server) homeSection(userID, category string, limit int) []map[string]an
 		rows, err = s.DB.Query(
 			`SELECT rc.root_id, rc.path, rc.accessed_at, r.name
 			 FROM recents rc LEFT JOIN storage_roots r ON r.id=rc.root_id
-			 WHERE rc.user_id=? AND rc.kind='add' ORDER BY rc.accessed_at DESC LIMIT ?`,
-			userID, limit)
+			 WHERE rc.user_id=? AND rc.kind='add' ORDER BY rc.accessed_at DESC LIMIT 100`,
+			userID)
 	} else {
 		rows, err = s.DB.Query(
 			`SELECT rc.root_id, rc.path, rc.accessed_at, r.name
 			 FROM recents rc LEFT JOIN storage_roots r ON r.id=rc.root_id
-			 WHERE rc.user_id=? AND rc.kind='access' ORDER BY rc.accessed_at DESC LIMIT ?`,
-			userID, limit)
+			 WHERE rc.user_id=? AND rc.kind='access' ORDER BY rc.accessed_at DESC LIMIT 100`,
+			userID)
 	}
 	if err != nil {
 		return []map[string]any{}
@@ -246,9 +307,6 @@ func (s *Server) homeSection(userID, category string, limit int) []map[string]an
 		if err := rows.Scan(&rootID, &path, &accessedAt, &rootName); err != nil {
 			continue
 		}
-		if category != homeKindAdded && classifyMedia(path) != category {
-			continue
-		}
 		out = append(out, map[string]any{
 			"root_id":     rootID,
 			"root_name":   rootName,
@@ -257,7 +315,20 @@ func (s *Server) homeSection(userID, category string, limit int) []map[string]an
 			"accessed_at": accessedAt,
 		})
 	}
-	return out
+	rows.Close()
+	out = s.filterLiveRecents(out)
+	filtered := out[:0]
+	for _, it := range out {
+		path, _ := it["path"].(string)
+		if category != homeKindAdded && classifyMedia(path) != category {
+			continue
+		}
+		filtered = append(filtered, it)
+	}
+	if len(filtered) > limit {
+		filtered = filtered[:limit]
+	}
+	return filtered
 }
 
 // handleHome returns dashboard data for the post-login Home view.

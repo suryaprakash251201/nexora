@@ -193,9 +193,12 @@ export default function CommandBar({
 
   return (
     <div className="relative z-30 mx-3 mt-3 mb-0 sm:mx-4 sm:mt-4">
-      <div className="glass rounded-2xl flex items-center gap-1.5 sm:gap-3 px-2.5 sm:px-5 h-13 sm:h-16">
+      {/* Below lg the actions would collide with the breadcrumb/search row, so
+          the bar stacks into two rows (breadcrumb row, then actions row) and
+          returns to a single row once there is room for everything. */}
+      <div className="glass rounded-2xl flex flex-col lg:flex-row lg:items-center gap-1.5 sm:gap-3 px-2.5 sm:px-5 py-2 lg:py-0 min-h-13 lg:min-h-16">
         {/* Left: Breadcrumbs + Search */}
-        <div className="min-w-0 flex-1 flex items-center gap-2 sm:gap-3">
+        <div className="min-w-0 flex-1 w-full lg:w-auto flex items-center gap-2 sm:gap-3">
           <Breadcrumbs rootName={rootName} path={path} onNavigate={onNavigate} onDropToFolder={onDropToFolder} onUploadFiles={onUploadFiles} />
 
           {/* Pending clipboard chip (Ctrl+X/C then Ctrl+V) */}
@@ -269,12 +272,12 @@ export default function CommandBar({
         </div>
 
         {/* Right: Actions */}
-        <div className="flex items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-1.5 w-full lg:w-auto justify-start lg:justify-end">
           {/* Filter */}
           <button
             ref={filterBtnRef}
             onClick={toggleFilter}
-            className={`p-2 rounded-xl glass-hover transition-colors hidden sm:block min-w-[36px] min-h-[36px] ${filter !== "all" ? "text-accent-tertiary" : "text-text-secondary hover:text-foreground"}`}
+            className={`p-2 rounded-xl glass-hover transition-colors hidden lg:block min-w-[36px] min-h-[36px] ${filter !== "all" ? "text-accent-tertiary" : "text-text-secondary hover:text-foreground"}`}
             title="Filter"
             aria-label="Filter"
             aria-expanded={filterOpen}
@@ -286,7 +289,7 @@ export default function CommandBar({
           <button
             ref={sortBtnRef}
             onClick={toggleSort}
-            className="p-2 rounded-xl glass-hover text-text-secondary hover:text-accent transition-colors hidden sm:block min-w-[36px] min-h-[36px]"
+            className="p-2 rounded-xl glass-hover text-text-secondary hover:text-accent transition-colors hidden lg:block min-w-[36px] min-h-[36px]"
             title="Sort"
             aria-label="Sort"
             aria-expanded={sortOpen}
@@ -372,7 +375,7 @@ export default function CommandBar({
       </div>
 
       {/* Mobile filter & sort chips */}
-      <div className="sm:hidden flex items-center gap-1.5 mt-2 overflow-x-auto pb-1 no-scrollbar">
+      <div className="lg:hidden flex items-center gap-1.5 mt-2 overflow-x-auto pb-1 no-scrollbar">
         {filterOptions.map((opt) => (
           <button
             key={opt.value}

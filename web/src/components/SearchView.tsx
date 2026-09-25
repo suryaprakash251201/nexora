@@ -72,6 +72,7 @@ export default function SearchView({
                 icon={<SearchIcon className="h-5 w-5" />}
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
+                aria-label="Search all authorized files"
                 placeholder="Search all authorized files…"
                 className="h-12 text-base"
               />
@@ -95,11 +96,11 @@ export default function SearchView({
                 />
                 In file contents
               </label>
-              <select value={root} onChange={(e) => setRoot(e.target.value)} className="rounded-xl glass-input px-3 py-2 text-sm outline-none cursor-pointer">
+              <select value={root} onChange={(e) => setRoot(e.target.value)} aria-label="Restrict to storage root" className="rounded-xl glass-input px-3 py-2 text-sm outline-none cursor-pointer">
                 <option value="">All storage roots</option>
                 {roots.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
               </select>
-              <select value={kind} onChange={(e) => setKind(e.target.value)} className="rounded-xl glass-input px-3 py-2 text-sm outline-none cursor-pointer">
+              <select value={kind} onChange={(e) => setKind(e.target.value)} aria-label="Filter by file type" className="rounded-xl glass-input px-3 py-2 text-sm outline-none cursor-pointer">
                 <option value="">Any type</option>
                 <option value="image">Images</option>
                 <option value="video">Videos</option>
@@ -111,11 +112,12 @@ export default function SearchView({
                 <input 
                   value={ext} 
                   onChange={(e) => setExt(e.target.value)} 
+                  aria-label="Filter by extension"
                   placeholder="Extension (e.g. pdf)" 
                   className="w-36 rounded-xl glass-input px-3 py-2 text-sm outline-none" 
                 />
               </div>
-              <select value={sort} onChange={(e) => setSort(e.target.value)} className="rounded-xl glass-input px-3 py-2 text-sm outline-none cursor-pointer ml-auto">
+              <select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="Sort results" className="rounded-xl glass-input px-3 py-2 text-sm outline-none cursor-pointer ml-auto">
                 <option value="relevance">Sort: Relevance</option>
                 <option value="newest">Sort: Newest</option>
                 <option value="largest">Sort: Largest</option>

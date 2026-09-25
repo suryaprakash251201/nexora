@@ -52,3 +52,37 @@ func (s *Store) List(limit, offset int) ([]Entry, error) {
 	}
 	return out, rows.Err()
 }
+
+// NamedEntry is an audit entry with the acting user's display name resolved.
+type NamedEntry struct {
+	Entry
+	UserName string
+}
+
+// ListByTarget returns audit entries that reference the given root-relative
+// path, newest first. Rename/move audits store "src -> dest" in target, so
+// both directions are matched.
+func (s *Store) ListByTarget(target string, limit int) ([]NamedEntry, error) {
+	rows, err := s.db.Query(
+		`SELECT a.id, a.user_id, a.action, a.ip, a.target, a.detail, a.created_at,
+		        COALESCE(u.username, '')
+		 FROM audit_logs a
+		 LEFT JOIN users u ON u.id = a.user_id
+		 WHERE a.target = ? OR a.target LIKE ? OR a.target LIKE ?
+		 ORDER BY a.created_at DESC
+		 LIMIT ?`,
+		target, target+" -> %", "% -> "+target, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []NamedEntry
+	for rows.Next() {
+		var e NamedEntry
+		if err := rows.Scan(&e.ID, &e.UserID, &e.Action, &e.IP, &e.Target, &e.Detail, &e.CreatedAt, &e.UserName); err != nil {
+			return nil, err
+		}
+		out = append(out, e)
+	}
+	return out, rows.Err()
+}

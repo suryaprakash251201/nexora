@@ -19,15 +19,18 @@ function initials(name: string): string {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
+/* Badge colours live in CSS (see .role-badge-* in index.css) so the light
+   theme can swap in darker hues — the raw 400-level purples/blues/teals only
+   reach 1.9-2.7:1 on the near-white light theme (WCAG AA needs 4.5:1). */
 const roleColors: Record<string, string> = {
-  admin: "bg-accent-purple/10 text-accent-purple border-accent-purple/20",
-  user: "bg-blue-500/10 text-blue-400 border-blue-500/20",
-  viewer: "bg-teal-500/10 text-teal-400 border-teal-500/20",
+  admin: "role-badge-admin border-accent-purple/20",
+  user: "role-badge-user border-blue-500/20",
+  viewer: "role-badge-viewer border-teal-500/20",
 };
 
 function roleBadge(role: string) {
   const map: Record<string, string> = { admin: "Administrator", user: "User", viewer: "Viewer" };
-  const colors = roleColors[role] || "bg-gray-500/10 text-gray-400 border-gray-500/20";
+  const colors = roleColors[role] || "role-badge-fallback border-gray-500/20";
   return (
     <span className={`inline-flex items-center text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-md ${colors}`}>
       {map[role] || role}

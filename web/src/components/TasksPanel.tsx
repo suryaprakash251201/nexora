@@ -262,7 +262,7 @@ export default function TasksPanel() {
                 onClick={() => setFilter(f)}
                 className={cn(
                   "px-3 py-1.5 text-xs font-semibold capitalize transition-colors",
-                  filter === f ? "bg-accent text-white" : "text-content-muted hover:text-content",
+                  filter === f ? "bg-accent text-primary-foreground" : "text-content-muted hover:text-content",
                 )}
               >
                 {f === "done" ? "Completed" : f}
@@ -288,6 +288,7 @@ export default function TasksPanel() {
         onSubmit={(e) => { e.preventDefault(); void addTask(); }}
       >
         <input
+          aria-label="New task title"
           className="flex-1 px-3.5 py-2.5 rounded-xl bg-card border border-border text-sm focus:outline-none focus:ring-2 focus:ring-accent"
           placeholder={`Add a task to ${activeListTitle}…`}
           value={title}
@@ -301,7 +302,7 @@ export default function TasksPanel() {
           value={due}
           onChange={(e) => setDue(e.target.value)}
         />
-        <Button type="submit" disabled={!title.trim()}>
+        <Button type="submit" disabled={!title.trim()} aria-label="Add task" title="Add task">
           <Plus className="h-4 w-4" />
           <span className="hidden sm:inline">Add</span>
         </Button>

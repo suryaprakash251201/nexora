@@ -368,6 +368,7 @@ export default function HomePanel({
               icon={<Search className="h-5 w-5" />}
               value={q}
               onChange={(e) => setQ(e.target.value)}
+              aria-label="Search your files"
               placeholder="Search your files, folders, and documents…"
               className="h-12 text-base bg-surface/60 border-glass-border focus:border-accent/50 focus:ring-accent/20"
             />
@@ -442,7 +443,7 @@ export default function HomePanel({
                         )}
                         <div className="absolute inset-0 bg-black/[0.05] dark:bg-black/10 group-hover:bg-black/[0.12] dark:group-hover:bg-black/30 transition-colors duration-300" />
                         <div className="absolute inset-0 grid place-items-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 scale-90 group-hover:scale-100">
-                          <div className="h-12 w-12 rounded-full bg-accent/90 text-white grid place-items-center shadow-lg backdrop-blur-md">
+                          <div className="h-12 w-12 rounded-full bg-accent/90 text-primary-foreground grid place-items-center shadow-lg backdrop-blur-md">
                             <Play className="h-6 w-6 ml-1" />
                           </div>
                         </div>

@@ -69,7 +69,7 @@ export function ActionModals({ menu, rootId, path, onClose, onDone, onArchiveExt
     const trimmed = value.trim();
     return (
       <Modal title="Rename" onClose={onClose} footer={<Button variant="primary" size="sm" disabled={!trimmed} onClick={() => run(() => filesApi.rename(rootId, menu.item!.path, trimmed), "Renamed")}>Rename</Button>}>
-        <input autoFocus value={value} onChange={(e) => setValue(e.target.value)} className="glass-input w-full rounded-xl px-3 py-2" />
+        <input autoFocus value={value} onChange={(e) => setValue(e.target.value)} aria-label="New name" className="glass-input w-full rounded-xl px-3 py-2" />
       </Modal>
     );
   }

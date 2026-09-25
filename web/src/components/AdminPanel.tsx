@@ -225,7 +225,7 @@ function OverviewTab({ goTo }: { goTo: (t: Tab) => void }) {
                   <div className="p-1.5 rounded-lg bg-accent/10 text-accent"><Clock className="h-4 w-4" /></div>
                   <h3 className="font-bold text-lg">Recent Activity</h3>
                 </div>
-                <button onClick={() => goTo("audit")} className="text-xs font-semibold text-accent hover:underline">View all →</button>
+                <button onClick={() => goTo("audit")} className="inline-flex items-center min-h-[24px] px-1.5 -mx-1.5 text-xs font-semibold text-accent hover:underline">View all →</button>
               </div>
               {(audit?.items || []).length === 0 ? (
                 <p className="text-sm text-content-muted">No audit entries yet.</p>

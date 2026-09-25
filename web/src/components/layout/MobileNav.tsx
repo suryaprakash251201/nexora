@@ -92,7 +92,7 @@ export function MobileNav({
                 className="relative flex flex-col items-center justify-center gap-0.5 min-w-[50px] h-12 rounded-full transition-all duration-200 text-text-tertiary active:scale-95"
                 aria-label="Upload"
               >
-                <div className="h-[38px] w-[38px] rounded-full bg-accent text-white grid place-items-center shadow-lg shadow-accent/30 -mt-3">
+                <div className="h-[38px] w-[38px] rounded-full bg-accent text-primary-foreground grid place-items-center shadow-lg shadow-accent/30 -mt-3">
                   <Upload className="h-[18px] w-[18px]" />
                 </div>
                 <span className="text-[9px] font-semibold opacity-70">Upload</span>

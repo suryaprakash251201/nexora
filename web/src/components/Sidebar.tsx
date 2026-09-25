@@ -2,6 +2,7 @@ import { Trash2, Plus, Share2, Clock, Star, Search, Shield, ListMusic, Home, Log
 import { motion, AnimatePresence } from "motion/react";
 import type { Root } from "../api/types";
 import { memo, useState } from "react";
+import { useTheme } from "next-themes";
 import { rootIcon } from "../lib/rootIcons";
 import { versionApi, adminApi, trashApi, sharesApi, favoritesApi } from "../api/endpoints";
 import { useQuery } from "@tanstack/react-query";
@@ -26,11 +27,37 @@ const viewColors: Record<string, string> = {
   image: "#34D399",
   photos: "#F43F5E",
   calendar: "#34D399",
-  tasks: "#FBBF24"
+  tasks: "#FBBF24",
+  analytics: "#5B8CFF"
 };
 
-const NavItem = ({ v, icon, label, isActive, badge, collapsed, onSelectView, onHoverView }: { v: SidebarView; icon: React.ReactNode; label: string; isActive: boolean; badge?: number; collapsed: boolean; onSelectView: (v: SidebarView) => void; onHoverView?: (v: SidebarView) => void; }) => {
-  const accent = viewColors[v] || "#5B8CFF";
+/** Same accents darkened for the light theme — the vivid hexes above sit at
+    1.5–3.4:1 on a near-white sidebar (WCAG AA needs 4.5:1 for labels). */
+const viewColorsLight: Record<string, string> = {
+  home: "#2563EB",
+  search: "#0E7490",
+  files: "#0F766E",
+  favorites: "#6D28D9",
+  recents: "#0369A1",
+  shares: "#B45309",
+  playlists: "#BE185D",
+  trash: "#BE123C",
+  admin: "#B91C1C",
+  video: "#4338CA",
+  image: "#047857",
+  photos: "#BE123C",
+  calendar: "#047857",
+  tasks: "#B45309",
+  analytics: "#2563EB"
+};
+
+/** Accent used for the active nav label — never the raw vivid hex in light
+    mode, or the label sits at 1.5–3.4:1 on a near-white sidebar. */
+const activeAccent = (v: string, light: boolean | undefined) =>
+  (light ? viewColorsLight[v] : viewColors[v]) || (light ? "#2563EB" : "#5B8CFF");
+
+const NavItem = ({ v, icon, label, isActive, badge, collapsed, onSelectView, onHoverView, light }: { v: SidebarView; icon: React.ReactNode; label: string; isActive: boolean; badge?: number; collapsed: boolean; onSelectView: (v: SidebarView) => void; onHoverView?: (v: SidebarView) => void; light?: boolean; }) => {
+  const accent = activeAccent(v, light);
   return (
     <button onClick={() => onSelectView(v)} onMouseEnter={() => onHoverView?.(v)} title={collapsed ? label : undefined}
       aria-current={isActive ? "page" : undefined}
@@ -53,7 +80,7 @@ const NavItem = ({ v, icon, label, isActive, badge, collapsed, onSelectView, onH
           style={isActive ? { color: accent } : undefined}>
           {icon}
           {collapsed && badge !== undefined && badge > 0 && (
-            <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-1 rounded-full bg-accent text-[9px] font-bold text-white grid place-items-center">
+            <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-1 rounded-full bg-accent text-[9px] font-bold text-primary-foreground grid place-items-center">
               {badge > 99 ? "99+" : badge}
             </span>
           )}
@@ -101,6 +128,10 @@ export default memo(function Sidebar({
   canWrite?: boolean;
 }) {
   const version = useQuery({ queryKey: ["version"], queryFn: () => versionApi.get() as any });
+  // next-themes can return undefined before hydration resolves — fall back to
+  // the class the theme script already put on <html>.
+  const { resolvedTheme } = useTheme();
+  const isLight = resolvedTheme === "light" || (resolvedTheme == null && typeof document !== "undefined" && document.documentElement.classList.contains("light"));
   const usage = useQuery({ queryKey: ["storage-usage"], queryFn: () => adminApi.getUsage(), enabled: isAdmin, });
   const usedPercent = usage.data && usage.data.total > 0 ? Math.round((usage.data.used / usage.data.total) * 100) : 0;
   /** Which storage entry is currently the hovered drop target (move-drag). */
@@ -125,7 +156,7 @@ export default memo(function Sidebar({
       <motion.aside
         animate={{ width: collapsed ? 80 : 304 }}
         transition={{ duration: 0.28, ease: [0.25, 0.1, 0.25, 1] }}
-        className="relative shrink-0 h-full py-3 pl-3 z-40 overflow-visible"
+        className="relative shrink-0 h-full py-3 pl-3 z-40 overflow-visible hidden md:block"
       >
         <div
           className="h-full w-full flex flex-col rounded-[28px] glass-strong border border-glass-border-soft shadow-[0_8px_32px_rgba(0,0,0,0.35)] backdrop-blur-2xl overflow-hidden"
@@ -175,28 +206,28 @@ export default memo(function Sidebar({
           {/* Scrollable navigation — hidden scrollbar for clean look */}
           <nav aria-label="Main navigation" className={cn("flex-1 overflow-y-auto pb-2 sidebar-scroll", collapsed ? "px-2 w-full" : "px-2 w-full")}>
             {!collapsed && <SectionLabel>Main</SectionLabel>}
-            <NavItem v="home" icon={<Home className="w-5 h-5" />} label="Home" isActive={view === "home"} collapsed={collapsed} onSelectView={onSelectView} onHoverView={onHoverView} />
-            <NavItem v="search" icon={<Search className="w-5 h-5" />} label="Search" isActive={view === "search"} collapsed={collapsed} onSelectView={onSelectView} onHoverView={onHoverView} />
-            <NavItem v="analytics" icon={<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18" /></svg>} label="Analytics" isActive={view === "analytics"} collapsed={collapsed} onSelectView={onSelectView} onHoverView={onHoverView} />
-            <NavItem v="photos" icon={<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2" strokeWidth={2}/><circle cx="8.5" cy="8.5" r="1.5" strokeWidth={2}/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 15l-5-5L5 21" /></svg>} label="Photos" isActive={view === "photos"} collapsed={collapsed} onSelectView={onSelectView} onHoverView={onHoverView} />
+            <NavItem v="home" icon={<Home className="w-5 h-5" />} label="Home" isActive={view === "home"} collapsed={collapsed} onSelectView={onSelectView} onHoverView={onHoverView} light={isLight} />
+            <NavItem v="search" icon={<Search className="w-5 h-5" />} label="Search" isActive={view === "search"} collapsed={collapsed} onSelectView={onSelectView} onHoverView={onHoverView} light={isLight} />
+            <NavItem v="analytics" icon={<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18" /></svg>} label="Analytics" isActive={view === "analytics"} collapsed={collapsed} onSelectView={onSelectView} onHoverView={onHoverView} light={isLight} />
+            <NavItem v="photos" icon={<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2" strokeWidth={2}/><circle cx="8.5" cy="8.5" r="1.5" strokeWidth={2}/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 15l-5-5L5 21" /></svg>} label="Photos" isActive={view === "photos"} collapsed={collapsed} onSelectView={onSelectView} onHoverView={onHoverView} light={isLight} />
 
             {!collapsed && <SectionLabel>Library</SectionLabel>}
-            <NavItem v="recents" icon={<Clock className="w-5 h-5" />} label="Recent" isActive={view === "recents"} collapsed={collapsed} onSelectView={onSelectView} onHoverView={onHoverView} />
-            <NavItem v="favorites" icon={<Star className="w-5 h-5" />} label="Favorites" isActive={view === "favorites"} badge={badgeCounts.favorites} collapsed={collapsed} onSelectView={onSelectView} onHoverView={onHoverView} />
-            <NavItem v="shares" icon={<Share2 className="w-5 h-5" />} label="Shared" isActive={view === "shares"} badge={badgeCounts.shares} collapsed={collapsed} onSelectView={onSelectView} onHoverView={onHoverView} />
-            <NavItem v="playlists" icon={<ListMusic className="w-5 h-5" />} label="Playlists" isActive={view === "playlists"} collapsed={collapsed} onSelectView={onSelectView} onHoverView={onHoverView} />
+            <NavItem v="recents" icon={<Clock className="w-5 h-5" />} label="Recent" isActive={view === "recents"} collapsed={collapsed} onSelectView={onSelectView} onHoverView={onHoverView} light={isLight} />
+            <NavItem v="favorites" icon={<Star className="w-5 h-5" />} label="Favorites" isActive={view === "favorites"} badge={badgeCounts.favorites} collapsed={collapsed} onSelectView={onSelectView} onHoverView={onHoverView} light={isLight} />
+            <NavItem v="shares" icon={<Share2 className="w-5 h-5" />} label="Shared" isActive={view === "shares"} badge={badgeCounts.shares} collapsed={collapsed} onSelectView={onSelectView} onHoverView={onHoverView} light={isLight} />
+            <NavItem v="playlists" icon={<ListMusic className="w-5 h-5" />} label="Playlists" isActive={view === "playlists"} collapsed={collapsed} onSelectView={onSelectView} onHoverView={onHoverView} light={isLight} />
 
             {!collapsed && <SectionLabel>Productivity</SectionLabel>}
-            <NavItem v="calendar" icon={<Calendar className="w-5 h-5" />} label="Calendar" isActive={view === "calendar"} collapsed={collapsed} onSelectView={onSelectView} onHoverView={onHoverView} />
-            <NavItem v="tasks" icon={<CheckSquare className="w-5 h-5" />} label="Tasks" isActive={view === "tasks"} collapsed={collapsed} onSelectView={onSelectView} onHoverView={onHoverView} />
+            <NavItem v="calendar" icon={<Calendar className="w-5 h-5" />} label="Calendar" isActive={view === "calendar"} collapsed={collapsed} onSelectView={onSelectView} onHoverView={onHoverView} light={isLight} />
+            <NavItem v="tasks" icon={<CheckSquare className="w-5 h-5" />} label="Tasks" isActive={view === "tasks"} collapsed={collapsed} onSelectView={onSelectView} onHoverView={onHoverView} light={isLight} />
 
             {!collapsed && <SectionLabel>Storage</SectionLabel>}
-            <NavItem v="trash" icon={<Trash2 className="w-5 h-5" />} label="Trash" isActive={view === "trash"} badge={badgeCounts.trash} collapsed={collapsed} onSelectView={onSelectView} onHoverView={onHoverView} />
+            <NavItem v="trash" icon={<Trash2 className="w-5 h-5" />} label="Trash" isActive={view === "trash"} badge={badgeCounts.trash} collapsed={collapsed} onSelectView={onSelectView} onHoverView={onHoverView} light={isLight} />
 
             {roots.map((r) => {
               const Icon = rootIcon(r.icon);
               const isActive = view === "files" && activeRoot === r.id;
-              const accent = viewColors.files;
+              const accent = activeAccent("files", isLight);
               // Active storage entry accepts internal move-drops (moves the
               // dragged selection into this storage's base directory).
               // Cross-root moves aren't supported by the move API, so other
@@ -232,7 +263,7 @@ export default memo(function Sidebar({
                     />
                   )}
                   {rootDrop && !collapsed && (
-                    <span className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-accent px-2 py-0.5 text-[10px] font-semibold text-white shadow-lg shadow-accent/40 animate-scale-in">
+                    <span className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-accent px-2 py-0.5 text-[10px] font-semibold text-primary-foreground shadow-lg shadow-accent/40 animate-scale-in">
                       Move here
                     </span>
                   )}
@@ -282,7 +313,7 @@ export default memo(function Sidebar({
               <button onClick={() => onSelectView("admin")} title={collapsed ? "Admin" : undefined}
                 aria-current={view === "admin" ? "page" : undefined}
                 className={cn("relative w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl text-left text-[15px] font-medium transition-all duration-200 min-h-[48px] group focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:outline-none", collapsed ? "justify-center px-0" : "px-4")}
-                style={view === "admin" ? { color: viewColors.admin } : undefined}>
+                style={view === "admin" ? { color: isLight ? viewColorsLight.admin : viewColors.admin } : undefined}>
                 {view === "admin" && (
                   <motion.div layoutId="sidebar-active-admin"
                     className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-full"
@@ -290,7 +321,7 @@ export default memo(function Sidebar({
                     transition={{ type: "spring", stiffness: 400, damping: 30 }}
                   />
                 )}
-                <Shield className="h-5 w-5 shrink-0" style={view === "admin" ? { color: viewColors.admin } : undefined} />
+                <Shield className="h-5 w-5 shrink-0" style={view === "admin" ? { color: isLight ? viewColorsLight.admin : viewColors.admin } : undefined} />
                 {!collapsed && <span>Admin</span>}
               </button>
             )}
@@ -310,7 +341,7 @@ export default memo(function Sidebar({
                   href="https://github.com/suryaprakash251201/nexora"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-text-tertiary hover:text-foreground transition-colors"
+                  className="inline-flex items-center justify-center p-1.5 -m-1.5 rounded-lg text-text-tertiary hover:text-foreground hover:bg-glass-bg transition-colors"
                   title="Nexora on GitHub"
                   aria-label="View source code on GitHub"
                 >

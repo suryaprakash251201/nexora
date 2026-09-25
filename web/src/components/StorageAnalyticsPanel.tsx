@@ -110,6 +110,7 @@ export default function StorageAnalyticsPanel({ roots, onClose, onNavigateToFile
           <select
             value={selectedRoot}
             onChange={(e) => setSelectedRoot(e.target.value)}
+            aria-label="Storage root to analyse"
             className="rounded-lg glass-input px-3 py-1.5 text-sm outline-none cursor-pointer"
           >
             {roots.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}

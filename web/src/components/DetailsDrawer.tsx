@@ -280,7 +280,7 @@ export default function DetailsDrawer({
                 <button
                   onClick={() => openFolder("")}
                   title={`Open ${rootName}`}
-                  className="shrink-0 px-1.5 py-0.5 rounded-md bg-accent/10 text-accent border border-accent/15 hover:bg-accent/15 transition-colors font-semibold"
+                  className="shrink-0 min-h-6 inline-flex items-center px-2 rounded-md bg-accent/10 text-accent border border-accent/15 hover:bg-accent/15 transition-colors font-semibold"
                 >
                   {rootName}
                 </button>
@@ -296,7 +296,7 @@ export default function DetailsDrawer({
                         <button
                           onClick={() => openFolder(target)}
                           title={`Open ${rootName}/${target}`}
-                          className="px-1 py-0.5 rounded-md truncate text-content-muted hover:text-content hover:bg-glass-bg transition-colors"
+                          className="min-h-6 inline-flex items-center px-1.5 rounded-md truncate text-content-muted hover:text-content hover:bg-glass-bg transition-colors"
                         >
                           {c}
                         </button>
@@ -573,7 +573,7 @@ export default function DetailsDrawer({
                   action={onShowVersions ? (
                     <button
                       onClick={(e) => { e.stopPropagation(); onShowVersions(); }}
-                      className="text-[10px] font-semibold text-content-muted hover:text-accent transition-colors px-1.5 py-0.5 rounded-lg hover:bg-accent/10"
+                      className="min-h-6 inline-flex items-center text-[10px] font-semibold text-content-muted hover:text-accent transition-colors px-2 rounded-lg hover:bg-accent/10"
                     >
                       View all →
                     </button>
@@ -643,7 +643,7 @@ function QuickAction({ icon, label, onClick, primary, active }: { icon: React.Re
   return (
     <button onClick={onClick} title={label} aria-pressed={active} className={cn(
       "h-8 px-3 rounded-full border text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm",
-      primary ? "bg-accent text-white border-accent shadow-[0_4px_12px_var(--color-accent-glow)] hover:opacity-95 hover:shadow-[0_6px_18px_var(--color-accent-glow)]" :
+      primary ? "bg-accent text-primary-foreground border-accent shadow-[0_4px_12px_var(--color-accent-glow)] hover:opacity-95 hover:shadow-[0_6px_18px_var(--color-accent-glow)]" :
         active ? "bg-amber-400 text-white border-amber-400 shadow-md" :
           "bg-surface border-border/60 text-content hover:border-accent/30 hover:text-accent hover:bg-accent/5"
     )}>
@@ -788,7 +788,7 @@ function SharesList({ rootId, path }: { rootId: string; path: string }) {
                   <span className="text-xs font-mono font-medium truncate">/s/{s.token.slice(0, 10)}…</span>
                 </div>
                 <button onClick={() => copyLink(s.id, s.token)}
-                  className="h-7 px-2.5 rounded-lg bg-accent text-white text-xs font-semibold flex items-center gap-1 hover:bg-accent/90 transition-colors shrink-0">
+                  className="h-7 px-2.5 rounded-lg bg-accent text-primary-foreground text-xs font-semibold flex items-center gap-1 hover:bg-accent/90 transition-colors shrink-0">
                   {copiedId === s.id ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
                   {copiedId === s.id ? "Copied" : "Copy"}
                 </button>
@@ -941,7 +941,7 @@ function TagsEditor({ rootId, path }: { rootId: string; path: string }) {
                 <button
                   onClick={() => newName.trim() && create.mutate({ name: newName.trim(), color: newColor })}
                   disabled={!newName.trim() || create.isPending}
-                  className="px-3 py-1.5 rounded-lg bg-accent text-white text-xs font-medium disabled:opacity-40 transition-colors"
+                  className="px-3 py-1.5 rounded-lg bg-accent text-primary-foreground text-xs font-medium disabled:opacity-40 transition-colors"
                 >
                   {create.isPending ? "…" : "Create"}
                 </button>

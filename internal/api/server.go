@@ -213,6 +213,8 @@ func (s *Server) Routes() http.Handler {
 	authed.Get("/files/stat", s.handleStatFile)
 	authed.Get("/files/duplicates", s.handleFindDuplicates)
 	authed.Get("/files/comments", s.listFileComments)
+	// Per-item audit trail shown in the details drawer's Activity panel.
+	authed.Get("/activity", s.handleActivity)
 	// Resumable chunked uploads (large files).
 	authed.Post("/files/uploads/init", s.handleUploadInit)
 	authed.Put("/files/uploads/{id}/chunk", s.handleUploadChunk)

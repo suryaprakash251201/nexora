@@ -73,7 +73,7 @@ function PhotoTileInner({ photo, aspect, selecting, selected, onOpen, onToggleSe
         className={cn(
           "absolute left-1.5 top-1.5 z-10 grid h-6 w-6 place-items-center rounded-full backdrop-blur-sm transition-all duration-150",
           selected
-            ? "bg-accent text-white"
+            ? "bg-accent text-primary-foreground"
             : "bg-black/30 text-white/80 focus-visible:opacity-100",
           selecting || selected ? "opacity-100" : "opacity-0 group-hover:opacity-100"
         )}

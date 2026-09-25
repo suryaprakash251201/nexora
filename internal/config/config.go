@@ -204,20 +204,57 @@ func parseRoots(s string) []RootConfig {
 		if part == "" {
 			continue
 		}
-		fields := strings.Split(part, ":")
-		if len(fields) < 2 {
+		name, rest, found := strings.Cut(part, ":")
+		name = strings.TrimSpace(name)
+		if !found || name == "" || strings.TrimSpace(rest) == "" {
 			continue
 		}
-		rc := RootConfig{Name: fields[0], Path: fields[1], ReadOnly: false, Indexed: true}
-		if len(fields) >= 3 {
-			rc.ReadOnly = strings.EqualFold(fields[2], "true") || fields[2] == "1" || strings.EqualFold(fields[2], "ro")
+		rc := RootConfig{Name: name, ReadOnly: false, Indexed: true}
+		// The trailing readOnly/indexed segments are optional flags, but the
+		// path itself may contain colons (Windows drive letters, e.g.
+		// Files:C:\nexora\files:false). Only peel trailing segments off when
+		// they are actually flag tokens, so the path keeps its own colons.
+		// Format is Name:/path[:readOnly[:indexed]] — one trailing flag means
+		// readOnly, two means readOnly + indexed.
+		segments := strings.Split(rest, ":")
+		var flags []string
+		for i := len(segments) - 1; i >= 1 && isBoolFlag(strings.TrimSpace(segments[i])); i-- {
+			flags = append(flags, strings.TrimSpace(segments[i]))
+			segments = segments[:i]
 		}
-		if len(fields) >= 4 {
-			rc.Indexed = !strings.EqualFold(fields[3], "false")
+		// `flags` is collected back-to-front, so flags[0] is the last segment.
+		switch {
+		case len(flags) == 1:
+			rc.ReadOnly = isTrueFlag(flags[0])
+		case len(flags) >= 2:
+			rc.ReadOnly = isTrueFlag(flags[1])
+			rc.Indexed = !isFalseFlag(flags[0])
+		}
+		rc.Path = strings.Join(segments, ":")
+		if rc.Path == "" {
+			continue
 		}
 		out = append(out, rc)
 	}
 	return out
+}
+
+// isBoolFlag reports whether a NEXORA_DEFAULT_ROOTS trailing segment is one of
+// the accepted readOnly/indexed flag spellings.
+func isBoolFlag(token string) bool {
+	switch strings.ToLower(token) {
+	case "true", "false", "1", "0", "ro", "rw":
+		return true
+	}
+	return false
+}
+
+func isTrueFlag(token string) bool {
+	return strings.EqualFold(token, "true") || token == "1" || strings.EqualFold(token, "ro")
+}
+
+func isFalseFlag(token string) bool {
+	return strings.EqualFold(token, "false") || token == "0"
 }
 
 func env(key, def string) string {

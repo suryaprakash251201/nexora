@@ -50,8 +50,11 @@ export default function ContextMenu({
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-40" onClick={onClose} onContextMenu={(e) => { e.preventDefault(); onClose(); }} />
+      {/* Both children need explicit keys: unkeyed siblings inside
+          AnimatePresence are keyed "" and trip React's duplicate-key warning. */}
+      <div key="backdrop" className="fixed inset-0 z-40" onClick={onClose} onContextMenu={(e) => { e.preventDefault(); onClose(); }} />
       <motion.div
+        key="menu"
         ref={menuRef}
         initial={{ opacity: 0, scale: 0.95, y: -4 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}

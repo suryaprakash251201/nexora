@@ -259,5 +259,5 @@ export function MapGallery({ photos, onOpenAt, indexOf }: MapGalleryProps) {
 function cnPin(single: boolean): string {
   return single
     ? "absolute z-10 grid place-items-center rounded-full transition-transform hover:scale-110"
-    : "absolute z-10 grid place-items-center rounded-full bg-accent text-white shadow-lg shadow-accent/40 ring-2 ring-black/20 transition-transform hover:scale-110";
+    : "absolute z-10 grid place-items-center rounded-full bg-accent text-primary-foreground shadow-lg shadow-accent/40 ring-2 ring-black/20 transition-transform hover:scale-110";
 }

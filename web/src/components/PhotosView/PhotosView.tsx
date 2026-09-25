@@ -295,6 +295,7 @@ export default function PhotosView({ roots, onOpen, onPreview }: PhotosViewProps
                 <input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
+                  aria-label="Search photos"
                   placeholder="Search photos…"
                   className="w-36 rounded-lg border border-border/40 bg-surface-2 py-1.5 pl-8 pr-7 text-sm outline-none transition-all placeholder:text-content-muted focus:w-52 focus:border-accent sm:w-44"
                 />

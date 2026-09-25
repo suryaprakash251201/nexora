@@ -602,7 +602,7 @@ export default function FileBrowser({
                               whileHover={{ scale: 1.1 }}
                               whileTap={{ scale: 0.9 }}
                               onClick={(e) => { e.stopPropagation(); onOpen(item); }}
-                              className="p-2 rounded-xl text-white hover:bg-accent transition-colors bg-accent/60"
+                              className="p-2 rounded-xl text-primary-foreground hover:bg-accent transition-colors bg-accent/60"
                               title={action.label}
                               aria-label={action.label}
                             >
@@ -627,7 +627,7 @@ export default function FileBrowser({
 
                       {dropTarget === item.path && (
                         <div className="absolute inset-0 z-10 rounded-2xl bg-accent/[0.08] border border-accent/40 pointer-events-none grid place-items-center">
-                          <span className="rounded-full bg-accent px-2.5 py-1 text-[11px] font-semibold text-white shadow-lg shadow-accent/40 animate-scale-in">
+                          <span className="rounded-full bg-accent px-2.5 py-1 text-[11px] font-semibold text-primary-foreground shadow-lg shadow-accent/40 animate-scale-in">
                             {dropKind === "upload" ? "Upload here" : "Move here"}
                           </span>
                         </div>

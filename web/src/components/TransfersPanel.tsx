@@ -239,7 +239,7 @@ export default function TransfersPanel() {
           )}
         </span>
         {queued + active > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 h-4 min-w-4 px-1 rounded-full bg-accent text-white text-[9px] font-bold flex items-center justify-center shadow">
+          <span className="absolute -top-0.5 -right-0.5 h-4 min-w-4 px-1 rounded-full bg-accent text-primary-foreground text-[9px] font-bold flex items-center justify-center shadow">
             {active + queued}
           </span>
         )}

@@ -330,7 +330,7 @@ export default function TextWorkspace({
                 onClick={() => switchMode(m)}
                 className={cn(
                   "flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium capitalize transition-all duration-150",
-                  mode === m ? "bg-accent text-white shadow-sm" : "text-content-muted hover:text-content"
+                  mode === m ? "bg-accent text-primary-foreground shadow-sm" : "text-content-muted hover:text-content"
                 )}
               >
                 {m === "preview" ? <Eye className="h-3.5 w-3.5" /> : <Pencil className="h-3.5 w-3.5" />}

@@ -1471,14 +1471,35 @@ body {
 }
 
 /* ============================================================
-   Sidebar scroll — hidden scrollbar for clean sidebar look
+   Sidebar scroll — thin visible bar so a truncated nav reads as
+   scrollable (952px of items vs ~558px of viewport would otherwise
+   end silently with no affordance at all)
    ============================================================ */
 .sidebar-scroll {
-  scrollbar-width: none;
-  -ms-overflow-style: none;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.45) transparent;
 }
 .sidebar-scroll::-webkit-scrollbar {
-  display: none;
+  width: 6px;
+}
+.sidebar-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.sidebar-scroll::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.45);
+  border-radius: 999px;
+}
+.sidebar-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.7);
+}
+.light .sidebar-scroll {
+  scrollbar-color: rgba(15, 23, 42, 0.28) transparent;
+}
+.light .sidebar-scroll::-webkit-scrollbar-thumb {
+  background: rgba(15, 23, 42, 0.28);
+}
+.light .sidebar-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(15, 23, 42, 0.45);
 }
 
 /* ============================================================
@@ -1659,7 +1680,9 @@ body {
   --popover: rgba(18, 20, 28, 0.95);
   --popover-foreground: #FFFFFF;
   --primary: #5B8CFF;
-  --primary-foreground: #FFFFFF;
+  /* Near-black label on the bright periwinkle primary — white text only
+     reaches 3.15:1 here, this pairing is 5.7:1 (WCAG AA). */
+  --primary-foreground: #0B1220;
   --secondary: rgba(255, 255, 255, 0.08);
   --secondary-foreground: #FFFFFF;
   --muted: rgba(255, 255, 255, 0.06);
@@ -1695,7 +1718,9 @@ body {
   --card-foreground: #0F172A;
   --popover: #FFFFFF;
   --popover-foreground: #0F172A;
-  --primary: #5B8CFF;
+  /* Blue-600, not the periwinkle: white on #5B8CFF is 3.15:1 against a
+     white page, this is 5.2:1. Matches --accent-solid below. */
+  --primary: #2563EB;
   --primary-foreground: #FFFFFF;
   --secondary: #F1F5F9;
   --secondary-foreground: #0F172A;
@@ -1726,6 +1751,9 @@ body {
   --color-warning: #B45309;
   --color-danger: #DC2626;
   --color-info: #2563EB;
+  /* The inherited cyan #35D3FF is 1.76:1 on this near-white page — text and
+     icons using the tertiary accent need AA (4.5:1), so pin a dark cyan. */
+  --color-accent-tertiary: #0E7490;
 
   --color-bg-primary: #F8FAFC;
   --color-bg-secondary: #F1F5F9;
@@ -1895,6 +1923,17 @@ body {
    Theme Variants - Accent Color Overrides
    ============================================================ */
 
+/* Role badges (ProfileMenu). Dark hues first; the .light overrides swap in
+   AA-safe colours — the 400-level hues sit at 1.9-2.7:1 on near-white. */
+.role-badge-admin { color: #A78BFA; background: rgba(167, 139, 250, 0.10); }
+.role-badge-user { color: #60A5FA; background: rgba(59, 130, 246, 0.12); }
+.role-badge-viewer { color: #2DD4BF; background: rgba(45, 212, 191, 0.12); }
+.role-badge-fallback { color: #9CA3AF; background: rgba(156, 163, 175, 0.12); }
+.light .role-badge-admin { color: #6D28D9; background: rgba(109, 40, 217, 0.08); }
+.light .role-badge-user { color: #1D4ED8; background: rgba(37, 99, 235, 0.08); }
+.light .role-badge-viewer { color: #0F766E; background: rgba(15, 118, 110, 0.08); }
+.light .role-badge-fallback { color: #4B5563; background: rgba(75, 85, 99, 0.08); }
+
 /* Amethyst - Purple/Pink accent */
 [data-theme="amethyst"] {
   --color-accent: #A78BFA;
@@ -1918,9 +1957,12 @@ body {
 
 .light[data-theme="amethyst"] {
   --accent: rgba(167, 139, 250, 0.1);
-  --accent-foreground: #A78BFA;
+  --color-accent: #7C3AED;
+  --color-accent-tertiary: #7C3AED;
+  --accent-foreground: #7C3AED;
   --accent-solid: #7C3AED;
-  --primary: #A78BFA;
+  --primary: #7C3AED;
+  --primary-foreground: #FFFFFF;
   --ring: rgba(167, 139, 250, 0.4);
   --sidebar-accent: rgba(167, 139, 250, 0.1);
 }
@@ -1948,9 +1990,12 @@ body {
 
 .light[data-theme="aurora"] {
   --accent: rgba(45, 212, 191, 0.1);
-  --accent-foreground: #2DD4BF;
+  --color-accent: #0F766E;
+  --color-accent-tertiary: #0F766E;
+  --accent-foreground: #0F766E;
   --accent-solid: #0F766E;
-  --primary: #2DD4BF;
+  --primary: #0F766E;
+  --primary-foreground: #FFFFFF;
   --ring: rgba(45, 212, 191, 0.4);
   --sidebar-accent: rgba(45, 212, 191, 0.1);
 }
@@ -1979,9 +2024,12 @@ body {
 
 .light[data-theme="ember"] {
   --accent: rgba(251, 191, 36, 0.1);
-  --accent-foreground: #FBBF24;
+  --color-accent: #B45309;
+  --color-accent-tertiary: #B45309;
+  --accent-foreground: #B45309;
   --accent-solid: #B45309;
   --primary: #FBBF24;
+  --primary-foreground: #0F172A;
   --ring: rgba(251, 191, 36, 0.4);
   --sidebar-accent: rgba(251, 191, 36, 0.1);
 }
@@ -1998,6 +2046,19 @@ body {
   --accent-foreground: #5B8CFF;
   --primary: #5B8CFF;
   --ring: rgba(91, 140, 255, 0.5);
+}
+
+/* [data-theme="midnight"] above is selector-level equal to .light but wins by
+   order — pin the light-mode accent tokens back to the AA-safe blue. Without
+   this the light theme silently keeps the dark periwinkle accent, which
+   puts white text at 3.15:1 and blue link text at 3.02:1 on white. */
+.light[data-theme="midnight"] {
+  --color-accent: #2563EB;
+  --color-accent-tertiary: #0E7490;
+  --accent-solid: #2563EB;
+  --accent-foreground: #2563EB;
+  --primary: #2563EB;
+  --primary-foreground: #FFFFFF;
 }
 
 @layer base {

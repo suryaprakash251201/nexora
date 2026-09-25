@@ -54,7 +54,7 @@ func (s *Server) handleStatic(w http.ResponseWriter, r *http.Request) {
 		// current bug.
 		if strings.HasSuffix(candidate, "index.html") {
 			w.Header().Set("Cache-Control", "no-cache, must-revalidate")
-		} else if strings.Contains(candidate, "/assets/") {
+		} else if strings.Contains(filepath.ToSlash(candidate), "/assets/") {
 			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 		}
 		http.ServeFile(w, r, candidate)

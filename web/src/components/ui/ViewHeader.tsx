@@ -57,7 +57,10 @@ export function ViewHeader({
             {subtitle}
           </p>
         )}
-        <div className="ml-auto flex items-center gap-1.5 flex-wrap justify-end">
+        {/* pr-14 reserves the top-right corner for the floating avatar menu
+            (Workspace renders it at top-3 right-3, ~50x46) so header actions
+            never end up underneath it. */}
+        <div className="ml-auto flex items-center gap-1.5 flex-wrap justify-end pr-14">
           {actions}
         </div>
       </div>

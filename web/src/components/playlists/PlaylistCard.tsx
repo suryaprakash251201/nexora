@@ -131,7 +131,7 @@ export default function PlaylistCard({
             aria-label={`Play ${pl.name}`}
             className="absolute inset-0 grid place-items-center opacity-0 group-hover:opacity-100 transition-all duration-200 scale-90 group-hover:scale-100 disabled:cursor-default"
           >
-            <span className="h-11 w-11 rounded-full bg-accent text-white grid place-items-center shadow-lg">
+            <span className="h-11 w-11 rounded-full bg-accent text-primary-foreground grid place-items-center shadow-lg">
               <Play className="h-5 w-5 ml-0.5" />
             </span>
           </button>

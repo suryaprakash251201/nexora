@@ -41,32 +41,36 @@ export const Accordion = forwardRef<HTMLDivElement, AccordionProps>(
 
     return (
       <div ref={ref} className={cn("rounded-2xl border border-border/40 bg-surface/60 backdrop-blur-sm overflow-hidden shadow-sm", className)} {...props}>
+      <div className="relative w-full flex items-center justify-between gap-2 px-3.5 py-2.5 border-b border-border/30 bg-surface-muted/30 hover:bg-surface-muted/50 transition-colors">
+        {/* Toggle spans the whole header as an underlay so the optional
+            `action` stays a sibling control — a <button> may not contain
+            another <button> (invalid HTML + nested interactive a11y). */}
         <button
           type="button"
           onClick={() => setIsOpen((v) => !v)}
-          className="w-full flex items-center justify-between px-3.5 py-2.5 border-b border-border/30 bg-surface-muted/30 hover:bg-surface-muted/50 transition-colors text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+          aria-label={`Toggle ${title}`}
           aria-expanded={isOpen}
           aria-controls={panelId}
-        >
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className={cn("h-7 w-7 rounded-lg border grid place-items-center shrink-0", COLOR_MAP[color])}>
-              {icon}
-            </div>
-            <span className="text-xs font-bold tracking-wide uppercase text-content truncate">{title}</span>
+          className="absolute inset-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/50"
+        />
+        <div className="relative flex items-center gap-2.5 min-w-0 pointer-events-none">
+          <div className={cn("h-7 w-7 rounded-lg border grid place-items-center shrink-0", COLOR_MAP[color])}>
+            {icon}
           </div>
-          <div className="flex items-center gap-2 shrink-0">
-            {/* Nested interactive content (e.g. "View all →") must not toggle
-                the accordion when clicked — stop the event at the wrapper. */}
-            <div onClick={(e) => e.stopPropagation()}>{action}</div>
-            <motion.div
-              animate={{ rotate: isOpen ? 180 : 0 }}
-              transition={{ duration: 180, ease: [0.22, 1, 0.36, 1] }}
-              className="text-content-muted"
-            >
-              <ChevronDown className="h-4 w-4 shrink-0" />
-            </motion.div>
-          </div>
-        </button>
+          <span className="text-xs font-bold tracking-wide uppercase text-content truncate">{title}</span>
+        </div>
+        <div className="relative flex items-center gap-2 shrink-0">
+          {/* The action keeps its own pointer events so it does not toggle. */}
+          {action}
+          <motion.div
+            animate={{ rotate: isOpen ? 180 : 0 }}
+            transition={{ duration: 180, ease: [0.22, 1, 0.36, 1] }}
+            className="text-content-muted pointer-events-none"
+          >
+            <ChevronDown className="h-4 w-4 shrink-0" />
+          </motion.div>
+        </div>
+      </div>
         <AnimatePresence initial={false}>
           {isOpen && (
             <motion.div

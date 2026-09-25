@@ -349,7 +349,7 @@ export default function CalendarPanel() {
                 >
                   <span className={cn(
                     "inline-grid place-items-center h-6 w-6 rounded-full text-xs font-semibold",
-                    isToday ? "bg-accent text-white" : "text-content",
+                    isToday ? "bg-accent text-primary-foreground" : "text-content",
                   )}>
                     {d.getDate()}
                   </span>

@@ -13,6 +13,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -30,6 +31,9 @@ import (
 func TestSubdirPermissionErrorsAreActionable(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("running as root — permission bits are bypassed, test meaningless")
+	}
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX mode bits are not enforced for the owner on Windows (ACLs apply instead), so the locked directory stays writable")
 	}
 
 	dbPath := filepath.Join(t.TempDir(), "test.db")

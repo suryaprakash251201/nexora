@@ -102,7 +102,7 @@ export function FilterMenu({ filters, onChange, availableCameras, activeCount }:
         <SlidersHorizontal className="h-4 w-4" />
         <span className="hidden sm:inline">Filters</span>
         {hasActive && (
-          <span className="grid h-4.5 min-w-[18px] place-items-center rounded-full bg-accent px-1 text-[10px] font-bold text-white">
+          <span className="grid h-4.5 min-w-[18px] place-items-center rounded-full bg-accent px-1 text-[10px] font-bold text-primary-foreground">
             {activeCount}
           </span>
         )}

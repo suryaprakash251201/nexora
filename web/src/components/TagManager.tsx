@@ -201,7 +201,7 @@ export function TagManager({ onClose }: { onClose: () => void }) {
           <button
             onClick={() => newName.trim() && createMutation.mutate({ name: newName.trim(), color: newColor })}
             disabled={!newName.trim() || createMutation.isPending}
-            className="px-3 py-1.5 rounded-lg bg-accent text-white text-sm font-medium disabled:opacity-40 transition-colors"
+            className="px-3 py-1.5 rounded-lg bg-accent text-primary-foreground text-sm font-medium disabled:opacity-40 transition-colors"
           >
             {createMutation.isPending ? "…" : "Add"}
           </button>
@@ -471,7 +471,7 @@ export function TagPicker({
                 <button
                   onClick={() => newTagName.trim() && createTag.mutate({ name: newTagName.trim(), color: newTagColor })}
                   disabled={!newTagName.trim()}
-                  className="flex-1 px-3 py-1.5 rounded-lg bg-accent text-white text-sm font-medium disabled:opacity-40 transition-colors"
+                  className="flex-1 px-3 py-1.5 rounded-lg bg-accent text-primary-foreground text-sm font-medium disabled:opacity-40 transition-colors"
                 >
                   Create
                 </button>
