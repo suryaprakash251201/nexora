@@ -2,6 +2,10 @@
   "name": "@nexora/core",
   "version": "1.11.0",
   "description": "Shared pure helpers and types for Nexora web + mobile — single source of truth for format helpers, file-type detection, and transcode codec tables",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/suryaprakash251201/nexora.git"
+  },
   "type": "commonjs",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
