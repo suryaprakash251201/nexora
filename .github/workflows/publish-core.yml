@@ -25,6 +25,7 @@ jobs:
         with:
           node-version: 22
           registry-url: https://npm.pkg.github.com
+          scope: '@suryaprakash251201'
 
       - name: Install build dependencies
         working-directory: ./packages/core
