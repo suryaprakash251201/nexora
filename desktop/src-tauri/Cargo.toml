@@ -1,6 +1,6 @@
 [package]
 name = "nexora-desktop"
-version = "1.10.0"
+version = "1.11.0"
 description = "Nexora Desktop - Native file management"
 authors = ["suryaprakash251201"]
 edition = "2021"
