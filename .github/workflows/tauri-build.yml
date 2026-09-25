@@ -162,6 +162,7 @@ jobs:
           node desktop/scripts/make-updater-json.mjs --dir bundles
           --tag "${{ github.event.inputs.release_tag || github.ref_name }}"
           --repo "${{ github.repository }}" --out bundles/updater.json
+          --allow-missing-signatures
 
       - name: publish release
         uses: softprops/action-gh-release@v3

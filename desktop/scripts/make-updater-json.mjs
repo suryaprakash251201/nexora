@@ -56,6 +56,7 @@ const tag = arg("tag");
 const repo = arg("repo");
 const out = arg("out", "updater.json");
 const notes = arg("notes", `Nexora Desktop ${tag ?? ""}`.trim());
+const allowMissingSignatures = process.argv.includes("--allow-missing-signatures");
 
 if (!tag || !repo) {
   console.error("make-updater-json: --tag and --repo are required");
@@ -73,6 +74,10 @@ for (const file of walk(dir)) {
   try {
     statSync(sigPath);
   } catch {
+    if (allowMissingSignatures) {
+      console.warn(`make-updater-json: skipping unsigned ${asset}`);
+      continue;
+    }
     console.error(`make-updater-json: missing signature for ${asset} (expected ${asset}.sig)`);
     process.exit(1);
   }
@@ -90,7 +95,11 @@ for (const file of walk(dir)) {
 }
 
 if (Object.keys(platforms).length === 0) {
-  console.error(`make-updater-json: no updatable bundles found under ${dir}`);
+  if (allowMissingSignatures) {
+    console.log("make-updater-json: no signed updater bundles; skipping manifest");
+    process.exit(0);
+  }
+  console.error("make-updater-json: no updatable bundles found under " + dir);
   process.exit(1);
 }
 

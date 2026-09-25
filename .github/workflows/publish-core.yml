@@ -28,7 +28,7 @@ jobs:
 
       - name: Install build dependencies
         working-directory: ./packages/core
-        run: npm install --ignore-scripts --no-audit --no-fund
+        run: npm install --ignore-scripts --no-audit --no-fund --legacy-peer-deps
 
       - name: Publish package
         working-directory: ./packages/core
