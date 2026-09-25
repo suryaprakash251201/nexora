@@ -1,4 +1,4 @@
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion } from "motion/react";
 import { CalendarClock, FileText, FolderTree, Hash, X } from "lucide-react";
 import { useViewer } from "./ctx";
 import { formatBytes, formatDate } from "../../lib/format";

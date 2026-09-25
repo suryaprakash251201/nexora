@@ -3,6 +3,10 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "path";
 
+// import.meta.dirname, not __dirname: Vite's native config loader does not
+// define __dirname and warns about it on every dev/build start.
+const rootDir = import.meta.dirname;
+
 export default defineConfig({
   base: "/",
   plugins: [react(), tailwindcss()],
@@ -12,8 +16,8 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "./src"),
-      "@nexora/core": path.resolve(__dirname, "../packages/core/src"),
+      "@": path.resolve(rootDir, "./src"),
+      "@nexora/core": path.resolve(rootDir, "../packages/core/src"),
     },
   },
   build: {
@@ -30,7 +34,6 @@ export default defineConfig({
           if (id.includes("node_modules/lucide-react/")) return "vendor-icons";
           if (id.includes("node_modules/@base-ui/react/")) return "vendor-ui";
           if (id.includes("node_modules/cmdk/")) return "vendor-ui";
-          if (id.includes("node_modules/sonner/")) return "vendor-ui";
         },
       },
     },

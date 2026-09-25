@@ -6,7 +6,7 @@
     "frontendDist": "../../web/dist"
   },
   "productName": "Nexora",
-  "version": "1.10.0",
+  "version": "1.11.0",
   "identifier": "com.nexora.desktop",
   "app": {
     "withGlobalTauri": false,

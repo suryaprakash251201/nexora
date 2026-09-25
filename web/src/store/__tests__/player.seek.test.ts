@@ -1,5 +1,28 @@
-import { describe, expect, it } from "vitest";
-import { engine, usePlayer, nativeSeekStalled } from "../player";
+import { describe, expect, it, vi, beforeEach } from "vitest";
+
+// The native adapter dereferences `window`, which does not exist under the
+// Node-based test runner. Without this stub every native-mode seek threw
+// "window is not defined", the store swallowed it, and the tests only ever
+// asserted the optimistic state write — never that the adapter was handed the
+// right value.
+const nativeSeek = vi.fn(async (_t: number) => {});
+vi.mock("../../lib/nativeAudio", () => ({
+  nativeAudio: {
+    seek: (t: number) => nativeSeek(t),
+    setVolume: async () => {},
+    setSpeed: async () => {},
+    play: async () => {},
+    pause: async () => {},
+    position: async () => 0,
+  },
+  nativeAudioAvailable: async () => true,
+}));
+
+const { engine, usePlayer, nativeSeekStalled } = await import("../player");
+
+beforeEach(() => {
+  nativeSeek.mockClear();
+});
 
 describe("PlayerEngine native seek", () => {
   it("paints the target time optimistically (poll gap is 250ms)", () => {
@@ -8,9 +31,11 @@ describe("PlayerEngine native seek", () => {
       usePlayer.setState({ currentTime: 5, duration: 0 });
       engine.seek(42);
       expect(usePlayer.getState().currentTime).toBe(42);
+      expect(nativeSeek).toHaveBeenLastCalledWith(42);
       // Negative targets clamp to zero.
       engine.seek(-10);
       expect(usePlayer.getState().currentTime).toBe(0);
+      expect(nativeSeek).toHaveBeenLastCalledWith(0);
     } finally {
       engine.mode = "html5";
       usePlayer.setState({ currentTime: 0, duration: 0, buffering: false });
@@ -38,6 +63,7 @@ describe("PlayerEngine native seek", () => {
       engine.seek(500);
       // 100 - 0.2 headroom.
       expect(usePlayer.getState().currentTime).toBeCloseTo(99.8, 5);
+      expect(nativeSeek).toHaveBeenLastCalledWith(99.8);
       engine.seek(99.95);
       expect(usePlayer.getState().currentTime).toBeCloseTo(99.8, 5);
     } finally {

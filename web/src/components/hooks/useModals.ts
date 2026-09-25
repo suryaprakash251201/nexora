@@ -11,7 +11,7 @@ export function useModals() {
   const [shareItem, setShareItem] = useState<FileItem | null>(null);
   const [ctx, setCtx] = useState<{ x: number; y: number; item: FileItem } | null>(null);
   const [ctxPlaylist, setCtxPlaylist] = useState<{ x: number; y: number; items: FileItem[] } | null>(null);
-  const [menu, setMenu] = useState<{ kind: string; item?: FileItem } | null>(null);
+  const [menu, setMenu] = useState<{ kind: string; item?: FileItem; dest?: { rootId: string; path: string } } | null>(null);
   const [rootModal, setRootModal] = useState(false);
   const [playlistModal, setPlaylistModal] = useState(false);
   const [playlistName, setPlaylistName] = useState("");

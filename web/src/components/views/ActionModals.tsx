@@ -9,7 +9,7 @@ import { filesApi } from "../../api/endpoints";
 import type { FileItem } from "../../api/types";
 
 export function ActionModals({ menu, rootId, path, onClose, onDone, onArchiveExtract }: {
-  menu: { kind: string; item?: FileItem };
+  menu: { kind: string; item?: FileItem; dest?: { rootId: string; path: string } };
   rootId: string;
   path: string;
   onClose: () => void;
@@ -21,14 +21,20 @@ export function ActionModals({ menu, rootId, path, onClose, onDone, onArchiveExt
   );
   const [content, setContent] = useState("");
   const pushToast = useUI((s) => s.pushToast);
-  const base = (name: string) => (path ? `${path}/${name}` : name);
+  // Creation modals can be launched from a view with no active storage (the
+  // home dashboard), where the user picked a destination in a picker first.
+  const targetRootId = menu.dest?.rootId ?? rootId;
+  const base = (name: string) => {
+    const p = menu.dest?.path ?? path;
+    return p ? `${p}/${name}` : name;
+  };
   const run = async (fn: () => Promise<any>, ok: string) => {
     try { await fn(); pushToast("success", ok); onDone(); } catch (e: any) { pushToast("error", e.message); }
   };
 
   if (menu.kind === "newFolder") {
     return (
-      <Modal title="New folder" onClose={onClose} footer={<Button variant="primary" size="sm" onClick={() => run(() => filesApi.createDirectory(rootId, base(value || "New Folder")), "Folder created")}>Create</Button>}>
+      <Modal title="New folder" onClose={onClose} footer={<Button variant="primary" size="sm" onClick={() => run(() => filesApi.createDirectory(targetRootId, base(value || "New Folder")), "Folder created")}>Create</Button>}>
         <input autoFocus value={value} onChange={(e) => setValue(e.target.value)} placeholder="Folder name" className="glass-input w-full rounded-xl px-3 py-2" />
       </Modal>
     );
@@ -42,7 +48,7 @@ export function ActionModals({ menu, rootId, path, onClose, onDone, onArchiveExt
       return v.replace(/\.[^./\\]+$/, "") + "." + ext;
     };
     return (
-      <Modal title="New text file" onClose={onClose} footer={<Button variant="primary" size="sm" onClick={() => run(() => filesApi.createFile(rootId, base(value || "untitled.txt"), content), "File created")}>Create</Button>}>
+      <Modal title="New text file" onClose={onClose} footer={<Button variant="primary" size="sm" onClick={() => run(() => filesApi.createFile(targetRootId, base(value || "untitled.txt"), content), "File created")}>Create</Button>}>
         <input autoFocus value={value} onChange={(e) => setValue(e.target.value)} placeholder="name.txt" className="glass-input mb-2 w-full rounded-xl px-3 py-2" />
         <div className="mb-2 flex flex-wrap gap-1.5">
           <button

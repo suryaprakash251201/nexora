@@ -414,7 +414,7 @@ export default function SettingsModal({ user, onClose, initialView = "main" }: {
               </div>
               {pwError && <p className="text-sm text-danger flex items-center gap-1.5"><AlertCircle className="h-4 w-4" /> {pwError}</p>}
               <div className="pt-2">
-                <Button type="submit" variant="primary" onClick={changePassword} loading={pwBusy} disabled={!pwCurrent || !pwNew || !pwConfirm} className="w-full">
+                <Button type="submit" variant="primary" loading={pwBusy} disabled={!pwCurrent || !pwNew || !pwConfirm} className="w-full">
                   Change Password
                 </Button>
               </div>

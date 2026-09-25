@@ -237,6 +237,22 @@ export default function Workspace({ user }: { user: User }) {
   const fileInput = useRef<HTMLInputElement>(null);
   const folderInput = useRef<HTMLInputElement>(null);
 
+  // Quick actions on the home dashboard have no active storage root, so they
+  // can't upload or create anything directly. They collect a destination in a
+  // picker first, then resume the original action against it.
+  type HomeAction =
+    | { kind: "upload" | "upload-folder"; files: File[] }
+    | { kind: "newFolder" | "newFile" };
+  const [homeAction, setHomeAction] = useState<HomeAction | null>(null);
+  // Set while a home upload is waiting for the OS file chooser, so the shared
+  // input onChange knows to hold the files instead of uploading them.
+  const homeUploadKind = useRef<"upload" | "upload-folder" | null>(null);
+
+  const startHomeUpload = (kind: "upload" | "upload-folder") => {
+    homeUploadKind.current = kind;
+    (kind === "upload" ? fileInput.current : folderInput.current)?.click();
+  };
+
   const activeRoot = roots.data?.roots.find((r) => r.id === rootId) || null;
   const canWrite = !!activeRoot && activeRoot.permission === "write" && !activeRoot.read_only;
 
@@ -347,9 +363,23 @@ export default function Workspace({ user }: { user: User }) {
   const { doDelete, bulkDelete, archivePaths, toggleFavorite } = useFileOperations({ rootId, refresh, qc, selection, clearSelection, favSet });
   const { folderPicker, setFolderPicker, openPickerFor, applyFolderPicker, transferPaths, clipboard, copySelection, cutSelection, pasteClipboard, clearClipboard } = useClipboard({ rootId, path, selection, clearSelection, refresh, canWrite });
   const { dragProps, dragActive, dropPicker, setDropPicker, pendingDrop } = useDragAndDrop({ rootId, canWrite, uploadFiles });
+
+  // Shared by the two hidden file inputs. A home quick-action upload parks the
+  // chosen files until a destination is picked; everything else uploads now.
+  // The list is snapshotted because FileList is a live view of the input and
+  // resetting input.value would empty it out from under us.
+  const handleChosenFiles = (input: HTMLInputElement) => {
+    const kind = homeUploadKind.current;
+    homeUploadKind.current = null;
+    const files = input.files ? Array.from(input.files) : [];
+    input.value = "";
+    if (!files.length) return;
+    if (kind) setHomeAction({ kind, files });
+    else uploadFiles(files);
+  };
   
   const [shortcutsModalOpen, setShortcutsModalOpen] = useState(false);
-  const isModalOpen = modals.isModalOpen || !!folderPicker || !!dropPicker || shortcutsModalOpen;
+  const isModalOpen = modals.isModalOpen || !!folderPicker || !!dropPicker || !!homeAction || shortcutsModalOpen;
   
   useKeyboardShortcuts({
     canWrite, view, setView, selection, items, bulkDelete, setMenu,
@@ -669,8 +699,8 @@ export default function Workspace({ user }: { user: User }) {
           </div>
         )}
 
-        <input ref={fileInput} type="file" multiple className="hidden" onChange={(e) => { uploadFiles(e.target.files); e.target.value = ""; }} />
-        <input ref={folderInput} type="file" {...{ webkitdirectory: "", directory: "" }} multiple className="hidden" onChange={(e) => { uploadFiles(e.target.files); e.target.value = ""; }} />
+        <input ref={fileInput} type="file" multiple className="hidden" onChange={(e) => handleChosenFiles(e.target)} />
+        <input ref={folderInput} type="file" {...{ webkitdirectory: "", directory: "" }} multiple className="hidden" onChange={(e) => handleChosenFiles(e.target)} />
 
         {(selectMode || selection.size > 0) && (
           <SelectionBar
@@ -770,10 +800,10 @@ export default function Workspace({ user }: { user: User }) {
                   isAdmin={isAdmin}
                   onSearch={(q) => { setSearch(q); setView("search"); }}
                   onOpenRecent={(item) => navigateTo(item.root_id, item.path, false, item.name)}
-                  onUpload={() => fileInput.current?.click()}
-                  onUploadFolder={() => folderInput.current?.click()}
-                  onNewFolder={() => setMenu({ kind: "newFolder" })}
-                  onNewFile={() => setMenu({ kind: "newFile" })}
+                  onUpload={() => startHomeUpload("upload")}
+                  onUploadFolder={() => startHomeUpload("upload-folder")}
+                  onNewFolder={() => setHomeAction({ kind: "newFolder" })}
+                  onNewFile={() => setHomeAction({ kind: "newFile" })}
                   onNewRoot={() => isAdmin && setRootModal(true)}
                   onOpenPlaylist={() => setView("playlists")}
                 />
@@ -922,6 +952,35 @@ export default function Workspace({ user }: { user: User }) {
             pendingDrop.current = null;
             setDropPicker(false);
             if (files) uploadFiles(files, rid, destPath);
+          }}
+        />
+      )}
+
+      {homeAction && (
+        <DropRootPicker
+          roots={roots.data?.roots || []}
+          pending={"files" in homeAction ? { current: homeAction.files } : undefined}
+          title={
+            homeAction.kind === "newFolder" ? "New folder in…"
+            : homeAction.kind === "newFile" ? "New text file in…"
+            : homeAction.kind === "upload-folder" ? "Upload folder to…"
+            : "Upload to…"
+          }
+          description={
+            homeAction.kind === "newFolder" ? "Choose which storage location to create the folder in."
+            : homeAction.kind === "newFile" ? "Choose which storage location to create the file in."
+            : homeAction.kind === "upload-folder"
+              ? "Choose a storage root and optional subfolder for this folder."
+              : undefined
+          }
+          confirmLabel={homeAction.kind === "newFolder" || homeAction.kind === "newFile" ? "Continue" : undefined}
+          onClose={() => setHomeAction(null)}
+          onConfirm={(rid, destPath) => {
+            const action = homeAction;
+            setHomeAction(null);
+            if (!action) return;
+            if ("files" in action) uploadFiles(action.files, rid, destPath);
+            else setMenu({ kind: action.kind, dest: { rootId: rid, path: destPath } });
           }}
         />
       )}

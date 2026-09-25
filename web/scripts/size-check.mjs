@@ -4,6 +4,7 @@
  */
 import { readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const BUDGETS = [
   { match: /^index-.*\.js$/, kb: 560 },
@@ -11,7 +12,10 @@ const BUDGETS = [
   { match: /^vendor-.*\.js$/, kb: 220 },
 ];
 
-const dir = new URL("../dist/assets", import.meta.url).pathname;
+// fileURLToPath, not URL#pathname: pathname keeps the leading slash and
+// percent-encoding, which produces "C:\C:\Users\Name%20With%20Space\..." on
+// Windows and makes the gate fail there.
+const dir = fileURLToPath(new URL("../dist/assets", import.meta.url));
 let failed = false;
 for (const f of readdirSync(dir).filter((f) => f.endsWith(".js"))) {
   const kb = Math.round(statSync(join(dir, f)).size / 1024);

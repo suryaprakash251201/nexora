@@ -15,7 +15,7 @@ import {
   Maximize, Minimize, Info, Check, ChevronDown, Copy,
   Captions,
 } from "lucide-react";
-import { motion } from "framer-motion";
+import { motion } from "motion/react";
 import { filesApi } from "../../api/endpoints";
 import { useUI } from "../../store";
 import type { FileItem } from "../../api/types";

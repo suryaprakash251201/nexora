@@ -13,7 +13,7 @@ import {
   Printer,
   MoreHorizontal,
 } from "lucide-react";
-import { motion } from "framer-motion";
+import { motion } from "motion/react";
 import { useViewer } from "./ctx";
 import { padPage } from "./utils";
 import { cn } from "@/lib/utils";

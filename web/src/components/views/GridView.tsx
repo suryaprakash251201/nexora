@@ -2,7 +2,7 @@
  * Extracted from Workspace.tsx — shared card grid for library views
  * (favourites, recents, photos-style lists).
  */
-import { motion } from "framer-motion";
+import { motion } from "motion/react";
 import { FileThumb } from "../FileThumb";
 import { SkeletonGrid } from "../ui/Skeleton";
 import { EmptyState } from "../ui/EmptyState";

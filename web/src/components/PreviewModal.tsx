@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, useCallback, useRef, lazy, Suspense } from "react";
 import { X, Download, Pencil, Share2, ZoomIn, ZoomOut, Maximize, Minimize, ChevronLeft, ChevronRight, Info } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence } from "motion/react";
 import type { FileItem } from "../api/types";
 import { previewKind, isEditable, rawUrl } from "../lib/preview";
 import { startDownload } from "../lib/transfer";

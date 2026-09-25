@@ -1,7 +1,26 @@
 # Changelog
-All notable changes to Nexora are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/) and the project adheres to [Semantic Versioning](https://semver.org/). The single source of truth for the current version is the repo-root `VERSION` file (`1.10.0`) — `web`, `desktop`, and the Docker image all derive from it; `mobile` has an independent app-store version (`1.0.0`).
+All notable changes to Nexora are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/) and the project adheres to [Semantic Versioning](https://semver.org/). The single source of truth for the current version is the repo-root `VERSION` file (`1.11.0`) — `web`, `desktop`, and the Docker image all derive from it; `mobile` has an independent app-store version (`1.0.0`).
 
 ## [Unreleased]
+
+## [1.11.0] - 2026-09-25
+
+### Fixed
+- **Web: Home dashboard quick actions did nothing** — Upload Files, Upload Folder, New Folder and New Text File were wired straight to the current storage root, but Home has no active root, so `uploadFiles` bailed on a null `rootId` and the action ended silently: no upload, no error, no toast. All four now collect a destination first (a generalized version of the existing drop-to-upload root picker) and resume against it, covering plain and folder uploads plus folder/file creation. `ActionModals` accepts an optional destination override so creation works outside the active root.
+- **Web: every dialog overflowed on small screens** — the modal scrim used an `auto` grid track, so it sized to max-content and `max-w-md` (448px) beat the space actually available; at 390px wide the title, root paths and confirm button were all clipped. Pinned to `grid-cols-[minmax(0,1fr)]` with `min-w-0` on the panel. Verified with no overflow at 320/390/768px.
+- **Web: read-only roots advertised uploads** — the empty-folder state told read-only users to "drag files or folders here, or use the Upload buttons", inviting actions the API rejects. The copy is now permission-aware.
+- **Web: service worker registered during `vite dev`** and could shadow HMR, so it is now production-only; any worker left on a dev origin is actively unregistered. Cache writes are handed to `event.waitUntil` (previously fire-and-forget, so the worker could be terminated mid-write), and only a verified `text/html` 200 response is adopted as the app shell — previously *any* navigation was cached under `/`, so a 404 or the mobile `/pdfviewer/` document could permanently replace the shell.
+- **Web: image drag-to-pan never worked** — the listener effect gated installation on `drag.current.active`, a ref read that is not a render trigger, so the listeners were never attached. They are now installed unconditionally with the guard inside the handlers.
+- **Web: changing your password submitted twice** — the form had both an `onSubmit` handler and a matching `onClick` on its submit button, firing the mutation twice per click.
+- **Web: storage legend rendered the file total as a fifth category** — the total sat in the same 4-column category grid and wrapped onto its own row, reading as another category. It is now a separate caption line.
+- **Web: `theme-color` stayed dark in light mode** — the browser chrome (address bar, mobile task switcher) kept the dark value after switching themes. It is now synced from the active theme.
+- **Web: `npm run size` failed on Windows** — the script derived its path from `URL#pathname`, which keeps the leading slash and percent-encoding and produced `C:\C:\Users\<name>%20<space>\...`. Switched to `fileURLToPath`.
+- **Web: undeclared `framer-motion` dependency** — 11 files imported it directly while the rest of the app used `motion/react`, resolving only transitively through `motion`. All migrated to the declared entry point (verified byte-identical vendor chunk output).
+- **Web: `vite.config.ts` used `__dirname`**, which Vite's native config loader does not define, so every dev and build start printed a migration warning. Now uses `import.meta.dirname`. Also dropped a stale `sonner` manual-chunk rule for a package that is not a dependency.
+- **Web: Node support was under-documented** — `engines` now states the range the lockfile actually requires (22.22+/24/26) rather than the documented Node 20+, which the current toolchain cannot satisfy.
+- **Web: player seek tests were asserting nothing useful** — the suite forced native playback mode under Node, where the native adapter dereferences `window`; every seek threw, the store swallowed it, and the tests only checked the optimistic state write. The adapter is now mocked and the tests assert the value it actually receives, which also removes the `window is not defined` noise from test output.
+
+Verified with `tsc --noEmit`, the full Vitest suite (31 tests), a production build, the bundle-size gate, the hook linter, and a 14-check Playwright regression pass across 320/390/768/1440px viewports in both themes.
 
 ## [1.10.0] - 2026-09-25
 

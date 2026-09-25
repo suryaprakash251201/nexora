@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from "react";
 import { ChevronDown, ChevronUp, Loader2, Search, X } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence } from "motion/react";
 import { useViewer } from "./ctx";
 import { cn } from "@/lib/utils";
 

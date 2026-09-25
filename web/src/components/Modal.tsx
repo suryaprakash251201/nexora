@@ -38,7 +38,7 @@ export function Modal({ title, description, icon, onClose, children, footer }: {
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         transition={{ duration: 0.12 }}
-        className="fixed inset-0 z-[var(--z-modal)] grid place-items-center p-4 scrim"
+        className="fixed inset-0 z-[var(--z-modal)] grid grid-cols-[minmax(0,1fr)] place-items-center p-4 scrim"
         onMouseDown={onClose}
       >
         <motion.div
@@ -51,7 +51,7 @@ export function Modal({ title, description, icon, onClose, children, footer }: {
           aria-modal="true"
           aria-labelledby={titleId}
           tabIndex={-1}
-          className="w-full max-w-md glass-strong rounded-2xl outline-none shadow-2xl shadow-black/30 flex flex-col max-h-[85vh]"
+          className="w-full max-w-md min-w-0 glass-strong rounded-2xl outline-none shadow-2xl shadow-black/30 flex flex-col max-h-[85vh]"
           onMouseDown={(e) => e.stopPropagation()}
         >
           <div className="flex items-start justify-between px-6 py-4 border-b border-border/50 bg-gradient-to-r from-glass-bg-subtle via-transparent to-transparent">

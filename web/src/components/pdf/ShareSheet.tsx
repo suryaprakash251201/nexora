@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Check, Copy, ExternalLink, Link2, Share2, Smartphone, X } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence } from "motion/react";
 import { toast } from "../../lib/toast";
 import { useViewer } from "./ctx";
 

@@ -513,7 +513,9 @@ export default function FileBrowser({
         <EmptyState
           variant="files"
           title="This folder is empty"
-          description="Drag files or folders here, or use the Upload buttons to add content."
+          description={canWrite
+            ? "Drag files or folders here, or use the Upload buttons to add content."
+            : "Nothing here yet. This storage location is read-only, so you can browse and download but not add files."}
           action={canWrite && onUpload ? { label: "Upload files", onClick: onUpload } : undefined}
         />
         {canWrite && onUploadFolder && (

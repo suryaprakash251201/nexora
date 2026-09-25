@@ -147,7 +147,10 @@ export default function ImageView({
   };
 
   useEffect(() => {
-    if (!drag.current.active) return;
+    // Listeners are installed unconditionally. Gating installation on
+    // drag.current.active read a ref during effect setup, which is not a
+    // render trigger — mousedown set the ref but changed no state, so this
+    // effect never re-ran and panning never worked.
     const onMove = (e: MouseEvent) => {
       if (!drag.current.active) return;
       setPan({ x: drag.current.px + e.clientX - drag.current.sx, y: drag.current.py + e.clientY - drag.current.sy });
@@ -156,7 +159,7 @@ export default function ImageView({
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);
     return () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
-  }, [zoom, pan, fitMode]);
+  }, []);
 
   const hasPrev = index > 0;
   const hasNext = index < images.length - 1;

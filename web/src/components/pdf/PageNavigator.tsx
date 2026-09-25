@@ -1,6 +1,6 @@
 import { useEffect, memo, useRef } from "react";
 import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence } from "motion/react";
 import { X } from "lucide-react";
 import { useViewer } from "./ctx";
 import { DEFAULT_PAGE_SIZE, type PageSize } from "./types";

@@ -13,7 +13,7 @@ import {
   Search,
   Share2,
 } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence } from "motion/react";
 import { useViewer } from "./ctx";
 import { formatBytes } from "../../lib/format";
 import { padPage } from "./utils";

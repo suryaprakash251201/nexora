@@ -155,11 +155,10 @@ function StorageBreakdown() {
             <span className="ml-auto font-medium text-content-muted/80 tabular-nums">{formatBytes(b?.[s.key]?.size ?? 0)}</span>
           </div>
         ))}
-        <div className="flex items-center gap-2">
-          <span className="h-2.5 w-2.5 rounded-full bg-accent-amber" />
-          <span className="text-content-muted truncate">{usage.data.file_count.toLocaleString()} files</span>
-        </div>
       </div>
+      <p className="mt-3 text-xs text-content-muted/80 tabular-nums">
+        {usage.data.file_count.toLocaleString()} file{usage.data.file_count === 1 ? "" : "s"} indexed
+      </p>
     </motion.div>
   );
 }
