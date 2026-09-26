@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 
@@ -9,6 +10,16 @@ import (
 	"github.com/nexora/nexora/internal/middleware"
 	"github.com/nexora/nexora/internal/storage"
 )
+
+// reindexInBackground kicks off a search-index sweep without blocking the
+// request. ScanAll coalesces concurrent invocations and never errors out, so
+// calling it on every root create/enable is cheap.
+func (s *Server) reindexInBackground() {
+	if s.Search == nil {
+		return
+	}
+	go s.Search.ScanAll(context.Background())
+}
 
 func (s *Server) handleAdminListRoots(w http.ResponseWriter, r *http.Request) {
 	roots, err := s.StorageRoots.List()
@@ -83,6 +94,11 @@ func (s *Server) handleAdminCreateRoot(w http.ResponseWriter, r *http.Request) {
 	if u, ok := auth.UserFromContext(r.Context()); ok {
 		_ = s.StorageRoots.Grant(u.ID, root.ID, storage.PermWrite)
 	}
+	// A new root is invisible to search, photos and usage stats until it is
+	// scanned, and the periodic sweep only runs every 6 hours — so without this
+	// a freshly added root silently returns nothing for search until the next
+	// sweep (or a manual reindex).
+	s.reindexInBackground()
 	s.audit(r, "root_create", root.Name, root.Path)
 	writeJSON(w, http.StatusCreated, map[string]any{"ok": true, "id": root.ID})
 }
@@ -112,6 +128,11 @@ func (s *Server) handleAdminUpdateRoot(w http.ResponseWriter, r *http.Request) {
 	if err := s.StorageRoots.Update(id, req.Name, req.Path, req.Icon, req.Type, req.Config, req.ReadOnly, req.Enabled, req.Indexed); err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error", "could not update root", middleware.GetRequestID(r.Context()))
 		return
+	}
+	// Enabling indexing (or a root that was disabled) has to take effect now,
+	// not at the next 6-hourly sweep.
+	if req.Enabled && req.Indexed {
+		s.reindexInBackground()
 	}
 	s.audit(r, "root_update", id, req.Name)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
