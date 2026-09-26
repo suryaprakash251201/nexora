@@ -150,6 +150,9 @@ jobs:
       - name: Verify patches apply
         run: npx patch-package --error-on-fail
 
+      - name: Verify image-size CVE guards
+        run: npm run check:cve
+
       - name: Rules of Hooks (AST check)
         run: npm run lint:hooks
 

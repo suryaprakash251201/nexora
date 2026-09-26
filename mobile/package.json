@@ -46,7 +46,8 @@
     "ios": "expo run:ios",
     "prebuild": "expo prebuild --clean",
     "postinstall": "patch-package",
-    "lint:hooks": "node ../scripts/check-hooks.cjs src"
+    "lint:hooks": "node ../scripts/check-hooks.cjs src",
+    "check:cve": "node scripts/check-image-size-cve.cjs"
   },
   "private": true,
   "overrides": {
