@@ -51,7 +51,7 @@ export default memo(function PlayerBar() {
       audioRef.current = null;
     }
   }, []);
-  const { current, isPlaying, buffering, volume, muted, primaryOpen, currentTime, duration, queueLength, index, shuffle, repeat, audioError } = usePlayer(
+  const { current, isPlaying, buffering, volume, muted, primaryOpen, currentTime, duration, queueLength, index, shuffle, repeat, audioError, transportIntent } = usePlayer(
     useShallow((s) => ({
       current: s.current(),
       isPlaying: s.isPlaying,
@@ -66,6 +66,7 @@ export default memo(function PlayerBar() {
       shuffle: s.shuffle,
       repeat: s.repeat,
       audioError: s.audioError,
+      transportIntent: s.transportIntent,
     }))
   );
   const [expanded, setExpanded] = useState(false);
@@ -246,31 +247,38 @@ export default memo(function PlayerBar() {
       console.warn("PlayerBar: invalid URL", url);
       return;
     }
-    a.src = url;
     // Preload aggressively only once playing; while paused, metadata alone
     // warms the connection without downloading a large file in the background.
     a.preload = usePlayer.getState().isPlaying ? "auto" : "metadata";
-    a.load();
-    if (usePlayer.getState().isPlaying) a.play().catch(() => {});
+    engine.loadSource(url);
     // `useNative` is a dep so the src is (re)assigned when the <audio>
     // element remounts after a native→html5 fallback: the URL is unchanged
     // across that transition, so a [url]-only effect would never run on the
     // replacement node and playback would stay silent.
   }, [url, useNative]);
 
+  // Transport commands are driven by the *intent* counter, never by
+  // `isPlaying`. `isPlaying` mirrors the element's own play/pause events, so
+  // commanding the element from it closed a feedback loop: the element and the
+  // store pushed each other back and forth hundreds of times per second,
+  // flapping the Play/Pause button and re-running every dependent effect
+  // (media metadata, artwork, re-renders) on each commit. `intent.id` changes
+  // only when a user action or a track change actually asks for transport.
+  //
+  // The engine routes the command to the active backend (native on the desktop
+  // shell, the <audio> element in the browser), so the desktop play/pause
+  // button and the OS media keys keep working as before.
   useEffect(() => {
-    const a = audioRef.current;
-    if (!a) return;
-    if (isPlaying) {
-      a.preload = "auto";
-      a.play().catch(() => {});
-    } else a.pause();
-  }, [isPlaying]);
+    if (transportIntent.playing) engine.play();
+    else engine.pause();
+    // `transportIntent.id` is the change signal; `playing` is read from it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [url, useNative, transportIntent.id]);
 
   const stop = () => {
-    engine.pause();
     engine.timeOffset = 0;
-    usePlayer.setState({ queue: [], index: -1, isPlaying: false, currentTime: 0, duration: 0 });
+    usePlayer.setState({ queue: [], index: -1, currentTime: 0, duration: 0 });
+    usePlayer.getState().requestTransport(false);
   };
 
   // Buffered-range end (for the progress-bar indicator).
@@ -353,7 +361,7 @@ export default memo(function PlayerBar() {
                 </div>
                 <p className="truncate text-[10px] font-medium text-content-muted mt-0.5 flex items-center gap-1.5">
                   {queueLength > 1 && `Track ${index + 1} / ${queueLength}`}
-                  {queueLength > 1 && isPlaying ? ' · ' : ''}
+                  {queueLength > 1 ? ' · ' : ''}
                   {isPlaying && buffering ? (
                     <span className="inline-flex items-center gap-1 text-accent animate-pulse">
                       <span className="h-1 w-1 rounded-full bg-accent" />

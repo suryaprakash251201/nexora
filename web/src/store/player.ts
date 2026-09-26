@@ -46,6 +46,15 @@ interface PlayerState {
   cycleRepeat: () => void;
   current: () => FileItem | null;
   _syncTime: (c: number, d: number) => void;
+  /**
+   * Latest transport *command* (not observation). Every action that wants the
+   * element to start or stop bumps `id`, and the player effect performs the
+   * command. `isPlaying` is deliberately NOT part of this: it mirrors the
+   * element's own events, and feeding it back into a command is what used to
+   * make the two oscillate.
+   */
+  transportIntent: { id: number; playing: boolean };
+  requestTransport: (playing: boolean) => void;
 }
 
 const LS_KEY = "nexora.player";
@@ -118,6 +127,14 @@ class PlayerEngine {
   onTranscodeSeek: ((t: number) => void) | null = null;
   private pollTimer: number | null = null;
   private nativeDuration = 0;
+  /** The node that currently carries this engine's media listeners. */
+  private boundEl: HTMLAudioElement | null = null;
+  /** True while a source swap is still loading: the element's transport state
+   *  is meaningless then, and a play() issued mid-load gets dropped by the
+   *  media load algorithm. */
+  private loading = false;
+  /** A play() that arrived while `loading` — replayed once the source is ready. */
+  private playWhenReady = false;
   /** Last native seek target + timestamp: polls that return a stale
    *  pre-seek position while the decode thread is still seeking (blocking
    *  HTTP range fetches) must not clobber the optimistic UI. */
@@ -127,19 +144,27 @@ class PlayerEngine {
   private seekRecovering = false;
 
   bind(el: HTMLAudioElement) {
-    // Idempotent per element: the <audio> node can be recreated around native
-    // playback or StrictMode remounts, and re-binding must never stack
-    // duplicate event listeners on the same node.
-    if (this.audio === el) return;
     this.audio = el;
+    // Listeners are attached once per *node*, tracked separately from
+    // `audio`: `detach` clears the command target, so keying idempotence off
+    // `audio` let a StrictMode remount (detach → re-attach the same node) stack
+    // a second `ended` listener. Two listeners meant every track end advanced
+    // the queue twice — the second call hit the end-of-queue branch and
+    // cancelled the start of the new track, stalling the queue.
+    if (this.boundEl === el) return;
+    this.boundEl = el;
     el.volume = usePlayer.getState().volume;
     el.playbackRate = usePlayer.getState().playbackRate;
-    el.addEventListener("play", () => usePlayer.setState({ isPlaying: true, buffering: false }));
-    el.addEventListener("pause", () => usePlayer.setState({ isPlaying: false, buffering: false }));
+    el.addEventListener("play", () => this.reportTransport(true));
+    el.addEventListener("pause", () => this.reportTransport(false));
     el.addEventListener("waiting", () => usePlayer.setState({ buffering: true }));
     el.addEventListener("stalled", () => usePlayer.setState({ buffering: true }));
     el.addEventListener("playing", () => usePlayer.setState({ buffering: false }));
     el.addEventListener("canplay", () => usePlayer.setState({ buffering: false }));
+    // A source swap ends: honor a play() that was issued while it was loading.
+    for (const ev of ["loadedmetadata", "loadeddata", "canplay", "playing"]) {
+      el.addEventListener(ev, () => this.onSourceReady());
+    }
     const sync = () => usePlayer.getState()._syncTime(el.currentTime + this.timeOffset, el.duration);
     el.addEventListener("timeupdate", sync);
     el.addEventListener("loadedmetadata", sync);
@@ -149,6 +174,50 @@ class PlayerEngine {
   /** Called when the bound <audio> element leaves the DOM. */
   detach(el: HTMLAudioElement | null) {
     if (el && this.audio === el) this.audio = null;
+  }
+
+  /**
+   * Mirrors a media element's transport event into the store — but only when
+   * it actually disagrees with the store.
+   *
+   * Transport *commands* live in `transportIntent` (see `requestTransport`),
+   * never in an `isPlaying` effect, so an event can't feed back into the
+   * command that produced it. An event that agrees with the store carries no
+   * new information and is dropped.
+   */
+  private reportTransport(playing: boolean) {
+    // Mid-swap the element is paused by the media load algorithm; that is
+    // bookkeeping for the track change, not a user-visible stop.
+    if (this.loading) return;
+    const s = usePlayer.getState();
+    if (s.isPlaying === playing && !s.buffering) return;
+    usePlayer.setState({ isPlaying: playing, buffering: false });
+  }
+
+  /**
+   * Rebinds the element to a new source.
+   *
+   * The media load algorithm pauses the element and can drop a play() issued
+   * while it is still fetching, which used to leave a track switch silently
+   * stopped. Transport reporting is muted until the source is ready, and a
+   * play() that lands during the load is replayed from `onSourceReady`.
+   */
+  loadSource(url: string) {
+    const a = this.audio;
+    if (!a) return;
+    this.loading = true;
+    this.playWhenReady = false;
+    a.src = url;
+    a.load();
+  }
+
+  /** The new source is playable — release the load lock and start if asked. */
+  private onSourceReady() {
+    if (!this.loading) return;
+    this.loading = false;
+    if (!this.playWhenReady) return;
+    this.playWhenReady = false;
+    this.play();
   }
 
   /** Monotonic token for native-handoff attempts so stale resolutions lose. */
@@ -290,10 +359,10 @@ class PlayerEngine {
   private onNativeEvent(e: { kind: string; message?: string }) {
     switch (e.kind) {
       case "playing":
-        usePlayer.setState({ isPlaying: true, buffering: false });
+        this.reportTransport(true);
         break;
       case "paused":
-        usePlayer.setState({ isPlaying: false, buffering: false });
+        this.reportTransport(false);
         break;
       case "ended":
         usePlayer.setState({ isPlaying: false });
@@ -355,11 +424,21 @@ class PlayerEngine {
 
   play() {
     if (this.mode === "native") return void nativeAudio.play();
-    this.audio?.play().catch(() => {});
+    const a = this.audio;
+    if (!a) return;
+    // Mid-load the element's own play() can be discarded by the media load
+    // algorithm — remember it and start when the source is ready instead.
+    if (this.loading) { this.playWhenReady = true; return; }
+    if (!a.paused) return;
+    void a.play().catch(() => {});
   }
   pause() {
     if (this.mode === "native") return void nativeAudio.pause();
-    this.audio?.pause();
+    // A stop during a load must also cancel the deferred start.
+    this.playWhenReady = false;
+    const a = this.audio;
+    if (!a || a.paused) return;
+    a.pause();
   }
   toggle() {
     if (this.mode === "native") {
@@ -433,25 +512,29 @@ export const usePlayer = create<PlayerState>((set, get) => ({
   muted: false,
   primaryOpen: false,
   audioError: "",
+  transportIntent: { id: 0, playing: false },
 
   current: () => {
     const { queue, index } = get();
     return index >= 0 && index < queue.length ? queue[index] : null;
   },
 
+  requestTransport: (playing) => set((s) => ({ transportIntent: { id: s.transportIntent.id + 1, playing } })),
+
   play: (queue, index = 0) => {
     if (!queue.length) return;
     engine.timeOffset = 0;
-    set({ queue, index: Math.max(0, Math.min(index, queue.length - 1)), isPlaying: true, currentTime: 0, duration: 0, audioError: "" });
+    set({ queue, index: Math.max(0, Math.min(index, queue.length - 1)), currentTime: 0, duration: 0, audioError: "" });
+    get().requestTransport(true);
     persist();
   },
 
-  toggle: () => engine.toggle(),
+  toggle: () => get().requestTransport(!get().isPlaying),
 
   next: (auto = false) => {
     const { queue, index, shuffle, repeat } = get();
     if (queue.length === 0) return;
-    if (auto && repeat === "one") { engine.seek(0); engine.play(); return; }
+    if (auto && repeat === "one") { engine.seek(0); get().requestTransport(true); return; }
     let ni: number;
     if (shuffle) {
       // Pick any *other* track so shuffle can't "advance" to the same song
@@ -461,11 +544,16 @@ export const usePlayer = create<PlayerState>((set, get) => ({
         : 0;
     } else ni = index + 1;
     if (ni >= queue.length) {
+      // End of the queue with repeat off: stop for real. The element is already
+      // paused by the browser, so the command is a no-op there and the state
+      // write is what the UI reflects — no `ended`-driven replay of the last
+      // track, which is what the old isPlaying→element command did.
       if (repeat === "all" || !auto) ni = 0;
-      else { set({ isPlaying: false }); return; }
+      else { set({ isPlaying: false }); get().requestTransport(false); return; }
     }
     engine.timeOffset = 0;
-    set({ index: ni, currentTime: 0, isPlaying: true, audioError: "" });
+    set({ index: ni, currentTime: 0, audioError: "" });
+    get().requestTransport(true);
     persist();
   },
 
@@ -479,20 +567,26 @@ export const usePlayer = create<PlayerState>((set, get) => ({
     let pi = index - 1;
     if (pi < 0) pi = queue.length - 1;
     engine.timeOffset = 0;
-    set({ index: pi, currentTime: 0, isPlaying: true, audioError: "" });
+    set({ index: pi, currentTime: 0, audioError: "" });
+    get().requestTransport(true);
     persist();
   },
 
-  setIndex: (i) => { engine.timeOffset = 0; set({ index: i, currentTime: 0, isPlaying: true, audioError: "" }); persist(); },
+  setIndex: (i) => {
+    engine.timeOffset = 0;
+    set({ index: i, currentTime: 0, audioError: "" });
+    get().requestTransport(true);
+    persist();
+  },
 
   removeFromQueue: (i) => {
     const { queue, index } = get();
     if (i < 0 || i >= queue.length) return;
     const nextQ = queue.filter((_, idx) => idx !== i);
     if (nextQ.length === 0) {
-      engine.pause();
       engine.timeOffset = 0;
-      set({ queue: [], index: -1, currentTime: 0, duration: 0, isPlaying: false });
+      set({ queue: [], index: -1, currentTime: 0, duration: 0 });
+      get().requestTransport(false);
       persist();
       return;
     }
