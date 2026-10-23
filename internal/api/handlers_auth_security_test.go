@@ -307,7 +307,25 @@ func TestLoginLockout_ScopedToAccountAndIP(t *testing.T) {
 
 // --- 3. Reset flow ----------------------------------------------------------
 
+func TestForgotPassword_DisabledByDefault(t *testing.T) {
+	h := newSecHarness(t, nil)
+	h.createUser(t, "carol", "carol@x", "Validpass1")
+	for _, path := range []string{"/api/v1/auth/forgot-password", "/api/v1/auth/reset-password"} {
+		req := httptest.NewRequest("POST", path, strings.NewReader(`{"login":"carol","token":"x","password":"Newpass123"}`))
+		req.RemoteAddr = "10.7.7.7:4444"
+		rec := httptest.NewRecorder()
+		h.handler.ServeHTTP(rec, req)
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("%s: got %d, want 403", path, rec.Code)
+		}
+		if strings.Contains(rec.Body.String(), `"token"`) {
+			t.Fatalf("%s leaked a token field: %s", path, rec.Body.String())
+		}
+	}
+}
+
 func TestForgotPassword_SecondCodeInvalidatesFirst(t *testing.T) {
+	t.Setenv("NEXORA_INSECURE_PASSWORD_RESET", "true")
 	h := newSecHarness(t, nil)
 	h.createUser(t, "bob", "bob@x", "Validpass1")
 
