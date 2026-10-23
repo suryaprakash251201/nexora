@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -209,7 +210,21 @@ type changePasswordRequest struct {
 	New     string `json:"new"`
 }
 
+// passwordResetEnabled reports whether the unauthenticated reset flow is on.
+// Nexora has no mail channel, so the reset code is returned directly to the
+// caller: anyone who can reach the API and knows a login could take over the
+// account. The flow is therefore denied by default and only enabled when the
+// operator sets NEXORA_INSECURE_PASSWORD_RESET=true.
+func passwordResetEnabled() bool {
+	return strings.EqualFold(strings.TrimSpace(os.Getenv("NEXORA_INSECURE_PASSWORD_RESET")), "true")
+}
+
 func (s *Server) handleForgotPassword(w http.ResponseWriter, r *http.Request) {
+	if !passwordResetEnabled() {
+		writeError(w, http.StatusForbidden, "password_reset_disabled",
+			"self-service password reset is disabled on this server", middleware.GetRequestID(r.Context()))
+		return
+	}
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	var req struct {
 		Login string `json:"login"`
@@ -274,6 +289,11 @@ func (s *Server) handleForgotPassword(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleResetPassword(w http.ResponseWriter, r *http.Request) {
+	if !passwordResetEnabled() {
+		writeError(w, http.StatusForbidden, "password_reset_disabled",
+			"self-service password reset is disabled on this server", middleware.GetRequestID(r.Context()))
+		return
+	}
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	var req struct {
 		Token    string `json:"token"`
