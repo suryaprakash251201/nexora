@@ -12,24 +12,26 @@
  */
 import { readFileSync } from "node:fs";
 
-const npmLock = JSON.parse(readFileSync("desktop/package-lock.json", "utf8"));
 const npm = {};
-for (const [key, entry] of Object.entries(npmLock.packages ?? {})) {
-  const name = key.split("node_modules/").pop();
-  if (name.startsWith("@tauri-apps/plugin-")) {
-    npm[name.split("plugin-").pop()] = entry.version;
+for (const workspace of ["desktop", "web"]) {
+  const npmLock = JSON.parse(readFileSync(`${workspace}/package-lock.json`, "utf8"));
+  for (const [key, entry] of Object.entries(npmLock.packages ?? {})) {
+    const name = key.split("node_modules/").pop();
+    if (name.startsWith("@tauri-apps/plugin-")) {
+      npm[`${workspace}/${name.split("plugin-").pop()}`] = entry.version;
+    }
   }
 }
 
-const cargoLock = readFileSync("desktop/src-tauri/Cargo.lock", "utf8");
+const cargoLock = readFileSync("desktop/src-tauri/Cargo.lock", "utf8").replace(/\r\n/g, "\n");
 const cargo = Object.fromEntries(
   [...cargoLock.matchAll(/name = "tauri-plugin-([^"]+)"\nversion = "([^"]+)"/g)].map((m) => [m[1], m[2]]),
 );
 
 const minor = (v) => v.split(".").slice(0, 2).join(".");
 const bad = Object.entries(npm)
-  .filter(([plugin, nver]) => cargo[plugin] && minor(nver) !== minor(cargo[plugin]))
-  .map(([plugin, nver]) => `${plugin}: npm ${nver} vs cargo ${cargo[plugin]}`);
+  .filter(([plugin, nver]) => !cargo[plugin.split("/").pop()] || minor(nver) !== minor(cargo[plugin.split("/").pop()]))
+  .map(([plugin, nver]) => `${plugin}: npm ${nver} vs cargo ${cargo[plugin.split("/").pop()] ?? "missing"}`);
 
 if (bad.length > 0) {
   console.error("Tauri plugin version mismatch (npm vs cargo, major.minor must match):");
