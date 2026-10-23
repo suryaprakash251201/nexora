@@ -23,7 +23,7 @@ for (const workspace of ["desktop", "web"]) {
   }
 }
 
-const cargoLock = readFileSync("desktop/src-tauri/Cargo.lock", "utf8");
+const cargoLock = readFileSync("desktop/src-tauri/Cargo.lock", "utf8").replace(/\r\n/g, "\n");
 const cargo = Object.fromEntries(
   [...cargoLock.matchAll(/name = "tauri-plugin-([^"]+)"\nversion = "([^"]+)"/g)].map((m) => [m[1], m[2]]),
 );
