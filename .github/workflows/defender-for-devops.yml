@@ -26,6 +26,13 @@ on:
   schedule:
     - cron: '32 1 * * 0'
 
+# Explicit least-privilege token: the SARIF upload to code scanning
+# requires security-events:write, and an explicit top-level block also
+# satisfies CKV2_GHA_1 (no implicit write-all from repo defaults).
+permissions:
+  contents: read
+  security-events: write
+
 jobs:
   MSDO:
     # currently only windows latest is supported
