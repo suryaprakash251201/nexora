@@ -23,6 +23,13 @@ import (
 // overwhelmed by several transcodes at once.
 var transcodeSem = make(chan struct{}, 2)
 
+// hlsSem caps ffmpeg processes spawned for on-demand HLS segment
+// transcoding. Without a cap, any authenticated user could open many
+// concurrent segment requests and exhaust CPU/memory on the host.
+// Playback waits for a slot (bounded by the request context) instead of
+// being rejected, so normal sequential segment fetching is unaffected.
+var hlsSem = make(chan struct{}, 2)
+
 // defaultTranscodeTimeout is the wall-clock cap on a single ffmpeg
 // invocation when Config.TranscodeTimeout is zero. Chosen to be larger than
 // any reasonable feature-length movie transcoded on modest hardware, but
@@ -560,6 +567,16 @@ func (s *Server) handleHLSSegment(w http.ResponseWriter, r *http.Request) {
 	ffp, _, err := detectFfmpeg()
 	if err != nil {
 		writeError(w, http.StatusNotImplemented, "ffmpeg_missing", "ffmpeg not found", middleware.GetRequestID(r.Context()))
+		return
+	}
+
+	// Acquire an HLS transcode slot before spawning ffmpeg. Waiting is
+	// bounded by the request context: if the client goes away while
+	// queued, no process is started.
+	select {
+	case hlsSem <- struct{}{}:
+		defer func() { <-hlsSem }()
+	case <-r.Context().Done():
 		return
 	}
 
