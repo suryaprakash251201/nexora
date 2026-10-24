@@ -134,6 +134,7 @@ func (s *Server) Routes() http.Handler {
 
 	// CORS AllowOriginFunc reads s.Cfg live so admin edits to cors_origins
 	// take effect without a process restart.
+	r.Use(corsCredentialsGate(s.Cfg))
 	r.Use(cors.Handler(cors.Options{
 		AllowOriginFunc: func(_ *http.Request, origin string) bool {
 			origins := s.Cfg.CORSOrigins
@@ -372,4 +373,61 @@ func (s *Server) Routes() http.Handler {
 	// Static UI + SPA fallback.
 	r.NotFound(s.handleStatic)
 	return middleware.Compress(r)
+}
+
+// corsCredentialsGate prevents the fallback allow-any-origin CORS mode from
+// also allowing credentials. When NEXORA_CORS_ORIGINS is empty the server
+// echoes any Origin (so desktop/Tailscale clients using Bearer tokens work
+// out of the box), but a reflected origin combined with
+// Access-Control-Allow-Credentials would let any website read authenticated
+// responses with the victim's cookies. This gate strips the credentials
+// header unless the Origin exactly matches a configured origin.
+func corsCredentialsGate(cfg *config.Config) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			next.ServeHTTP(&corsCredWriter{ResponseWriter: w, r: r, cfg: cfg}, r)
+		})
+	}
+}
+
+type corsCredWriter struct {
+	http.ResponseWriter
+	r       *http.Request
+	cfg     *config.Config
+	checked bool
+}
+
+func (w *corsCredWriter) WriteHeader(code int) {
+	w.stripCredentials()
+	w.ResponseWriter.WriteHeader(code)
+}
+
+func (w *corsCredWriter) Write(b []byte) (int, error) {
+	w.stripCredentials()
+	return w.ResponseWriter.Write(b)
+}
+
+// Flush preserves streaming (SSE/transcode) support through the wrapper.
+func (w *corsCredWriter) Flush() {
+	w.stripCredentials()
+	if f, ok := w.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+func (w *corsCredWriter) stripCredentials() {
+	if w.checked {
+		return
+	}
+	w.checked = true
+	origin := w.r.Header.Get("Origin")
+	if origin == "" {
+		return
+	}
+	for _, o := range w.cfg.CORSOrigins {
+		if strings.TrimSpace(o) == origin {
+			return
+		}
+	}
+	w.Header().Del("Access-Control-Allow-Credentials")
 }

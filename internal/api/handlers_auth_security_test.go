@@ -392,16 +392,36 @@ func TestCSRF_SessionTokenInQueryNotExempt(t *testing.T) {
 		t.Fatalf("POST with session ?token= and no CSRF header: got %d, want 403", rec.Code)
 	}
 
-	// Safe methods with ?token= must still authenticate (mobile media URLs).
+	// Non-media GET endpoints no longer honor ?token= (URL tokens leak via
+	// logs/history/Referer): the session probe must report user null even
+	// though a valid session token is present in the URL.
 	getReq := httptest.NewRequest("GET", "/api/v1/auth/session?token="+raw, nil)
 	getRec := httptest.NewRecorder()
 	h.handler.ServeHTTP(getRec, getReq)
 	if getRec.Code != http.StatusOK {
-		t.Fatalf("GET with session ?token=: got %d, want 200", getRec.Code)
+		t.Fatalf("GET /auth/session with session ?token=: got %d, want 200", getRec.Code)
 	}
 	m := decodeBody(t, getRec)
-	user, ok := m["user"].(map[string]any)
-	if !ok || user["username"] != "carol" {
-		t.Fatalf("GET with session ?token= did not authenticate: %s", getRec.Body.String())
+	if m["user"] != nil {
+		t.Fatalf("GET /auth/session with session ?token= must not authenticate: got user %v", m["user"])
+	}
+
+	// Media endpoints still authenticate via ?token= (mobile/Tauri media
+	// URLs where the client cannot set Authorization headers).
+	mediaReq := httptest.NewRequest("GET", "/api/v1/files/raw?token="+raw, nil)
+	mediaRec := httptest.NewRecorder()
+	h.handler.ServeHTTP(mediaRec, mediaReq)
+	if mediaRec.Code == http.StatusUnauthorized {
+		t.Fatalf("GET /files/raw with session ?token=: got 401, media query-token auth must keep working")
+	}
+
+	// A HEAD request to a media endpoint is also allowed; a POST to a
+	// "media-looking" path is not (defense in depth with the CSRF check
+	// above).
+	postMedia := httptest.NewRequest("POST", "/api/v1/files/raw?token="+raw, nil)
+	postMediaRec := httptest.NewRecorder()
+	h.handler.ServeHTTP(postMediaRec, postMedia)
+	if postMediaRec.Code != http.StatusNotFound && postMediaRec.Code != http.StatusMethodNotAllowed && postMediaRec.Code != http.StatusForbidden {
+		t.Fatalf("POST /files/raw with ?token=: got %d, want 404/405/403 (no POST route, and token must not authenticate it)", postMediaRec.Code)
 	}
 }

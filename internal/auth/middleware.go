@@ -20,8 +20,8 @@ func SessionAuth(store *SessionStore, users *UserStore, tokens *TokenStore) func
 				token = cookie.Value
 			} else if authHeader := r.Header.Get("Authorization"); strings.HasPrefix(authHeader, "Bearer ") {
 				token = strings.TrimSpace(strings.TrimPrefix(authHeader, "Bearer "))
-			} else if qToken := r.URL.Query().Get("token"); qToken != "" {
-				token = qToken
+			} else if acceptsQueryToken(r) {
+				token = r.URL.Query().Get("token")
 			}
 
 			if token != "" {
@@ -42,6 +42,47 @@ func SessionAuth(store *SessionStore, users *UserStore, tokens *TokenStore) func
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+// queryTokenPrefixes are the only routes that may authenticate via a
+// `?token=` query parameter, and only for safe (read) methods. Tokens in
+// URLs leak through server access logs, browser history and Referer
+// headers, so query-token auth is limited to the read-only media/job
+// endpoints whose clients genuinely cannot set Authorization headers
+// (<video>/<img> elements, native PDF/media players, EventSource).
+// Everything else must use the session cookie or a Bearer header.
+var queryTokenPrefixes = []string{
+	"/api/v1/files/raw",
+	"/api/v1/files/thumbnail",
+	"/api/v1/files/transcode",
+	"/api/v1/files/hls/",
+	"/api/v1/files/versions/",
+	"/api/v1/audio/lyrics",
+	"/api/v1/jobs/",
+}
+
+// acceptsQueryToken reports whether this request may authenticate with a
+// session token carried in the URL query string.
+func acceptsQueryToken(r *http.Request) bool {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		return false
+	}
+	if r.URL.Query().Get("token") == "" {
+		return false
+	}
+	path := r.URL.Path
+	for _, prefix := range queryTokenPrefixes {
+		if !strings.HasPrefix(path, prefix) {
+			continue
+		}
+		// Exact match, a prefix that already ends in '/', or a '/' right
+		// after the prefix. This stops look-alike paths ("/files/rawish")
+		// from sneaking in on a media prefix.
+		if len(path) == len(prefix) || prefix[len(prefix)-1] == '/' || path[len(prefix)] == '/' {
+			return true
+		}
+	}
+	return false
 }
 
 // RequireAuth rejects requests without an authenticated, active user.
